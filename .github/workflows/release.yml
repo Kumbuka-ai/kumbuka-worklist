@@ -1,0 +1,160 @@
+name: Release
+
+# ---------------------------------------------------------------------------
+# Releases are cut from a TAG and from nothing else.
+#
+# There is deliberately no trigger on a branch push. A release built from a
+# moving branch has no stable name for what it contains: the same version
+# label would mean different code on different days, and an incident six
+# months later could not be tied back to a tree. A tag is an immutable
+# pointer, so the image, the release notes and the source agree by
+# construction rather than by convention.
+#
+# workflow_dispatch takes the tag as an explicit input for the one case that
+# is not a fresh cut — re-running a release whose publish step failed. It
+# still names a tag; it does not build from a branch.
+# ---------------------------------------------------------------------------
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (vX.Y.Z)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # -------------------------------------------------------------------------
+  # The suite runs again, at the tag.
+  #
+  # The branch was green when it merged, and that is a statement about a
+  # different tree: the tag may sit on a later commit, and a transitive
+  # dependency may have moved since. Nothing is published from a tree whose
+  # tests have not passed on that tree.
+  # -------------------------------------------------------------------------
+  verify:
+    name: verify (re-run the suite at the tag)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - working-directory: backend
+        run: mvn -B -ntp verify
+
+  # -------------------------------------------------------------------------
+  # The image: ghcr.io/<owner>/kumbuka-worklist:{tag, version, latest}
+  #
+  # No Maven publish. The memory engine this service is modelled on publishes
+  # its jars because a commercial edition consumes them as a library; nothing
+  # consumes this service as a library, and the services share no code by
+  # design. Publishing a jar nobody imports would invite exactly the coupling
+  # the architecture rules out.
+  # -------------------------------------------------------------------------
+  image:
+    name: image · build & push
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        name: derive tag and version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          REF="${GITHUB_REF#refs/tags/}"
+          if [ -z "$REF" ] || [ "$REF" = "$GITHUB_REF" ]; then
+            REF="$INPUT_TAG"
+          fi
+          if [ -z "$REF" ]; then
+            echo "no tag: this workflow releases from a tag and has nothing to build" >&2
+            exit 1
+          fi
+          echo "tag=$REF" >> "$GITHUB_OUTPUT"
+          echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
+          # ghcr rejects an upper-case path segment; the owner is lower-cased
+          # here rather than assumed to be lower-case already.
+          echo "owner=$(printf '%s' "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/kumbuka-worklist:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/kumbuka-worklist:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/kumbuka-worklist:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=worklist
+          cache-to: type=gha,scope=worklist,mode=max
+
+  # -------------------------------------------------------------------------
+  # The GitHub release, last — so a release never points at an image that was
+  # not pushed.
+  # -------------------------------------------------------------------------
+  github-release:
+    name: github release
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          REF="${GITHUB_REF#refs/tags/}"
+          if [ -z "$REF" ] || [ "$REF" = "$GITHUB_REF" ]; then
+            REF="$INPUT_TAG"
+          fi
+          echo "tag=$REF" >> "$GITHUB_OUTPUT"
+          echo "owner=$(printf '%s' "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: gh release create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          OWNER="${{ steps.meta.outputs.owner }}"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --notes "
+          ## Container image
+
+          \`\`\`
+          ghcr.io/$OWNER/kumbuka-worklist:$TAG
+          \`\`\`
+
+          Configuration is environment variables with a \`WORKLIST_\` prefix; see the README for the full set. The service role's password must be rotated away from the migration's placeholder before the service is reachable from outside a development machine.
+          "

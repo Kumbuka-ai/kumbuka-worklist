@@ -1,0 +1,94 @@
+{
+  "id": "kumbuka",
+  "realm": "kumbuka",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "member",
+        "description": "A member of the tenant."
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-kumbuka",
+    "composite": true,
+    "clientRole": false,
+    "containerId": "kumbuka"
+  },
+  "clients": [
+    {
+      "clientId": "kumbuka-worklist",
+      "name": "Worklist service",
+      "description": "The audience the worklist service accepts. Direct access grants are enabled so the probe can obtain a real token without driving a browser flow; a deployment does not enable them.",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "test-only-not-a-secret",
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "consentRequired": false,
+      "redirectUris": [
+        "http://localhost/*"
+      ],
+      "attributes": {
+        "client.use.lightweight.access.token.enabled": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "worklist audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "kumbuka-worklist",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "probe-member",
+      "email": "probe-member@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "probe-password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "member",
+        "default-roles-kumbuka"
+      ],
+      "firstName": "Tenant",
+      "lastName": "Probe"
+    }
+  ]
+}
