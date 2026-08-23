@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        The worklist service — a single Quarkus module.
+
+        DELIBERATELY ONE MODULE. The memory engine this service is modelled
+        on splits into `spi` + `server` because it publishes frozen tenancy
+        interfaces to a commercial edition. This service publishes nothing
+        and has no Keycloak extension, so a second module would carry no
+        contract and only cost a reactor.
+
+        DELIBERATELY NO DEPENDENCY ON A SIBLING SERVICE. The dispatch service
+        is built from the same substrate template and shares no code with this
+        one: no import, no foreign key, no view and no distributed
+        transaction. Where a shape is shared it is shared as a specification
+        plus a service-local conformance probe — which is why the tenancy
+        classes below are written here rather than imported. Copying a
+        template is the price of that rule and it is paid deliberately.
+    -->
+
+    <groupId>ai.kumbuka</groupId>
+    <artifactId>kumbuka-worklist</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>kumbuka-worklist</name>
+    <description>The worklist service: what a scope intends to do, as items that are worked through a process.</description>
+    <url>https://github.com/Kumbuka-ai/kumbuka-worklist</url>
+
+    <licenses>
+        <license>
+            <name>AGPL-3.0-only</name>
+            <url>https://www.gnu.org/licenses/agpl-3.0.txt</url>
+        </license>
+    </licenses>
+
+    <scm>
+        <connection>scm:git:https://github.com/Kumbuka-ai/kumbuka-worklist.git</connection>
+        <developerConnection>scm:git:git@github.com:Kumbuka-ai/kumbuka-worklist.git</developerConnection>
+        <url>https://github.com/Kumbuka-ai/kumbuka-worklist</url>
+    </scm>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <quarkus.platform.version>3.33.2</quarkus.platform.version>
+
+        <jacoco-plugin.version>0.8.12</jacoco-plugin.version>
+        <surefire-plugin.version>3.5.0</surefire-plugin.version>
+        <failsafe-plugin.version>3.5.0</failsafe-plugin.version>
+        <testcontainers.version>1.20.4</testcontainers.version>
+        <assertj.version>3.27.7</assertj.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>${quarkus.platform.artifact-id}</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Core -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+
+        <!-- Realm binding: a bearer resource server against the tenant realm. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-oidc</artifactId>
+        </dependency>
+
+        <!-- Persistence. Hibernate ORM without Panache: the substrate holds
+             one entity and needs the @TenantId filter, not an active-record
+             surface. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-hibernate-orm</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway</artifactId>
+        </dependency>
+
+        <!-- Observability -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+
+        <!-- Tests -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Flyway's PostgreSQL adapter, for the one test that drives Flyway
+            directly. The Quarkus extension supplies it to the application at
+            runtime but not to a test that constructs its own Flyway instance,
+            and without it Flyway reports "no database plugin found" rather
+            than doing anything with the database.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Instruments the code that @QuarkusTest classes drive. Quarkus runs
+            those under its own classloader, which the ordinary JaCoCo agent
+            cannot see; this extension can, and writes target/jacoco-quarkus.exec.
+            Nearly everything here is exercised through a @QuarkusTest, so
+            without it the coverage report would be close to empty and the
+            static-analysis gate would read that as untested code.
+        -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>generate-code</goal>
+                            <goal>generate-code-tests</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${surefire-plugin.version}</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <!--
+                Failsafe runs the *IT classes on EVERY `mvn verify`, with no
+                opt-in profile. Every load-bearing statement this service makes
+                — row-level security, the missing GRANT, the realm binding — is
+                a statement about a running database or a running identity
+                provider and can only be made there. A gate that has to be
+                switched on is one that will be found switched off.
+            -->
+            <plugin>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${failsafe-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <!--
+                Coverage report for the static-analysis gate.
+
+                Only the `report` goal runs here, against the file the
+                quarkus-jacoco extension produces. `prepare-agent` is
+                deliberately NOT attached: it would write a second, empty
+                exec file that races the extension's, and the documented
+                result is a report claiming zero coverage — which reads as a
+                regression rather than as a misconfiguration.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                        <configuration>
+                            <dataFile>${project.build.directory}/jacoco-quarkus.exec</dataFile>
+                            <outputDirectory>${project.build.directory}/site/jacoco</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

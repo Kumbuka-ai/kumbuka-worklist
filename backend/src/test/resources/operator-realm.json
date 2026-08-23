@@ -1,0 +1,94 @@
+{
+  "id": "kumbuka-ops",
+  "realm": "kumbuka-ops",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "member",
+        "description": "A member of the tenant."
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-kumbuka-ops",
+    "composite": true,
+    "clientRole": false,
+    "containerId": "kumbuka-ops"
+  },
+  "clients": [
+    {
+      "clientId": "kumbuka-worklist",
+      "name": "Worklist service",
+      "description": "The same client id in a DIFFERENT realm. Its tokens carry the right audience and a valid signature from this realm's keys, and the service must still refuse them \u2014 the issuer is what decides.",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "test-only-not-a-secret",
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "consentRequired": false,
+      "redirectUris": [
+        "http://localhost/*"
+      ],
+      "attributes": {
+        "client.use.lightweight.access.token.enabled": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "worklist audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "kumbuka-worklist",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "probe-operator",
+      "email": "probe-operator@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "probe-password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "member",
+        "default-roles-kumbuka-ops"
+      ],
+      "firstName": "Operator",
+      "lastName": "Probe"
+    }
+  ]
+}

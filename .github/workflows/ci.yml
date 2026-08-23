@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # -------------------------------------------------------------------------
+  # The full suite, with no opt-in profile.
+  #
+  # Every load-bearing statement this service makes is a statement about a
+  # running PostgreSQL or a running Keycloak, and both are started by the
+  # tests themselves. GitHub-hosted runners provide Docker, so the gate here
+  # is the same suite a developer runs locally rather than a reduced one.
+  # -------------------------------------------------------------------------
+  backend:
+    name: backend · mvn verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Print versions
+        run: |
+          java -version
+          mvn -version
+          docker version
+
+      - name: mvn verify
+        working-directory: backend
+        run: mvn -B -ntp verify
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            backend/target/surefire-reports/**
+            backend/target/failsafe-reports/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # Static analysis, on every pull request and every push to main.
+  #
+  # A separate job, and it re-runs the suite rather than reusing the one
+  # above. The scan needs compiled binaries and a coverage report, and
+  # carrying those between jobs as artifacts adds a moving part whose failure
+  # mode is a silently empty report — the analyser accepts a missing coverage
+  # file without complaint and simply reports nothing covered. Paying for the
+  # suite twice buys an analysis that cannot quietly measure nothing.
+  #
+  # There is no branch here that skips the scan when the token is absent. A
+  # gate that switches itself off when its credential goes missing reports
+  # green for the one state it exists to catch.
+  # -------------------------------------------------------------------------
+  sonar:
+    name: code quality · SonarQube Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: new-code detection and blame attribution are both
+          # computed from it, and a shallow clone makes every line look new.
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: mvn verify (binaries + coverage)
+        working-directory: backend
+        run: mvn -B -ntp verify
+
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+
+  # -------------------------------------------------------------------------
+  # The container builds.
+  #
+  # A separate job because it answers a separate question. The suite above
+  # says the code is right; this says the artifact that ships can be produced
+  # at all — a Dockerfile that stopped building would otherwise be discovered
+  # at deployment time.
+  # -------------------------------------------------------------------------
+  image:
+    name: backend · docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker build
+        working-directory: backend
+        run: docker build -t kumbuka-worklist:ci .
