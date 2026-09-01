@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
  * Probes C to G — the guarantees of the item domain, each with the state it
@@ -562,8 +562,298 @@ class ItemDomainIT {
     }
 
     // ==================================================================
+    // The dependency edge.
+    // ==================================================================
+
+    /**
+     * The edges are set as a whole, and one that leaves the set is withdrawn
+     * rather than deleted.
+     *
+     * <p>The withdrawal is not visible from the read side — an edge that is
+     * no longer asserted is history — so it is asserted by what happens when
+     * the same edge comes BACK: the row that was already there is asserted
+     * again, and no second row appears. A delete-and-reinsert would be
+     * indistinguishable from the outside, which is why the guarantee is
+     * carried by the missing DELETE privilege rather than by this test.
+     */
+    @Test
+    void dependencies_are_set_as_a_whole_and_a_removed_edge_comes_back() {
+        UUID first = stated("dependency probe 1");
+        UUID second = stated("dependency probe 2");
+        UUID third = stated("dependency probe 3");
+
+        Map<String, Object> withBoth = amendField(first, "depends_on",
+            List.of(second.toString(), third.toString()));
+        assertThat(dependsOn(withBoth))
+            .as("both edges are asserted, and the answer is sorted so that re-sending it "
+                + "is not a change")
+            .containsExactlyInAnyOrder(second, third);
+
+        Map<String, Object> withOne = amendField(first, "depends_on", List.of(third));
+        assertThat(dependsOn(withOne))
+            .as("the edge that left the set is no longer asserted")
+            .containsExactly(third);
+
+        Map<String, Object> backAgain = amendField(first, "depends_on",
+            List.of(second, third));
+        assertThat(dependsOn(backAgain))
+            .as("and re-asserting it works — the row was kept, so this is an update of "
+                + "the edge that was already there rather than a second one")
+            .containsExactlyInAnyOrder(second, third);
+    }
+
+    /** Setting the same edges again changes nothing, so nothing is written. */
+    @Test
+    void re_asserting_the_same_dependencies_is_not_a_change() {
+        UUID first = stated("dependency no-op 1");
+        UUID second = stated("dependency no-op 2");
+
+        amendField(first, "depends_on", List.of(second));
+        Map<String, Object> before = items.inspect(SCOPE, first);
+
+        Map<String, Object> after = amendField(first, "depends_on", List.of(second));
+        assertThat(after.get("conflict_token"))
+            .as("the same edge set is the same value, so the token must not rotate")
+            .isEqualTo(before.get("conflict_token"));
+    }
+
+    /** The one cycle a single row can express is refused by name. */
+    @Test
+    void an_item_cannot_depend_on_itself() {
+        UUID id = stated("self dependency probe");
+
+        WorklistException refusal = catchWorklistException(() ->
+            amendField(id, "depends_on", List.of(id)));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders()).containsExactly("depends_on");
+    }
+
+    /**
+     * A dependency on an item that does not exist cannot be written at all.
+     *
+     * <p>The contract lists a dangling reference as a whole-inventory
+     * violation that a validation pass reports, because a comma-separated
+     * list of numbers in a text cell can point anywhere. Here the foreign key
+     * refuses it, so the violation class does not exist rather than being
+     * detected — which is the stronger outcome and is the point of asking
+     * what each property would look like in a database.
+     *
+     * <p>The refusal is a constraint violation and not a typed one, and that
+     * is honest: the check is the database's, and dressing it up would
+     * suggest the domain decides something it does not.
+     */
+    @Test
+    void a_dependency_on_an_item_that_does_not_exist_cannot_be_written() {
+        UUID id = stated("dangling probe");
+
+        assertThat(catchThrowable(() ->
+            amendField(id, "depends_on", List.of(UUID.randomUUID()))))
+            .as("the edge has a foreign key on both ends, so a dangling reference is not "
+                + "something to find later — it is something that cannot be stored")
+            .isNotNull();
+    }
+
+    // ==================================================================
+    // The remaining refusals, each named.
+    // ==================================================================
+
+    /** An address is allocated once. */
+    @Test
+    void an_item_is_admitted_once() {
+        String token = "PA" + shortId();
+        selectors.declare(SCOPE, token);
+        UUID id = admitted(token, "double admission probe");
+
+        WorklistException refusal = catchWorklistException(() -> items.admit(SCOPE, id, token,
+            (String) items.inspect(SCOPE, id).get("conflict_token")));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ALREADY_ADMITTED);
+        assertThat(items.inspect(SCOPE, id).get("number"))
+            .as("and the first address is untouched — a re-allocation would make every "
+                + "reference to the old one resolve to something else")
+            .isEqualTo(1L);
+    }
+
+    /** An item of another scope, or of no scope, is not this scope's item. */
+    @Test
+    void an_item_that_is_not_in_this_scope_is_unknown() {
+        UUID id = stated("scope probe");
+        UUID otherScope = UUID.randomUUID();
+
+        assertThat(catchWorklistException(() -> items.inspect(otherScope, id)).reason())
+            .as("an item is addressed within its scope, and a lookup from another scope "
+                + "must not resolve it")
+            .isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
+        assertThat(catchWorklistException(() -> items.inspect(SCOPE, UUID.randomUUID()))
+            .reason())
+            .isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
+    }
+
+    /** A new item carries no service-derived field, and the refusal names them. */
+    @Test
+    void a_new_item_may_not_be_given_a_derived_field() {
+        Map<String, Object> arguments = new HashMap<>();
+        arguments.put("title", "derived field probe");
+        arguments.put("number", 7L);
+
+        WorklistException refusal = catchWorklistException(() -> items.state(SCOPE, arguments));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
+        assertThat(refusal.offenders())
+            .as("an address is allocated by admission and never supplied")
+            .containsExactly("number");
+    }
+
+    /** And it carries a title, on every status. */
+    @Test
+    void an_item_without_a_title_is_refused() {
+        assertThat(catchWorklistException(() -> items.state(SCOPE, Map.of())).reason())
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+
+        UUID id = stated("title clearing probe");
+        assertThat(catchWorklistException(() -> {
+            Map<String, Object> clearing = new HashMap<>(items.inspect(SCOPE, id));
+            clearing.put("title", "   ");
+            items.amend(SCOPE, id, clearing);
+        }).reason())
+            .as("the title cannot be cleared either — it is the one field required "
+                + "regardless of status")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+    }
+
+    /** A malformed selector token is refused before anything is created. */
+    @Test
+    void a_malformed_selector_token_is_refused() {
+        WorklistException refusal =
+            catchWorklistException(() -> selectors.declare(SCOPE, "1-not-a-selector"));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(selectors.inScope(SCOPE).stream().map(s -> s.token).toList())
+            .doesNotContain("1-not-a-selector");
+    }
+
+    /** Declaring twice is the same statement made twice, not a collision. */
+    @Test
+    void declaring_a_selector_twice_returns_the_one_that_exists() {
+        String token = "PI" + shortId();
+        UUID first = selectors.declare(SCOPE, token).id;
+
+        assertThat(selectors.declare(SCOPE, token).id)
+            .as("declaration states that the space should exist, and a retry after a "
+                + "timeout should not have to tell 'created' from 'already there'")
+            .isEqualTo(first);
+        assertThat(selectors.markOf(SCOPE, token))
+            .as("and the second declaration did not reset the address space")
+            .isZero();
+    }
+
+    // ==================================================================
+    // The vocabulary's own lifecycle.
+    // ==================================================================
+
+    /** There is no fifth axis: the axes are structure, the tokens are data. */
+    @Test
+    void there_is_no_axis_beyond_the_four() {
+        WorklistException refusal =
+            catchWorklistException(() -> terms.declare(SCOPE, "urgency", "HIGH", 1));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.getMessage()).contains("cluster", "type", "priority", "size");
+    }
+
+    /** A term token carries no whitespace and is not empty. */
+    @Test
+    void a_malformed_term_token_is_refused() {
+        assertThat(catchWorklistException(() ->
+            terms.declare(SCOPE, Term.SIZE, "two words", 1)).reason())
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(catchWorklistException(() ->
+            terms.declare(SCOPE, Term.SIZE, "  ", 1)).reason())
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+    }
+
+    /**
+     * A withdrawn term stays resolvable on the items already carrying it.
+     *
+     * <p>That is why withdrawal is a status here rather than a deletion: an
+     * item characterised two years ago has to keep saying what it was
+     * characterised as, or its own history stops being legible.
+     */
+    @Test
+    void a_withdrawn_term_still_reads_back_on_the_items_that_carry_it() {
+        String token = "TW" + shortId();
+        terms.declare(SCOPE, Term.TYPE, token, 3);
+
+        UUID id = stated("withdrawn term probe");
+        amendField(id, "type", token);
+
+        terms.withdraw(SCOPE, Term.TYPE, token);
+
+        assertThat(items.inspect(SCOPE, id).get("type"))
+            .as("the item keeps reading back the term it was characterised with")
+            .isEqualTo(token);
+        assertThat(terms.onAxis(SCOPE, Term.TYPE).stream().map(t -> t.token).toList())
+            .as("and the term is still on the axis, with its status changed rather than "
+                + "its row removed")
+            .contains(token);
+    }
+
+    /** Declaring a term twice is idempotent, like declaring a selector. */
+    @Test
+    void declaring_a_term_twice_returns_the_one_that_exists() {
+        String token = "TT" + shortId();
+        UUID first = terms.declare(SCOPE, Term.PRIORITY, token, 1).id;
+        assertThat(terms.declare(SCOPE, Term.PRIORITY, token, 9).id).isEqualTo(first);
+    }
+
+    // ==================================================================
+    // Reading a scope.
+    // ==================================================================
+
+    /** A survey of the scope returns the stated items in the canonical shape. */
+    @Test
+    void a_survey_returns_the_items_of_the_scope_in_the_canonical_shape() {
+        UUID id = stated("survey probe " + shortId());
+
+        assertThat(items.survey(SCOPE))
+            .as("the survey is the same projection the single read gives, so a caller "
+                + "handles one shape rather than two")
+            .anySatisfy(item -> {
+                assertThat(item.get("id")).isEqualTo(id);
+                assertThat(item).containsKeys("title", "status", "component", "depends_on",
+                    "conflict_token", "created_at", "updated_at");
+            });
+    }
+
+    // ==================================================================
     // Helpers.
     // ==================================================================
+
+    /**
+     * The asserted dependencies of a projection, typed.
+     *
+     * <p>An unchecked cast rather than a wildcard, because the field holds
+     * item ids by contract and a wildcard leaves the assertion unable to name
+     * what it is comparing against.
+     */
+    @SuppressWarnings("unchecked")
+    private static List<UUID> dependsOn(Map<String, Object> projection) {
+        return (List<UUID>) projection.get("depends_on");
+    }
+
+    /** A stated item, returning its id. */
+    private UUID stated(String title) {
+        return (UUID) items.state(SCOPE, Map.of("title", title)).get("id");
+    }
+
+    /** One field amended, with the token read immediately before. */
+    private Map<String, Object> amendField(UUID id, String field, Object value) {
+        Map<String, Object> arguments = new HashMap<>();
+        arguments.put(field, value);
+        arguments.put("conflict_token", items.inspect(SCOPE, id).get("conflict_token"));
+        return items.amend(SCOPE, id, arguments);
+    }
 
     /** A stated item, admitted under a selector, returning its id. */
     private UUID admitted(String selectorToken, String title) {

@@ -41,7 +41,7 @@ public class TermRegistry {
     @Transactional
     public Term declare(UUID scopeId, String axis, String token, int ordinal) {
         requireAxis(axis);
-        if (token == null || token.isBlank() || token.matches(".*\\s.*")) {
+        if (token == null || token.isBlank() || Term.WHITESPACE.matcher(token).find()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "a term token carries no whitespace and is not empty. Refused on axis "

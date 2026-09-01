@@ -51,7 +51,7 @@ public class SelectorRegistry {
      */
     @Transactional
     public Selector declare(UUID scopeId, String token) {
-        if (token == null || !token.matches("^[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*$")) {
+        if (token == null || !Selector.TOKEN.matcher(token).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "a selector token is a leading letter followed by alphanumerics and "

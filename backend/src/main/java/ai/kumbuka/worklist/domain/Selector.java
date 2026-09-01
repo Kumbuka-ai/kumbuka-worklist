@@ -48,6 +48,30 @@ public class Selector {
     /** Withdrawn: resolvable for what already exists, closed to anything new. */
     public static final String WITHDRAWN = "withdrawn";
 
+    /**
+     * The shape of a token: a leading letter, then alphanumerics and interior
+     * hyphens. {@code FEAT}, {@code CHORE}, {@code F}, {@code D-GTM} pass; a
+     * leading digit, a trailing hyphen, a doubled hyphen and an empty token do
+     * not.
+     *
+     * <p>Here rather than in the registry that uses it, because
+     * {@code ck_selector_token} in V4 is the same expression and the two must
+     * not drift: a Java check that accepted what the database rejects would
+     * turn a refusal into a constraint violation, and the other way round
+     * would let a token through that nothing can store.
+     *
+     * <p><strong>The quantifiers are possessive, and that is load-bearing.</strong>
+     * Written as {@code [A-Za-z0-9]*(-[A-Za-z0-9]+)*} — the obvious form, and
+     * the one V4 carries because PostgreSQL's engine does not backtrack this
+     * way — the two nested stars give Java's engine an exponential number of
+     * ways to split a long non-matching input, and a token of a few dozen
+     * characters is enough to hang the thread. Possessive quantifiers commit
+     * to what they consume and never give it back, so a failure is decided in
+     * one pass. The accepted language is identical.
+     */
+    public static final java.util.regex.Pattern TOKEN =
+        java.util.regex.Pattern.compile("^[A-Za-z][A-Za-z0-9]*+(?:-[A-Za-z0-9]++)*+$");
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)

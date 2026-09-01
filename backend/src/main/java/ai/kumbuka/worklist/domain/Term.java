@@ -50,6 +50,20 @@ public class Term {
     public static final String DECLARED = "declared";
     public static final String WITHDRAWN = "withdrawn";
 
+    /**
+     * One whitespace character, anywhere.
+     *
+     * <p>A pattern searched with {@code find} rather than
+     * {@code token.matches(".*\\s.*")}. The latter reads more directly and
+     * costs quadratic time on a token with no whitespace in it: the leading
+     * {@code .*} consumes everything, then backs off one character at a time
+     * and rescans the tail for each position. Searching for the character
+     * itself is one linear pass, and it is also the question actually being
+     * asked.
+     */
+    public static final java.util.regex.Pattern WHITESPACE =
+        java.util.regex.Pattern.compile("\\s");
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
