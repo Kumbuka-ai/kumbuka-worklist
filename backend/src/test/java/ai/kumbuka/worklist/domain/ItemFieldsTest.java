@@ -172,18 +172,18 @@ class ItemFieldsTest {
 
     @Test
     void the_selector_token_pattern_accepts_the_corpus_and_rejects_the_rest() {
-        assertThat(Selector.TOKEN.matcher("FEAT").matches()).isTrue();
-        assertThat(Selector.TOKEN.matcher("F").matches()).isTrue();
-        assertThat(Selector.TOKEN.matcher("D-GTM").matches()).isTrue();
-        assertThat(Selector.TOKEN.matcher("CHORE09").matches()).isTrue();
+        assertThat(Selector.TOKEN_PATTERN.matcher("FEAT").matches()).isTrue();
+        assertThat(Selector.TOKEN_PATTERN.matcher("F").matches()).isTrue();
+        assertThat(Selector.TOKEN_PATTERN.matcher("D-GTM").matches()).isTrue();
+        assertThat(Selector.TOKEN_PATTERN.matcher("CHORE09").matches()).isTrue();
 
-        assertThat(Selector.TOKEN.matcher("1FEAT").matches())
+        assertThat(Selector.TOKEN_PATTERN.matcher("1FEAT").matches())
             .as("a leading digit — the number is the other half of the address")
             .isFalse();
-        assertThat(Selector.TOKEN.matcher("FEAT-").matches()).isFalse();
-        assertThat(Selector.TOKEN.matcher("D--GTM").matches()).isFalse();
-        assertThat(Selector.TOKEN.matcher("").matches()).isFalse();
-        assertThat(Selector.TOKEN.matcher("FEAT 51").matches()).isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("FEAT-").matches()).isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("D--GTM").matches()).isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("").matches()).isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("FEAT 51").matches()).isFalse();
     }
 
     /**
@@ -204,7 +204,7 @@ class ItemFieldsTest {
         String pathological = "A" + "-b".repeat(50_000) + "!";
 
         assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () ->
-            assertThat(Selector.TOKEN.matcher(pathological).matches())
+            assertThat(Selector.TOKEN_PATTERN.matcher(pathological).matches())
                 .as("a long input that cannot match must be refused, quickly and without "
                     + "exhausting the stack")
                 .isFalse());

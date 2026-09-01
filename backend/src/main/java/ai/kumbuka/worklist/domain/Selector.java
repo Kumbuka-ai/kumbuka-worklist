@@ -69,7 +69,7 @@ public class Selector {
      * to what they consume and never give it back, so a failure is decided in
      * one pass. The accepted language is identical.
      */
-    public static final java.util.regex.Pattern TOKEN =
+    public static final java.util.regex.Pattern TOKEN_PATTERN =
         java.util.regex.Pattern.compile("^[A-Za-z][A-Za-z0-9]*+(?:-[A-Za-z0-9]++)*+$");
 
     @Id
