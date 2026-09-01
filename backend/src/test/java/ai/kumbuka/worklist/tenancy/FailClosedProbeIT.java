@@ -136,13 +136,18 @@ class FailClosedProbeIT {
                 owner.commit();
 
                 try (AutoCloseable ignored = tenantContext.bind(tenantA)) {
-                    List<Item> rows = items.inScope(SCOPE);
+                    // The answer carries no tenant — the axis is never a field
+                    // a caller reads. The titles carry it instead, which is
+                    // why plantOneItemPerTenant writes them that way: with the
+                    // policy off, a row of tenant B would appear here, and its
+                    // title would say so.
+                    var rows = items.survey(SCOPE);
                     assertThat(rows)
                         .as("with the policy disabled, the ORM filter is the only thing "
                             + "scoping this read — and it must still scope it")
                         .isNotEmpty()
-                        .allSatisfy(item -> assertThat(item.tenantId)
-                            .isEqualTo(tenantA.toString()));
+                        .allSatisfy(item -> assertThat(String.valueOf(item.get("title")))
+                            .endsWith(tenantA.toString()));
                 }
 
                 // The other side of the same observation: raw SQL, which the
@@ -198,10 +203,10 @@ class FailClosedProbeIT {
      */
     private void plantOneItemPerTenant() throws Exception {
         try (AutoCloseable ignored = tenantContext.bind(tenantA)) {
-            items.create(SCOPE, titleA());
+            items.state(SCOPE, java.util.Map.of("title", titleA()));
         }
         try (AutoCloseable ignored = tenantContext.bind(tenantB)) {
-            items.create(SCOPE, titleB());
+            items.state(SCOPE, java.util.Map.of("title", titleB()));
         }
     }
 

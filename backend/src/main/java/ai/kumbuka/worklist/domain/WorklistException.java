@@ -14,11 +14,11 @@ import java.util.List;
  * <p>The message is for a human and names the specifics; the reason is for a
  * caller and is stable.
  *
- * <p>The set below is the substrate's, and it is short because the substrate
- * refuses few things. The verbs of the worklist — the status machine over the
- * declared vocabulary, the relations, the planning layer, the claim lease —
- * arrive with the domain half and bring their own reasons. Enumerating them
- * here in advance would be guessing at refusals nothing can yet raise.
+ * <p>The first two below are the substrate's. The rest arrived with the item
+ * domain, and each one names a refusal something in this service actually
+ * raises — the planning layer's and the claim lease's are still absent for
+ * the same reason as before, that enumerating a refusal nothing can raise is
+ * guessing.
  */
 public class WorklistException extends RuntimeException {
 
@@ -26,7 +26,60 @@ public class WorklistException extends RuntimeException {
         /** The scope could not be resolved against the platform's read contract. */
         SCOPE_UNRESOLVED,
         /** The session settings the read contract needs were not bound. */
-        SESSION_NOT_BOUND
+        SESSION_NOT_BOUND,
+
+        /**
+         * An argument named a field that does not exist. The offenders are the
+         * argument names, because a refusal that does not say WHICH name it
+         * did not recognise leaves the caller to diff two vocabularies by eye.
+         */
+        UNKNOWN_FIELD,
+
+        /**
+         * A known field that a caller may not set carried a value other than
+         * the one it already has. Echoing a read answer back is fine; changing
+         * an id or a timestamp through it is not.
+         */
+        FIELD_NOT_SETTABLE,
+
+        /**
+         * A value outside what its field accepts — a status that is not one of
+         * the six, a component tag that is not a lower-case token.
+         */
+        INVALID_VALUE,
+
+        /**
+         * The conflict token was stale or absent. The refusal carries the
+         * CURRENT token, so a caller can re-read, re-apply and retry without
+         * a second round trip to find out what it should have sent.
+         */
+        CONFLICT,
+
+        /** No item of that id in this scope. */
+        ITEM_UNKNOWN,
+
+        /**
+         * The selector was never declared. It is NOT created here: a service
+         * that declares a selector on first use answers a misspelt address by
+         * inventing a second address space.
+         */
+        SELECTOR_UNDECLARED,
+
+        /** The selector exists and has been withdrawn, so nothing new is admitted under it. */
+        SELECTOR_WITHDRAWN,
+
+        /** A term of that token on that axis was never declared in this scope. */
+        TERM_UNDECLARED,
+
+        /** The item already carries an address, and an address is allocated once. */
+        ALREADY_ADMITTED,
+
+        /**
+         * A high-water mark may be carried forward and never back. Moving it
+         * back would hand out numbers that are already in use, which is the
+         * one thing the mark exists to prevent.
+         */
+        MARK_REGRESSION
     }
 
     private final transient Reason reason;

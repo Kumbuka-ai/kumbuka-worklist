@@ -19,13 +19,13 @@ import java.util.UUID;
  * the only way to ask the database directly, and asking the database directly
  * is the whole point of a policy that exists because raw SQL is possible.
  */
-final class Db {
+public final class Db {
 
     private Db() {
     }
 
     /** The container superuser. Stages fixtures; never what the service uses. */
-    static Connection asAdmin() throws SQLException {
+    public static Connection asAdmin() throws SQLException {
         return connect(config("test.db.admin.username"), config("test.db.admin.password"));
     }
 
@@ -38,7 +38,7 @@ final class Db {
             SubstrateDatabaseResource.MIGRATOR_PASSWORD);
     }
 
-    static Connection asService() throws SQLException {
+    public static Connection asService() throws SQLException {
         return connect(SubstrateDatabaseResource.SERVICE_ROLE,
             SubstrateDatabaseResource.SERVICE_PASSWORD);
     }
@@ -85,7 +85,7 @@ final class Db {
      * A null tenant resets it, which is how the fail-closed half of the
      * probes reaches the state a forgotten binding would produce.
      */
-    static void bindTenant(Connection c, UUID tenant) throws SQLException {
+    public static void bindTenant(Connection c, UUID tenant) throws SQLException {
         try (Statement s = c.createStatement()) {
             if (tenant == null) {
                 s.execute("RESET app.tenant_id");
@@ -115,7 +115,7 @@ final class Db {
         }
     }
 
-    static void exec(Connection c, String sql) throws SQLException {
+    public static void exec(Connection c, String sql) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute(sql);
         }

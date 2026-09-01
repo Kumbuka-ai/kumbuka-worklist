@@ -188,17 +188,22 @@ class TenantBindingEdgeCaseIT {
         UUID scope = UUID.fromString("00000000-0000-0000-0000-000000000010");
 
         try (AutoCloseable ignored = tenantContext.bind(tenant)) {
-            var stated = items.create(scope, "count-probe");
-            assertThat(stated.tenantId)
+            // The answer carries no tenant, deliberately: the tenancy axis is
+            // never a field a caller reads or writes. So the claim "the write
+            // carried the bound tenant" is checked one level down, by asking
+            // the database under exactly that tenant — where row-level
+            // security is what makes the row visible at all.
+            var stated = items.state(scope, java.util.Map.of("title", "count-probe"));
+            assertThat(stated.get("title")).isEqualTo("count-probe");
+
+            assertThat(items.survey(scope))
                 .as("a write through the ORM carries the bound tenant without the caller "
-                    + "supplying it — that is what the @TenantId filter is for")
-                .isEqualTo(tenant.toString());
-            assertThat(items.inScope(scope))
-                .as("and reads back exactly what it wrote, and only that: the scope holds "
-                    + "rows of other tenants planted by other cases, and none of them may "
-                    + "appear here")
+                    + "supplying it — that is what the @TenantId filter is for — and the "
+                    + "read gives back exactly what it wrote and only that: the scope "
+                    + "holds rows of other tenants planted by other cases, and none of "
+                    + "them may appear here")
                 .singleElement()
-                .satisfies(item -> assertThat(item.title).isEqualTo("count-probe"));
+                .satisfies(item -> assertThat(item.get("title")).isEqualTo("count-probe"));
         }
     }
 

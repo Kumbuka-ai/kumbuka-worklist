@@ -84,6 +84,32 @@ class ServiceRolePrivilegeIT {
      */
     private static final String HISTORY_TABLE = "flyway_schema_history";
 
+    /**
+     * Every base table this schema is supposed to have, by name.
+     *
+     * <p>The assertions above derive their table list from the catalog, which
+     * is what makes a table added by a later migration get checked the day it
+     * ships. That is one direction. This constant is the other: it is what
+     * makes a table that was supposed to be added and was NOT a failure too.
+     *
+     * <p>The distinction matters because the enumerated-privilege arrangement
+     * has exactly one failure mode — a migration that creates a relation and
+     * forgets its grants. A catalog-derived check sees that immediately. It
+     * does not see a migration that was never written, and a domain missing a
+     * table is not a state a privilege probe should be silent about.
+     *
+     * <p>Written out and not derived: an expectation read from the running
+     * catalog is a check that the catalog agrees with itself.
+     */
+    private static final Set<String> EXPECTED_TABLES = Set.of(
+        // The substrate's, from V1.
+        "item",
+        // The item domain's, from V4.
+        "selector", "number_space", "term", "item_dependency",
+        // The migrator's own record: no privilege for the runtime role, and
+        // nonetheless expected to BE there.
+        HISTORY_TABLE);
+
     private static String schema() {
         return ConfigProvider.getConfig().getValue("quarkus.flyway.default-schema", String.class);
     }
@@ -206,6 +232,35 @@ class ServiceRolePrivilegeIT {
                     + "nothing satisfies every absence above and cannot run the service")
                 .isNotNegative();
         }
+    }
+
+    /**
+     * The schema holds exactly the relations it is supposed to hold.
+     *
+     * <p>Both directions, and both are real. A MISSING table means a
+     * migration that was never written or never ran, and the service will
+     * fail on its first use of it rather than here. An EXTRA table means a
+     * relation nobody named — which, under this arrangement, is also a
+     * relation whose privileges nobody thought about.
+     */
+    @Test
+    void the_schema_holds_exactly_the_relations_that_were_declared() throws SQLException {
+        List<String> tables;
+        try (Connection c = admin()) {
+            tables = tablesIn(c, schema());
+        }
+
+        assertThat(tables)
+            .as("every declared relation of schema %s must exist. A missing one is a "
+                + "migration that was never written or never ran, and it surfaces at the "
+                + "first use of the table rather than here", schema())
+            .containsAll(EXPECTED_TABLES);
+
+        assertThat(tables)
+            .as("and nothing beyond them. Under enumerated privileges an unnamed relation "
+                + "is a relation whose entitlement nobody decided, so an extra table is a "
+                + "finding rather than a detail")
+            .allSatisfy(table -> assertThat(EXPECTED_TABLES).contains(table));
     }
 
     // ------------------------------------------------------------------
