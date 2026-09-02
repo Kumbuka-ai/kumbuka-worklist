@@ -191,7 +191,7 @@ public class Item {
      * <p>The substrate mapped this as insert-only and said why: there was no
      * verb that updated an item, so a maintenance trigger could not have been
      * observed working. There is one now, and the observation it needed is
-     * the interesting one — {@link ItemStore#update} moves this field ONLY
+     * the interesting one — {@link ItemService#update} moves this field ONLY
      * when a value actually changed, so a write carrying nothing new leaves
      * it where it is. A database trigger would have been the wrong mechanism
      * for exactly that reason: it cannot tell a statement that changed

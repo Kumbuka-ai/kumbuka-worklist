@@ -1,14 +1,14 @@
 package ai.kumbuka.worklist.platform;
 
 import ai.kumbuka.worklist.domain.WorklistException;
+import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
-import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -48,7 +48,7 @@ public class ScopeDirectory {
      *  address; the subject that asked for it is the audit log's business. */
     private static final Logger LOG = Logger.getLogger(ScopeDirectory.class);
 
-    @Inject EntityManager em;
+    @Inject ScopeAccessRepository scopes;
 
     /**
      * The scope a caller named, or a typed refusal.
@@ -61,15 +61,9 @@ public class ScopeDirectory {
         bindSubject(subject);
         requireSessionBound();
 
-        List<Object[]> rows = em.createNativeQuery("""
-                SELECT scope_id, tenant_id, slug, archived
-                FROM platform.scope_access
-                WHERE slug = :slug
-                """)
-            .setParameter("slug", slug)
-            .getResultList();
+        Optional<ScopeAccessRepository.ScopeAccessRow> row = scopes.findBySlug(slug);
 
-        if (rows.isEmpty()) {
+        if (row.isEmpty()) {
             // Reached only with both settings bound, so this genuinely means
             // "no such scope for this subject" and not "nothing was bound".
             LOG.warnf("scope '%s' unresolved: %s", slug,
@@ -82,12 +76,12 @@ public class ScopeDirectory {
         }
 
         LOG.debugf("resolved scope '%s'", slug);
-        Object[] row = rows.get(0);
+        ScopeAccessRepository.ScopeAccessRow found = row.get();
         return new ScopeAccess(
-            (UUID) row[0],
-            (UUID) row[1],
-            (String) row[2],
-            (Boolean) row[3]);
+            found.scopeId(),
+            found.tenantId(),
+            found.slug(),
+            found.archived());
     }
 
     /**
@@ -105,9 +99,7 @@ public class ScopeDirectory {
                     + "no asker — and the answer would be zero rows, which reads as "
                     + "'no such scope'.");
         }
-        em.createNativeQuery("SELECT set_config('app.subject', :v, true)")
-            .setParameter("v", subject)
-            .getSingleResult();
+        scopes.bindSubject(subject);
     }
 
     /**
@@ -120,10 +112,8 @@ public class ScopeDirectory {
      * wrong thing.
      */
     private void requireSessionBound() {
-        Object tenant = em.createNativeQuery(
-            "SELECT NULLIF(current_setting('app.tenant_id', true), '')").getSingleResult();
-        Object subject = em.createNativeQuery(
-            "SELECT NULLIF(current_setting('app.subject', true), '')").getSingleResult();
+        Object tenant = scopes.boundTenant();
+        Object subject = scopes.boundSubject();
 
         if (tenant == null || subject == null) {
             LOG.warnf("directory call with unbound session: %s",

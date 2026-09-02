@@ -40,7 +40,7 @@ class ItemDomainIT {
 
     private static final UUID SCOPE = UUID.fromString(SubstrateDatabaseResource.SCOPE_ID);
 
-    @Inject ItemStore items;
+    @Inject ItemService items;
     @Inject SelectorRegistry selectors;
     @Inject TermRegistry terms;
 

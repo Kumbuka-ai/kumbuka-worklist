@@ -1,6 +1,6 @@
 package ai.kumbuka.worklist.tenancy;
 
-import ai.kumbuka.worklist.domain.ItemStore;
+import ai.kumbuka.worklist.domain.ItemService;
 import io.quarkus.hibernate.orm.PersistenceUnitExtension;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -49,7 +49,7 @@ class TenantBindingEdgeCaseIT {
     // matches by type and is rejected for want of a matching qualifier.
     @Inject @PersistenceUnitExtension HibernateTenantResolver hibernateResolver;
 
-    @Inject ItemStore items;
+    @Inject ItemService items;
 
     // -----------------------------------------------------------------------
     // The bind stack

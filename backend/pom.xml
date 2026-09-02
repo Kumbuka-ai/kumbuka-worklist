@@ -192,6 +192,17 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire-plugin.version}</version>
                 <configuration>
+                    <!--
+                        No explicit `argLine` here on purpose. The Quarkus Maven
+                        extension appends its own JVM parameters to the standard
+                        `argLine` property, and warns and gives up as soon as an
+                        explicit one is configured without `@{argLine}` in it.
+                        jacoco:prepare-agent writes into that same standard
+                        property, so both arrive without either being named
+                        here — measured: with an explicit `argLine` the agent
+                        never reached the forked JVM and no exec file was
+                        written at all.
+                    -->
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                     </systemPropertyVariables>
@@ -223,14 +234,29 @@
                 </configuration>
             </plugin>
             <!--
-                Coverage report for the static-analysis gate.
+                Coverage for the static-analysis gate, collected by two agents
+                and merged.
 
-                Only the `report` goal runs here, against the file the
-                quarkus-jacoco extension produces. `prepare-agent` is
-                deliberately NOT attached: it would write a second, empty
-                exec file that races the extension's, and the documented
-                result is a report claiming zero coverage — which reads as a
-                regression rather than as a misconfiguration.
+                The quarkus-jacoco extension instruments what runs inside the
+                Quarkus classloader, which the ordinary agent cannot see, and
+                writes jacoco-quarkus.exec. The reverse is also true: it does
+                not see a plain-JVM test. Everything exercised ONLY by such a
+                test therefore read as uncovered — the architecture and
+                vocabulary guards among them, which is to say the tests whose
+                whole purpose is to be cheap enough to run without a container.
+
+                `prepare-agent` therefore runs as well, but writes its OWN file
+                and reaches Surefire through its OWN property. The note that
+                stood here before said prepare-agent must not be attached at
+                all, on the observation that a second agent produced an empty
+                exec file that raced the extension's. That race was between two
+                agents configured to write the SAME path, which is the default;
+                with separate destinations there is nothing to race, and `merge`
+                folds the two files into the one the report reads.
+
+                `merge` is declared before `report` on purpose: both are bound
+                to `verify`, and executions of one plugin in one phase run in
+                declaration order.
             -->
             <plugin>
                 <groupId>org.jacoco</groupId>
@@ -238,13 +264,41 @@
                 <version>${jacoco-plugin.version}</version>
                 <executions>
                     <execution>
+                        <id>prepare-agent-surefire</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                        <configuration>
+                            <destFile>${project.build.directory}/jacoco-surefire.exec</destFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>merge</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>merge</goal>
+                        </goals>
+                        <configuration>
+                            <fileSets>
+                                <fileSet>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>jacoco-quarkus.exec</include>
+                                        <include>jacoco-surefire.exec</include>
+                                    </includes>
+                                </fileSet>
+                            </fileSets>
+                            <destFile>${project.build.directory}/jacoco-merged.exec</destFile>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>report</id>
                         <phase>verify</phase>
                         <goals>
                             <goal>report</goal>
                         </goals>
                         <configuration>
-                            <dataFile>${project.build.directory}/jacoco-quarkus.exec</dataFile>
+                            <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
                             <outputDirectory>${project.build.directory}/site/jacoco</outputDirectory>
                         </configuration>
                     </execution>

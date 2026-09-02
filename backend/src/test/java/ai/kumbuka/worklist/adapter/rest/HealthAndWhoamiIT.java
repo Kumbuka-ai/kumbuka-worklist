@@ -1,4 +1,4 @@
-package ai.kumbuka.worklist.api;
+package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import io.quarkus.test.common.QuarkusTestResource;
