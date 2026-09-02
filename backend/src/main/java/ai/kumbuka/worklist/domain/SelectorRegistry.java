@@ -87,8 +87,8 @@ public class SelectorRegistry {
     }
 
     /**
-     * Withdraw a selector: nothing new is admitted under it, and everything
-     * already admitted keeps resolving.
+     * Withdraw a selector: nothing new is accepted under it, and everything
+     * already accepted keeps resolving.
      *
      * <p>The token stays occupied. That is the point — a released token could
      * be declared again to mean something else, and every address ever issued

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  * nothing, and that a read answer sent straight back is accepted rather than
  * discarded. It is worth testing on its own, at unit speed, rather than only
  * through the store — a failure here should say which conversion is wrong,
- * not that an amendment behaved oddly.
+ * not that an update behaved oddly.
  */
 class ItemFieldsTest {
 

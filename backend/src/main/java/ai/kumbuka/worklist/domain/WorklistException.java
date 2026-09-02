@@ -65,14 +65,17 @@ public class WorklistException extends RuntimeException {
          */
         SELECTOR_UNDECLARED,
 
-        /** The selector exists and has been withdrawn, so nothing new is admitted under it. */
+        /** The selector exists and has been withdrawn, so nothing new is accepted under it. */
         SELECTOR_WITHDRAWN,
 
         /** A term of that token on that axis was never declared in this scope. */
         TERM_UNDECLARED,
 
-        /** The item already carries an address, and an address is allocated once. */
-        ALREADY_ADMITTED,
+        /**
+         * The item was already accepted, so it carries its identifier, and
+         * that is allocated once.
+         */
+        ALREADY_ACCEPTED,
 
         /**
          * A high-water mark may be carried forward and never back. Moving it

@@ -193,10 +193,10 @@ class TenantBindingEdgeCaseIT {
             // carried the bound tenant" is checked one level down, by asking
             // the database under exactly that tenant — where row-level
             // security is what makes the row visible at all.
-            var stated = items.state(scope, java.util.Map.of("title", "count-probe"));
-            assertThat(stated.get("title")).isEqualTo("count-probe");
+            var created = items.create(scope, java.util.Map.of("title", "count-probe"));
+            assertThat(created.get("title")).isEqualTo("count-probe");
 
-            assertThat(items.survey(scope))
+            assertThat(items.query(scope))
                 .as("a write through the ORM carries the bound tenant without the caller "
                     + "supplying it — that is what the @TenantId filter is for — and the "
                     + "read gives back exactly what it wrote and only that: the scope "
