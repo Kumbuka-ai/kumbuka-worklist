@@ -21,11 +21,25 @@ import java.util.UUID;
  *
  * <h2>The verbs</h2>
  *
- * {@code state} a call-in, {@code admit} it into an address space,
- * {@code amend} what is known about it, {@code retract} it, {@code inspect}
- * one, {@code survey} a scope. Six, and none of these names is a verb of
- * another service on this platform — an accidental homonym across two
- * services is a reader believing they already know what a call does.
+ * {@code create} a call-in, {@code accept} it into the corpus,
+ * {@code update} what is known about it, {@code withdraw} it, {@code read}
+ * one, {@code query} a scope. Six, and every one of them is the platform's
+ * own word for the act, spelled identically.
+ *
+ * <p><strong>Identity is deliberate, and a shared name is not a collision.</strong>
+ * These names exist in sibling services too, and that is the mechanism rather
+ * than an accident: with one vocabulary the caller-facing surface is the
+ * UNION of the transitions instead of their sum, and it is the address that
+ * says which service is meant, not the verb. An earlier build of this class
+ * carried six names chosen so that no other service used them; the rule
+ * behind that choice is retired, so the names are gone with it.
+ *
+ * <p>What the identity buys is guarded rather than asserted:
+ * {@code VerbVocabularyGuardTest} holds the public methods below against a
+ * literal transcription of the platform verb set, in both directions. A verb
+ * too many and a verb too few are equally red, because drift back to a
+ * service-private name is silent otherwise — it breaks nothing, compiles,
+ * and is only noticed by the next reader who assumes the shared meaning.
  *
  * <p>There is no seventh that deletes. What the predecessor's {@code delete}
  * did — remove the row entirely — survives as the status {@code withdrawn},
@@ -74,7 +88,7 @@ public class ItemStore {
 
     /** One item, as the canonical field map. */
     @Transactional
-    public Map<String, Object> inspect(UUID scopeId, UUID itemId) {
+    public Map<String, Object> read(UUID scopeId, UUID itemId) {
         return project(require(scopeId, itemId));
     }
 
@@ -87,7 +101,7 @@ public class ItemStore {
      * than an obviously different one.
      */
     @Transactional
-    public List<Map<String, Object>> survey(UUID scopeId) {
+    public List<Map<String, Object>> query(UUID scopeId) {
         return em.createQuery(
                 "SELECT i FROM Item i WHERE i.scopeId = :scope ORDER BY i.createdAt, i.id",
                 Item.class)
@@ -103,18 +117,23 @@ public class ItemStore {
     // ------------------------------------------------------------------
 
     /**
-     * State an item: record that something has been called in.
+     * Create an item: record that something has been called in.
      *
      * <p>The tenant is not a parameter. It comes from the bound tenant
      * context, which is also what the policy checks the incoming row against
      * — an item whose tenant a caller could name would be an item a caller
      * could plant across the boundary.
      *
-     * <p>A stated item has no address. It gets one from {@link #admit}, when
-     * somebody has decided what kind of thing it is.
+     * <p>A created item carries no selector and no number. It gets both from
+     * {@link #accept}, when a second party has decided what kind of thing it
+     * is. <strong>Two names for that pair are in circulation and they mean
+     * the same thing:</strong> this repository has called {@code FEAT-51} the
+     * address since the substrate was built, while the platform vocabulary
+     * reserves "address" for what creation returns and calls the pair the
+     * business identifier. The word is unsettled; what it denotes is not.
      */
     @Transactional
-    public Map<String, Object> state(UUID scopeId, Map<String, ?> arguments) {
+    public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(arguments);
 
         List<String> notSettable = given.keySet().stream()
@@ -126,7 +145,7 @@ public class ItemStore {
                 WorklistException.Reason.FIELD_NOT_SETTABLE,
                 "a new item has no " + notSettable + " to carry: those fields are the "
                     + "service's and are derived rather than given. An address in "
-                    + "particular is allocated by admission, never supplied",
+                    + "particular is allocated by acceptance, never supplied",
                 notSettable);
         }
 
@@ -146,7 +165,7 @@ public class ItemStore {
         em.flush();
 
         // Everything else the caller supplied goes through the same path an
-        // amendment takes, so that a value is validated the same way whether
+        // update takes, so that a value is validated the same way whether
         // it arrives at intake or later. A second validation path is a second
         // place for the two to disagree.
         Map<Field, Object> rest = new EnumMap<>(Field.class);
@@ -157,27 +176,33 @@ public class ItemStore {
             em.flush();
         }
 
-        LOG.infof("item stated in scope %s", scopeId);
+        LOG.infof("item created in scope %s", scopeId);
         return project(item);
     }
 
     /**
-     * Admit an item into an address space: allocate its number under a
-     * declared selector.
+     * Accept an item into the corpus: allocate its number under a declared
+     * selector.
      *
-     * <p>Once. An address that could be reallocated would make every
+     * <p>The intake gate, and the one act of this store a second party
+     * performs rather than the author. What it allocates is the pair
+     * {@code (selector, number)} — {@code FEAT-51} — which the platform
+     * vocabulary calls the business identifier and this repository has always
+     * called the address; see {@link #create} on the two words.
+     *
+     * <p>Once. An identifier that could be reallocated would make every
      * reference to the old one resolve to something else, so a second
-     * admission is a typed refusal rather than a re-allocation.
+     * acceptance is a typed refusal rather than a re-allocation.
      */
     @Transactional
-    public Map<String, Object> admit(UUID scopeId, UUID itemId, String selectorToken,
+    public Map<String, Object> accept(UUID scopeId, UUID itemId, String selectorToken,
             String conflictToken) {
         Item item = require(scopeId, itemId);
         requireCurrentToken(item, conflictToken);
 
         if (item.selectorId != null) {
             throw new WorklistException(
-                WorklistException.Reason.ALREADY_ADMITTED,
+                WorklistException.Reason.ALREADY_ACCEPTED,
                 "item " + itemId + " already carries an address and an address is "
                     + "allocated once. Every reference ever written to it resolves "
                     + "through that address",
@@ -193,7 +218,7 @@ public class ItemStore {
         em.flush();
         em.refresh(item);
 
-        LOG.infof("item admitted as %s-%d in scope %s", selectorToken, number, scopeId);
+        LOG.infof("item accepted as %s-%d in scope %s", selectorToken, number, scopeId);
         return project(item);
     }
 
@@ -213,7 +238,7 @@ public class ItemStore {
      * the answer a caller read already carries it.
      */
     @Transactional
-    public Map<String, Object> amend(UUID scopeId, UUID itemId, Map<String, ?> arguments) {
+    public Map<String, Object> update(UUID scopeId, UUID itemId, Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(arguments);
         Item item = require(scopeId, itemId);
 
@@ -234,7 +259,7 @@ public class ItemStore {
             // The whole point. No statement is issued, so the modification
             // date and the token stay where they are, and the change trail
             // keeps meaning what it says.
-            LOG.debugf("amendment of an item in scope %s changed nothing and wrote nothing",
+            LOG.debugf("update of an item in scope %s changed nothing and wrote nothing",
                 scopeId);
             return current;
         }
@@ -242,24 +267,24 @@ public class ItemStore {
         stamp(item);
         em.flush();
         em.refresh(item);
-        LOG.infof("item amended in scope %s", scopeId);
+        LOG.infof("item updated in scope %s", scopeId);
         return project(item);
     }
 
     /**
-     * Retract an item: it is taken back, and it keeps its number forever.
+     * Withdraw an item: it is taken back, and it keeps its number forever.
      *
      * <p>This is what the predecessor's {@code delete} becomes. It goes
-     * through {@link #amend} rather than beside it, so that the conflict
+     * through {@link #update} rather than beside it, so that the conflict
      * token, the no-op rule and the field validation are the same code —
      * a second write path is a second place for those three to drift.
      */
     @Transactional
-    public Map<String, Object> retract(UUID scopeId, UUID itemId, String conflictToken) {
-        Map<String, Object> answer = amend(scopeId, itemId, Map.of(
+    public Map<String, Object> withdraw(UUID scopeId, UUID itemId, String conflictToken) {
+        Map<String, Object> answer = update(scopeId, itemId, Map.of(
             Field.STATUS.canonicalName(), Item.WITHDRAWN,
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
-        LOG.infof("item retracted in scope %s", scopeId);
+        LOG.infof("item withdrawn in scope %s", scopeId);
         return answer;
     }
 
@@ -517,7 +542,7 @@ public class ItemStore {
      * none — which is the class of defect this domain exists against.
      *
      * <p>The term and selector lookups are per item. Through the persistence
-     * context, so a survey of a scope resolves each distinct term once
+     * context, so a query over a scope resolves each distinct term once
      * whatever the item count; a projection built from a join would be faster
      * and is not worth a second query path while there is no reading surface
      * to make it matter.

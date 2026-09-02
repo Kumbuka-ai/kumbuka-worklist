@@ -3,7 +3,7 @@
 The worklist service.
 
 A scope states what it intends to do, as a list of items that are worked
-through a process. An item is stated, characterised, planned, claimed, worked
+through a process. An item is created, characterised, planned, claimed, worked
 and terminated; that sequence takes weeks or months and every step changes the
 item.
 

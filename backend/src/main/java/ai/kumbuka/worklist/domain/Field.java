@@ -52,16 +52,16 @@ public enum Field {
     /** The row's identity, from the insert onward. Never set by a caller. */
     ID("id", false),
 
-    /** The tenancy unit the item belongs to. Fixed when the item is stated. */
+    /** The tenancy unit the item belongs to. Fixed when the item is created. */
     SCOPE("scope", false),
 
     /**
      * The declared head of the address, as its token — {@code FEAT}, not a
-     * uuid. Set by admission into an address space, never by an amendment.
+     * uuid. Set by acceptance into an address space, never by an update.
      */
     SELECTOR("selector", false),
 
-    /** The number allocated within that address space. Set by admission. */
+    /** The number allocated within that address space. Set by acceptance. */
     NUMBER("number", false),
 
     // --- what a caller characterises -------------------------------------
@@ -110,7 +110,7 @@ public enum Field {
 
     /**
      * Moved by an effective change and by nothing else. A write that changes
-     * no value leaves it where it is — see {@link ItemStore#amend}.
+     * no value leaves it where it is — see {@link ItemStore#update}.
      */
     UPDATED_AT("updated_at", false),
 

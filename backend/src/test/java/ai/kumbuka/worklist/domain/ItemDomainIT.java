@@ -66,12 +66,12 @@ class ItemDomainIT {
      */
     @Test
     void a_stale_conflict_token_is_refused_and_the_refusal_carries_the_current_one() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", "conflict probe"));
-        UUID id = (UUID) stated.get("id");
-        String staleToken = (String) stated.get("conflict_token");
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", "conflict probe"));
+        UUID id = (UUID) created.get("id");
+        String staleToken = (String) created.get("conflict_token");
 
         // Somebody else gets there first.
-        Map<String, Object> moved = items.amend(SCOPE, id, Map.of(
+        Map<String, Object> moved = items.update(SCOPE, id, Map.of(
             "title", "moved on",
             "conflict_token", staleToken));
         String currentToken = (String) moved.get("conflict_token");
@@ -81,7 +81,7 @@ class ItemDomainIT {
                 + "that the row moved")
             .isNotEqualTo(staleToken);
 
-        WorklistException refusal = catchWorklistException(() -> items.amend(SCOPE, id, Map.of(
+        WorklistException refusal = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "title", "written over the top",
             "conflict_token", staleToken)));
 
@@ -94,7 +94,7 @@ class ItemDomainIT {
 
         // What the absent mechanism would have left behind: the second
         // writer's title, and a token rotated a second time. Neither is here.
-        Map<String, Object> after = items.inspect(SCOPE, id);
+        Map<String, Object> after = items.read(SCOPE, id);
         assertThat(after.get("title"))
             .as("RED STATE, by its trace: with the check skipped the losing writer would "
                 + "have overwritten the winner and this would read 'written over the top'")
@@ -107,17 +107,17 @@ class ItemDomainIT {
     /** An absent token is the same refusal as a stale one, for the same reason. */
     @Test
     void a_write_with_no_conflict_token_is_refused() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", "tokenless probe"));
-        UUID id = (UUID) stated.get("id");
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", "tokenless probe"));
+        UUID id = (UUID) created.get("id");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.amend(SCOPE, id, Map.of("title", "no token given")));
+            items.update(SCOPE, id, Map.of("title", "no token given")));
 
         assertThat(refusal.reason())
             .as("no token and a wrong token are the same fact — this write was not built "
                 + "from a read of the row it is changing")
             .isEqualTo(WorklistException.Reason.CONFLICT);
-        assertThat(items.inspect(SCOPE, id).get("title"))
+        assertThat(items.read(SCOPE, id).get("title"))
             .as("and nothing was written")
             .isEqualTo("tokenless probe");
     }
@@ -127,7 +127,7 @@ class ItemDomainIT {
     // ==================================================================
 
     /**
-     * An amendment carrying only the values already held moves neither the
+     * An update carrying only the values already held moves neither the
      * modification date nor the token.
      *
      * <p>This is the measured predecessor defect in its exact shape: a write
@@ -137,21 +137,21 @@ class ItemDomainIT {
      * reported success.
      */
     @Test
-    void an_amendment_that_changes_nothing_writes_nothing() throws SQLException {
-        Map<String, Object> stated = items.state(SCOPE, Map.of(
+    void an_update_that_changes_nothing_writes_nothing() throws SQLException {
+        Map<String, Object> created = items.create(SCOPE, Map.of(
             "title", "no-op probe",
             "reference", "on file",
             "component", List.of("e2e", "ee-srv")));
-        UUID id = (UUID) stated.get("id");
+        UUID id = (UUID) created.get("id");
 
-        Map<String, Object> before = items.inspect(SCOPE, id);
+        Map<String, Object> before = items.read(SCOPE, id);
         // Read from the database BEFORE the call, because the answer the call
         // returns is built by the same code that decided not to write. Only a
         // value read outside that code can say whether a statement was issued.
         String storedDateBefore = storedUpdatedAt(id);
 
         // The obvious caller move: read, change nothing, send it all back.
-        Map<String, Object> echoed = items.amend(SCOPE, id, new HashMap<>(before));
+        Map<String, Object> echoed = items.update(SCOPE, id, new HashMap<>(before));
 
         assertThat(echoed.get("updated_at"))
             .as("the modification date must not move for a write that changed no value — "
@@ -185,16 +185,16 @@ class ItemDomainIT {
             .isEqualTo(movedToken);
     }
 
-    /** And an amendment that changes ONE value does move both. */
+    /** And an update that changes ONE value does move both. */
     @Test
-    void an_amendment_that_changes_one_value_moves_the_date_and_the_token() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", "effective probe"));
-        UUID id = (UUID) stated.get("id");
-        Map<String, Object> before = items.inspect(SCOPE, id);
+    void an_update_that_changes_one_value_moves_the_date_and_the_token() {
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", "effective probe"));
+        UUID id = (UUID) created.get("id");
+        Map<String, Object> before = items.read(SCOPE, id);
 
         Map<String, Object> changed = new HashMap<>(before);
         changed.put("title", "an actual change");
-        Map<String, Object> after = items.amend(SCOPE, id, changed);
+        Map<String, Object> after = items.update(SCOPE, id, changed);
 
         assertThat(after.get("conflict_token"))
             .as("a real change rotates the token. Without this half, 'nothing writes on a "
@@ -214,15 +214,15 @@ class ItemDomainIT {
      */
     @Test
     void a_reordered_list_is_not_a_change() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of(
+        Map<String, Object> created = items.create(SCOPE, Map.of(
             "title", "set semantics probe",
             "component", List.of("ee-srv", "e2e")));
-        UUID id = (UUID) stated.get("id");
-        Map<String, Object> before = items.inspect(SCOPE, id);
+        UUID id = (UUID) created.get("id");
+        Map<String, Object> before = items.read(SCOPE, id);
 
         Map<String, Object> reordered = new HashMap<>(before);
         reordered.put("component", List.of("ee-srv", "e2e", "e2e"));
-        Map<String, Object> after = items.amend(SCOPE, id, reordered);
+        Map<String, Object> after = items.update(SCOPE, id, reordered);
 
         assertThat(after.get("conflict_token"))
             .as("the same set, in another order and with a repeat, is the same value")
@@ -246,16 +246,16 @@ class ItemDomainIT {
      */
     @Test
     void an_unknown_field_is_refused_by_name_and_nothing_is_written() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", "unknown field probe"));
-        UUID id = (UUID) stated.get("id");
-        Map<String, Object> before = items.inspect(SCOPE, id);
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", "unknown field probe"));
+        UUID id = (UUID) created.get("id");
+        Map<String, Object> before = items.read(SCOPE, id);
 
         Map<String, Object> misspelt = new HashMap<>(before);
         misspelt.remove("title");
         misspelt.put("Titel", "the predecessor's spelling");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.amend(SCOPE, id, misspelt));
+            items.update(SCOPE, id, misspelt));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
         assertThat(refusal.offenders())
@@ -269,7 +269,7 @@ class ItemDomainIT {
         // RED STATE, by its trace. A silently dropped argument would have
         // written the row: same values, fresh date, rotated token. The token
         // is the tell, and it has not moved.
-        Map<String, Object> after = items.inspect(SCOPE, id);
+        Map<String, Object> after = items.read(SCOPE, id);
         assertThat(after.get("conflict_token"))
             .as("RED STATE, observed by its absence: had the unknown argument been "
                 + "dropped and the write let through, the token would have rotated. That "
@@ -283,17 +283,17 @@ class ItemDomainIT {
     /** Several unknown names are reported together, not one per round trip. */
     @Test
     void every_unknown_field_is_named_at_once() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", "several probe"));
-        UUID id = (UUID) stated.get("id");
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", "several probe"));
+        UUID id = (UUID) created.get("id");
 
         Map<String, Object> arguments = new HashMap<>();
-        arguments.put("conflict_token", stated.get("conflict_token"));
+        arguments.put("conflict_token", created.get("conflict_token"));
         arguments.put("Titel", "one");
         arguments.put("Status", "two");
         arguments.put("Disp", "three");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.amend(SCOPE, id, arguments));
+            items.update(SCOPE, id, arguments));
 
         assertThat(refusal.offenders())
             .as("a caller that misspelt three fields learns all three in one round trip")
@@ -309,14 +309,14 @@ class ItemDomainIT {
      */
     @Test
     void a_read_answer_sent_back_unchanged_is_accepted() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", "round trip probe"));
-        UUID id = (UUID) stated.get("id");
-        Map<String, Object> before = items.inspect(SCOPE, id);
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", "round trip probe"));
+        UUID id = (UUID) created.get("id");
+        Map<String, Object> before = items.read(SCOPE, id);
 
         Map<String, Object> roundTrip = new HashMap<>(before);
         roundTrip.put("reference", "changed one thing");
 
-        Map<String, Object> after = items.amend(SCOPE, id, roundTrip);
+        Map<String, Object> after = items.update(SCOPE, id, roundTrip);
 
         assertThat(after.get("reference")).isEqualTo("changed one thing");
         assertThat(after.get("id"))
@@ -328,16 +328,16 @@ class ItemDomainIT {
     /** But a read-only field carrying a DIFFERENT value is refused by name. */
     @Test
     void a_read_only_field_given_a_new_value_is_refused_by_name() {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", "not settable probe"));
-        UUID id = (UUID) stated.get("id");
-        Map<String, Object> before = items.inspect(SCOPE, id);
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", "not settable probe"));
+        UUID id = (UUID) created.get("id");
+        Map<String, Object> before = items.read(SCOPE, id);
 
         Map<String, Object> tampered = new HashMap<>(before);
         tampered.put("id", UUID.randomUUID());
         tampered.put("number", 99L);
 
         WorklistException refusal = catchWorklistException(() ->
-            items.amend(SCOPE, id, tampered));
+            items.update(SCOPE, id, tampered));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders())
@@ -351,24 +351,24 @@ class ItemDomainIT {
     // ==================================================================
 
     /**
-     * A retracted item keeps its number, and the next allocation is the next
+     * A withdrawn item keeps its number, and the next allocation is the next
      * one up.
      *
      * <p>The red state is established rather than described: after the
-     * retraction, the highest number among the LIVE items is lower than the
+     * withdrawal, the highest number among the LIVE items is lower than the
      * mark, so an implementation deriving the next number from
      * {@code max(number) + 1} over live rows would hand out a number that is
      * already in use. That arithmetic is done here, on the real data, and
      * asserted to differ from what was actually allocated.
      */
     @Test
-    void a_retracted_item_does_not_give_its_number_back() {
+    void a_withdrawn_item_does_not_give_its_number_back() {
         String token = "PF" + shortId();
         selectors.declare(SCOPE, token);
 
-        UUID first = admitted(token, "number probe 1");
-        UUID second = admitted(token, "number probe 2");
-        UUID third = admitted(token, "number probe 3");
+        UUID first = accepted(token, "number probe 1");
+        UUID second = accepted(token, "number probe 2");
+        UUID third = accepted(token, "number probe 3");
 
         assertThat(numberOf(first)).isEqualTo(1L);
         assertThat(numberOf(second)).isEqualTo(2L);
@@ -376,9 +376,9 @@ class ItemDomainIT {
 
         // The highest one is taken back. This is what the predecessor's
         // `delete` would have done, and it removed the row.
-        items.retract(SCOPE, third, (String) items.inspect(SCOPE, third).get("conflict_token"));
-        assertThat(items.inspect(SCOPE, third).get("number"))
-            .as("a retracted item keeps its address. That is what makes the mark a mark "
+        items.withdraw(SCOPE, third, (String) items.read(SCOPE, third).get("conflict_token"));
+        assertThat(items.read(SCOPE, third).get("number"))
+            .as("a withdrawn item keeps its address. That is what makes the mark a mark "
                 + "by construction rather than by a rule somebody has to keep")
             .isEqualTo(3L);
 
@@ -388,7 +388,7 @@ class ItemDomainIT {
         // afterwards would measure a different question.
         long derivedFromLiveRows = highestLiveNumber(token) + 1;
 
-        long allocated = numberOf(admitted(token, "number probe 4"));
+        long allocated = numberOf(accepted(token, "number probe 4"));
         assertThat(allocated)
             .as("the next allocation is the next number up, whatever happened to the "
                 + "items already holding numbers")
@@ -402,7 +402,7 @@ class ItemDomainIT {
             .isLessThan(allocated);
 
         assertThat(derivedFromLiveRows)
-            .as("and it is not merely lower — it is EXACTLY the number the retracted item "
+            .as("and it is not merely lower — it is EXACTLY the number the withdrawn item "
                 + "still holds. Two items would answer to one address, and every "
                 + "reference ever written to it would become ambiguous with no error "
                 + "anywhere")
@@ -419,7 +419,7 @@ class ItemDomainIT {
         selectors.declare(SCOPE, token);
 
         selectors.carryMarkForward(SCOPE, token, 500L);
-        assertThat(numberOf(admitted(token, "after the import")))
+        assertThat(numberOf(accepted(token, "after the import")))
             .as("an import arrives with numbers already allocated elsewhere, and the mark "
                 + "has to be told where the corpus got to")
             .isEqualTo(501L);
@@ -438,7 +438,7 @@ class ItemDomainIT {
     // ==================================================================
 
     /**
-     * Admitting under a selector that was never declared is refused, and the
+     * Accepting under a selector that was never declared is refused, and the
      * selector is NOT created.
      *
      * <p>The second half is the whole point and is asserted separately. A
@@ -449,11 +449,11 @@ class ItemDomainIT {
     @Test
     void an_undeclared_selector_is_refused_and_is_not_created_by_the_attempt() {
         String neverDeclared = "PG" + shortId();
-        UUID id = (UUID) items.state(SCOPE, Map.of("title", "undeclared probe")).get("id");
-        String conflictToken = (String) items.inspect(SCOPE, id).get("conflict_token");
+        UUID id = (UUID) items.create(SCOPE, Map.of("title", "undeclared probe")).get("id");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.admit(SCOPE, id, neverDeclared, conflictToken));
+            items.accept(SCOPE, id, neverDeclared, conflictToken));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SELECTOR_UNDECLARED);
         assertThat(refusal.offenders()).containsExactly(neverDeclared);
@@ -467,24 +467,24 @@ class ItemDomainIT {
                 + "indistinguishable from an intended one — both exist, both have items")
             .doesNotContain(neverDeclared);
 
-        assertThat(items.inspect(SCOPE, id).get("selector"))
+        assertThat(items.read(SCOPE, id).get("selector"))
             .as("and the item did not acquire an address")
             .isNull();
     }
 
-    /** A declared selector that was withdrawn admits nothing further. */
+    /** A declared selector that was withdrawn accepts nothing further. */
     @Test
-    void a_withdrawn_selector_admits_nothing_further() {
+    void a_withdrawn_selector_accepts_nothing_further() {
         String token = "PW" + shortId();
         selectors.declare(SCOPE, token);
-        admitted(token, "before the withdrawal");
+        accepted(token, "before the withdrawal");
         selectors.withdraw(SCOPE, token);
 
-        UUID id = (UUID) items.state(SCOPE, Map.of("title", "after the withdrawal")).get("id");
-        String conflictToken = (String) items.inspect(SCOPE, id).get("conflict_token");
+        UUID id = (UUID) items.create(SCOPE, Map.of("title", "after the withdrawal")).get("id");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.admit(SCOPE, id, token, conflictToken));
+            items.accept(SCOPE, id, token, conflictToken));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SELECTOR_WITHDRAWN);
 
         assertThat(selectors.inScope(SCOPE).stream().map(s -> s.token).toList())
@@ -500,10 +500,10 @@ class ItemDomainIT {
     /** A term that was never declared in this scope is refused by axis and token. */
     @Test
     void an_undeclared_term_is_refused_by_axis_and_token() {
-        UUID id = (UUID) items.state(SCOPE, Map.of("title", "vocabulary probe")).get("id");
-        String conflictToken = (String) items.inspect(SCOPE, id).get("conflict_token");
+        UUID id = (UUID) items.create(SCOPE, Map.of("title", "vocabulary probe")).get("id");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
 
-        WorklistException refusal = catchWorklistException(() -> items.amend(SCOPE, id, Map.of(
+        WorklistException refusal = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "cluster", "NOT-DECLARED",
             "conflict_token", conflictToken)));
 
@@ -520,10 +520,10 @@ class ItemDomainIT {
         String token = "CL" + shortId();
         terms.declare(SCOPE, Term.CLUSTER, token, 1);
 
-        UUID id = (UUID) items.state(SCOPE, Map.of("title", "declared term probe")).get("id");
-        String conflictToken = (String) items.inspect(SCOPE, id).get("conflict_token");
+        UUID id = (UUID) items.create(SCOPE, Map.of("title", "declared term probe")).get("id");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
 
-        Map<String, Object> after = items.amend(SCOPE, id, Map.of(
+        Map<String, Object> after = items.update(SCOPE, id, Map.of(
             "cluster", token,
             "conflict_token", conflictToken));
 
@@ -547,10 +547,10 @@ class ItemDomainIT {
      */
     @Test
     void planned_is_not_a_status_of_an_item() {
-        UUID id = (UUID) items.state(SCOPE, Map.of("title", "status probe")).get("id");
-        String conflictToken = (String) items.inspect(SCOPE, id).get("conflict_token");
+        UUID id = (UUID) items.create(SCOPE, Map.of("title", "status probe")).get("id");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
 
-        WorklistException refusal = catchWorklistException(() -> items.amend(SCOPE, id, Map.of(
+        WorklistException refusal = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "status", "planned",
             "conflict_token", conflictToken)));
 
@@ -578,23 +578,23 @@ class ItemDomainIT {
      */
     @Test
     void dependencies_are_set_as_a_whole_and_a_removed_edge_comes_back() {
-        UUID first = stated("dependency probe 1");
-        UUID second = stated("dependency probe 2");
-        UUID third = stated("dependency probe 3");
+        UUID first = created("dependency probe 1");
+        UUID second = created("dependency probe 2");
+        UUID third = created("dependency probe 3");
 
-        Map<String, Object> withBoth = amendField(first, "depends_on",
+        Map<String, Object> withBoth = updateField(first, "depends_on",
             List.of(second.toString(), third.toString()));
         assertThat(dependsOn(withBoth))
             .as("both edges are asserted, and the answer is sorted so that re-sending it "
                 + "is not a change")
             .containsExactlyInAnyOrder(second, third);
 
-        Map<String, Object> withOne = amendField(first, "depends_on", List.of(third));
+        Map<String, Object> withOne = updateField(first, "depends_on", List.of(third));
         assertThat(dependsOn(withOne))
             .as("the edge that left the set is no longer asserted")
             .containsExactly(third);
 
-        Map<String, Object> backAgain = amendField(first, "depends_on",
+        Map<String, Object> backAgain = updateField(first, "depends_on",
             List.of(second, third));
         assertThat(dependsOn(backAgain))
             .as("and re-asserting it works — the row was kept, so this is an update of "
@@ -605,13 +605,13 @@ class ItemDomainIT {
     /** Setting the same edges again changes nothing, so nothing is written. */
     @Test
     void re_asserting_the_same_dependencies_is_not_a_change() {
-        UUID first = stated("dependency no-op 1");
-        UUID second = stated("dependency no-op 2");
+        UUID first = created("dependency no-op 1");
+        UUID second = created("dependency no-op 2");
 
-        amendField(first, "depends_on", List.of(second));
-        Map<String, Object> before = items.inspect(SCOPE, first);
+        updateField(first, "depends_on", List.of(second));
+        Map<String, Object> before = items.read(SCOPE, first);
 
-        Map<String, Object> after = amendField(first, "depends_on", List.of(second));
+        Map<String, Object> after = updateField(first, "depends_on", List.of(second));
         assertThat(after.get("conflict_token"))
             .as("the same edge set is the same value, so the token must not rotate")
             .isEqualTo(before.get("conflict_token"));
@@ -620,10 +620,10 @@ class ItemDomainIT {
     /** The one cycle a single row can express is refused by name. */
     @Test
     void an_item_cannot_depend_on_itself() {
-        UUID id = stated("self dependency probe");
+        UUID id = created("self dependency probe");
 
         WorklistException refusal = catchWorklistException(() ->
-            amendField(id, "depends_on", List.of(id)));
+            updateField(id, "depends_on", List.of(id)));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.offenders()).containsExactly("depends_on");
@@ -645,10 +645,10 @@ class ItemDomainIT {
      */
     @Test
     void a_dependency_on_an_item_that_does_not_exist_cannot_be_written() {
-        UUID id = stated("dangling probe");
+        UUID id = created("dangling probe");
 
         assertThat(catchThrowable(() ->
-            amendField(id, "depends_on", List.of(UUID.randomUUID()))))
+            updateField(id, "depends_on", List.of(UUID.randomUUID()))))
             .as("the edge has a foreign key on both ends, so a dangling reference is not "
                 + "something to find later — it is something that cannot be stored")
             .isNotNull();
@@ -660,16 +660,16 @@ class ItemDomainIT {
 
     /** An address is allocated once. */
     @Test
-    void an_item_is_admitted_once() {
+    void an_item_is_accepted_once() {
         String token = "PA" + shortId();
         selectors.declare(SCOPE, token);
-        UUID id = admitted(token, "double admission probe");
+        UUID id = accepted(token, "double acceptance probe");
 
-        WorklistException refusal = catchWorklistException(() -> items.admit(SCOPE, id, token,
-            (String) items.inspect(SCOPE, id).get("conflict_token")));
+        WorklistException refusal = catchWorklistException(() -> items.accept(SCOPE, id, token,
+            (String) items.read(SCOPE, id).get("conflict_token")));
 
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ALREADY_ADMITTED);
-        assertThat(items.inspect(SCOPE, id).get("number"))
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ALREADY_ACCEPTED);
+        assertThat(items.read(SCOPE, id).get("number"))
             .as("and the first address is untouched — a re-allocation would make every "
                 + "reference to the old one resolve to something else")
             .isEqualTo(1L);
@@ -678,14 +678,14 @@ class ItemDomainIT {
     /** An item of another scope, or of no scope, is not this scope's item. */
     @Test
     void an_item_that_is_not_in_this_scope_is_unknown() {
-        UUID id = stated("scope probe");
+        UUID id = created("scope probe");
         UUID otherScope = UUID.randomUUID();
 
-        assertThat(catchWorklistException(() -> items.inspect(otherScope, id)).reason())
+        assertThat(catchWorklistException(() -> items.read(otherScope, id)).reason())
             .as("an item is addressed within its scope, and a lookup from another scope "
                 + "must not resolve it")
             .isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
-        assertThat(catchWorklistException(() -> items.inspect(SCOPE, UUID.randomUUID()))
+        assertThat(catchWorklistException(() -> items.read(SCOPE, UUID.randomUUID()))
             .reason())
             .isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
     }
@@ -697,7 +697,7 @@ class ItemDomainIT {
         arguments.put("title", "derived field probe");
         arguments.put("number", 7L);
 
-        WorklistException refusal = catchWorklistException(() -> items.state(SCOPE, arguments));
+        WorklistException refusal = catchWorklistException(() -> items.create(SCOPE, arguments));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders())
@@ -708,14 +708,14 @@ class ItemDomainIT {
     /** And it carries a title, on every status. */
     @Test
     void an_item_without_a_title_is_refused() {
-        assertThat(catchWorklistException(() -> items.state(SCOPE, Map.of())).reason())
+        assertThat(catchWorklistException(() -> items.create(SCOPE, Map.of())).reason())
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
 
-        UUID id = stated("title clearing probe");
+        UUID id = created("title clearing probe");
         assertThat(catchWorklistException(() -> {
-            Map<String, Object> clearing = new HashMap<>(items.inspect(SCOPE, id));
+            Map<String, Object> clearing = new HashMap<>(items.read(SCOPE, id));
             clearing.put("title", "   ");
-            items.amend(SCOPE, id, clearing);
+            items.update(SCOPE, id, clearing);
         }).reason())
             .as("the title cannot be cleared either — it is the one field required "
                 + "regardless of status")
@@ -785,12 +785,12 @@ class ItemDomainIT {
         String token = "TW" + shortId();
         terms.declare(SCOPE, Term.TYPE, token, 3);
 
-        UUID id = stated("withdrawn term probe");
-        amendField(id, "type", token);
+        UUID id = created("withdrawn term probe");
+        updateField(id, "type", token);
 
         terms.withdraw(SCOPE, Term.TYPE, token);
 
-        assertThat(items.inspect(SCOPE, id).get("type"))
+        assertThat(items.read(SCOPE, id).get("type"))
             .as("the item keeps reading back the term it was characterised with")
             .isEqualTo(token);
         assertThat(terms.onAxis(SCOPE, Term.TYPE).stream().map(t -> t.token).toList())
@@ -811,13 +811,13 @@ class ItemDomainIT {
     // Reading a scope.
     // ==================================================================
 
-    /** A survey of the scope returns the stated items in the canonical shape. */
+    /** A query of the scope returns the created items in the canonical shape. */
     @Test
-    void a_survey_returns_the_items_of_the_scope_in_the_canonical_shape() {
-        UUID id = stated("survey probe " + shortId());
+    void a_query_returns_the_items_of_the_scope_in_the_canonical_shape() {
+        UUID id = created("query probe " + shortId());
 
-        assertThat(items.survey(SCOPE))
-            .as("the survey is the same projection the single read gives, so a caller "
+        assertThat(items.query(SCOPE))
+            .as("the query is the same projection the single read gives, so a caller "
                 + "handles one shape rather than two")
             .anySatisfy(item -> {
                 assertThat(item.get("id")).isEqualTo(id);
@@ -842,29 +842,29 @@ class ItemDomainIT {
         return (List<UUID>) projection.get("depends_on");
     }
 
-    /** A stated item, returning its id. */
-    private UUID stated(String title) {
-        return (UUID) items.state(SCOPE, Map.of("title", title)).get("id");
+    /** A created item, returning its id. */
+    private UUID created(String title) {
+        return (UUID) items.create(SCOPE, Map.of("title", title)).get("id");
     }
 
-    /** One field amended, with the token read immediately before. */
-    private Map<String, Object> amendField(UUID id, String field, Object value) {
+    /** One field updated, with the token read immediately before. */
+    private Map<String, Object> updateField(UUID id, String field, Object value) {
         Map<String, Object> arguments = new HashMap<>();
         arguments.put(field, value);
-        arguments.put("conflict_token", items.inspect(SCOPE, id).get("conflict_token"));
-        return items.amend(SCOPE, id, arguments);
+        arguments.put("conflict_token", items.read(SCOPE, id).get("conflict_token"));
+        return items.update(SCOPE, id, arguments);
     }
 
-    /** A stated item, admitted under a selector, returning its id. */
-    private UUID admitted(String selectorToken, String title) {
-        Map<String, Object> stated = items.state(SCOPE, Map.of("title", title));
-        UUID id = (UUID) stated.get("id");
-        items.admit(SCOPE, id, selectorToken, (String) stated.get("conflict_token"));
+    /** A created item, accepted under a selector, returning its id. */
+    private UUID accepted(String selectorToken, String title) {
+        Map<String, Object> created = items.create(SCOPE, Map.of("title", title));
+        UUID id = (UUID) created.get("id");
+        items.accept(SCOPE, id, selectorToken, (String) created.get("conflict_token"));
         return id;
     }
 
     private long numberOf(UUID id) {
-        return (Long) items.inspect(SCOPE, id).get("number");
+        return (Long) items.read(SCOPE, id).get("number");
     }
 
     /** Short and unique, so a probe's selectors do not collide across runs. */
@@ -892,12 +892,12 @@ class ItemDomainIT {
     // --- reading and writing around the ORM, for the red states ----------
 
     /**
-     * The highest number among items NOT retracted — the quantity a derived
+     * The highest number among items NOT withdrawn — the quantity a derived
      * mark would be computed from.
      */
     private long highestLiveNumber(String selectorToken) {
         List<Long> live = new ArrayList<>();
-        for (Map<String, Object> item : items.survey(SCOPE)) {
+        for (Map<String, Object> item : items.query(SCOPE)) {
             if (selectorToken.equals(item.get("selector"))
                 && !Item.WITHDRAWN.equals(item.get("status"))
                 && item.get("number") != null) {

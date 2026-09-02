@@ -99,7 +99,7 @@ class FailClosedProbeIT {
      * fails closed by raising, because {@code WITH CHECK} compares the
      * incoming row against an unbound setting and cannot admit it. The two are
      * worth separating: a write that quietly affected no rows would leave a
-     * caller believing it had stated an item.
+     * caller believing it had created an item.
      */
     @Test
     void an_unbound_write_is_refused_by_the_policy() throws SQLException {
@@ -141,7 +141,7 @@ class FailClosedProbeIT {
                     // why plantOneItemPerTenant writes them that way: with the
                     // policy off, a row of tenant B would appear here, and its
                     // title would say so.
-                    var rows = items.survey(SCOPE);
+                    var rows = items.query(SCOPE);
                     assertThat(rows)
                         .as("with the policy disabled, the ORM filter is the only thing "
                             + "scoping this read — and it must still scope it")
@@ -203,10 +203,10 @@ class FailClosedProbeIT {
      */
     private void plantOneItemPerTenant() throws Exception {
         try (AutoCloseable ignored = tenantContext.bind(tenantA)) {
-            items.state(SCOPE, java.util.Map.of("title", titleA()));
+            items.create(SCOPE, java.util.Map.of("title", titleA()));
         }
         try (AutoCloseable ignored = tenantContext.bind(tenantB)) {
-            items.state(SCOPE, java.util.Map.of("title", titleB()));
+            items.create(SCOPE, java.util.Map.of("title", titleB()));
         }
     }
 

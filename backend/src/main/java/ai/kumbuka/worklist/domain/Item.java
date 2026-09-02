@@ -29,7 +29,7 @@ import java.util.UUID;
  *
  * An item is addressed by {@code (scope, selector, number)} — {@code FEAT-51}
  * in a scope. Both halves of the selector-and-number pair are null on a raw
- * call-in and are set together when the item is admitted into an address
+ * call-in and are set together when the item is accepted into an address
  * space. That is the intake state rather than a weakened invariant: something
  * gets called in before anybody has decided what kind of thing it is, and
  * demanding a selector at that moment means either guessing one or refusing
@@ -116,7 +116,7 @@ public class Item {
 
     // --- the address ------------------------------------------------------
 
-    /** The declared selector, or null on a raw call-in. Set once, at admission. */
+    /** The declared selector, or null on a raw call-in. Set once, at acceptance. */
     @Column(name = "selector_id")
     public UUID selectorId;
 
@@ -191,7 +191,7 @@ public class Item {
      * <p>The substrate mapped this as insert-only and said why: there was no
      * verb that updated an item, so a maintenance trigger could not have been
      * observed working. There is one now, and the observation it needed is
-     * the interesting one — {@link ItemStore#amend} moves this field ONLY
+     * the interesting one — {@link ItemStore#update} moves this field ONLY
      * when a value actually changed, so a write carrying nothing new leaves
      * it where it is. A database trigger would have been the wrong mechanism
      * for exactly that reason: it cannot tell a statement that changed
