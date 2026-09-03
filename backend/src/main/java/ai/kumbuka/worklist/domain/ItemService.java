@@ -1,9 +1,9 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.ItemRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -69,16 +69,16 @@ import java.util.UUID;
  */
 @ApplicationScoped
 @TenantBound
-public class ItemStore {
+public class ItemService {
 
     /**
      * An address, a scope id, a count, a transition. Never a title, never an
      * actor — the operator boundary of this service is a missing GRANT, and a
      * log line carrying content walks around it by a different road.
      */
-    private static final Logger LOG = Logger.getLogger(ItemStore.class);
+    private static final Logger LOG = Logger.getLogger(ItemService.class);
 
-    @Inject EntityManager em;
+    @Inject ItemRepository items;
     @Inject SelectorRegistry selectors;
     @Inject TermRegistry terms;
 
@@ -102,11 +102,7 @@ public class ItemStore {
      */
     @Transactional
     public List<Map<String, Object>> query(UUID scopeId) {
-        return em.createQuery(
-                "SELECT i FROM Item i WHERE i.scopeId = :scope ORDER BY i.createdAt, i.id",
-                Item.class)
-            .setParameter("scope", scopeId)
-            .getResultList()
+        return items.inScope(scopeId)
             .stream()
             .map(this::project)
             .toList();
@@ -161,8 +157,7 @@ public class ItemStore {
         Item item = new Item();
         item.scopeId = scopeId;
         item.title = title;
-        em.persist(item);
-        em.flush();
+        items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
         // update takes, so that a value is validated the same way whether
@@ -173,7 +168,7 @@ public class ItemStore {
         rest.remove(Field.TITLE);
         if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
             stamp(item);
-            em.flush();
+            items.flush();
         }
 
         LOG.infof("item created in scope %s", scopeId);
@@ -215,8 +210,7 @@ public class ItemStore {
         item.selectorId = selector.id;
         item.number = number;
         stamp(item);
-        em.flush();
-        em.refresh(item);
+        items.flushAndRefresh(item);
 
         LOG.infof("item accepted as %s-%d in scope %s", selectorToken, number, scopeId);
         return project(item);
@@ -265,8 +259,7 @@ public class ItemStore {
         }
 
         stamp(item);
-        em.flush();
-        em.refresh(item);
+        items.flushAndRefresh(item);
         LOG.infof("item updated in scope %s", scopeId);
         return project(item);
     }
@@ -453,10 +446,7 @@ public class ItemStore {
                 List.of(Field.DEPENDS_ON.canonicalName()));
         }
 
-        List<ItemDependency> edges = em.createQuery(
-                "SELECT d FROM ItemDependency d WHERE d.itemId = :item", ItemDependency.class)
-            .setParameter("item", item.id)
-            .getResultList();
+        List<ItemDependency> edges = items.edgesOf(item.id);
 
         boolean changed = false;
         List<UUID> present = new ArrayList<>();
@@ -477,12 +467,12 @@ public class ItemStore {
             ItemDependency edge = new ItemDependency();
             edge.itemId = item.id;
             edge.dependsOnId = target;
-            em.persist(edge);
+            items.insertEdge(edge);
             changed = true;
         }
 
         if (changed) {
-            em.flush();
+            items.flush();
         }
         return changed;
     }
@@ -522,7 +512,7 @@ public class ItemStore {
     }
 
     private Item require(UUID scopeId, UUID itemId) {
-        Item item = itemId == null ? null : em.find(Item.class, itemId);
+        Item item = items.byId(itemId);
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
@@ -573,7 +563,7 @@ public class ItemStore {
         if (item.selectorId == null) {
             return null;
         }
-        Selector selector = em.find(Selector.class, item.selectorId);
+        Selector selector = items.selectorById(item.selectorId);
         return selector == null ? null : selector.token;
     }
 
@@ -581,7 +571,7 @@ public class ItemStore {
         if (termId == null) {
             return null;
         }
-        Term term = em.find(Term.class, termId);
+        Term term = items.termById(termId);
         return term == null ? null : term.token;
     }
 
@@ -595,15 +585,6 @@ public class ItemStore {
      * write that changed nothing.
      */
     private List<UUID> assertedDependencies(Item item) {
-        return em.createQuery(
-                "SELECT d.dependsOnId FROM ItemDependency d "
-                    + "WHERE d.itemId = :item AND d.status = :status "
-                    + "ORDER BY d.dependsOnId", UUID.class)
-            .setParameter("item", item.id)
-            .setParameter("status", ItemDependency.ASSERTED)
-            .getResultList()
-            .stream()
-            .sorted()
-            .toList();
+        return items.assertedDependencies(item.id);
     }
 }

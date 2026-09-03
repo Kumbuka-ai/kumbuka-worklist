@@ -1,5 +1,6 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.fixture.ServicePrivateVerbFixture;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -27,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * assumed the shared meaning. That is precisely the class of defect a probe
  * has to carry, because nothing else will.
  *
- * <p>This is not hypothetical here. An earlier build of {@link ItemStore}
+ * <p>This is not hypothetical here. An earlier build of {@link ItemService}
  * carried six deliberately service-private names, chosen to satisfy a rule
  * that no verb name exist in two services. That rule is retired; the names
  * outlived it by a sprint. This guard exists so the second drift is loud.
@@ -36,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * {@link #PLATFORM_VOCABULARY} and {@link #CARRIED_BY_THIS_SCHEME} are written
  * out by hand, from the ratified catalogue. Deriving either from
- * {@code ItemStore} would produce a test that agrees with whatever the class
+ * {@code ItemService} would produce a test that agrees with whatever the class
  * says — internally consistent and evidence of nothing. A transcription can
  * disagree with the code, which is the only property that makes it a probe.
  *
@@ -83,7 +84,7 @@ class VerbVocabularyGuardTest {
 
     /**
      * The verbs this scheme carries TODAY, and therefore exactly the public
-     * methods {@link ItemStore} has.
+     * methods {@link ItemService} has.
      *
      * <p>Six of the twenty-four. The catalogue's mapping table for this scheme
      * names more — the draw, the graph, the planning verbs, {@code validate} —
@@ -126,8 +127,8 @@ class VerbVocabularyGuardTest {
      */
     @Test
     void the_public_methods_of_the_item_store_are_exactly_the_carried_verbs() {
-        assertThat(publicVerbsOf(ItemStore.class))
-            .as("the public methods of ItemStore are the platform verbs this scheme "
+        assertThat(publicVerbsOf(ItemService.class))
+            .as("the public methods of ItemService are the platform verbs this scheme "
                 + "carries, spelled identically — %s. A method missing from that set is "
                 + "a verb drifted back to a service-private name, which breaks nothing "
                 + "and is found by nobody; a method beyond it is a service-private "
@@ -176,6 +177,38 @@ class VerbVocabularyGuardTest {
             }
         }
         return wire.toString();
+    }
+
+    /**
+     * The red state, observed on every build.
+     *
+     * <p>Without it the assertion above is a comparison that happens to come
+     * out equal, and nothing distinguishes that from a reflection helper that
+     * has stopped seeing methods at all — which would make the guard pass on
+     * a class with no verbs left. {@code ServicePrivateVerbFixture} carries one
+     * correctly spelled verb and one service-private name, and the SAME
+     * detection the assertion above uses is required to tell them apart.
+     */
+    @Test
+    void the_guard_reports_a_service_private_name_where_a_verb_belongs() {
+        Set<String> found = publicVerbsOf(ServicePrivateVerbFixture.class);
+
+        assertThat(found)
+            .as("RED STATE, observed: the fixture carries a service-private name, and "
+                + "the detection must surface it. An empty or partial result here would "
+                + "mean the assertion above is comparing two things it never read")
+            .contains("register_intake");
+
+        assertThat(PLATFORM_VOCABULARY)
+            .as("RED STATE, observed: and that name must not be a platform verb — "
+                + "otherwise the guard would be watching a violation that is not one")
+            .doesNotContain("register_intake");
+
+        assertThat(found)
+            .as("RED STATE, observed: the same detection must still recognise the verb "
+                + "that IS spelled correctly, or it would report every method and say "
+                + "nothing about vocabulary")
+            .contains("read");
     }
 
     /**

@@ -11,7 +11,7 @@ import java.util.UUID;
  * Turning a caller's values into the shape the store compares and stores, and
  * back.
  *
- * <p>Separate from {@link ItemStore} because none of it needs a database, and
+ * <p>Separate from {@link ItemService} because none of it needs a database, and
  * because the comparison below is the mechanism behind two guarantees at once
  * — that a write changing nothing writes nothing, and that a read answer sent
  * straight back is accepted rather than silently discarded. Both rest on

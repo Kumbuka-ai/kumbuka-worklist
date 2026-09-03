@@ -1,7 +1,7 @@
 package ai.kumbuka.worklist.tenancy;
 
 import ai.kumbuka.worklist.domain.Item;
-import ai.kumbuka.worklist.domain.ItemStore;
+import ai.kumbuka.worklist.domain.ItemService;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -55,7 +55,7 @@ class FailClosedProbeIT {
         tenantB = UUID.randomUUID();
     }
 
-    @Inject ItemStore items;
+    @Inject ItemService items;
     @Inject TenantContext tenantContext;
 
     /** Acceptance criterion 5, in both of its halves. */

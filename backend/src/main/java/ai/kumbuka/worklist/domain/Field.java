@@ -110,7 +110,7 @@ public enum Field {
 
     /**
      * Moved by an effective change and by nothing else. A write that changes
-     * no value leaves it where it is — see {@link ItemStore#update}.
+     * no value leaves it where it is — see {@link ItemService#update}.
      */
     UPDATED_AT("updated_at", false),
 

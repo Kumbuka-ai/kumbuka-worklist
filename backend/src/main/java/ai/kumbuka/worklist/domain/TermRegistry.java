@@ -1,10 +1,9 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.TermRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -29,7 +28,7 @@ public class TermRegistry {
 
     private static final Logger LOG = Logger.getLogger(TermRegistry.class);
 
-    @Inject EntityManager em;
+    @Inject TermRepository terms;
 
     /**
      * Declare a value on an axis.
@@ -59,8 +58,7 @@ public class TermRegistry {
         term.axis = axis;
         term.token = token;
         term.ordinal = ordinal;
-        em.persist(term);
-        em.flush();
+        terms.insert(term);
 
         LOG.infof("term %s declared on axis %s in scope %s", token, axis, scopeId);
         return term;
@@ -81,7 +79,7 @@ public class TermRegistry {
             return term;
         }
         term.status = Term.WITHDRAWN;
-        em.flush();
+        terms.flush();
         LOG.infof("term %s withdrawn on axis %s in scope %s", token, axis, scopeId);
         return term;
     }
@@ -90,12 +88,7 @@ public class TermRegistry {
     @Transactional
     public List<Term> onAxis(UUID scopeId, String axis) {
         requireAxis(axis);
-        return em.createQuery(
-                "SELECT t FROM Term t WHERE t.scopeId = :scope AND t.axis = :axis "
-                    + "ORDER BY t.ordinal, t.token", Term.class)
-            .setParameter("scope", scopeId)
-            .setParameter("axis", axis)
-            .getResultList();
+        return terms.onAxis(scopeId, axis);
     }
 
     /**
@@ -150,16 +143,6 @@ public class TermRegistry {
     }
 
     private Term find(UUID scopeId, String axis, String token) {
-        try {
-            return em.createQuery(
-                    "SELECT t FROM Term t WHERE t.scopeId = :scope AND t.axis = :axis "
-                        + "AND t.token = :token", Term.class)
-                .setParameter("scope", scopeId)
-                .setParameter("axis", axis)
-                .setParameter("token", token)
-                .getSingleResult();
-        } catch (NoResultException absent) {
-            return null;
-        }
+        return terms.find(scopeId, axis, token);
     }
 }

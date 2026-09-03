@@ -1,11 +1,9 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.SelectorRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
-import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -33,7 +31,7 @@ public class SelectorRegistry {
     /** An address, a scope id, a number. Never content, never an actor. */
     private static final Logger LOG = Logger.getLogger(SelectorRegistry.class);
 
-    @Inject EntityManager em;
+    @Inject SelectorRepository selectors;
 
     /**
      * Declare a selector. This is the ONLY way one comes into existence.
@@ -67,8 +65,7 @@ public class SelectorRegistry {
         Selector selector = new Selector();
         selector.scopeId = scopeId;
         selector.token = token;
-        em.persist(selector);
-        em.flush();
+        selectors.insert(selector);
 
         // The address space opens with the selector, at zero. Created here
         // rather than lazily on the first allocation, because a lazily
@@ -79,8 +76,7 @@ public class SelectorRegistry {
         space.selectorId = selector.id;
         space.scopeId = scopeId;
         space.highWaterMark = 0L;
-        em.persist(space);
-        em.flush();
+        selectors.insert(space);
 
         LOG.infof("selector %s declared in scope %s", token, scopeId);
         return selector;
@@ -101,7 +97,7 @@ public class SelectorRegistry {
             return selector;
         }
         selector.status = Selector.WITHDRAWN;
-        em.flush();
+        selectors.flush();
         LOG.infof("selector %s withdrawn in scope %s", token, scopeId);
         return selector;
     }
@@ -109,11 +105,7 @@ public class SelectorRegistry {
     /** Every selector of a scope, declared and withdrawn alike, by token. */
     @Transactional
     public List<Selector> inScope(UUID scopeId) {
-        return em.createQuery(
-                "SELECT s FROM Selector s WHERE s.scopeId = :scope ORDER BY s.token",
-                Selector.class)
-            .setParameter("scope", scopeId)
-            .getResultList();
+        return selectors.inScope(scopeId);
     }
 
     /**
@@ -163,8 +155,7 @@ public class SelectorRegistry {
                 List.of(selector.token));
         }
 
-        NumberSpace space = em.find(NumberSpace.class, selector.id,
-            LockModeType.PESSIMISTIC_WRITE);
+        NumberSpace space = selectors.lockSpace(selector.id);
         if (space == null) {
             // A selector without its space is a row that predates the
             // declaration path above, or one written around it. Reported
@@ -179,7 +170,7 @@ public class SelectorRegistry {
         }
 
         space.highWaterMark = space.highWaterMark + 1;
-        em.flush();
+        selectors.flush();
         LOG.debugf("number %d allocated under selector %s in scope %s",
             space.highWaterMark, selector.token, scopeId);
         return space.highWaterMark;
@@ -197,8 +188,7 @@ public class SelectorRegistry {
     @Transactional
     public long carryMarkForward(UUID scopeId, String token, long mark) {
         Selector selector = require(scopeId, token);
-        NumberSpace space = em.find(NumberSpace.class, selector.id,
-            LockModeType.PESSIMISTIC_WRITE);
+        NumberSpace space = selectors.lockSpace(selector.id);
 
         if (space == null || mark < space.highWaterMark) {
             long current = space == null ? -1 : space.highWaterMark;
@@ -213,7 +203,7 @@ public class SelectorRegistry {
         }
 
         space.highWaterMark = mark;
-        em.flush();
+        selectors.flush();
         LOG.infof("high-water mark of selector %s in scope %s carried to %d",
             token, scopeId, mark);
         return mark;
@@ -223,20 +213,11 @@ public class SelectorRegistry {
     @Transactional
     public long markOf(UUID scopeId, String token) {
         Selector selector = require(scopeId, token);
-        NumberSpace space = em.find(NumberSpace.class, selector.id);
+        NumberSpace space = selectors.space(selector.id);
         return space == null ? 0L : space.highWaterMark;
     }
 
     private Selector find(UUID scopeId, String token) {
-        try {
-            return em.createQuery(
-                    "SELECT s FROM Selector s WHERE s.scopeId = :scope AND s.token = :token",
-                    Selector.class)
-                .setParameter("scope", scopeId)
-                .setParameter("token", token)
-                .getSingleResult();
-        } catch (NoResultException absent) {
-            return null;
-        }
+        return selectors.find(scopeId, token);
     }
 }
