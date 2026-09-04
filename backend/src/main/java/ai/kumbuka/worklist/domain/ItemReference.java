@@ -1,14 +1,11 @@
 package ai.kumbuka.worklist.domain;
 
-import ai.kumbuka.worklist.tenancy.StringUuidConverter;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
-import org.hibernate.annotations.TenantId;
 import org.hibernate.generator.EventType;
 
 import java.io.Serializable;
@@ -51,7 +48,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "item_reference", schema = "worklist")
 @IdClass(ItemReference.Key.class)
-public class ItemReference {
+public class ItemReference extends TenantScoped {
 
     /** The entry is part of the list. */
     public static final String ASSERTED = "asserted";
@@ -65,14 +62,6 @@ public class ItemReference {
     @Id
     @Column(name = "ordinal", nullable = false)
     public int ordinal;
-
-    @TenantId
-    @Convert(converter = StringUuidConverter.class)
-    @Column(name = "tenant_id", nullable = false)
-    public String tenantId;
-
-    @Column(name = "scope_id", nullable = false)
-    public UUID scopeId;
 
     /** What a reader sees instead of the raw target. Optional. */
     @Column(name = "label")

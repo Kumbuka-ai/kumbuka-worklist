@@ -1,20 +1,10 @@
 package ai.kumbuka.worklist.domain;
 
-import ai.kumbuka.worklist.tenancy.StringUuidConverter;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.Generated;
-import org.hibernate.annotations.TenantId;
-import org.hibernate.generator.EventType;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * One attribute a scope declared, with its type.
@@ -50,10 +40,18 @@ import java.util.UUID;
  * <p>The index itself is created when the attribute is declared, and that
  * verb belongs to the reading surface's own piece of work. What stands here
  * is the column that makes the capability declarable at all.
+ *
+ * <h2>The key, beside the inherited display name</h2>
+ *
+ * A declaration carries both: {@link #key} is the stable name a caller
+ * addresses the attribute by, immutable and unique in its scope, while the
+ * inherited name is what a reader sees and may change at will. That is one
+ * more separation than the other declared values need, and it is why this is
+ * the only one a caller addresses by something other than its identity.
  */
 @Entity
 @Table(name = "attribute_definition", schema = "worklist")
-public class AttributeDefinition {
+public class AttributeDefinition extends DeclaredValue {
 
     /** Free text, one line or many. */
     public static final String TEXT = "text";
@@ -81,9 +79,6 @@ public class AttributeDefinition {
     /** The types whose values are drawn from {@link AttributeOption}. */
     public static final List<String> ENUMERATED = List.of(CHOICE, MULTI_CHOICE);
 
-    public static final String DECLARED = "declared";
-    public static final String WITHDRAWN = "withdrawn";
-
     /**
      * The shape of a key: a leading lower-case letter, then alphanumerics and
      * interior underscores. {@code cluster}, {@code story_points}, {@code t2}
@@ -103,19 +98,6 @@ public class AttributeDefinition {
     public static final java.util.regex.Pattern KEY_PATTERN =
         java.util.regex.Pattern.compile("^[a-z][a-z0-9]*+(?:_[a-z0-9]++)*+$");
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    public UUID id;
-
-    @TenantId
-    @Convert(converter = StringUuidConverter.class)
-    @Column(name = "tenant_id", nullable = false)
-    public String tenantId;
-
-    @Column(name = "scope_id", nullable = false)
-    public UUID scopeId;
-
     /**
      * The stable name a caller addresses the attribute by. Immutable, and
      * unique in its scope: a withdrawn definition keeps its key, which is what
@@ -124,33 +106,11 @@ public class AttributeDefinition {
     @Column(name = "key", nullable = false, updatable = false)
     public String key;
 
-    /** What a reader sees. Changeable at will; an item stores {@link #id}. */
-    @Column(name = "name", nullable = false)
-    public String name;
-
-    @Column(name = "description")
-    public String description;
-
     /** One of {@link #TYPES}. */
     @Column(name = "type", nullable = false)
     public String type;
 
-    /** The display order of the declarations, and never the alphabetical one. */
-    @Column(name = "rank", nullable = false)
-    public int rank;
-
     /** Whether ordering by this attribute is a capability the scope declared. */
     @Column(name = "sortable", nullable = false)
     public boolean sortable;
-
-    @Column(name = "status", nullable = false)
-    public String status = DECLARED;
-
-    @Generated(event = EventType.INSERT)
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
-    public Instant createdAt;
-
-    @Generated(event = EventType.INSERT)
-    @Column(name = "updated_at", nullable = false, insertable = false)
-    public Instant updatedAt;
 }

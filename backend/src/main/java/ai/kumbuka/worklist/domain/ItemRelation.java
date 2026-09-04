@@ -1,14 +1,11 @@
 package ai.kumbuka.worklist.domain;
 
-import ai.kumbuka.worklist.tenancy.StringUuidConverter;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
-import org.hibernate.annotations.TenantId;
 import org.hibernate.generator.EventType;
 
 import java.io.Serializable;
@@ -56,7 +53,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "item_relation", schema = "worklist")
 @IdClass(ItemRelation.Key.class)
-public class ItemRelation {
+public class ItemRelation extends TenantScoped {
 
     /** The edge is asserted. */
     public static final String ASSERTED = "asserted";
@@ -74,14 +71,6 @@ public class ItemRelation {
     @Id
     @Column(name = "relation_type_id", nullable = false)
     public UUID relationTypeId;
-
-    @TenantId
-    @Convert(converter = StringUuidConverter.class)
-    @Column(name = "tenant_id", nullable = false)
-    public String tenantId;
-
-    @Column(name = "scope_id", nullable = false)
-    public UUID scopeId;
 
     @Column(name = "status", nullable = false)
     public String status = ASSERTED;

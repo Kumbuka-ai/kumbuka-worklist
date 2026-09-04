@@ -1,8 +1,6 @@
 package ai.kumbuka.worklist.domain;
 
-import ai.kumbuka.worklist.tenancy.StringUuidConverter;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -10,7 +8,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.TenantId;
 import org.hibernate.generator.EventType;
 import org.hibernate.type.SqlTypes;
 
@@ -88,28 +85,14 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "item", schema = "worklist")
-public class Item {
+public class Item extends TenantScoped {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
     public UUID id;
 
-    /**
-     * The tenancy axis — layer 1 of the enforcement model.
-     *
-     * <p>Typed as String because Quarkus' Hibernate tenant-resolver SPI is
-     * String-only, and converted to the {@code uuid} column by
-     * {@link StringUuidConverter}.
-     */
-    @TenantId
-    @Convert(converter = StringUuidConverter.class)
-    @Column(name = "tenant_id", nullable = false)
-    public String tenantId;
 
-    /** The platform scope this item belongs to. Stored, never resolved from here. */
-    @Column(name = "scope_id", nullable = false)
-    public UUID scopeId;
 
     // --- the address ------------------------------------------------------
 

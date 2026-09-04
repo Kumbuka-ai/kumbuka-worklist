@@ -1,15 +1,12 @@
 package ai.kumbuka.worklist.domain;
 
-import ai.kumbuka.worklist.tenancy.StringUuidConverter;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
-import org.hibernate.annotations.TenantId;
 import org.hibernate.generator.EventType;
 
 import java.time.Instant;
@@ -63,20 +60,12 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "number_space", schema = "worklist")
-public class NumberSpace {
+public class NumberSpace extends TenantScoped {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
     public UUID id;
-
-    @TenantId
-    @Convert(converter = StringUuidConverter.class)
-    @Column(name = "tenant_id", nullable = false)
-    public String tenantId;
-
-    @Column(name = "scope_id", nullable = false)
-    public UUID scopeId;
 
     /**
      * The selector whose address space this is, or null for the scope-wide

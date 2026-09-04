@@ -134,8 +134,8 @@ public class VocabularyRegistry {
     @Transactional
     public ItemStatus withdrawStatus(UUID scopeId, UUID statusId) {
         ItemStatus status = requireStatus(scopeId, statusId);
-        if (!ItemStatus.WITHDRAWN.equals(status.status)) {
-            status.status = ItemStatus.WITHDRAWN;
+        if (!DeclaredValue.WITHDRAWN.equals(status.status)) {
+            status.status = DeclaredValue.WITHDRAWN;
             vocabulary.flush();
             LOG.infof("status %s withdrawn in scope %s", statusId, scopeId);
         }
@@ -243,8 +243,8 @@ public class VocabularyRegistry {
     @Transactional
     public AttributeDefinition withdrawAttribute(UUID scopeId, String key) {
         AttributeDefinition definition = requireAttribute(scopeId, key);
-        if (!AttributeDefinition.WITHDRAWN.equals(definition.status)) {
-            definition.status = AttributeDefinition.WITHDRAWN;
+        if (!DeclaredValue.WITHDRAWN.equals(definition.status)) {
+            definition.status = DeclaredValue.WITHDRAWN;
             vocabulary.flush();
             LOG.infof("attribute %s withdrawn in scope %s", key, scopeId);
         }
@@ -352,8 +352,8 @@ public class VocabularyRegistry {
     @Transactional
     public RelationType withdrawRelationType(UUID scopeId, UUID typeId) {
         RelationType type = requireRelationType(scopeId, typeId);
-        if (!RelationType.WITHDRAWN.equals(type.status)) {
-            type.status = RelationType.WITHDRAWN;
+        if (!DeclaredValue.WITHDRAWN.equals(type.status)) {
+            type.status = DeclaredValue.WITHDRAWN;
             vocabulary.flush();
             LOG.infof("relation type %s withdrawn in scope %s", typeId, scopeId);
         }
