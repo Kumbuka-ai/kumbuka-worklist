@@ -341,7 +341,15 @@ class ItemFieldsTest {
     }
 
     // ------------------------------------------------------------------
-    // The composite keys.
+    // The composite key.
+    //
+    // There is one. The reference entry used to carry a second, over its item
+    // and its ordinal, and it is gone rather than skipped: an entry is
+    // addressed by an identity of its own now, because a positional key and a
+    // withdrawal status exclude each other. What replaced that key is a
+    // partial unique index over the LIVING rows, which is a statement about
+    // the database and is asserted where the database can answer it —
+    // SchemaConstraintIT.
     // ------------------------------------------------------------------
 
     /**
@@ -378,27 +386,4 @@ class ItemFieldsTest {
         assertThat(new ItemRelation.Key()).isNotEqualTo(key);
     }
 
-    /**
-     * The reference key's identity: the item and the position within it.
-     *
-     * <p>An ordinal is only unique within an item, so both halves are needed —
-     * and a key on the ordinal alone would make position 0 of every item the
-     * same row to the persistence provider.
-     */
-    @Test
-    void the_reference_key_identifies_an_entry_by_its_item_and_its_position() {
-        UUID item = UUID.randomUUID();
-
-        ItemReference.Key key = new ItemReference.Key(item, 1);
-
-        assertThat(key)
-            .isEqualTo(new ItemReference.Key(item, 1))
-            .hasSameHashCodeAs(new ItemReference.Key(item, 1))
-            .isNotEqualTo(new ItemReference.Key(item, 2))
-            .isNotEqualTo(new ItemReference.Key(UUID.randomUUID(), 1))
-            .isNotEqualTo(null)
-            .isNotEqualTo("not a key");
-        assertThat(key).isEqualTo(key);
-        assertThat(new ItemReference.Key()).isNotEqualTo(key);
-    }
 }

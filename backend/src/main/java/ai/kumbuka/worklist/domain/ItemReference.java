@@ -2,15 +2,14 @@ package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
-import java.io.Serializable;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -30,24 +29,30 @@ import java.util.UUID;
  * follow. Typing them would make the service responsible for something on the
  * other side of a boundary it deliberately does not cross.
  *
- * <p>The service validates the FORM of a {@link #target} and never resolves
- * it. Nothing here participates in any derivation: readiness does not read
- * it, no predicate depends on it, and no guard blocks on it.
+ * <h2>The entry has an identity, and the ordinal is not it</h2>
  *
- * <p>{@link #ordinal} is the reader's order and is dense on write — the list
- * is rewritten as a whole rather than patched, so a position is never left
- * with a hole in it.
+ * {@link #id} is the key. {@link #ordinal} is the reader's order and carries
+ * no address, so a reorder moves nothing a caller is holding.
+ *
+ * <p>The two are separate because <strong>a positional key and a withdrawal
+ * status exclude each other.</strong> Withdraw two entries from a list of five
+ * and the ordinals 3 and 4 carry tombstones; let the list grow back to five
+ * and exactly those ordinals have to be reissued. Under a positional key the
+ * write either collides with the tombstone or overwrites it — and an
+ * overwritten tombstone is not preservation, it is a free slot that READS like
+ * preservation, which is worse than a delete because it is invisible.
+ *
+ * <p>So density is a property of the LIVING entries: one living entry per
+ * ordinal within an item, as a partial unique index, with withdrawn rows
+ * exempt. A withdrawn row keeps whatever ordinal it had and is never consulted
+ * for order.
  *
  * <p><strong>Withdrawal rather than deletion</strong>, as everywhere in this
- * schema: nothing holds a DELETE privilege, so a list that gets shorter
- * rewrites the positions it still has and withdraws the ones above them. The
- * study names this status only for the relation edge; it is here because the
- * same study states, of the whole schema, that withdrawal is a status
- * everywhere — and without it a reference list could only ever grow.
+ * schema: nothing holds a DELETE privilege, so a list that gets shorter marks
+ * its tail withdrawn and leaves it standing.
  */
 @Entity
 @Table(name = "item_reference", schema = "worklist")
-@IdClass(ItemReference.Key.class)
 public class ItemReference extends TenantScoped {
 
     /** The entry is part of the list. */
@@ -55,11 +60,25 @@ public class ItemReference extends TenantScoped {
     /** The entry was part of it once and is not any more. */
     public static final String WITHDRAWN = "withdrawn";
 
+    /**
+     * The entry's own identity, and the only thing that addresses it.
+     *
+     * <p>Not the ordinal, and not the pair of item and ordinal. See the class
+     * comment: a positional key cannot coexist with a tombstone.
+     */
     @Id
-    @Column(name = "item_id", nullable = false)
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false)
+    public UUID id;
+
+    /** The item this pointer hangs off. Immutable: an entry does not migrate. */
+    @Column(name = "item_id", nullable = false, updatable = false)
     public UUID itemId;
 
-    @Id
+    /**
+     * The reader's order. Dense across the LIVING entries and meaningless on a
+     * withdrawn one, which keeps whatever it had.
+     */
     @Column(name = "ordinal", nullable = false)
     public int ordinal;
 
@@ -81,46 +100,4 @@ public class ItemReference extends TenantScoped {
     @Generated(event = EventType.INSERT)
     @Column(name = "updated_at", nullable = false, insertable = false)
     public Instant updatedAt;
-
-    /**
-     * The composite key: the item and the position within it.
-     *
-     * <p>The tenancy axis is deliberately NOT part of it, as on the relation
-     * edge. An item id is already unique across tenants, so the pair
-     * identifies an entry on its own; the table's own primary key in V4
-     * carries {@code tenant_id} as well, because that is the column
-     * row-level security filters on and it must be on the row.
-     */
-    public static class Key implements Serializable {
-
-        private static final long serialVersionUID = 1L;
-
-        public UUID itemId;
-        public int ordinal;
-
-        public Key() {
-            // Required by the persistence provider.
-        }
-
-        public Key(UUID itemId, int ordinal) {
-            this.itemId = itemId;
-            this.ordinal = ordinal;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof Key key)) {
-                return false;
-            }
-            return ordinal == key.ordinal && Objects.equals(itemId, key.itemId);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(itemId, ordinal);
-        }
-    }
 }

@@ -66,9 +66,10 @@
 --      five are declared attributes and live in `attributes`.
 --
 --   5. `reference` WAS ONE NULLABLE TEXT COLUMN and is now `item_reference`,
---      an ordered list. Measured on the estate being migrated: that one field
---      came to hold, simultaneously, an item's rationale, a withdrawn
---      decision, a build source path and a warning that the path was wrong.
+--      an ordered list with an identity of its own. Measured on the estate
+--      being migrated: that one field came to hold, simultaneously, an item's
+--      rationale, a withdrawn decision, a build source path and a warning
+--      that the path was wrong.
 --
 --   6. THE PLANNING LAYER IS HERE — milestone, iteration, membership — and
 --      its VERBS are not. The tables are here because a planning layer added
@@ -918,26 +919,44 @@ CREATE INDEX idx_item_attributes
 -- boundary it deliberately does not cross.
 --
 -- The service validates the FORM of a target and never resolves it, so the
--- constraint here is non-emptiness and nothing more.
+-- constraint on it is non-emptiness and nothing more.
 --
--- The ordinal is the reader's order and is DENSE ON WRITE — the whole list is
--- rewritten rather than patched. Density is a domain property; what the
--- schema holds is that two entries of one item cannot share a position.
+-- AN ENTRY HAS AN IDENTITY OF ITS OWN, AND THE ORDINAL IS NOT PART OF THE KEY.
 --
--- THE `status` COLUMN IS NOT IN THE STUDY'S COLUMN LIST AND IS HERE ANYWAY.
--- The study names it only for the relation edge, and it states separately —
--- as a property of the whole schema — that there is no delete privilege and
--- that withdrawal is a status everywhere. A reference list has to be able to
--- get SHORTER; without a withdrawal status it cannot, because `target` is
--- NOT NULL and nothing deletes. The two statements cannot both hold with the
--- column absent, so the general rule is followed and the omission is reported
--- rather than worked around: a shrinking list rewrites positions 0..n-1 and
--- withdraws everything above n, which keeps the ordinal dense.
+-- That is the whole point of this table's shape. A POSITIONAL KEY AND A
+-- WITHDRAWAL STATUS EXCLUDE EACH OTHER: withdraw two entries from a list of
+-- five and the ordinals 3 and 4 carry tombstones; let the list grow back to
+-- five and exactly those ordinals have to be reissued. Either the write
+-- collides with the tombstone or it overwrites it — and an overwritten
+-- tombstone is not preservation, it is a free slot that READS like
+-- preservation. That is worse than a delete, because it is invisible.
+--
+-- With `id` as the key the withdrawn row keeps standing, keeps whatever
+-- ordinal it had, and the ordinal is free for a living entry again.
+--
+-- DENSITY IS A PROPERTY OF THE LIVING ENTRIES, and that is what the partial
+-- unique index below says: one living entry per ordinal within an item.
+-- Withdrawn rows are exempt and are never consulted for order. A plain unique
+-- index over the three columns would forbid exactly the state this table
+-- exists to hold.
+--
+-- THE REVERSE QUESTION IS ANSWERED BY AN INDEX, NOT BY A SECOND TABLE.
+-- "Which items point at this ticket" runs over `(tenant_id, scope_id,
+-- target)`. A separate table of external references was considered and
+-- rejected: the LABEL belongs on the entry rather than on the target, because
+-- two items legitimately call the same document by different names — so such
+-- a table's only payload would be the target string itself, the very value
+-- one would use as its key. Deduplicating it would make this service the
+-- authority on when two foreign addresses are the same, which is a
+-- responsibility on the far side of the boundary this service draws.
 -- ---------------------------------------------------------------------------
 CREATE TABLE worklist.item_reference (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID         NOT NULL,
     scope_id    UUID         NOT NULL,
     item_id     UUID         NOT NULL,
+    -- The reader's order, and nothing else. Not an address: an entry is
+    -- addressed by its identity, so a reorder moves nothing a caller holds.
     ordinal     INTEGER      NOT NULL,
     label       TEXT,
     target      TEXT         NOT NULL,
@@ -945,15 +964,27 @@ CREATE TABLE worklist.item_reference (
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
-    CONSTRAINT pk_item_reference PRIMARY KEY (tenant_id, item_id, ordinal),
-
     CONSTRAINT ck_item_reference_ordinal CHECK (ordinal >= 0),
     CONSTRAINT ck_item_reference_target  CHECK (length(btrim(target)) > 0),
     CONSTRAINT ck_item_reference_status  CHECK (status IN ('asserted', 'withdrawn')),
 
     CONSTRAINT fk_item_reference_item FOREIGN KEY (tenant_id, item_id)
-        REFERENCES worklist.item (tenant_id, id)
+        REFERENCES worklist.item (tenant_id, id),
+
+    CONSTRAINT uq_item_reference_tenant_id UNIQUE (tenant_id, id)
 );
+
+-- One LIVING entry per ordinal within an item. Partial, so that a withdrawn
+-- row and a living one may share an ordinal — which is exactly the state a
+-- list that shrank and grew back is in, and exactly what a plain unique index
+-- would refuse.
+CREATE UNIQUE INDEX uq_item_reference_ordinal
+    ON worklist.item_reference (tenant_id, item_id, ordinal)
+    WHERE status <> 'withdrawn';
+
+-- The reverse direction: which items point at a given external address.
+CREATE INDEX idx_item_reference_target
+    ON worklist.item_reference (tenant_id, scope_id, target);
 
 CREATE INDEX idx_item_reference_scope ON worklist.item_reference (tenant_id, scope_id);
 

@@ -925,6 +925,99 @@ class ItemDomainIT {
             .isEmpty();
     }
 
+    /**
+     * The cycle the identity change exists for: five entries, down to three,
+     * back to five — through the VERB.
+     *
+     * <p>This is the case a positional key cannot survive. Withdrawing two
+     * entries leaves tombstones on the ordinals 3 and 4; growing the list back
+     * needs exactly those ordinals again. A write path walking by ordinal
+     * finds the tombstones sitting there and either collides with them or
+     * writes over them — and an overwritten tombstone is not preservation, it
+     * is a free slot that READS like preservation, which is worse than a
+     * delete because it is invisible.
+     *
+     * <p>So the assertion is not that the write succeeded. It is that
+     * <strong>seven rows stand afterwards</strong>: the five living entries
+     * with dense ordinals, and the two withdrawn ones still carrying the
+     * targets they had when they were withdrawn. Had the write overwritten
+     * them, the count would be five and the old targets would be gone — which
+     * is the state this whole change was made against.
+     *
+     * <p>{@code SchemaConstraintIT} establishes that the schema can HOLD this
+     * state, planting it with raw SQL. This case establishes that the verb
+     * PRODUCES it. Neither stands for the other.
+     */
+    @Test
+    void a_reference_list_that_shrank_and_grew_back_keeps_its_tombstones()
+            throws SQLException {
+        UUID id = createdId("reference cycle probe");
+
+        updateField(id, "references", List.of(
+            Map.of("target", "docs/0.md"), Map.of("target", "docs/1.md"),
+            Map.of("target", "docs/2.md"), Map.of("target", "docs/3.md"),
+            Map.of("target", "docs/4.md")));
+
+        Map<String, Object> shrunk = updateField(id, "references", List.of(
+            Map.of("target", "docs/0.md"), Map.of("target", "docs/1.md"),
+            Map.of("target", "docs/2.md")));
+        assertThat(targetsOfReferences(shrunk))
+            .as("three entries are left in the reader's order")
+            .containsExactly("docs/0.md", "docs/1.md", "docs/2.md");
+
+        Map<String, Object> grown = updateField(id, "references", List.of(
+            Map.of("target", "docs/0.md"), Map.of("target", "docs/1.md"),
+            Map.of("target", "docs/2.md"), Map.of("target", "docs/new-3.md"),
+            Map.of("target", "docs/new-4.md")));
+        assertThat(targetsOfReferences(grown))
+            .as("and back to five, with the two new entries at the end")
+            .containsExactly("docs/0.md", "docs/1.md", "docs/2.md",
+                "docs/new-3.md", "docs/new-4.md");
+
+        assertThat(storedReferences(id))
+            .as("SEVEN rows stand, read around the ORM: the five living entries at "
+                + "ordinals 0 to 4, and the two tombstones still on the ordinals they "
+                + "were withdrawn at, still carrying docs/3.md and docs/4.md. A write "
+                + "path walking by ordinal would have found the tombstones at 3 and 4 "
+                + "and written over them — five rows instead of seven, and the "
+                + "withdrawn targets gone with no error anywhere")
+            .containsExactly(
+                "0 asserted docs/0.md",
+                "1 asserted docs/1.md",
+                "2 asserted docs/2.md",
+                "3 asserted docs/new-3.md",
+                "3 withdrawn docs/3.md",
+                "4 asserted docs/new-4.md",
+                "4 withdrawn docs/4.md");
+    }
+
+    /**
+     * A reorder moves the ordinals of the living entries and creates no rows.
+     *
+     * <p>An entry is addressed by its identity now, so re-ordering is an
+     * update of the position rather than a rewrite of the list. Without that,
+     * every reorder would leave the old list behind as tombstones and the
+     * table would grow with each one.
+     */
+    @Test
+    void a_reorder_moves_the_living_entries_and_writes_no_new_rows() throws SQLException {
+        UUID id = createdId("reference reorder probe");
+
+        updateField(id, "references", List.of(
+            Map.of("target", "docs/a.md"), Map.of("target", "docs/b.md")));
+
+        Map<String, Object> reordered = updateField(id, "references", List.of(
+            Map.of("target", "docs/b.md"), Map.of("target", "docs/a.md")));
+
+        assertThat(targetsOfReferences(reordered))
+            .as("the reader's order is what came in")
+            .containsExactly("docs/b.md", "docs/a.md");
+        assertThat(storedReferences(id))
+            .as("and it is still two rows: a reorder rewrites positions, not the list. "
+                + "Rewriting would have withdrawn both and inserted two more")
+            .containsExactly("0 asserted docs/b.md", "1 asserted docs/a.md");
+    }
+
     /** An entry pointing at nothing is not an entry. */
     @Test
     void a_reference_entry_carries_a_target() {
@@ -1296,6 +1389,36 @@ class ItemDomainIT {
             }
         }
         return live.stream().mapToLong(Long::longValue).max().orElse(0L);
+    }
+
+    /**
+     * Every reference row of an item as "ordinal status target", read around
+     * the ORM and ordered so that a tombstone and the living entry sharing its
+     * ordinal stand next to each other.
+     *
+     * <p>Around the ORM deliberately: the projection shows the living entries
+     * only, which is right for a reader and useless for this assertion. What
+     * has to be seen here is the row that the answer does NOT carry.
+     */
+    private List<String> storedReferences(UUID id) {
+        List<String> out = new ArrayList<>();
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, boundTenant());
+            try (var st = c.prepareStatement("""
+                    SELECT ordinal, status, target FROM worklist.item_reference
+                    WHERE item_id = ? ORDER BY ordinal, status
+                    """)) {
+                st.setObject(1, id);
+                try (ResultSet rs = st.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(rs.getInt(1) + " " + rs.getString(2) + " " + rs.getString(3));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("could not read the reference rows", e);
+        }
+        return out;
     }
 
     /** The scope-wide high-water mark, read around the ORM. */

@@ -501,46 +501,64 @@ public class ItemService {
     /**
      * Set the reference list to exactly the given entries, in the given order.
      *
-     * <p>Rewritten as a whole and never patched, so the ordinal stays dense:
-     * positions 0 to n-1 take the new entries, and every position above them
-     * is WITHDRAWN. Withdrawn rather than removed because this schema grants
-     * DELETE nowhere, and a list that could only ever grow is not a list.
+     * <p><strong>The LIVING entries are what this walks, position by
+     * position.</strong> Entry i of the wanted list is matched against the
+     * i-th living row: its label, its target and its ordinal are moved to
+     * where they should be. A wanted list longer than the living one gets
+     * fresh rows for the tail; a shorter one withdraws the living rows beyond
+     * its end.
+     *
+     * <p><strong>A withdrawn row is never touched again.</strong> Not its
+     * content, not its ordinal, not its status. That is the difference from
+     * walking by ordinal, which would find the tombstone sitting at the
+     * position a growing list needs and either collide with it or overwrite
+     * it — and an overwritten tombstone is a free slot that reads like
+     * preservation.
+     *
+     * <p>The two loops below cannot both do work in one call: a wanted list is
+     * either longer than the living one or shorter. So no ordinal is ever
+     * withdrawn and re-issued within a single flush, and the partial unique
+     * index never sees the two rows at once.
      */
     private boolean applyReferences(Item item, List<Map<String, Object>> wanted) {
-        List<ItemReference> held = items.referencesOf(item.id);
+        List<ItemReference> living = items.assertedReferences(item.id);
         boolean changed = false;
 
-        for (int ordinal = 0; ordinal < wanted.size(); ordinal++) {
-            Map<String, Object> entry = wanted.get(ordinal);
+        for (int position = 0; position < wanted.size(); position++) {
+            Map<String, Object> entry = wanted.get(position);
             String label = (String) entry.get(ItemFields.LABEL);
             String target = (String) entry.get(ItemFields.TARGET);
 
-            ItemReference row = at(held, ordinal);
-            if (row == null) {
-                row = new ItemReference();
+            if (position >= living.size()) {
+                ItemReference row = new ItemReference();
                 row.itemId = item.id;
                 row.scopeId = item.scopeId;
-                row.ordinal = ordinal;
+                row.ordinal = position;
                 row.label = label;
                 row.target = target;
                 items.insertReference(row);
                 changed = true;
                 continue;
             }
-            if (!Objects.equals(row.label, label) || !Objects.equals(row.target, target)
-                    || !ItemReference.ASSERTED.equals(row.status)) {
+
+            ItemReference row = living.get(position);
+            if (row.ordinal != position) {
+                row.ordinal = position;
+                changed = true;
+            }
+            if (!Objects.equals(row.label, label) || !Objects.equals(row.target, target)) {
                 row.label = label;
                 row.target = target;
-                row.status = ItemReference.ASSERTED;
                 changed = true;
             }
         }
 
-        for (ItemReference row : held) {
-            if (row.ordinal >= wanted.size() && !ItemReference.WITHDRAWN.equals(row.status)) {
-                row.status = ItemReference.WITHDRAWN;
-                changed = true;
-            }
+        for (int position = wanted.size(); position < living.size(); position++) {
+            // The ordinal is left where it was. It is meaningless on a
+            // withdrawn row — nothing reads it for order — and rewriting it
+            // would be a change to a row that is supposed to stand as it was.
+            living.get(position).status = ItemReference.WITHDRAWN;
+            changed = true;
         }
 
         if (changed) {
@@ -761,10 +779,5 @@ public class ItemService {
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);
-    }
-
-    /** The reference row at that position, or null when the list is shorter. */
-    private static ItemReference at(List<ItemReference> held, int ordinal) {
-        return held.stream().filter(row -> row.ordinal == ordinal).findFirst().orElse(null);
     }
 }

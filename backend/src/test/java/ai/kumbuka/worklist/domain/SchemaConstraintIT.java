@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -297,6 +299,124 @@ class SchemaConstraintIT {
     }
 
     // ==================================================================
+    // The reference list, whose ordinal is not a key.
+    // ==================================================================
+
+    /**
+     * One LIVING entry per ordinal within an item — and a withdrawn one beside
+     * it.
+     *
+     * <p>Both halves are the probe, and the second is the one a plain unique
+     * index would have got wrong. A positional key and a withdrawal status
+     * exclude each other: withdraw two entries from a list of five and the
+     * ordinals 3 and 4 carry tombstones, and a list growing back to five has
+     * to reissue exactly those. Under a full index the write collides; under
+     * no index at all two living entries share a position and the reader's
+     * order stops being one.
+     */
+    @Test
+    void one_living_reference_per_ordinal_and_a_withdrawn_one_beside_it()
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+            UUID item = insertItem(c, "reference ordinal probe");
+            insertReference(c, item, 0, "docs/a.md", "asserted");
+            c.commit();
+
+            Db.bindTenant(c, tenant);
+            assertThatThrownBy(() -> insertReference(c, item, 0, "docs/b.md", "asserted"))
+                .as("RED STATE, observed: two LIVING entries of one item on one ordinal "
+                    + "must be refused. The ordinal is the reader's order, and an order "
+                    + "with two things in one place is not an order")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("uq_item_reference_ordinal");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            insertReference(c, item, 0, "docs/tombstone.md", "withdrawn");
+            c.commit();
+
+            assertThat(count(c, "item_reference"))
+                .as("a withdrawn entry may share an ordinal with a living one — that is "
+                    + "exactly the state a list that shrank and grew back is in, and a "
+                    + "plain unique index would have refused it")
+                .isEqualTo(2);
+            c.commit();
+        }
+    }
+
+    /**
+     * The whole cycle, which is what the decision is actually about: five
+     * entries, two withdrawn, back to five.
+     *
+     * <p>The constraint alone does not establish this. What has to hold at the
+     * end is that all SEVEN rows stand, that the two withdrawn ones carry the
+     * content they had when they were withdrawn, and that the five living ones
+     * carry dense ordinals from 0 to 4 — with the withdrawn pair still holding
+     * the ordinals the new entries now occupy.
+     *
+     * <p>Under a positional key this state is unreachable. The write that
+     * grows the list back either collides with the tombstone or overwrites it,
+     * and an overwritten tombstone is a free slot that READS like
+     * preservation.
+     *
+     * <p>This case establishes that the SCHEMA can hold the state, planting it
+     * with raw SQL. That the WRITE PATH actually produces it — that the verb
+     * walks the living entries rather than the ordinals — is the other half,
+     * and it is asserted through the verb in
+     * {@code ItemDomainIT.a_reference_list_that_shrank_and_grew_back_keeps_its_tombstones}.
+     * Neither half stands for the other: a schema that can hold the state
+     * says nothing about a verb that never reaches it.
+     */
+    @Test
+    void a_reference_list_shrinks_and_grows_back_without_disturbing_its_tombstones()
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+            UUID item = insertItem(c, "reference cycle probe");
+            for (int i = 0; i < 5; i++) {
+                insertReference(c, item, i, "docs/" + i + ".md", "asserted");
+            }
+            c.commit();
+
+            // Two withdrawn, keeping their ordinals and their content.
+            Db.bindTenant(c, tenant);
+            withdrawReferencesFrom(c, item, 3);
+            c.commit();
+
+            Db.bindTenant(c, tenant);
+            assertThat(livingOrdinals(c, item))
+                .as("three living entries are left, and their ordinals are still dense")
+                .containsExactly(0, 1, 2);
+
+            // And back to five. The two new entries take ordinals 3 and 4 —
+            // the very ordinals the tombstones are sitting on.
+            insertReference(c, item, 3, "docs/new-3.md", "asserted");
+            insertReference(c, item, 4, "docs/new-4.md", "asserted");
+            c.commit();
+
+            Db.bindTenant(c, tenant);
+            assertThat(count(c, "item_reference"))
+                .as("all seven rows stand: five living and two tombstones. Nothing was "
+                    + "deleted, because nothing in this schema can delete")
+                .isEqualTo(7);
+
+            assertThat(livingOrdinals(c, item))
+                .as("and the living entries carry dense ordinals from 0 to 4, on the same "
+                    + "positions the tombstones occupy")
+                .containsExactly(0, 1, 2, 3, 4);
+
+            assertThat(withdrawnTargets(c, item))
+                .as("the withdrawn entries stand unchanged, with the content they had "
+                    + "when they were withdrawn. Had the growing write walked by ordinal "
+                    + "it would have found them at 3 and 4 and written over them, and "
+                    + "this list would read docs/new-3.md and docs/new-4.md twice")
+                .containsExactly("docs/3.md", "docs/4.md");
+            c.commit();
+        }
+    }
+
+    // ==================================================================
     // The claim.
     // ==================================================================
 
@@ -495,6 +615,71 @@ class SchemaConstraintIT {
             st.setObject(5, type);
             st.executeUpdate();
         }
+    }
+
+    private void insertReference(Connection c, UUID item, int ordinal, String target,
+            String status) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item_reference
+                    (id, tenant_id, scope_id, item_id, ordinal, target, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setObject(4, item);
+            st.setInt(5, ordinal);
+            st.setString(6, target);
+            st.setString(7, status);
+            st.executeUpdate();
+        }
+    }
+
+    /** Withdraw every living entry from that ordinal upward, keeping its content. */
+    private void withdrawReferencesFrom(Connection c, UUID item, int from)
+            throws SQLException {
+        try (var st = c.prepareStatement("""
+                UPDATE worklist.item_reference SET status = 'withdrawn'
+                WHERE item_id = ? AND ordinal >= ? AND status = 'asserted'
+                """)) {
+            st.setObject(1, item);
+            st.setInt(2, from);
+            st.executeUpdate();
+        }
+    }
+
+    /** The ordinals of the living entries, in the reader's order. */
+    private List<Integer> livingOrdinals(Connection c, UUID item) throws SQLException {
+        List<Integer> out = new ArrayList<>();
+        try (var st = c.prepareStatement("""
+                SELECT ordinal FROM worklist.item_reference
+                WHERE item_id = ? AND status = 'asserted' ORDER BY ordinal
+                """)) {
+            st.setObject(1, item);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    out.add(rs.getInt(1));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The targets of the withdrawn entries, by the ordinal they kept. */
+    private List<String> withdrawnTargets(Connection c, UUID item) throws SQLException {
+        List<String> out = new ArrayList<>();
+        try (var st = c.prepareStatement("""
+                SELECT target FROM worklist.item_reference
+                WHERE item_id = ? AND status = 'withdrawn' ORDER BY ordinal
+                """)) {
+            st.setObject(1, item);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    out.add(rs.getString(1));
+                }
+            }
+        }
+        return out;
     }
 
     private void insertMilestone(Connection c, long number, String kind, String status,
