@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -83,24 +84,60 @@ class VerbVocabularyGuardTest {
         "digest", "scopes", "validate");
 
     /**
-     * The verbs this scheme carries TODAY, and therefore exactly the public
-     * methods {@link ItemService} has.
+     * The verbs each service of this scheme carries TODAY, and therefore
+     * exactly the public methods each of those classes has.
      *
-     * <p>Six of the twenty-four. The catalogue's mapping table for this scheme
-     * names more — the draw, the graph, the planning verbs, {@code validate} —
-     * and none of them is built. They belong here when they are built and not
-     * before: a verb listed here with no method behind it would make this
-     * guard red on a truthful class, and a guard that is red for being ahead
-     * of the code gets suppressed rather than fixed.
+     * <p>The scheme is five services and not one, because the platform
+     * carries ONE vocabulary and it is the ADDRESS that says which object is
+     * meant: {@code update} on an iteration and {@code update} on a
+     * membership are the same word aimed at two different things, and in Java
+     * two methods of one name taking the same arguments are one method. So
+     * the guard holds each address separately rather than pooling them —
+     * pooling would let a verb move from one service to another unnoticed,
+     * which is the drift it exists against wearing a different hat.
      *
-     * <p>{@code close} is deliberately absent for a different reason, and it
-     * stays absent: an item's terminality is reached through {@code update}
-     * against scope-declared status vocabulary, and {@code close} on this
-     * scheme addresses the iteration or the milestone. That asymmetry against
-     * the sibling service is a decision, not a gap.
+     * <p>The draw, the graph verbs and {@code validate} are still absent, and
+     * they belong here when they are built and not before: a verb listed with
+     * no method behind it would make this guard red on a truthful class, and
+     * a guard that is red for being ahead of the code gets suppressed rather
+     * than fixed.
+     *
+     * <p>{@code close} is absent from {@link ItemService} for a different
+     * reason and stays absent: an item's terminality is reached through
+     * {@code update} against scope-declared status vocabulary, and
+     * {@code close} on this scheme addresses the iteration or the milestone.
+     * That asymmetry against the sibling service is a decision, not a gap —
+     * and the two entries below that DO carry {@code close} are what makes it
+     * an asymmetry rather than an omission.
      */
-    private static final Set<String> CARRIED_BY_THIS_SCHEME = Set.of(
-        "create", "read", "update", "withdraw", "query", "accept");
+    private static final Map<Class<?>, Set<String>> CARRIED_BY_THIS_SCHEME = Map.of(
+        ItemService.class,
+        Set.of("create", "read", "update", "withdraw", "query", "accept"),
+
+        MilestoneService.class,
+        Set.of("create", "read", "update", "query", "close"),
+
+        IterationService.class,
+        Set.of("create", "read", "update", "query", "close", "advance"),
+
+        // `plan` and `unplan` sit here rather than on the iteration because
+        // what they write is the membership row. The reorder goes the other
+        // way, and for the same reason: it writes the iteration's whole
+        // sequence under the iteration's one token.
+        MembershipService.class,
+        Set.of("plan", "unplan", "update", "read", "query"),
+
+        // No `query`: one row per scope is not something a scope-addressed
+        // call enumerates.
+        ScopeSettingService.class,
+        Set.of("create", "read", "update"));
+
+    /** Every verb the scheme carries, across all five addresses. */
+    private static Set<String> everythingCarried() {
+        return CARRIED_BY_THIS_SCHEME.values().stream()
+            .flatMap(Set::stream)
+            .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+    }
 
     /**
      * Nothing may be claimed as carried that the platform does not have.
@@ -114,7 +151,7 @@ class VerbVocabularyGuardTest {
                 + "that is not in that set is a service-private verb wearing the "
                 + "vocabulary's clothes, and adding it here as well as to the class "
                 + "would make this whole guard a list compared with itself")
-            .containsAll(CARRIED_BY_THIS_SCHEME);
+            .containsAll(everythingCarried());
     }
 
     /**
@@ -126,15 +163,37 @@ class VerbVocabularyGuardTest {
      * learn what one run could have said.
      */
     @Test
-    void the_public_methods_of_the_item_store_are_exactly_the_carried_verbs() {
-        assertThat(publicVerbsOf(ItemService.class))
-            .as("the public methods of ItemService are the platform verbs this scheme "
-                + "carries, spelled identically — %s. A method missing from that set is "
-                + "a verb drifted back to a service-private name, which breaks nothing "
-                + "and is found by nobody; a method beyond it is a service-private "
-                + "vocabulary growing back one method at a time",
-                new TreeSet<>(CARRIED_BY_THIS_SCHEME))
-            .isEqualTo(new TreeSet<>(CARRIED_BY_THIS_SCHEME));
+    void the_public_methods_of_each_service_are_exactly_the_verbs_it_carries() {
+        for (Map.Entry<Class<?>, Set<String>> service : CARRIED_BY_THIS_SCHEME.entrySet()) {
+            assertThat(publicVerbsOf(service.getKey()))
+                .as("the public methods of %s are the platform verbs it carries, spelled "
+                    + "identically — %s. A method missing from that set is a verb drifted "
+                    + "back to a service-private name, which breaks nothing and is found "
+                    + "by nobody; a method beyond it is a service-private vocabulary "
+                    + "growing back one method at a time",
+                    service.getKey().getSimpleName(), new TreeSet<>(service.getValue()))
+                .isEqualTo(new TreeSet<>(service.getValue()));
+        }
+    }
+
+    /**
+     * The shared base of the planning services carries no verb of its own.
+     *
+     * <p>{@code PlanningService} holds the mechanics all four planning
+     * addresses need, and every one of them is protected. If a helper there
+     * slipped out as public it would be a verb on four services at once,
+     * invisible to the assertion above — {@code getDeclaredMethods} does not
+     * see inherited methods, so the per-service check cannot catch it. This
+     * is the one place that can.
+     */
+    @Test
+    void the_shared_planning_base_carries_no_verb_of_its_own() {
+        assertThat(publicVerbsOf(PlanningService.class))
+            .as("PlanningService is mechanics and not vocabulary. A public method there "
+                + "is a verb every planning service inherits without declaring, and the "
+                + "per-service check above reads declared methods only — so it would not "
+                + "see it")
+            .isEmpty();
     }
 
     /**

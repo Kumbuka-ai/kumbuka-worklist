@@ -7,7 +7,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -146,10 +145,10 @@ public class ItemService {
      */
     @Transactional
     public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
-        Map<Field, Object> given = Field.resolve(arguments);
+        Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
 
         List<String> notSettable = given.keySet().stream()
-            .filter(field -> !field.settable())
+            .filter(field -> !field.settableOn(Addressed.ITEM))
             .map(Field::canonicalName)
             .toList();
         if (!notSettable.isEmpty()) {
@@ -196,7 +195,7 @@ public class ItemService {
         rest.remove(Field.TITLE);
         rest.remove(Field.STATUS);
         if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
-            stamp(item);
+            item.stamp();
             items.flush();
         }
 
@@ -222,7 +221,7 @@ public class ItemService {
     public Map<String, Object> accept(UUID scopeId, UUID itemId, String selectorToken,
             String conflictToken) {
         Item item = require(scopeId, itemId);
-        requireCurrentToken(item, conflictToken);
+        item.requireCurrentToken(conflictToken);
 
         if (item.selectorId != null) {
             throw new WorklistException(
@@ -238,7 +237,7 @@ public class ItemService {
 
         item.selectorId = selector.id;
         item.number = number;
-        stamp(item);
+        item.stamp();
         items.flushAndRefresh(item);
 
         LOG.infof("item accepted as %s-%d in scope %s", selectorToken, number, scopeId);
@@ -262,17 +261,17 @@ public class ItemService {
      */
     @Transactional
     public Map<String, Object> update(UUID scopeId, UUID itemId, Map<String, ?> arguments) {
-        Map<Field, Object> given = Field.resolve(arguments);
+        Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
         Item item = require(scopeId, itemId);
 
-        requireCurrentToken(item, given.get(Field.CONFLICT_TOKEN));
+        item.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
         Map<String, Object> current = project(item);
         refuseUnsettableChanges(current, given);
 
         Map<Field, Object> settable = new EnumMap<>(Field.class);
         given.forEach((field, value) -> {
-            if (field.settable()) {
+            if (field.settableOn(Addressed.ITEM)) {
                 settable.put(field, value);
             }
         });
@@ -287,7 +286,7 @@ public class ItemService {
             return current;
         }
 
-        stamp(item);
+        item.stamp();
         items.flushAndRefresh(item);
         LOG.infof("item updated in scope %s", scopeId);
         return project(item);
@@ -347,7 +346,7 @@ public class ItemService {
             Map<Field, Object> given) {
         List<String> refused = new ArrayList<>();
         given.forEach((field, value) -> {
-            if (field.settable() || field == Field.CONFLICT_TOKEN) {
+            if (field.settableOn(Addressed.ITEM) || field == Field.CONFLICT_TOKEN) {
                 return;
             }
             if (!ItemFields.unchangedAsText(current.get(field.canonicalName()), value)) {
@@ -361,7 +360,7 @@ public class ItemService {
                 "these fields are the service's and may not be changed: " + refused
                     + ". Sending them back unaltered is fine — that is what a read "
                     + "answer carries — but the values given differ from the ones held. "
-                    + "Settable here is " + Field.settableNames(),
+                    + "Settable here is " + Field.settableNames(Addressed.ITEM),
                 refused);
         }
     }
@@ -628,40 +627,6 @@ public class ItemService {
         return changed;
     }
 
-    /**
-     * The modification date and the conflict token, moved together.
-     *
-     * <p>One place, called only where an effective change was established, so
-     * that "the token rotated" and "something changed" cannot come apart.
-     */
-    private static void stamp(Item item) {
-        item.changedAt = Instant.now();
-        item.conflictToken = UUID.randomUUID().toString();
-    }
-
-    /**
-     * The conflict token must be the one the row currently carries.
-     *
-     * <p>A stale one and an absent one are the same refusal, and it carries
-     * the CURRENT token: a caller that has to make a second call just to
-     * learn what it should have sent will end up reading, and a caller that
-     * reads in order to overwrite has stopped detecting conflicts.
-     */
-    private static void requireCurrentToken(Item item, Object presented) {
-        if (presented != null && item.conflictToken.equals(String.valueOf(presented))) {
-            return;
-        }
-        throw new WorklistException(
-            WorklistException.Reason.CONFLICT,
-            (presented == null
-                ? "a write carries the conflict token it read; none was given. "
-                : "the conflict token given is not the one this item carries. ")
-                + "The item has changed since it was read, or was never read. Its "
-                + "current token is " + item.conflictToken
-                + " — re-read, re-apply the change and retry",
-            List.of(item.conflictToken));
-    }
-
     private Item require(UUID scopeId, UUID itemId) {
         Item item = items.byId(itemId);
         if (item == null || !item.scopeId.equals(scopeId)) {
@@ -700,7 +665,7 @@ public class ItemService {
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item));
-        fields.put(Field.MILESTONE.canonicalName(), item.milestoneId);
+        fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneId);
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken);

@@ -93,7 +93,92 @@ public class WorklistException extends RuntimeException {
          * back would hand out numbers that are already in use, which is the
          * one thing the mark exists to prevent.
          */
-        MARK_REGRESSION
+        MARK_REGRESSION,
+
+        // --- the planning layer ---------------------------------------
+        //
+        // These arrived with the planning verbs, and not before. The class
+        // comment above says why: enumerating a refusal nothing can raise is
+        // guessing, and a reason with no thrower is a reason nobody has
+        // checked the wording of.
+
+        /** No milestone of that id in this scope. */
+        MILESTONE_UNKNOWN,
+
+        /** No iteration of that id in this scope. */
+        ITERATION_UNKNOWN,
+
+        /** The item is not a member of that iteration. */
+        MEMBERSHIP_UNKNOWN,
+
+        /**
+         * The item is already a member of that iteration.
+         *
+         * <p>Planning it again is refused rather than treated as a move: a
+         * second membership would have to displace the first, and displacing
+         * silently is how the predecessor lost a position somebody was
+         * holding.
+         */
+        MEMBERSHIP_PRESENT,
+
+        /**
+         * The iteration is closed, and a closed iteration takes no further
+         * writes.
+         *
+         * <p>Closing is the one act on this axis that is not reversible
+         * through a verb. Its memberships stay readable, which is what makes
+         * a closed iteration a record rather than a gap.
+         */
+        ITERATION_CLOSED,
+
+        /**
+         * The iteration still holds memberships that are neither done nor
+         * dropped, and the refusal names them.
+         *
+         * <p>Closing over live memberships would decide for the operator what
+         * happened to each one. Naming them is the point: a refusal that only
+         * states the rule sends the reader back to the store to find out what
+         * it was talking about.
+         */
+        ITERATION_INCOMPLETE,
+
+        /**
+         * There is no iteration for {@code advance} to promote.
+         *
+         * <p>Kept apart from "nothing to do because everything is terminal",
+         * which is a call to close rather than a call to plan. Collapsing the
+         * two makes a caller fall back silently to the wrong remedy.
+         */
+        ITERATION_ABSENT,
+
+        /**
+         * The item may not enter an iteration: it is not actionable, or it
+         * carries no milestone, or its milestone is off the product path.
+         *
+         * <p>The refusal names the value it found, because all three cases
+         * read the same from outside and the remedy for each is different.
+         */
+        ITEM_UNPLANNABLE,
+
+        /**
+         * The scope has no settings row, so its cardinality limits and its
+         * allocation counters do not exist yet.
+         *
+         * <p>Not created on first use: V4 leaves the four cardinality columns
+         * without defaults so that no layer can quietly pick them.
+         */
+        SETTING_ABSENT,
+
+        /** The scope already has its settings row, and there is one per scope. */
+        SETTING_PRESENT,
+
+        /**
+         * A cardinality limit the scope set for itself would be exceeded.
+         *
+         * <p>The refusal carries the limit, so that a caller can tell a
+         * setting they may raise from a platform ceiling they may not.
+         */
+        CARDINALITY_EXCEEDED
     }
 
     private final transient Reason reason;

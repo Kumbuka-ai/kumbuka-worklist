@@ -30,7 +30,7 @@ class ItemFieldsTest {
     @Test
     void an_unknown_name_is_refused_and_named() {
         WorklistException refusal = (WorklistException) catchThrowable(() ->
-            Field.resolve(Map.of("Titel", "the predecessor's spelling")));
+            Field.resolve(Addressed.ITEM, Map.of("Titel", "the predecessor's spelling")));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
         assertThat(refusal.offenders()).containsExactly("Titel");
@@ -46,13 +46,13 @@ class ItemFieldsTest {
      */
     @Test
     void the_name_is_matched_case_sensitively() {
-        assertThat(Field.byCanonicalName("title")).contains(Field.TITLE);
-        assertThat(Field.byCanonicalName("Title")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "title")).contains(Field.TITLE);
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "Title")).isEmpty();
     }
 
     @Test
     void the_settable_names_are_the_ones_a_caller_may_change() {
-        assertThat(Field.settableNames())
+        assertThat(Field.settableNames(Addressed.ITEM))
             .contains("title", "description", "status", "attributes", "references",
                 "relations")
             .doesNotContain("id", "number", "selector", "milestone", "created_at",
@@ -70,10 +70,10 @@ class ItemFieldsTest {
      */
     @Test
     void a_declared_attribute_is_not_a_field_of_its_own() {
-        assertThat(Field.byCanonicalName("cluster")).isEmpty();
-        assertThat(Field.byCanonicalName("size")).isEmpty();
-        assertThat(Field.byCanonicalName("component")).isEmpty();
-        assertThat(Field.byCanonicalName("attributes")).contains(Field.ATTRIBUTES);
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "cluster")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "size")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "component")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "attributes")).contains(Field.ATTRIBUTES);
     }
 
     // ------------------------------------------------------------------

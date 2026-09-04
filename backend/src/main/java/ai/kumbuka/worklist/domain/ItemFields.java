@@ -88,6 +88,19 @@ final class ItemFields {
         return List.copyOf(out);
     }
 
+    /**
+     * A caller's value as a sequence of tokens: distinct, and in the order
+     * they were given.
+     *
+     * <p>The counterpart of {@link #tokens(Field, Object)}, which sorts
+     * because what it normalises is a SET. Here the order is the value — an
+     * iteration's membership sequence is what it is because of the order —
+     * so sorting it would destroy the thing being written.
+     */
+    static List<String> tokensInOrder(Field field, Object raw) {
+        return List.copyOf(rawTokens(field, raw));
+    }
+
     /** A caller's value as an identity, or a refusal naming what was given. */
     static UUID id(Field field, Object raw) {
         String token = text(field, raw == null ? null : String.valueOf(raw));
