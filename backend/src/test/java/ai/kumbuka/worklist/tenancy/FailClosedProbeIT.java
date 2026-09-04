@@ -2,6 +2,7 @@ package ai.kumbuka.worklist.tenancy;
 
 import ai.kumbuka.worklist.domain.Item;
 import ai.kumbuka.worklist.domain.ItemService;
+import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -56,6 +57,7 @@ class FailClosedProbeIT {
     }
 
     @Inject ItemService items;
+    @Inject VocabularyRegistry vocabulary;
     @Inject TenantContext tenantContext;
 
     /** Acceptance criterion 5, in both of its halves. */
@@ -203,11 +205,27 @@ class FailClosedProbeIT {
      */
     private void plantOneItemPerTenant() throws Exception {
         try (AutoCloseable ignored = tenantContext.bind(tenantA)) {
-            items.create(SCOPE, java.util.Map.of("title", titleA()));
+            items.create(SCOPE, java.util.Map.of("title", titleA(), "status", status()));
         }
         try (AutoCloseable ignored = tenantContext.bind(tenantB)) {
-            items.create(SCOPE, java.util.Map.of("title", titleB()));
+            items.create(SCOPE, java.util.Map.of("title", titleB(), "status", status()));
         }
+    }
+
+    /**
+     * A status declared under the tenant currently bound.
+     *
+     * <p>An item carries a mandatory reference to a declared status, so each
+     * tenant declares its own before it holds an item. That is not fixture
+     * overhead this probe works around: a status is a value the SCOPE declared
+     * rather than a literal this service knows, and a vocabulary is
+     * tenant-scoped like everything else here — so a status planted under one
+     * tenant is invisible to the other, which is the very isolation under
+     * test.
+     */
+    private String status() {
+        return String.valueOf(
+            vocabulary.declareStatus(SCOPE, "open", 1, true, false, false, false).id);
     }
 
     private String titleA() {

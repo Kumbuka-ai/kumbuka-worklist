@@ -43,8 +43,9 @@ public class WorklistException extends RuntimeException {
         FIELD_NOT_SETTABLE,
 
         /**
-         * A value outside what its field accepts — a status that is not one of
-         * the six, a component tag that is not a lower-case token.
+         * A value outside what its field accepts — an attribute key that is
+         * not a token, a reference entry with no target, a relation entry with
+         * no type.
          */
         INVALID_VALUE,
 
@@ -68,8 +69,18 @@ public class WorklistException extends RuntimeException {
         /** The selector exists and has been withdrawn, so nothing new is accepted under it. */
         SELECTOR_WITHDRAWN,
 
-        /** A term of that token on that axis was never declared in this scope. */
-        TERM_UNDECLARED,
+        /**
+         * A declared value of that identity does not exist in this scope: a
+         * status, an attribute, one of its options, or a relation type.
+         *
+         * <p>One reason for all four, because the four are one kind of object
+         * — the schema carries them in separate tables only because their
+         * platform properties differ, and a caller told "that value is not
+         * declared here" needs no fifth word for which table it was in. The
+         * message names the table's subject and the identity; the reason names
+         * the class of refusal.
+         */
+        VALUE_UNDECLARED,
 
         /**
          * The item was already accepted, so it carries its identifier, and

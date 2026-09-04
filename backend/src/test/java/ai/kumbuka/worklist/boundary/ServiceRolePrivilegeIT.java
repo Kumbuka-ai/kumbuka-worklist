@@ -104,8 +104,22 @@ class ServiceRolePrivilegeIT {
     private static final Set<String> EXPECTED_TABLES = Set.of(
         // The substrate's, from V1.
         "item",
-        // The item domain's, from V4.
-        "selector", "number_space", "term", "item_dependency",
+        // The declared vocabularies, from V4. Three tables for one kind of
+        // object, because the platform properties differ: a status carries the
+        // four predicates, a relation type carries whether it blocks, an
+        // option carries neither and belongs to a definition.
+        "item_status", "attribute_definition", "attribute_option", "relation_type",
+        // Identity: the declared head of an address, and both high-water marks.
+        "selector", "number_space",
+        // The item's satellites: an ordered list of external pointers, and the
+        // typed edge.
+        "item_reference", "item_relation",
+        // The planning layer. Its tables are here and its verbs are not — a
+        // planning layer added later would be a second replacement of the
+        // migration that carries these, in a store that by then holds rows.
+        "milestone", "iteration", "iteration_membership",
+        // The lease, and what the scope decides.
+        "claim", "scope_setting", "view_preference",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);

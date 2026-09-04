@@ -154,7 +154,7 @@ class MigrationCallbackWitnessIT {
                 postgres.getUsername(), postgres.getPassword());
              Statement s = c.createStatement();
              ResultSet rs = s.executeQuery(
-                 "SELECT title FROM worklist.item ORDER BY title")) {
+                 "SELECT name FROM worklist.item_status ORDER BY name")) {
             var found = new java.util.ArrayList<String>();
             while (rs.next()) {
                 found.add(rs.getString(1));
@@ -162,7 +162,7 @@ class MigrationCallbackWitnessIT {
             assertThat(found)
                 .as("and with it registered the write lands — so the refusal above was the "
                     + "missing callback and not a broken migration")
-                .containsExactly("witness-item");
+                .containsExactly("witness-status");
         }
     }
 

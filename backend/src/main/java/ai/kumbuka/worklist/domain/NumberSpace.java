@@ -4,6 +4,8 @@ import ai.kumbuka.worklist.tenancy.StringUuidConverter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
@@ -16,9 +18,23 @@ import java.util.UUID;
 /**
  * The high-water mark of one address space.
  *
- * <p>The address space is {@code (scope, selector)}, and since a selector
- * belongs to exactly one scope, the selector identifies it — which is why the
- * primary key is the selector's id and not a triple.
+ * <h2>Both counters exist at all times</h2>
+ *
+ * One row per selector, for the per-selector position of the allocation mode,
+ * and one row per scope with a NULL {@link #selectorId}, for the scope-wide
+ * position. The allocator reads the row the mode names and advances BOTH.
+ *
+ * <p><strong>That is what makes the mode a setting rather than a
+ * migration.</strong> Switching it is a read against a counter that was
+ * maintained all along; if only the active counter were kept, switching would
+ * mean reconstructing the other one from rows that no longer say what was
+ * handed out.
+ *
+ * <p>The key is therefore a surrogate and not the selector. A null selector is
+ * not a missing value here — it is the row that belongs to no selector because
+ * it belongs to all of them — and a unique constraint over a nullable column
+ * would admit any number of such rows, because in SQL two nulls are not equal.
+ * V4 uses two partial unique indexes instead.
  *
  * <h2>Why the mark is stored rather than computed</h2>
  *
@@ -49,10 +65,10 @@ import java.util.UUID;
 @Table(name = "number_space", schema = "worklist")
 public class NumberSpace {
 
-    /** The selector whose address space this is. Also the primary key. */
     @Id
-    @Column(name = "selector_id", nullable = false)
-    public UUID selectorId;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false)
+    public UUID id;
 
     @TenantId
     @Convert(converter = StringUuidConverter.class)
@@ -61,6 +77,17 @@ public class NumberSpace {
 
     @Column(name = "scope_id", nullable = false)
     public UUID scopeId;
+
+    /**
+     * The selector whose address space this is, or null for the scope-wide
+     * counter.
+     *
+     * <p>Immutable: a counter does not migrate between address spaces, and a
+     * per-selector row that became the scope-wide one would take a mark with
+     * it that was never handed out at that level.
+     */
+    @Column(name = "selector_id", updatable = false)
+    public UUID selectorId;
 
     /**
      * The highest number ever handed out in this space. Zero means none has
