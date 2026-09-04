@@ -199,7 +199,7 @@ public class Item extends AggregateRoot {
      */
     @Override
     protected String subject() {
-        return "item";
+        return Addressed.ITEM.description();
     }
 
     /** The item's modification column is {@code changed_at}, as the target schema names it. */

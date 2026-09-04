@@ -6,12 +6,10 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
-import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -70,12 +68,6 @@ class PlanningDomainIT {
     private UUID scope;
     private UUID actionableStatus;
     private UUID restingStatus;
-
-    /** The tenant the ORM binds, read from the same setting the service runs on. */
-    private static UUID boundTenant() {
-        return UUID.fromString(
-            ConfigProvider.getConfig().getValue("worklist.tenant-id", String.class));
-    }
 
     @BeforeEach
     void aScopeOfItsOwn() {
@@ -658,17 +650,17 @@ class PlanningDomainIT {
     @Test
     void the_token_is_on_the_roots_and_never_on_the_membership() throws SQLException {
         try (Connection c = Db.asService()) {
-            assertThat(hasConflictToken(c, "iteration_membership"))
+            assertThat(PlanningFixture.hasConflictToken(c, "iteration_membership"))
                 .as("RED STATE, observed: a token on the membership is the most tempting "
                     + "column in this migration and the one that would undo the "
                     + "aggregate rule. It must not be there")
                 .isFalse();
 
             assertThat(List.of(
-                    hasConflictToken(c, "item"),
-                    hasConflictToken(c, "iteration"),
-                    hasConflictToken(c, "milestone"),
-                    hasConflictToken(c, "scope_setting")))
+                    PlanningFixture.hasConflictToken(c, "item"),
+                    PlanningFixture.hasConflictToken(c, "iteration"),
+                    PlanningFixture.hasConflictToken(c, "milestone"),
+                    PlanningFixture.hasConflictToken(c, "scope_setting")))
                 .as("and the four roots must all carry one, or the assertion above would "
                     + "be passing on a catalog read that finds nothing anywhere")
                 .containsExactly(true, true, true, true);
@@ -759,57 +751,17 @@ class PlanningDomainIT {
     }
 
     /**
-     * Point an item at a milestone, over JDBC.
+     * An item carrying a real goal, which is what makes it plannable.
      *
-     * <p>The one fixture here that goes around the service, and it does so
-     * because <strong>no verb assigns this field</strong>. See the class
-     * comment: the precondition is built, the way to satisfy it through a
-     * verb is not, and that gap is reported rather than papered over with a
-     * seventh verb nobody asked for.
+     * <p>The pointing itself is {@link PlanningFixture}, which names why it
+     * has to go around the service: no verb assigns this field.
      */
     private UUID withMilestone(UUID itemId, UUID milestoneId) {
-        try (Connection c = Db.asService()) {
-            Db.bindTenant(c, boundTenant());
-            try (var st = c.prepareStatement(
-                    "UPDATE worklist.item SET milestone_id = ? WHERE id = ?")) {
-                st.setObject(1, milestoneId);
-                st.setObject(2, itemId);
-                st.executeUpdate();
-            }
-            c.commit();
-        } catch (SQLException notWritable) {
-            throw new IllegalStateException(
-                "the milestone fixture could not write item " + itemId, notWritable);
-        }
-        return itemId;
+        return PlanningFixture.pointAtMilestone(itemId, milestoneId);
     }
 
     private static int membershipRowsOf(UUID iterationId) throws SQLException {
-        try (Connection c = Db.asService()) {
-            Db.bindTenant(c, boundTenant());
-            try (var st = c.prepareStatement(
-                    "SELECT count(*) FROM worklist.iteration_membership "
-                        + "WHERE iteration_id = ?")) {
-                st.setObject(1, iterationId);
-                try (ResultSet rows = st.executeQuery()) {
-                    rows.next();
-                    return rows.getInt(1);
-                }
-            }
-        }
-    }
-
-    private static boolean hasConflictToken(Connection c, String table) throws SQLException {
-        try (var st = c.prepareStatement(
-                "SELECT count(*) FROM information_schema.columns "
-                    + "WHERE table_schema = 'worklist' AND table_name = ? "
-                    + "AND column_name = 'conflict_token'")) {
-            st.setString(1, table);
-            try (ResultSet rows = st.executeQuery()) {
-                rows.next();
-                return rows.getInt(1) == 1;
-            }
-        }
+        return PlanningFixture.membershipRowsOf(iterationId);
     }
 
     private static WorklistException refusalFrom(ThrowingCallable call) {

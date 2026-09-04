@@ -182,7 +182,8 @@ public class MembershipService extends PlanningService {
     }
 
     /**
-     * Move a membership's own status: todo, active, done or dropped.
+     * Move a membership's own status to one of the four states
+     * {@link IterationMembership} declares.
      *
      * <p><strong>At most one membership of an iteration is active</strong>,
      * and that is held by a partial unique index rather than by this method.

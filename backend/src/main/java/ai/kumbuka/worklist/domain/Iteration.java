@@ -92,7 +92,7 @@ public class Iteration extends AggregateRoot {
 
     @Override
     protected String subject() {
-        return "iteration";
+        return Addressed.ITERATION.description();
     }
 
     @Override

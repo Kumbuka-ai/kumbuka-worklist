@@ -136,7 +136,7 @@ public class ScopeSetting extends AggregateRoot {
 
     @Override
     protected String subject() {
-        return "scope setting";
+        return Addressed.SETTING.description();
     }
 
     @Override

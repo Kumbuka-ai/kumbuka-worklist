@@ -284,8 +284,8 @@ public enum Field {
     POSITION("position", Set.of(MEMBERSHIP), Set.of()),
 
     /**
-     * How far this iteration has got with this item: todo, active, done or
-     * dropped.
+     * How far this iteration has got with this item, as one of the four
+     * states {@link IterationMembership} declares.
      *
      * <p><strong>Deliberately not spelled {@code status}.</strong> Done on a
      * membership means completed IN THIS ITERATION; done on an item means

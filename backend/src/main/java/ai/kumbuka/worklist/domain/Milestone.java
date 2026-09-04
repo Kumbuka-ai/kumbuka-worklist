@@ -141,7 +141,7 @@ public class Milestone extends AggregateRoot {
 
     @Override
     protected String subject() {
-        return "milestone";
+        return Addressed.MILESTONE.description();
     }
 
     @Override
