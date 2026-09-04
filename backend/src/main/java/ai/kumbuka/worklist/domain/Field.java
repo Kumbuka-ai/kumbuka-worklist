@@ -31,6 +31,29 @@ import java.util.Optional;
  * it. An argument that is not in this enum is a {@link
  * WorklistException.Reason#UNKNOWN_FIELD} that NAMES the argument.
  *
+ * <h2>The core is small, and everything else is a declaration</h2>
+ *
+ * The fields below are the item's fixed core: what the SERVICE reasons about.
+ * Cluster, type, priority, size and the component tags were fields of their
+ * own in the predecessor and in the previous shape of this domain; they are
+ * declared attributes now and travel under the single name
+ * {@link #ATTRIBUTES}. A sixth of them is a declaration rather than an entry
+ * in this enum, which is the whole point of the change.
+ *
+ * <h2>Why a declared value travels as its identity</h2>
+ *
+ * {@link #STATUS} carries the id of a declared status and not its display
+ * name, and the entries of {@link #RELATIONS} carry the id of a declared
+ * relation type. That follows from the rule that a declared value has an
+ * identity separate from its name: the name is what a reader sees and may be
+ * changed at will, so a caller writing one would be writing something that is
+ * allowed to move under it.
+ *
+ * <p>{@link #SELECTOR} is the one declared thing that travels as its token,
+ * and it is not an inconsistency: a selector token IS half of an address,
+ * immutable by construction and already written into commit messages and
+ * documents everywhere. There is nothing for it to move under.
+ *
  * <h2>Why read-only fields are not simply rejected</h2>
  *
  * A read answer carries {@link #ID}, {@link #CREATED_AT} and the rest, and a
@@ -66,42 +89,70 @@ public enum Field {
 
     // --- what a caller characterises -------------------------------------
 
-    /** One line, human readable. */
+    /** One line, the item's handle in every listing. */
     TITLE("title", true),
 
     /**
-     * One of six values. {@code planned} is deliberately not among them: it
-     * is derivable from iteration membership, the membership table is the
-     * planning layer's, and a value that nothing maintains is worse than an
-     * absent one.
+     * What the item is and why it matters — never how it will be done. The
+     * design lives in the document a reference points at.
+     */
+    DESCRIPTION("description", true),
+
+    /**
+     * The identity of a status the scope declared.
+     *
+     * <p>Not a literal out of a fixed set. Which statuses exist, what they
+     * are called and which of the four predicates each one carries are the
+     * scope's declaration; this service's business is that the value IS
+     * declared.
      */
     STATUS("status", true),
 
-    /** A declared term on the {@code cluster} axis, as its token. */
-    CLUSTER("cluster", true),
-    /** A declared term on the {@code type} axis, as its token. */
-    TYPE("type", true),
-    /** A declared term on the {@code priority} axis, as its token. */
-    PRIORITY("priority", true),
-    /** A declared term on the {@code size} axis, as its token. */
-    SIZE("size", true),
+    /**
+     * The declared attributes, as a map from a definition's stable key to its
+     * value.
+     *
+     * <p>Keyed by the KEY and not by the identity, unlike the stored column:
+     * the key is immutable and unique in its scope, so it is what a caller can
+     * hold on to, while the storage form keys by identity so that a rename of
+     * the key would not be a data migration either.
+     */
+    ATTRIBUTES("attributes", true),
 
     /**
-     * The component tags — {@code e2e}, {@code ee-srv}, {@code none}. A list,
-     * because the predecessor's single space-separated cell was a fact about
-     * a Markdown cell and not about the tags.
+     * The external pointers, as an ordered list of entries carrying an
+     * optional {@code label} and a {@code target}.
+     *
+     * <p>A list and not one field. The single free-text column this replaces
+     * came to hold, in the estate being migrated, an item's rationale, a
+     * withdrawn decision, a build source path and a warning that the path was
+     * wrong — all at once.
      */
-    COMPONENT("component", true),
-
-    /** Free text. Null when nothing is on file; there is no filler token. */
-    REFERENCE("reference", true),
+    REFERENCES("references", true),
 
     /**
-     * The items this one depends on, as their ids. A list, and the edge is a
-     * relation underneath, so a reference to an item that does not exist is
-     * refused by the database rather than found later by an inventory walk.
+     * The typed edges out of this item, as a list of entries carrying a
+     * {@code type} — the identity of a declared relation type — and an
+     * {@code item}, the identity of the other end.
+     *
+     * <p>Set as a whole. An edge that leaves the set is withdrawn and never
+     * deleted, and one that re-enters is asserted again on the row that was
+     * already there.
      */
-    DEPENDS_ON("depends_on", true),
+    RELATIONS("relations", true),
+
+    // --- the planning axis, read here and written elsewhere ---------------
+
+    /**
+     * The milestone this item serves, or null — including the three marker
+     * rows, which are milestones in the table and positions on the axis.
+     *
+     * <p>Read-only through the item verbs. Setting it is a planning act, and
+     * the planning layer's verbs are a separate piece of work; the field is
+     * here because an answer that omitted it would be an item read that does
+     * not say what the item is for.
+     */
+    MILESTONE("milestone", false),
 
     // --- what the service derives ----------------------------------------
 
@@ -112,7 +163,7 @@ public enum Field {
      * Moved by an effective change and by nothing else. A write that changes
      * no value leaves it where it is — see {@link ItemService#update}.
      */
-    UPDATED_AT("updated_at", false),
+    CHANGED_AT("changed_at", false),
 
     /**
      * Opaque, from the moment of reading. A write carries the token it read
@@ -192,10 +243,12 @@ public enum Field {
                 WorklistException.Reason.UNKNOWN_FIELD,
                 "no field is named " + unknown + ". An item's fields are "
                     + Arrays.stream(values()).map(Field::canonicalName).toList()
-                    + ", of which " + settableNames() + " may be set. Nothing was written: "
-                    + "an argument this service does not recognise is refused rather than "
-                    + "dropped, because a dropped argument makes a write that changed "
-                    + "nothing look like one that succeeded",
+                    + ", of which " + settableNames() + " may be set. A scope's own "
+                    + "attributes are not fields: they travel inside `attributes`, "
+                    + "under the key they were declared with. Nothing was written: "
+                    + "an argument this service does not recognise is refused rather "
+                    + "than dropped, because a dropped argument makes a write that "
+                    + "changed nothing look like one that succeeded",
                 unknown);
         }
         return resolved;

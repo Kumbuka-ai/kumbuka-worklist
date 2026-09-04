@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.tenancy;
 
 import ai.kumbuka.worklist.domain.ItemService;
+import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import io.quarkus.hibernate.orm.PersistenceUnitExtension;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -50,6 +51,7 @@ class TenantBindingEdgeCaseIT {
     @Inject @PersistenceUnitExtension HibernateTenantResolver hibernateResolver;
 
     @Inject ItemService items;
+    @Inject VocabularyRegistry vocabulary;
 
     // -----------------------------------------------------------------------
     // The bind stack
@@ -193,7 +195,14 @@ class TenantBindingEdgeCaseIT {
             // carried the bound tenant" is checked one level down, by asking
             // the database under exactly that tenant — where row-level
             // security is what makes the row visible at all.
-            var created = items.create(scope, java.util.Map.of("title", "count-probe"));
+            // A status is declared first, under the same binding: an item
+            // carries a mandatory reference to one, and the vocabulary is
+            // tenant-scoped like everything else — so this tenant's status is
+            // its own and no other tenant can see it.
+            String status = String.valueOf(
+                vocabulary.declareStatus(scope, "open", 1, true, false, false, false).id);
+            var created = items.create(scope,
+                java.util.Map.of("title", "count-probe", "status", status));
             assertThat(created.get("title")).isEqualTo("count-probe");
 
             assertThat(items.query(scope))

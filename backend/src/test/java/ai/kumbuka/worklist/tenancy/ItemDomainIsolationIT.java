@@ -77,8 +77,17 @@ class ItemDomainIsolationIT {
      * reason. The two probes answer different questions and neither replaces
      * the other.
      */
-    private static final List<String> DOMAIN_TABLES =
-        List.of("selector", "number_space", "term", "item_dependency");
+    private static final List<String> DOMAIN_TABLES = List.of(
+        // The declared vocabularies.
+        "item_status", "attribute_definition", "attribute_option", "relation_type",
+        // Identity.
+        "selector", "number_space",
+        // The item's satellites.
+        "item_reference", "item_relation",
+        // The planning layer, whose tables exist here and whose verbs do not.
+        "milestone", "iteration", "iteration_membership",
+        // The lease, and what the scope decides.
+        "claim", "scope_setting", "view_preference");
 
     private static final UUID SCOPE = UUID.fromString(SubstrateDatabaseResource.SCOPE_ID);
 
@@ -206,12 +215,20 @@ class ItemDomainIsolationIT {
         }
     }
 
-    /** {@code WITH CHECK} on {@code worklist.term}, which also has no precondition. */
+    /**
+     * {@code WITH CHECK} on {@code worklist.item_status}, which also has no
+     * precondition.
+     *
+     * <p>A status is the vocabulary case now, and it is the one that matters
+     * most: a status carries the four predicates the platform reasons about,
+     * so a status planted across the boundary would be a foreign tenant
+     * deciding what "closed" means in a scope it cannot see.
+     */
     @Test
-    void a_bound_session_cannot_plant_a_term_under_a_foreign_tenant() throws SQLException {
+    void a_bound_session_cannot_plant_a_status_under_a_foreign_tenant() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenantA);
-            assertThatThrownBy(() -> insertTerm(c, tenantB))
+            assertThatThrownBy(() -> insertStatus(c, tenantB))
                 .as("a vocabulary is a scope's own data, and a session bound to another "
                     + "tenant may not add to it")
                 .isInstanceOf(SQLException.class)
@@ -221,28 +238,62 @@ class ItemDomainIsolationIT {
     }
 
     /**
-     * {@code WITH CHECK} on {@code worklist.item_dependency}.
+     * {@code WITH CHECK} on {@code worklist.item_relation}.
      *
-     * <p>Both items are created under tenant B and committed first, for the
-     * same reason as the number space: the edge is the statement under test,
-     * and its preconditions must not be what gets refused.
+     * <p>Both items and the relation type are created under tenant B and
+     * committed first, for the same reason as the number space: the edge is
+     * the statement under test, and its preconditions must not be what gets
+     * refused.
      */
     @Test
-    void a_bound_session_cannot_plant_a_dependency_under_a_foreign_tenant()
+    void a_bound_session_cannot_plant_a_relation_under_a_foreign_tenant()
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenantB);
             UUID from = insertItem(c, tenantB, "edge-source");
             UUID to = insertItem(c, tenantB, "edge-target");
+            UUID type = insertRelationType(c, tenantB);
             c.commit();
 
             Db.bindTenant(c, tenantA);
-            assertThatThrownBy(() -> insertDependency(c, tenantB, from, to))
-                .as("both items exist and belong to tenant B; the edge between them may "
-                    + "still not be written from a session bound to tenant A")
+            assertThatThrownBy(() -> insertRelation(c, tenantB, from, to, type))
+                .as("both items and the type exist and belong to tenant B; the edge "
+                    + "between them may still not be written from a session bound to "
+                    + "tenant A")
                 .isInstanceOf(SQLException.class)
                 .hasMessageContaining("row-level security");
             c.rollback();
+        }
+    }
+
+    /**
+     * And the runtime role cannot DELETE anything at all, on any of them.
+     *
+     * <p>A different mechanism from everything above and it is worth its own
+     * case: row-level security decides which rows a statement sees, and this
+     * decides whether the statement may be issued. "No verb deletes" is held
+     * by the GRANTS, so it holds against raw SQL that never passes a policy —
+     * and TRUNCATE, which is the one that bypasses every policy there is,
+     * falls under the same absence.
+     */
+    @Test
+    void the_runtime_role_may_not_delete_from_any_relation_of_this_domain()
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenantA);
+            plantOneOfEach(c, tenantA);
+            c.commit();
+
+            for (String table : DOMAIN_TABLES) {
+                assertThatThrownBy(() -> Db.exec(c, "DELETE FROM worklist." + table))
+                    .as("RED STATE, observed: a DELETE against worklist.%s must be "
+                        + "refused for want of a privilege. Withdrawal is a status "
+                        + "everywhere in this schema, and one granted DELETE would cost "
+                        + "the whole of that guarantee", table)
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("permission denied");
+                c.rollback();
+            }
         }
     }
 
@@ -304,16 +355,39 @@ class ItemDomainIsolationIT {
     // Planting. No RETURNING anywhere: ids are generated here and sent.
     // ------------------------------------------------------------------
 
-    /** Exactly one row in each of the four relations, under one tenant. */
+    /**
+     * Exactly one row in each relation of {@link #DOMAIN_TABLES}, under one
+     * tenant.
+     *
+     * <p>Exactly one, because the read half counts. The two items the edge
+     * needs are not counted — {@code item} comes from V1 and its isolation is
+     * asserted by {@code RowLevelSecurityProbeIT}, which is why it is not in
+     * the list.
+     */
     private void plantOneOfEach(Connection c, UUID tenant) throws SQLException {
         Db.bindTenant(c, tenant);
+
         UUID selector = UUID.randomUUID();
         insertSelector(c, tenant, selector);
         insertNumberSpace(c, tenant, selector);
-        insertTerm(c, tenant);
+
+        insertStatus(c, tenant);
+        UUID definition = insertAttributeDefinition(c, tenant);
+        insertAttributeOption(c, tenant, definition);
+        UUID type = insertRelationType(c, tenant);
+
         UUID from = insertItem(c, tenant, "edge-source");
         UUID to = insertItem(c, tenant, "edge-target");
-        insertDependency(c, tenant, from, to);
+        insertRelation(c, tenant, from, to, type);
+        insertReference(c, tenant, from);
+
+        insertMilestone(c, tenant);
+        UUID iteration = insertIteration(c, tenant);
+        insertMembership(c, tenant, iteration, from);
+
+        insertClaim(c, tenant, from);
+        insertScopeSetting(c, tenant, iteration);
+        insertViewPreference(c, tenant);
     }
 
     private void insertSelector(Connection c, UUID tenant, UUID id) throws SQLException {
@@ -332,55 +406,233 @@ class ItemDomainIsolationIT {
     private void insertNumberSpace(Connection c, UUID tenant, UUID selectorId)
             throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.number_space (selector_id, tenant_id, scope_id)
-                VALUES (?, ?, ?)
+                INSERT INTO worklist.number_space (id, selector_id, tenant_id, scope_id)
+                VALUES (?, ?, ?, ?)
                 """)) {
-            st.setObject(1, selectorId);
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, selectorId);
+            st.setObject(3, tenant);
+            st.setObject(4, SCOPE);
             st.executeUpdate();
         }
     }
 
-    private void insertTerm(Connection c, UUID tenant) throws SQLException {
+    private UUID insertStatus(Connection c, UUID tenant) throws SQLException {
+        UUID id = UUID.randomUUID();
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.term (id, tenant_id, scope_id, axis, token)
-                VALUES (?, ?, ?, 'cluster', ?)
+                INSERT INTO worklist.item_status
+                    (id, tenant_id, scope_id, name, actionable, in_progress, closed,
+                     successful)
+                VALUES (?, ?, ?, ?, true, false, false, false)
                 """)) {
-            st.setObject(1, UUID.randomUUID());
+            st.setObject(1, id);
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
             st.setString(4, freshToken());
             st.executeUpdate();
         }
+        return id;
     }
 
-    private UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
+    private UUID insertAttributeDefinition(Connection c, UUID tenant) throws SQLException {
         UUID id = UUID.randomUUID();
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item (id, tenant_id, scope_id, title)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO worklist.attribute_definition
+                    (id, tenant_id, scope_id, key, name, type)
+                VALUES (?, ?, ?, ?, ?, 'choice')
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
-            st.setString(4, title);
+            st.setString(4, freshKey());
+            st.setString(5, "an attribute");
             st.executeUpdate();
         }
         return id;
     }
 
-    private void insertDependency(Connection c, UUID tenant, UUID from, UUID to)
+    private void insertAttributeOption(Connection c, UUID tenant, UUID definition)
             throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item_dependency (tenant_id, item_id, depends_on_id)
-                VALUES (?, ?, ?)
+                INSERT INTO worklist.attribute_option
+                    (id, tenant_id, scope_id, definition_id, name)
+                VALUES (?, ?, ?, ?, ?)
                 """)) {
-            st.setObject(1, tenant);
-            st.setObject(2, from);
-            st.setObject(3, to);
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setObject(4, definition);
+            st.setString(5, "an option");
             st.executeUpdate();
         }
+    }
+
+    private UUID insertRelationType(Connection c, UUID tenant) throws SQLException {
+        UUID id = UUID.randomUUID();
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.relation_type (id, tenant_id, scope_id, name, blocks)
+                VALUES (?, ?, ?, ?, true)
+                """)) {
+            st.setObject(1, id);
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setString(4, freshToken());
+            st.executeUpdate();
+        }
+        return id;
+    }
+
+    /**
+     * An item, with the status its tenant declared.
+     *
+     * <p>Planted after {@link #insertStatus}, because the reference is
+     * mandatory: a status is a declared value and there is no literal to fall
+     * back on.
+     */
+    private UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
+        UUID id = UUID.randomUUID();
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item (id, tenant_id, scope_id, title, status_id)
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            st.setObject(1, id);
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setString(4, title);
+            st.setObject(5, anyStatus(c, tenant));
+            st.executeUpdate();
+        }
+        return id;
+    }
+
+    private void insertRelation(Connection c, UUID tenant, UUID from, UUID to, UUID type)
+            throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item_relation
+                    (tenant_id, scope_id, from_item_id, to_item_id, relation_type_id)
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setObject(3, from);
+            st.setObject(4, to);
+            st.setObject(5, type);
+            st.executeUpdate();
+        }
+    }
+
+    private void insertReference(Connection c, UUID tenant, UUID item) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item_reference
+                    (tenant_id, scope_id, item_id, ordinal, target)
+                VALUES (?, ?, ?, 0, 'docs/a.md')
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setObject(3, item);
+            st.executeUpdate();
+        }
+    }
+
+    private void insertMilestone(Connection c, UUID tenant) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.milestone (id, tenant_id, scope_id, number, title)
+                VALUES (?, ?, ?, 1, 'a milestone')
+                """)) {
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.executeUpdate();
+        }
+    }
+
+    private UUID insertIteration(Connection c, UUID tenant) throws SQLException {
+        UUID id = UUID.randomUUID();
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.iteration
+                    (id, tenant_id, scope_id, number, motto, description)
+                VALUES (?, ?, ?, 1, 'a motto', 'a description')
+                """)) {
+            st.setObject(1, id);
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.executeUpdate();
+        }
+        return id;
+    }
+
+    private void insertMembership(Connection c, UUID tenant, UUID iteration, UUID item)
+            throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.iteration_membership
+                    (tenant_id, scope_id, iteration_id, item_id, position)
+                VALUES (?, ?, ?, ?, 0)
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setObject(3, iteration);
+            st.setObject(4, item);
+            st.executeUpdate();
+        }
+    }
+
+    private void insertClaim(Connection c, UUID tenant, UUID item) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.claim
+                    (tenant_id, scope_id, item_id, receipt, actor, expires_at)
+                VALUES (?, ?, ?, 'a receipt', 'an actor', now() + interval '1 hour')
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setObject(3, item);
+            st.executeUpdate();
+        }
+    }
+
+    private void insertScopeSetting(Connection c, UUID tenant, UUID iteration)
+            throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.scope_setting
+                    (tenant_id, scope_id, current_iteration_id, max_planned_iterations,
+                     warn_planned_iterations, max_memberships_per_iteration,
+                     warn_memberships_per_iteration)
+                VALUES (?, ?, ?, 4, 3, 40, 30)
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setObject(3, iteration);
+            st.executeUpdate();
+        }
+    }
+
+    private void insertViewPreference(Connection c, UUID tenant) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.view_preference (tenant_id, scope_id, actor)
+                VALUES (?, ?, 'a reader')
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.executeUpdate();
+        }
+    }
+
+    /** The tenant's declared status, or a fresh one when it has none yet. */
+    private UUID anyStatus(Connection c, UUID tenant) throws SQLException {
+        try (var st = c.prepareStatement(
+                "SELECT id FROM worklist.item_status WHERE tenant_id = ? LIMIT 1")) {
+            st.setObject(1, tenant);
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next()) {
+                    return UUID.fromString(rs.getString(1));
+                }
+            }
+        }
+        return insertStatus(c, tenant);
+    }
+
+    /** An attribute key the check constraint accepts, unique per call. */
+    private static String freshKey() {
+        return "k" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 
     /** A token the check constraints accept, unique per call. */

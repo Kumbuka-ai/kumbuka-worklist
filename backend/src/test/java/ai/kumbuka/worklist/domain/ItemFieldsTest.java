@@ -53,8 +53,27 @@ class ItemFieldsTest {
     @Test
     void the_settable_names_are_the_ones_a_caller_may_change() {
         assertThat(Field.settableNames())
-            .contains("title", "status", "component", "depends_on", "reference")
-            .doesNotContain("id", "number", "selector", "created_at", "conflict_token");
+            .contains("title", "description", "status", "attributes", "references",
+                "relations")
+            .doesNotContain("id", "number", "selector", "milestone", "created_at",
+                "conflict_token");
+    }
+
+    /**
+     * A scope's own attributes are not fields, and that is the change the
+     * whole declaration mechanism rests on.
+     *
+     * <p>{@code cluster}, {@code type}, {@code priority} and {@code size} were
+     * four entries in this enum, so a fifth axis was a code change. They
+     * travel inside {@code attributes} now, under the key they were declared
+     * with, and a sixth of them is a row.
+     */
+    @Test
+    void a_declared_attribute_is_not_a_field_of_its_own() {
+        assertThat(Field.byCanonicalName("cluster")).isEmpty();
+        assertThat(Field.byCanonicalName("size")).isEmpty();
+        assertThat(Field.byCanonicalName("component")).isEmpty();
+        assertThat(Field.byCanonicalName("attributes")).contains(Field.ATTRIBUTES);
     }
 
     // ------------------------------------------------------------------
@@ -63,9 +82,9 @@ class ItemFieldsTest {
 
     @Test
     void blank_text_is_the_same_absence_as_null() {
-        assertThat(ItemFields.text(Field.REFERENCE, null)).isNull();
-        assertThat(ItemFields.text(Field.REFERENCE, "   ")).isNull();
-        assertThat(ItemFields.text(Field.REFERENCE, " on file ")).isEqualTo("on file");
+        assertThat(ItemFields.text(Field.DESCRIPTION, null)).isNull();
+        assertThat(ItemFields.text(Field.DESCRIPTION, "   ")).isNull();
+        assertThat(ItemFields.text(Field.DESCRIPTION, " on file ")).isEqualTo("on file");
     }
 
     /**
@@ -94,55 +113,131 @@ class ItemFieldsTest {
      */
     @Test
     void tokens_are_normalised_to_a_sorted_distinct_set() {
-        assertThat(ItemFields.tokens(Field.COMPONENT, List.of("ee-srv", "e2e", "e2e", " ")))
-            .containsExactly("e2e", "ee-srv");
-        assertThat(ItemFields.tokens(Field.COMPONENT, new String[] {"b", "a"}))
+        assertThat(ItemFields.tokens(Field.ATTRIBUTES, List.of("b", "a", "a", " ")))
+            .containsExactly("a", "b");
+        assertThat(ItemFields.tokens(Field.ATTRIBUTES, new String[] {"b", "a"}))
             .as("an array and a list are the same value — a caller that read the answer "
                 + "out of the entity has one, out of a payload the other")
             .containsExactly("a", "b");
-        assertThat(ItemFields.tokens(Field.COMPONENT, null)).isEmpty();
+        assertThat(ItemFields.tokens(Field.ATTRIBUTES, null)).isEmpty();
     }
 
     @Test
     void a_set_field_refuses_a_value_that_is_not_a_collection() {
         WorklistException refusal = (WorklistException) catchThrowable(() ->
-            ItemFields.tokens(Field.COMPONENT, "e2e"));
+            ItemFields.tokens(Field.RELATIONS, "not a list"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("component");
+        assertThat(refusal.offenders()).containsExactly("relations");
     }
 
+    /**
+     * The declared attributes are a map, sorted by key and free of absences.
+     *
+     * <p>The order a map arrives in says nothing, so two answers differing
+     * only in it would compare unequal and a round trip would look like a
+     * change. A key present with a null value is the absence of the attribute
+     * and is dropped, so that clearing one and never having set it are the
+     * same state rather than two that read alike.
+     */
     @Test
-    void component_tags_are_lower_case_tokens_and_a_malformed_one_is_named() {
-        assertThat(ItemFields.componentTokens(List.of("ee-srv", "e2e", "none")))
-            .containsExactly("e2e", "ee-srv", "none");
+    void attributes_are_normalised_to_a_sorted_map_without_absences() {
+        Map<String, Object> given = new java.util.LinkedHashMap<>();
+        given.put("size", "L");
+        given.put("cluster", "CORE");
+        given.put("priority", null);
+
+        assertThat(ItemFields.attributes(given))
+            .containsExactly(Map.entry("cluster", "CORE"), Map.entry("size", "L"));
+        assertThat(ItemFields.attributes(null)).isEmpty();
 
         WorklistException refusal = (WorklistException) catchThrowable(() ->
-            ItemFields.componentTokens(List.of("e2e", "EE_SRV", "-leading")));
-
+            ItemFields.attributes(List.of("not a map")));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders())
-            .as("both malformed tags are reported, so a caller learns them in one round trip")
-            .containsExactlyInAnyOrder("EE_SRV", "-leading");
+        assertThat(refusal.offenders()).containsExactly("attributes");
     }
 
-    /** Ids accept a uuid or its rendering, and refuse anything that is neither. */
+    /**
+     * The reference list keeps its order and normalises each entry.
+     *
+     * <p>The order is the reader's and is part of the value, so it is NOT
+     * sorted away — unlike the relation set, where the order carries nothing.
+     * That asymmetry is the whole difference between a list and a set, and
+     * getting it the wrong way round would either lose the reader's order or
+     * report a reordering as a change.
+     */
     @Test
-    void ids_accept_both_shapes_and_refuse_what_is_not_an_id() {
+    void references_keep_their_order_and_a_blank_label_is_an_absent_one() {
+        List<Map<String, Object>> normalised = ItemFields.references(List.of(
+            Map.of("label", " the design ", "target", " docs/a.md "),
+            Map.of("label", "   ", "target", "docs/b.md")));
+
+        assertThat(normalised).hasSize(2);
+        assertThat(normalised.get(0))
+            .containsEntry("label", "the design")
+            .containsEntry("target", "docs/a.md");
+        assertThat(normalised.get(1).get("label"))
+            .as("a blank label is the same absence as no label — two entries differing "
+                + "only in which spelling of nothing they carry would compare unequal")
+            .isNull();
+
+        WorklistException refusal = (WorklistException) catchThrowable(() ->
+            ItemFields.references(List.of(Map.of("label", "no target"))));
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders()).containsExactly("references");
+    }
+
+    /**
+     * The relation set is sorted, distinct, and typed on both halves.
+     *
+     * <p>Sorted because it is a set: a caller re-sending a read answer would
+     * otherwise present the same edges in another order and the comparison
+     * would report a change nobody made.
+     */
+    @Test
+    void relations_are_normalised_to_a_sorted_distinct_set_of_typed_edges() {
+        UUID type = UUID.fromString("00000000-0000-0000-0000-000000000001");
         UUID one = UUID.fromString("00000000-0000-0000-0000-00000000000a");
         UUID two = UUID.fromString("00000000-0000-0000-0000-00000000000b");
 
-        assertThat(ItemFields.ids(Field.DEPENDS_ON, List.of(two, one.toString(), one)))
-            .as("sorted and distinct, whichever shape each element arrived in")
-            .containsExactly(one, two);
+        List<Map<String, Object>> normalised = ItemFields.relations(List.of(
+            Map.of("type", type.toString(), "item", two),
+            Map.of("type", type, "item", one.toString()),
+            Map.of("type", type, "item", two)));
+
+        assertThat(normalised)
+            .as("sorted by target then type, distinct, whichever shape each half arrived in")
+            .containsExactly(
+                Map.of("type", type, "item", one),
+                Map.of("type", type, "item", two));
+
+        WorklistException typeless = (WorklistException) catchThrowable(() ->
+            ItemFields.relations(List.of(Map.of("item", one.toString()))));
+        assertThat(typeless.reason())
+            .as("an edge without a type is the predecessor's untyped one, and every "
+                + "machine reader of it has to guess whether it blocks")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+    }
+
+    /** An identity accepts a uuid or its rendering, and refuses what is neither. */
+    @Test
+    void an_identity_accepts_both_shapes_and_refuses_what_is_not_one() {
+        UUID one = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+
+        assertThat(ItemFields.id(Field.STATUS, one)).isEqualTo(one);
+        assertThat(ItemFields.id(Field.STATUS, one.toString()))
+            .as("whichever shape it arrived in — a caller echoing a read answer may have "
+                + "carried the uuid through JSON as a string")
+            .isEqualTo(one);
+        assertThat(ItemFields.id(Field.STATUS, null)).isNull();
 
         WorklistException refusal = (WorklistException) catchThrowable(() ->
-            ItemFields.ids(Field.DEPENDS_ON, List.of("47")));
+            ItemFields.id(Field.STATUS, "47"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
-            .as("and the message says why a number is not one: the predecessor's running "
-                + "number does not exist here")
+            .as("and the message says why: a declared value has an identity separate from "
+                + "its name, and the identity is what an item stores")
             .contains("47");
     }
 
@@ -211,52 +306,84 @@ class ItemFieldsTest {
     }
 
     /**
-     * The whitespace check is a search rather than a whole-string match.
+     * The attribute key pattern accepts a token and rejects a sentence.
      *
-     * <p>{@code token.matches(".*\\s.*")} answers the same question and costs
-     * quadratic time on a token with no whitespace: the leading {@code .*}
-     * takes everything, then backs off a character at a time and rescans the
-     * tail from each position.
+     * <p>This is what the whitespace check on a vocabulary token became. The
+     * question is the same — is this a token somebody can address an
+     * attribute by — and the answer is stricter, because a key appears in a
+     * machine answer and in a caller's argument map rather than only in a
+     * display.
+     *
+     * <p>The pattern is possessive for the reason the selector's is, and the
+     * timeout is what makes that a gate rather than a remark: it is enormously
+     * more than the pattern needs and enormously less than the failure takes.
      */
     @Test
-    void the_whitespace_check_finds_whitespace_anywhere_in_one_pass() {
-        assertThat(Term.WHITESPACE.matcher("SEC").find()).isFalse();
-        assertThat(Term.WHITESPACE.matcher("two words").find()).isTrue();
-        assertThat(Term.WHITESPACE.matcher("trailing ").find()).isTrue();
+    void the_attribute_key_pattern_accepts_a_token_and_decides_a_long_input_in_one_pass() {
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("cluster").matches()).isTrue();
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("story_points").matches()).isTrue();
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("t2").matches()).isTrue();
 
-        String long_ = "x".repeat(200_000);
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("two words").matches())
+            .as("a key is a token — it travels in an argument map")
+            .isFalse();
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("Cluster").matches()).isFalse();
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("1st").matches()).isFalse();
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("trailing_").matches()).isFalse();
+        assertThat(AttributeDefinition.KEY_PATTERN.matcher("").matches()).isFalse();
+
+        String pathological = "a" + "_b".repeat(50_000) + "!";
         assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () ->
-            assertThat(Term.WHITESPACE.matcher(long_).find()).isFalse());
+            assertThat(AttributeDefinition.KEY_PATTERN.matcher(pathological).matches())
+                .as("a long input that cannot match must be refused, quickly and without "
+                    + "exhausting the stack")
+                .isFalse());
     }
 
     // ------------------------------------------------------------------
-    // The dependency key.
+    // The composite key.
+    //
+    // There is one. The reference entry used to carry a second, over its item
+    // and its ordinal, and it is gone rather than skipped: an entry is
+    // addressed by an identity of its own now, because a positional key and a
+    // withdrawal status exclude each other. What replaced that key is a
+    // partial unique index over the LIVING rows, which is a statement about
+    // the database and is asserted where the database can answer it —
+    // SchemaConstraintIT.
     // ------------------------------------------------------------------
 
     /**
-     * The composite key's identity, which the persistence provider relies on
+     * The relation key's identity, which the persistence provider relies on
      * to tell one edge from another.
      *
      * <p>Worth its own case because nothing else exercises it directly: a
      * broken {@code equals} would show up as an edge that will not update, or
      * one that updates the wrong row, and neither failure would point here.
+     *
+     * <p><strong>The type is part of it</strong>, and that is the difference
+     * from the untyped edge this replaces: without it, asserting a second kind
+     * of relation between the same two items would overwrite the first.
      */
     @Test
-    void the_dependency_key_identifies_an_edge_by_both_ends() {
+    void the_relation_key_identifies_an_edge_by_both_ends_and_its_type() {
         UUID from = UUID.randomUUID();
         UUID to = UUID.randomUUID();
+        UUID type = UUID.randomUUID();
 
-        ItemDependency.Key key = new ItemDependency.Key(from, to);
+        ItemRelation.Key key = new ItemRelation.Key(from, to, type);
 
         assertThat(key)
-            .isEqualTo(new ItemDependency.Key(from, to))
-            .hasSameHashCodeAs(new ItemDependency.Key(from, to))
-            .isNotEqualTo(new ItemDependency.Key(to, from))
-            .as("direction is part of the identity: A depends on B is not B depends on A")
-            .isNotEqualTo(new ItemDependency.Key(from, UUID.randomUUID()))
+            .isEqualTo(new ItemRelation.Key(from, to, type))
+            .hasSameHashCodeAs(new ItemRelation.Key(from, to, type))
+            .isNotEqualTo(new ItemRelation.Key(to, from, type))
+            .as("direction is part of the identity: A blocks B is not B blocks A")
+            .isNotEqualTo(new ItemRelation.Key(from, UUID.randomUUID(), type))
+            .as("and so is the type: two items may carry two edges of different types")
+            .isNotEqualTo(new ItemRelation.Key(from, to, UUID.randomUUID()))
             .isNotEqualTo(null)
             .isNotEqualTo("not a key");
         assertThat(key).isEqualTo(key);
-        assertThat(new ItemDependency.Key()).isNotEqualTo(key);
+        assertThat(new ItemRelation.Key()).isNotEqualTo(key);
     }
+
 }

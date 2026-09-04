@@ -128,16 +128,56 @@ public final class Db {
      * <p>Going around the ORM is the point: layer 1 rewrites every statement
      * it builds, so a row planted through it could never demonstrate what
      * layer 2 does on its own.
+     *
+     * <p>A status is declared first, because an item carries a mandatory
+     * reference to one. That is not scaffolding this helper works around: a
+     * status is a value the scope declared rather than a literal, so a scope
+     * has a vocabulary before it has an item, and a fixture that faked its way
+     * past that would be planting a row the service could not have written.
      */
     static UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
+        UUID status = declaredStatus(c, tenant);
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item (tenant_id, scope_id, title)
-                VALUES (?::uuid, ?::uuid, ?)
+                INSERT INTO worklist.item (tenant_id, scope_id, title, status_id)
+                VALUES (?::uuid, ?::uuid, ?, ?::uuid)
                 RETURNING id
                 """)) {
             st.setString(1, tenant.toString());
             st.setString(2, SubstrateDatabaseResource.SCOPE_ID);
             st.setString(3, title);
+            st.setString(4, status.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return UUID.fromString(rs.getString(1));
+            }
+        }
+    }
+
+    /**
+     * The tenant's own actionable status, declared on first use.
+     *
+     * <p>Looked up before it is created, because these probes plant several
+     * items under one tenant and a status per item would leave the scope
+     * carrying a vocabulary of duplicates that mean the same thing.
+     */
+    static UUID declaredStatus(Connection c, UUID tenant) throws SQLException {
+        try (var st = c.prepareStatement(
+                "SELECT id FROM worklist.item_status WHERE tenant_id = ?::uuid LIMIT 1")) {
+            st.setString(1, tenant.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next()) {
+                    return UUID.fromString(rs.getString(1));
+                }
+            }
+        }
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item_status
+                    (tenant_id, scope_id, name, actionable, in_progress, closed, successful)
+                VALUES (?::uuid, ?::uuid, 'open', true, false, false, false)
+                RETURNING id
+                """)) {
+            st.setString(1, tenant.toString());
+            st.setString(2, SubstrateDatabaseResource.SCOPE_ID);
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
                 return UUID.fromString(rs.getString(1));

@@ -1,9 +1,9 @@
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Item;
-import ai.kumbuka.worklist.domain.ItemDependency;
+import ai.kumbuka.worklist.domain.ItemReference;
+import ai.kumbuka.worklist.domain.ItemRelation;
 import ai.kumbuka.worklist.domain.Selector;
-import ai.kumbuka.worklist.domain.Term;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -53,10 +53,12 @@ public class ItemRepository {
     /**
      * Every item of a scope, oldest first.
      *
-     * <p>Ordering by creation and not by the sort key of the contract: the
-     * sort key ranks by milestone and cluster, the milestone is the planning
-     * layer's, and a partial implementation of a documented order is worse
-     * than an obviously different one.
+     * <p>Ordering by creation and not by the sort key of the contract. That
+     * sort ranks by milestone and by a declared attribute, and ordering by a
+     * declared attribute is a capability a scope declares rather than a
+     * property every attribute has for free — the containment index answers
+     * filters and does not order. A partial implementation of a documented
+     * order is worse than an obviously different one.
      */
     @Transactional
     public List<Item> inScope(UUID scopeId) {
@@ -79,39 +81,60 @@ public class ItemRepository {
         return selectorId == null ? null : em.find(Selector.class, selectorId);
     }
 
-    /** The term of that id, or null. */
+    /** Every relation out of an item, asserted and withdrawn alike. */
     @Transactional
-    public Term termById(UUID termId) {
-        return termId == null ? null : em.find(Term.class, termId);
-    }
-
-    /** Every dependency edge of an item, asserted and withdrawn alike. */
-    @Transactional
-    public List<ItemDependency> edgesOf(UUID itemId) {
+    public List<ItemRelation> edgesOf(UUID itemId) {
         return em.createQuery(
-                "SELECT d FROM ItemDependency d WHERE d.itemId = :item", ItemDependency.class)
+                "SELECT r FROM ItemRelation r WHERE r.fromItemId = :item",
+                ItemRelation.class)
             .setParameter(P_ITEM, itemId)
             .getResultList();
     }
 
     /**
-     * The asserted edges only, sorted. A withdrawn edge is history, not a
-     * dependency.
+     * The asserted relations only, sorted. A withdrawn edge is history, not a
+     * relation.
      *
      * <p>Sorted in the query, so that the answer is stable across reads.
      * Without that, a caller who re-sent a read answer would present the same
      * set in another order, and a comparison would report a change the caller
      * never made — the item would take a fresh modification date and a rotated
      * token for a write that changed nothing.
+     *
+     * <p>By target then type, which is the order the caller-facing
+     * normalisation uses too. Two orders would be two places for the same
+     * comparison to disagree.
      */
     @Transactional
-    public List<UUID> assertedDependencies(UUID itemId) {
+    public List<ItemRelation> assertedRelations(UUID itemId) {
         return em.createQuery(
-                "SELECT d.dependsOnId FROM ItemDependency d "
-                    + "WHERE d.itemId = :item AND d.status = :status "
-                    + "ORDER BY d.dependsOnId", UUID.class)
+                "SELECT r FROM ItemRelation r "
+                    + "WHERE r.fromItemId = :item AND r.status = :status "
+                    + "ORDER BY r.toItemId, r.relationTypeId", ItemRelation.class)
             .setParameter(P_ITEM, itemId)
-            .setParameter("status", ItemDependency.ASSERTED)
+            .setParameter("status", ItemRelation.ASSERTED)
+            .getResultList();
+    }
+
+    /** Every external pointer of an item, asserted and withdrawn alike. */
+    @Transactional
+    public List<ItemReference> referencesOf(UUID itemId) {
+        return em.createQuery(
+                "SELECT r FROM ItemReference r WHERE r.itemId = :item ORDER BY r.ordinal",
+                ItemReference.class)
+            .setParameter(P_ITEM, itemId)
+            .getResultList();
+    }
+
+    /** The asserted pointers only, in the reader's order. */
+    @Transactional
+    public List<ItemReference> assertedReferences(UUID itemId) {
+        return em.createQuery(
+                "SELECT r FROM ItemReference r "
+                    + "WHERE r.itemId = :item AND r.status = :status ORDER BY r.ordinal",
+                ItemReference.class)
+            .setParameter(P_ITEM, itemId)
+            .setParameter("status", ItemReference.ASSERTED)
             .getResultList();
     }
 
@@ -131,10 +154,23 @@ public class ItemRepository {
         return item;
     }
 
-    /** Inserts a dependency edge. Flushed by the caller, once, after the set. */
+    /** Inserts a relation. Flushed by the caller, once, after the whole set. */
     @Transactional
-    public void insertEdge(ItemDependency edge) {
+    public void insertEdge(ItemRelation edge) {
         em.persist(edge);
+    }
+
+    /**
+     * Inserts a reference entry. Flushed by the caller, once, after the list.
+     *
+     * <p>There is no counterpart that removes one, and there cannot be: this
+     * schema grants DELETE nowhere. A list that shrinks is rewritten in place
+     * and its tail is carried by the entries that remain — see
+     * {@code ItemService} on why the ordinal is dense.
+     */
+    @Transactional
+    public void insertReference(ItemReference reference) {
+        em.persist(reference);
     }
 
     /** Flushes pending changes for the same reason {@link #insert} does. */

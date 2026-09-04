@@ -9,6 +9,7 @@ import org.jboss.logging.Logger;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,9 +31,7 @@ import java.util.UUID;
  * These names exist in sibling services too, and that is the mechanism rather
  * than an accident: with one vocabulary the caller-facing surface is the
  * UNION of the transitions instead of their sum, and it is the address that
- * says which service is meant, not the verb. An earlier build of this class
- * carried six names chosen so that no other service used them; the rule
- * behind that choice is retired, so the names are gone with it.
+ * says which service is meant, not the verb.
  *
  * <p>What the identity buys is guarded rather than asserted:
  * {@code VerbVocabularyGuardTest} holds the public methods below against a
@@ -42,11 +41,25 @@ import java.util.UUID;
  * and is only noticed by the next reader who assumes the shared meaning.
  *
  * <p>There is no seventh that deletes. What the predecessor's {@code delete}
- * did — remove the row entirely — survives as the status {@code withdrawn},
- * and the consequence is that a number handed out is never handed back. That
- * makes the high-water mark a high-water mark BY CONSTRUCTION rather than by
- * a rule somebody has to keep, and it is kept without exception: a raw item
- * carrying no number is not carved out, because one rule beats two.
+ * did — remove the row entirely — survives as a terminal status the scope
+ * declared, and the consequence is that a number handed out is never handed
+ * back. That makes the high-water mark a high-water mark BY CONSTRUCTION
+ * rather than by a rule somebody has to keep.
+ *
+ * <h2>The status is a declared value and this class knows none of them</h2>
+ *
+ * {@link Field#STATUS} carries the IDENTITY of a status the scope declared,
+ * and the four predicates hang off that declaration rather than off a list in
+ * this file. That is the change this class exists on the far side of: the
+ * shape it replaces carried five literals in a check constraint and a
+ * matching list in Java, which is exactly the construction that makes a
+ * second vocabulary impossible.
+ *
+ * <p><strong>The transition rules are not here.</strong> An item may not
+ * become closed under a live claim; an item may not enter an iteration while
+ * it is not actionable. Both are expressed over the PREDICATES and both need
+ * the claim and the planning verbs to exist first. Writing them against the
+ * estate's status names would be the predecessor's mistake in a new file.
  *
  * <h2>One naming, in both directions</h2>
  *
@@ -80,7 +93,7 @@ public class ItemService {
 
     @Inject ItemRepository items;
     @Inject SelectorRegistry selectors;
-    @Inject TermRegistry terms;
+    @Inject VocabularyRegistry vocabulary;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -95,10 +108,10 @@ public class ItemService {
     /**
      * Every item of a scope, oldest first.
      *
-     * <p>Ordering by creation and not by the sort key of the contract: the
-     * sort key ranks by milestone and cluster, the milestone is the planning
-     * layer's, and a partial implementation of a documented order is worse
-     * than an obviously different one.
+     * <p>Ordering by creation and not by the sort key of the contract. That
+     * sort ranks by milestone and by a declared attribute, and ordering by a
+     * declared attribute is a capability a scope declares rather than a
+     * property every attribute has for free.
      */
     @Transactional
     public List<Map<String, Object>> query(UUID scopeId) {
@@ -120,13 +133,16 @@ public class ItemService {
      * — an item whose tenant a caller could name would be an item a caller
      * could plant across the boundary.
      *
+     * <p><strong>A title and a status are both required, and the second is
+     * new.</strong> A status is a declared value now, so there is no default
+     * to fall back on: a scope declares its vocabulary before it holds an
+     * item, exactly as it declares a selector before an address can be
+     * allocated. Inventing a status here would be this service deciding what
+     * a scope's list means.
+     *
      * <p>A created item carries no selector and no number. It gets both from
      * {@link #accept}, when a second party has decided what kind of thing it
-     * is. <strong>Two names for that pair are in circulation and they mean
-     * the same thing:</strong> this repository has called {@code FEAT-51} the
-     * address since the substrate was built, while the platform vocabulary
-     * reserves "address" for what creation returns and calls the pair the
-     * business identifier. The word is unsettled; what it denotes is not.
+     * is.
      */
     @Transactional
     public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
@@ -154,9 +170,21 @@ public class ItemService {
                 List.of(Field.TITLE.canonicalName()));
         }
 
+        UUID statusId = ItemFields.id(Field.STATUS, given.get(Field.STATUS));
+        if (statusId == null) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "an item carries a status, and a status is a value the scope declared "
+                    + "rather than one of a fixed set this service knows. Declare the "
+                    + "vocabulary of scope " + scopeId + " and name the status to start "
+                    + "an item in",
+                List.of(Field.STATUS.canonicalName()));
+        }
+
         Item item = new Item();
         item.scopeId = scopeId;
         item.title = title;
+        item.statusId = vocabulary.requireStatus(scopeId, statusId).id;
         items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
@@ -166,6 +194,7 @@ public class ItemService {
         Map<Field, Object> rest = new EnumMap<>(Field.class);
         rest.putAll(given);
         rest.remove(Field.TITLE);
+        rest.remove(Field.STATUS);
         if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
             stamp(item);
             items.flush();
@@ -181,9 +210,9 @@ public class ItemService {
      *
      * <p>The intake gate, and the one act of this store a second party
      * performs rather than the author. What it allocates is the pair
-     * {@code (selector, number)} — {@code FEAT-51} — which the platform
-     * vocabulary calls the business identifier and this repository has always
-     * called the address; see {@link #create} on the two words.
+     * {@code (selector, number)} — {@code FEAT-51} — and the identity of an
+     * item in the store is the TRIPLE scope, selector and number, never the
+     * pair without the selector.
      *
      * <p>Once. An identifier that could be reallocated would make every
      * reference to the old one resolve to something else, so a second
@@ -267,15 +296,31 @@ public class ItemService {
     /**
      * Withdraw an item: it is taken back, and it keeps its number forever.
      *
-     * <p>This is what the predecessor's {@code delete} becomes. It goes
-     * through {@link #update} rather than beside it, so that the conflict
-     * token, the no-op rule and the field validation are the same code —
-     * a second write path is a second place for those three to drift.
+     * <p>This is what the predecessor's {@code delete} becomes, and the status
+     * it moves to is <strong>the scope's own</strong>. A terminal value named
+     * in this file would be the literal vocabulary all over again, so the
+     * caller names the status it means and this verb is what says the act is
+     * a withdrawal rather than an ordinary change.
+     *
+     * <p>It goes through {@link #update} rather than beside it, so that the
+     * conflict token, the no-op rule and the field validation are the same
+     * code — a second write path is a second place for those three to drift.
      */
     @Transactional
-    public Map<String, Object> withdraw(UUID scopeId, UUID itemId, String conflictToken) {
+    public Map<String, Object> withdraw(UUID scopeId, UUID itemId, UUID statusId,
+            String conflictToken) {
+        ItemStatus status = vocabulary.requireStatus(scopeId, statusId);
+        if (!status.closed) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "withdrawing an item moves it to a status that is CLOSED, and " + statusId
+                    + " is not. Which values a scope closes with is its own declaration; "
+                    + "that a withdrawal is terminal is the platform's",
+                List.of(String.valueOf(statusId)));
+        }
+
         Map<String, Object> answer = update(scopeId, itemId, Map.of(
-            Field.STATUS.canonicalName(), Item.WITHDRAWN,
+            Field.STATUS.canonicalName(), String.valueOf(status.id),
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
         LOG.infof("item withdrawn in scope %s", scopeId);
         return answer;
@@ -358,73 +403,172 @@ public class ItemService {
                 item.title = title;
                 return true;
             }
+            case DESCRIPTION -> {
+                String description = ItemFields.text(field, value);
+                if (Objects.equals(held, description)) {
+                    return false;
+                }
+                item.description = description;
+                return true;
+            }
             case STATUS -> {
-                String status = ItemFields.text(field, value);
-                if (!Item.STATUSES.contains(status)) {
-                    throw new WorklistException(
-                        WorklistException.Reason.INVALID_VALUE,
-                        "there is no status " + status + ". The vocabulary is "
-                            + Item.STATUSES + ". `planned` is deliberately absent: it "
-                            + "means membership of an iteration, the membership table "
-                            + "is the planning layer's, and a value nothing maintains "
-                            + "is worse than an absent one",
-                        List.of(field.canonicalName()));
-                }
-                if (Objects.equals(held, status)) {
-                    return false;
-                }
-                item.status = status;
-                return true;
+                return applyStatus(item, held, field, value);
             }
-            case REFERENCE -> {
-                String reference = ItemFields.text(field, value);
-                if (Objects.equals(held, reference)) {
-                    return false;
-                }
-                item.reference = reference;
-                return true;
+            case ATTRIBUTES -> {
+                return applyAttributes(item, ItemFields.attributes(value));
             }
-            case COMPONENT -> {
-                List<String> tags = ItemFields.componentTokens(value);
-                if (Objects.equals(held, tags)) {
-                    return false;
-                }
-                item.component = tags.toArray(new String[0]);
-                return true;
+            case REFERENCES -> {
+                return applyReferences(item, ItemFields.references(value));
             }
-            case DEPENDS_ON -> {
-                return applyDependencies(item, ItemFields.ids(field, value));
-            }
-            case CLUSTER, TYPE, PRIORITY, SIZE -> {
-                return applyTerm(item, held, field, value);
+            case RELATIONS -> {
+                return applyRelations(item, ItemFields.relations(value));
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable and has no application");
         }
     }
 
-    /** A vocabulary field: resolved against the scope's own declared terms. */
-    private boolean applyTerm(Item item, Object held, Field field, Object value) {
-        String token = ItemFields.text(field, value);
-        if (Objects.equals(held, token)) {
+    /** The status: resolved against the scope's own declared vocabulary. */
+    private boolean applyStatus(Item item, Object held, Field field, Object value) {
+        UUID statusId = ItemFields.id(field, value);
+        if (statusId == null) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "an item carries a status on every path, so it cannot be cleared. What "
+                    + "the predecessor's delete did is a terminal status here, not the "
+                    + "absence of one",
+                List.of(field.canonicalName()));
+        }
+        if (ItemFields.unchangedAsText(held, statusId)) {
             return false;
         }
-        UUID termId = token == null
-            ? null
-            : terms.require(item.scopeId, TermRegistry.axisOf(field), token).id;
-
-        switch (field) {
-            case CLUSTER -> item.clusterTermId = termId;
-            case TYPE -> item.typeTermId = termId;
-            case PRIORITY -> item.priorityTermId = termId;
-            case SIZE -> item.sizeTermId = termId;
-            default -> throw new IllegalStateException(field + " is not a vocabulary field");
-        }
+        item.statusId = vocabulary.requireStatus(item.scopeId, statusId).id;
         return true;
     }
 
     /**
-     * Set the dependency edges to exactly the given set.
+     * Set the declared attributes to exactly the given map.
+     *
+     * <p>Keyed by the declaration's KEY on the way in and by its IDENTITY in
+     * the column, so a scope may rename a key and an item's stored value does
+     * not move. Every key is resolved against the scope's declarations, and an
+     * undeclared one is a typed refusal rather than a value nothing can read
+     * back.
+     *
+     * <p>An enumerated attribute's value is checked against its declared
+     * options; the other five types are stored as given. That asymmetry is the
+     * concept's: the platform asks no question about what a {@code text} or a
+     * {@code number} means, and it cannot render an option identity that was
+     * never declared.
+     */
+    private boolean applyAttributes(Item item, Map<String, Object> wanted) {
+        Map<String, Object> stored = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : wanted.entrySet()) {
+            AttributeDefinition definition =
+                vocabulary.requireAttribute(item.scopeId, entry.getKey());
+            stored.put(String.valueOf(definition.id),
+                storedValue(definition, entry.getValue()));
+        }
+
+        if (Objects.equals(item.attributes, stored)) {
+            return false;
+        }
+        item.attributes = stored;
+        return true;
+    }
+
+    /** One attribute value, in the form the column holds. */
+    private Object storedValue(AttributeDefinition definition, Object given) {
+        if (!AttributeDefinition.ENUMERATED.contains(definition.type)) {
+            return given;
+        }
+        if (AttributeDefinition.CHOICE.equals(definition.type)) {
+            return String.valueOf(
+                vocabulary.requireOption(definition, ItemFields.id(Field.ATTRIBUTES, given)).id);
+        }
+
+        List<String> options = new ArrayList<>();
+        for (String token : ItemFields.tokens(Field.ATTRIBUTES, given)) {
+            String optionId = String.valueOf(
+                vocabulary.requireOption(definition, ItemFields.id(Field.ATTRIBUTES, token)).id);
+            if (!options.contains(optionId)) {
+                options.add(optionId);
+            }
+        }
+        return List.copyOf(options);
+    }
+
+    /**
+     * Set the reference list to exactly the given entries, in the given order.
+     *
+     * <p><strong>The LIVING entries are what this walks, position by
+     * position.</strong> Entry i of the wanted list is matched against the
+     * i-th living row: its label, its target and its ordinal are moved to
+     * where they should be. A wanted list longer than the living one gets
+     * fresh rows for the tail; a shorter one withdraws the living rows beyond
+     * its end.
+     *
+     * <p><strong>A withdrawn row is never touched again.</strong> Not its
+     * content, not its ordinal, not its status. That is the difference from
+     * walking by ordinal, which would find the tombstone sitting at the
+     * position a growing list needs and either collide with it or overwrite
+     * it — and an overwritten tombstone is a free slot that reads like
+     * preservation.
+     *
+     * <p>The two loops below cannot both do work in one call: a wanted list is
+     * either longer than the living one or shorter. So no ordinal is ever
+     * withdrawn and re-issued within a single flush, and the partial unique
+     * index never sees the two rows at once.
+     */
+    private boolean applyReferences(Item item, List<Map<String, Object>> wanted) {
+        List<ItemReference> living = items.assertedReferences(item.id);
+        boolean changed = false;
+
+        for (int position = 0; position < wanted.size(); position++) {
+            Map<String, Object> entry = wanted.get(position);
+            String label = (String) entry.get(ItemFields.LABEL);
+            String target = (String) entry.get(ItemFields.TARGET);
+
+            if (position >= living.size()) {
+                ItemReference row = new ItemReference();
+                row.itemId = item.id;
+                row.scopeId = item.scopeId;
+                row.ordinal = position;
+                row.label = label;
+                row.target = target;
+                items.insertReference(row);
+                changed = true;
+                continue;
+            }
+
+            ItemReference row = living.get(position);
+            if (row.ordinal != position) {
+                row.ordinal = position;
+                changed = true;
+            }
+            if (!Objects.equals(row.label, label) || !Objects.equals(row.target, target)) {
+                row.label = label;
+                row.target = target;
+                changed = true;
+            }
+        }
+
+        for (int position = wanted.size(); position < living.size(); position++) {
+            // The ordinal is left where it was. It is meaningless on a
+            // withdrawn row — nothing reads it for order — and rewriting it
+            // would be a change to a row that is supposed to stand as it was.
+            living.get(position).status = ItemReference.WITHDRAWN;
+            changed = true;
+        }
+
+        if (changed) {
+            items.flush();
+        }
+        return changed;
+    }
+
+    /**
+     * Set the relations to exactly the given set.
      *
      * <p>An edge that leaves the set is WITHDRAWN, never deleted — this
      * schema grants DELETE on nothing, and one exception would cost the whole
@@ -432,41 +576,48 @@ public class ItemService {
      * the row that was already there.
      *
      * <p>A reference to an item that does not exist is refused by the foreign
-     * key rather than found later by an inventory walk. A CYCLE still can be
-     * written: no constraint expresses acyclicity, and the walk that would
-     * find one is a whole-inventory question that does not belong on a write
-     * path.
+     * key, and an undeclared type by {@link VocabularyRegistry}. A CYCLE over
+     * blocking relations still can be written: no constraint expresses
+     * acyclicity, the walk that finds one is a domain check with a red probe
+     * of its own, and it is not built here.
      */
-    private boolean applyDependencies(Item item, List<UUID> wanted) {
-        if (wanted.contains(item.id)) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "an item cannot depend on itself. That is the one cycle a single row "
-                    + "can express, and the only one a constraint can see",
-                List.of(Field.DEPENDS_ON.canonicalName()));
+    private boolean applyRelations(Item item, List<Map<String, Object>> wanted) {
+        for (Map<String, Object> entry : wanted) {
+            if (item.id.equals(entry.get(ItemFields.ITEM))) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    "an item cannot relate to itself. That is the one cycle a single row "
+                        + "can express, and the only one a constraint can see",
+                    List.of(Field.RELATIONS.canonicalName()));
+            }
+            vocabulary.requireRelationType(item.scopeId, (UUID) entry.get(ItemFields.TYPE));
         }
 
-        List<ItemDependency> edges = items.edgesOf(item.id);
-
+        List<ItemRelation> edges = items.edgesOf(item.id);
         boolean changed = false;
-        List<UUID> present = new ArrayList<>();
-        for (ItemDependency edge : edges) {
-            present.add(edge.dependsOnId);
-            String target = wanted.contains(edge.dependsOnId)
-                ? ItemDependency.ASSERTED : ItemDependency.WITHDRAWN;
+
+        List<Map<String, Object>> present = new ArrayList<>();
+        for (ItemRelation edge : edges) {
+            Map<String, Object> key = Map.of(
+                ItemFields.TYPE, edge.relationTypeId, ItemFields.ITEM, edge.toItemId);
+            present.add(key);
+            String target = wanted.contains(key)
+                ? ItemRelation.ASSERTED : ItemRelation.WITHDRAWN;
             if (!target.equals(edge.status)) {
                 edge.status = target;
                 changed = true;
             }
         }
 
-        for (UUID target : wanted) {
-            if (present.contains(target)) {
+        for (Map<String, Object> entry : wanted) {
+            if (present.contains(entry)) {
                 continue;
             }
-            ItemDependency edge = new ItemDependency();
-            edge.itemId = item.id;
-            edge.dependsOnId = target;
+            ItemRelation edge = new ItemRelation();
+            edge.fromItemId = item.id;
+            edge.toItemId = (UUID) entry.get(ItemFields.ITEM);
+            edge.relationTypeId = (UUID) entry.get(ItemFields.TYPE);
+            edge.scopeId = item.scopeId;
             items.insertEdge(edge);
             changed = true;
         }
@@ -484,7 +635,7 @@ public class ItemService {
      * that "the token rotated" and "something changed" cannot come apart.
      */
     private static void stamp(Item item) {
-        item.updatedAt = Instant.now();
+        item.changedAt = Instant.now();
         item.conflictToken = UUID.randomUUID().toString();
     }
 
@@ -531,9 +682,9 @@ public class ItemService {
      * could disagree, and a write would report a change where a reader saw
      * none — which is the class of defect this domain exists against.
      *
-     * <p>The term and selector lookups are per item. Through the persistence
-     * context, so a query over a scope resolves each distinct term once
-     * whatever the item count; a projection built from a join would be faster
+     * <p>The declaration lookups are per item, through the persistence
+     * context, so a query over a scope resolves each distinct declaration once
+     * whatever the item count. A projection built from a join would be faster
      * and is not worth a second query path while there is no reading surface
      * to make it matter.
      */
@@ -544,17 +695,14 @@ public class ItemService {
         fields.put(Field.SELECTOR.canonicalName(), tokenOfSelector(item));
         fields.put(Field.NUMBER.canonicalName(), item.number);
         fields.put(Field.TITLE.canonicalName(), item.title);
-        fields.put(Field.STATUS.canonicalName(), item.status);
-        fields.put(Field.CLUSTER.canonicalName(), tokenOfTerm(item.clusterTermId));
-        fields.put(Field.TYPE.canonicalName(), tokenOfTerm(item.typeTermId));
-        fields.put(Field.PRIORITY.canonicalName(), tokenOfTerm(item.priorityTermId));
-        fields.put(Field.SIZE.canonicalName(), tokenOfTerm(item.sizeTermId));
-        fields.put(Field.COMPONENT.canonicalName(),
-            ItemFields.tokens(Field.COMPONENT, item.component));
-        fields.put(Field.REFERENCE.canonicalName(), item.reference);
-        fields.put(Field.DEPENDS_ON.canonicalName(), assertedDependencies(item));
+        fields.put(Field.DESCRIPTION.canonicalName(), item.description);
+        fields.put(Field.STATUS.canonicalName(), item.statusId);
+        fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
+        fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
+        fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item));
+        fields.put(Field.MILESTONE.canonicalName(), item.milestoneId);
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
-        fields.put(Field.UPDATED_AT.canonicalName(), item.updatedAt);
+        fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken);
         return fields;
     }
@@ -567,24 +715,69 @@ public class ItemService {
         return selector == null ? null : selector.token;
     }
 
-    private String tokenOfTerm(UUID termId) {
-        if (termId == null) {
+    /**
+     * The stored attributes, keyed back by the declaration's KEY.
+     *
+     * <p>The column keys by identity so that a key can be renamed; a caller
+     * addresses the attribute by its key because that is the part it can hold
+     * on to. The translation is here rather than at the boundary, so that a
+     * read answer and the map a write compares against are the same shape.
+     *
+     * <p>A value under a declaration this scope no longer has is dropped from
+     * the answer. It is not lost — the column still carries it — and showing
+     * it would put a key in the answer that no declaration can name.
+     */
+    private Map<String, Object> declaredAttributes(Item item) {
+        Map<String, Object> answer = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : item.attributes.entrySet()) {
+            AttributeDefinition definition = definitionOf(entry.getKey());
+            if (definition != null) {
+                answer.put(definition.key, entry.getValue());
+            }
+        }
+        return ItemFields.attributes(answer);
+    }
+
+    private AttributeDefinition definitionOf(String storedKey) {
+        try {
+            return vocabulary.attributeById(UUID.fromString(storedKey));
+        } catch (IllegalArgumentException notAnId) {
             return null;
         }
-        Term term = items.termById(termId);
-        return term == null ? null : term.token;
+    }
+
+    /** The asserted pointers, in the reader's order. */
+    private List<Map<String, Object>> assertedReferences(Item item) {
+        List<Map<String, Object>> answer = new ArrayList<>();
+        for (ItemReference reference : items.assertedReferences(item.id)) {
+            // Unmodifiable rather than Map.copyOf, because the label is
+            // optional and Map.copyOf refuses a null value. The read answer
+            // and the normalised write value have to be the same shape or the
+            // comparison behind "a write that changes nothing writes nothing"
+            // compares two different things.
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put(ItemFields.LABEL, reference.label);
+            entry.put(ItemFields.TARGET, reference.target);
+            answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
     }
 
     /**
-     * The asserted edges only. A withdrawn edge is history, not a dependency.
+     * The asserted edges only. A withdrawn edge is history, not a relation.
      *
-     * <p>Sorted, so that the answer is stable across reads. Without that, a
-     * caller who re-sent a read answer would present the same set in another
-     * order, and a comparison would report a change the caller never made —
-     * the item would take a fresh modification date and a rotated token for a
-     * write that changed nothing.
+     * <p>Sorted by the repository, in the same order the caller-facing
+     * normalisation uses, so that a read answer sent straight back compares
+     * equal rather than looking like a reordering.
      */
-    private List<UUID> assertedDependencies(Item item) {
-        return items.assertedDependencies(item.id);
+    private List<Map<String, Object>> assertedRelations(Item item) {
+        List<Map<String, Object>> answer = new ArrayList<>();
+        for (ItemRelation relation : items.assertedRelations(item.id)) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put(ItemFields.TYPE, relation.relationTypeId);
+            entry.put(ItemFields.ITEM, relation.toItemId);
+            answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
     }
 }

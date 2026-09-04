@@ -78,6 +78,17 @@ public class SelectorRegistry {
         space.highWaterMark = 0L;
         selectors.insert(space);
 
+        // And the scope-wide counter beside it, if the scope has none yet.
+        // Both counters exist at all times, which is what makes the
+        // allocation mode a setting rather than a migration.
+        if (selectors.scopeWideSpace(scopeId) == null) {
+            NumberSpace wide = new NumberSpace();
+            wide.selectorId = null;
+            wide.scopeId = scopeId;
+            wide.highWaterMark = 0L;
+            selectors.insert(wide);
+        }
+
         LOG.infof("selector %s declared in scope %s", token, scopeId);
         return selector;
     }
@@ -143,6 +154,14 @@ public class SelectorRegistry {
      * the mark rolls back with it, so it is handed out again. That is the one
      * place this differs from a sequence, and it is the safe direction —
      * a number is reused only when nothing ever saw it.
+     *
+     * <p><strong>BOTH counters are advanced and one is read.</strong> The
+     * scope-wide mark moves with every allocation whatever position the scope
+     * is in, so that switching the allocation mode is a read against a counter
+     * that was maintained all along rather than a reconstruction from rows
+     * that no longer say what was handed out. What is read here is the
+     * per-selector position, which is the default; reading the other one is
+     * the verb that switches the mode, and that verb does not exist yet.
      */
     @Transactional
     public long allocate(UUID scopeId, Selector selector) {
@@ -170,6 +189,24 @@ public class SelectorRegistry {
         }
 
         space.highWaterMark = space.highWaterMark + 1;
+
+        NumberSpace wide = selectors.lockScopeWideSpace(scopeId);
+        if (wide == null) {
+            // A scope with per-selector counters and no scope-wide one is a
+            // scope whose selectors predate this arrangement. Reported rather
+            // than repaired: a counter created here would start at zero and
+            // hand out numbers this scope has already used.
+            throw new WorklistException(
+                WorklistException.Reason.SELECTOR_UNDECLARED,
+                "scope " + scopeId + " has no scope-wide number space. Every scope that "
+                    + "has a selector has one, maintained beside the per-selector "
+                    + "counters so that the allocation mode is a setting rather than a "
+                    + "migration; a scope missing it was not opened through the "
+                    + "declaring verb",
+                List.of(selector.token));
+        }
+        wide.highWaterMark = wide.highWaterMark + 1;
+
         selectors.flush();
         LOG.debugf("number %d allocated under selector %s in scope %s",
             space.highWaterMark, selector.token, scopeId);

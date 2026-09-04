@@ -1,15 +1,12 @@
 package ai.kumbuka.worklist.domain;
 
-import ai.kumbuka.worklist.tenancy.StringUuidConverter;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
-import org.hibernate.annotations.TenantId;
 import org.hibernate.generator.EventType;
 
 import java.time.Instant;
@@ -41,7 +38,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "selector", schema = "worklist")
-public class Selector {
+public class Selector extends TenantScoped {
 
     /** A selector that may still be used. */
     public static final String DECLARED = "declared";
@@ -77,14 +74,6 @@ public class Selector {
     @Column(name = "id", nullable = false)
     public UUID id;
 
-    /** The tenancy axis. String-typed for the resolver SPI; see {@link Item}. */
-    @TenantId
-    @Convert(converter = StringUuidConverter.class)
-    @Column(name = "tenant_id", nullable = false)
-    public String tenantId;
-
-    @Column(name = "scope_id", nullable = false)
-    public UUID scopeId;
 
     /** {@code FEAT}, {@code CHORE}, {@code D-GTM}. Immutable. */
     @Column(name = "token", nullable = false, updatable = false)
