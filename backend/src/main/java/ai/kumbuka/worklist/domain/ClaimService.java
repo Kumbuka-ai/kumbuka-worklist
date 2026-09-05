@@ -349,7 +349,7 @@ public class ClaimService {
                 WorklistException.Reason.INVALID_VALUE,
                 "release names the lease it ends by the receipt that claim minted for it. "
                     + "No receipt arrived",
-                List.of("receipt"));
+                List.of(F_RECEIPT));
         }
         return presented;
     }
@@ -371,7 +371,7 @@ public class ClaimService {
                 "a claim records the actor the service derived from the write channel, "
                     + "and this call arrived without one. Authorship is server-derived on "
                     + "this scheme without exception",
-                List.of("actor"));
+                List.of(F_ACTOR));
         }
         return presented;
     }

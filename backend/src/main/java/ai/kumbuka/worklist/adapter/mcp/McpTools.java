@@ -95,6 +95,15 @@ public final class McpTools {
             + "than dropped.";
 
     /**
+     * Prefix for the selector argument's description on tools that act on
+     * exactly one view. The tool declares which view, and this prefix names
+     * the reason the schema still asks for it: the shape of the surface is
+     * uniform, and a tool that took no selector would be a tool a caller
+     * has to remember is special.
+     */
+    private static final String SELECTOR_FIXED_DOC = "The view this acts on, which is ";
+
+    /**
      * The ten, in the order of the object's life rather than alphabetically: what
      * brings it into being, what reads and changes it, what ends it, and what
      * plans it.
@@ -184,7 +193,7 @@ public final class McpTools {
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING,
-                        "The view this acts on, which is " + Selector.ITERATION + "."),
+                        SELECTOR_FIXED_DOC + Selector.ITERATION + "."),
                     required(ARG_TOKEN, STRING,
                         "The conflict token of the scope's settings row."))),
 
@@ -236,7 +245,7 @@ public final class McpTools {
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING,
-                        "The view this acts on, which is " + Selector.ITEM + "."),
+                        SELECTOR_FIXED_DOC + Selector.ITEM + "."),
                     required(ARG_DURATION, INTEGER,
                         "The lease duration in seconds. See 'claim'."))),
 
@@ -275,8 +284,8 @@ public final class McpTools {
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING,
-                        "The view this acts on, which is " + Selector.ITEM + " — the "
-                            + "nearest truncation this surface offers to the scope."))));
+                        SELECTOR_FIXED_DOC + Selector.ITEM + " — the nearest truncation "
+                            + "this surface offers to the scope."))));
     }
 
     // ----------------------------------------------------------------------

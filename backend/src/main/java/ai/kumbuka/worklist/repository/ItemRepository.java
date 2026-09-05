@@ -44,6 +44,8 @@ public class ItemRepository {
 
     private static final String P_ITEM = "item";
 
+    private static final String P_STATUS = "status";
+
     @Inject EntityManager em;
 
     // ------------------------------------------------------------------
@@ -192,10 +194,11 @@ public class ItemRepository {
     public List<ItemRelation> assertedRelations(UUID itemId) {
         return em.createQuery(
                 "SELECT r FROM ItemRelation r "
-                    + "WHERE r.fromItemId = :item AND r.status = :status "
-                    + "ORDER BY r.toItemId, r.relationTypeId", ItemRelation.class)
+                    + "WHERE r.fromItemId = :" + P_ITEM
+                    + " AND r.status = :" + P_STATUS
+                    + " ORDER BY r.toItemId, r.relationTypeId", ItemRelation.class)
             .setParameter(P_ITEM, itemId)
-            .setParameter("status", ItemRelation.ASSERTED)
+            .setParameter(P_STATUS, ItemRelation.ASSERTED)
             .getResultList();
     }
 
@@ -214,10 +217,11 @@ public class ItemRepository {
     public List<ItemReference> assertedReferences(UUID itemId) {
         return em.createQuery(
                 "SELECT r FROM ItemReference r "
-                    + "WHERE r.itemId = :item AND r.status = :status ORDER BY r.ordinal",
+                    + "WHERE r.itemId = :" + P_ITEM
+                    + " AND r.status = :" + P_STATUS + " ORDER BY r.ordinal",
                 ItemReference.class)
             .setParameter(P_ITEM, itemId)
-            .setParameter("status", ItemReference.ASSERTED)
+            .setParameter(P_STATUS, ItemReference.ASSERTED)
             .getResultList();
     }
 

@@ -268,5 +268,8 @@ class ClaimExclusivityIT {
 
     // Silence the "unused import" that comes and goes as the file evolves.
     @SuppressWarnings("unused")
-    private static void keep(List<UUID> ignore) { }
+    private static void keep(List<UUID> ignore) {
+        // Only kept to hold the List<UUID> import in one place if the file
+        // grows a case that needs it. Deliberately no body.
+    }
 }

@@ -31,11 +31,11 @@ import java.util.Map;
 /**
  * The REST exposition of the verb surface.
  *
- * <p>Ten verbs on their outward forms; the seven the scheme does not carry and
- * the six it carries unbuilt, each answering by name; and a writing verb on a
- * truncated address answering 405 with {@code Allow}. Nothing else. A conformance
- * probe checks both halves of that — coverage and closure — against a
- * specification this class cannot edit.
+ * <p>The verbs the scheme carries on their outward forms; the seven it does not
+ * carry, each answering by name; and a writing verb on a truncated address
+ * answering 405 with {@code Allow}. Nothing else. A conformance probe checks both
+ * halves of that — coverage and closure — against a specification this class
+ * cannot edit.
  *
  * <h2>This is a front door, not an inner leg</h2>
  *
@@ -369,14 +369,6 @@ public class WorklistResource {
                 + "commitment gate it carries is accept and not send: an item is never "
                 + "frozen, so there is nothing for an author to commit outward and nothing "
                 + "for an addendum to hang off.");
-        throw unreachable(verb);
-    }
-
-    private Response unbuilt(String scope, String view, String id, String verb) {
-        verbs.unbuilt(caller.subject(), scope, view, id, verb,
-            "It is declared, it is specified, and no code answers it yet. That is a "
-                + "different sentence from 'this scheme does not have it', which is why it "
-                + "does not get the same status: waiting for this one is reasonable.");
         throw unreachable(verb);
     }
 

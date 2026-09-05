@@ -237,6 +237,85 @@ class McpProjectionIT {
     }
 
     /**
+     * The six verbs SPRINT_171.2 built, exercised end to end over MCP.
+     *
+     * <p>The chain probe above walks the object lifecycle. This one walks the
+     * claim family, the graph verbs, and validate — each one built for this
+     * sub-sprint, each one reached through the MCP adapter, its projection
+     * of the surface, and the domain behind it.
+     *
+     * <p>Two items and one declared relation type are the whole of the
+     * setup — the smallest scope in which relate and unrelate have a target.
+     */
+    @Test
+    void every_verb_built_by_this_sub_sprint_reaches_its_act_over_mcp() {
+        String status = String.valueOf(vocabulary
+            .declareStatus(SCOPE_ID, "carrier-open", 3, true, false, false, false).id);
+        UUID relationType = vocabulary
+            .declareRelationType(SCOPE_ID, "carrier-relates", false, 1).id;
+
+        String first = created(Selector.ITEM,
+            Map.of("title", "the source", "status", status));
+        String second = created(Selector.ITEM,
+            Map.of("title", "the target", "status", status));
+        String secondId = String.valueOf(idOf(second));
+
+        // ---- claim + release, at item depth --------------------------------
+        String receipt = call("claim",
+                Map.of("address", first, "duration_seconds", 60))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.receipt",
+                org.hamcrest.Matchers.notNullValue())
+            .extract().path("result.structuredContent.fields.receipt");
+        call("release", Map.of("address", first, "receipt", receipt))
+            .body("result.isError", is(false));
+
+        // ---- claim_next: the draw at collection depth ----------------------
+        //
+        // Two items are unclaimed; the draw takes one and reports its
+        // address so the caller can release it.
+        Map<String, Object> drawn = call("claim_next",
+                Map.of("scope", SurfaceFixture.SCOPE,
+                    "selector", Selector.ITEM,
+                    "duration_seconds", 60))
+            .body("result.isError", is(false))
+            .extract().path("result.structuredContent");
+        String drawnAddress = String.valueOf(((Map<?, ?>) drawn).get("address"));
+        String drawnReceipt = String.valueOf(
+            ((Map<?, ?>) ((Map<?, ?>) drawn).get("fields")).get("receipt"));
+        call("release", Map.of("address", drawnAddress, "receipt", drawnReceipt))
+            .body("result.isError", is(false));
+
+        // ---- relate + unrelate, at item depth ------------------------------
+        String firstToken = tokenOf(first);
+        firstToken = call("relate",
+                Map.of("address", first,
+                    "conflict_token", firstToken,
+                    "to_item", secondId,
+                    "type", relationType.toString()))
+            .body("result.isError", is(false))
+            .extract().path("result.structuredContent.fields.conflict_token");
+        call("unrelate",
+                Map.of("address", first,
+                    "conflict_token", firstToken,
+                    "to_item", secondId,
+                    "type", relationType.toString()))
+            .body("result.isError", is(false));
+
+        // ---- validate: the scope walk at collection depth ------------------
+        //
+        // No cycles were asserted, so the report is empty and the store is
+        // consistent. The point here is that the tool reaches its act and
+        // answers under the projection this exposition holds.
+        call("validate", Map.of("scope", SurfaceFixture.SCOPE, "selector", Selector.ITEM))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.findings",
+                org.hamcrest.Matchers.notNullValue())
+            .body("result.structuredContent.fields.consistent",
+                org.hamcrest.Matchers.is(true));
+    }
+
+    /**
      * The check order reaches this exposition too.
      *
      * <p>Both adapters call one surface, so the order cannot drift between them
@@ -264,6 +343,11 @@ class McpProjectionIT {
     private String tokenOf(String address) {
         return call("read", Map.of("address", address))
             .extract().path("result.structuredContent.fields.conflict_token");
+    }
+
+    private String idOf(String address) {
+        return call("read", Map.of("address", address))
+            .extract().path("result.structuredContent.fields.id");
     }
 
     /** The number part of an address, which is its last segment. */

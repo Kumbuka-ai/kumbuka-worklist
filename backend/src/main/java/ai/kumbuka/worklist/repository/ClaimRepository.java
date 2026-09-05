@@ -31,7 +31,6 @@ import java.util.UUID;
 @TenantBound
 public class ClaimRepository {
 
-    private static final String P_ITEM = "item";
     private static final String P_SCOPE = "scope";
 
     @Inject EntityManager em;

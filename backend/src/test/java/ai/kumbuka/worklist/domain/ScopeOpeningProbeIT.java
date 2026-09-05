@@ -180,5 +180,8 @@ class ScopeOpeningProbeIT {
     // A field used nowhere else, to keep imports in one place if the file
     // grows a fourth case.
     @SuppressWarnings("unused")
-    private static void unused(List<UUID> ignore) { }
+    private static void unused(List<UUID> ignore) {
+        // Only kept to hold the List<UUID> import if the file grows a case
+        // that needs it. Deliberately no body.
+    }
 }
