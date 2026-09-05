@@ -57,6 +57,20 @@ public final class McpTools {
     private static final String ARG_TOKEN = "conflict_token";
     private static final String ARG_FIELDS = "fields";
 
+    /** The claim family's shared argument. */
+    private static final String ARG_DURATION = "duration_seconds";
+
+    /** The receipt {@code release} presents. */
+    private static final String ARG_RECEIPT = "receipt";
+
+    /** The other end of one edge. */
+    private static final String ARG_TO_ITEM = "to_item";
+
+    /** The declared type of one edge. */
+    private static final String ARG_TYPE = "type";
+
+    private static final String INTEGER = "integer";
+
     private static final String SCOPE_DOC = "The scope name, a DNS label.";
 
     private static final String SELECTOR_DOC =
@@ -79,6 +93,15 @@ public final class McpTools {
             + "may be sent back unchanged: a field that carries the value it already has "
             + "changes nothing, and one this object does not have is refused by name rather "
             + "than dropped.";
+
+    /**
+     * Prefix for the selector argument's description on tools that act on
+     * exactly one view. The tool declares which view, and this prefix names
+     * the reason the schema still asks for it: the shape of the surface is
+     * uniform, and a tool that took no selector would be a tool a caller
+     * has to remember is special.
+     */
+    private static final String SELECTOR_FIXED_DOC = "The view this acts on, which is ";
 
     /**
      * The ten, in the order of the object's life rather than alphabetically: what
@@ -111,11 +134,25 @@ public final class McpTools {
 
             new Tool("query",
                 "The objects of one view, oldest first for items and in the axis's own "
-                    + "order for the other two. The whole set comes back; there is no "
-                    + "paging and no filter yet.",
+                    + "order for the other two. A limit caps the answer; a filter narrows "
+                    + "it over enumerated columns of the addressed view (item view only "
+                    + "today: 'status' and 'milestone' as declared ids). The answer names "
+                    + "'truncated' when the store carried more than the caller asked to "
+                    + "see — a silent ceiling would be the sprint-169 defect one layer "
+                    + "up.",
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING, SELECTOR_DOC))),
+                    required(ARG_SELECTOR, STRING, SELECTOR_DOC),
+                    optional("filter", OBJECT,
+                        "A map from an enumerated field name to a declared identity — "
+                            + "'{\"status\": \"<uuid>\"}'. Refused by name if the "
+                            + "addressed view does not narrow on it. A missing filter "
+                            + "returns the whole set, capped at the limit."),
+                    optional("limit", INTEGER,
+                        "The upper bound on this answer, up to "
+                            + ai.kumbuka.worklist.domain.QuerySpec.MAX_LIMIT
+                            + ". A missing limit uses the default of "
+                            + ai.kumbuka.worklist.domain.QuerySpec.DEFAULT_LIMIT + "."))),
 
             new Tool("accept",
                 "The intake gate. It refuses today and says why: the address it used to "
@@ -156,7 +193,7 @@ public final class McpTools {
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING,
-                        "The view this acts on, which is " + Selector.ITERATION + "."),
+                        SELECTOR_FIXED_DOC + Selector.ITERATION + "."),
                     required(ARG_TOKEN, STRING,
                         "The conflict token of the scope's settings row."))),
 
@@ -176,7 +213,79 @@ public final class McpTools {
                     required(ARG_ADDRESS, STRING,
                         "The membership's address: worklist://<scope>/iteration/"
                             + "<iteration>/<item>."),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC))));
+                    required(ARG_TOKEN, STRING, TOKEN_DOC))),
+
+            new Tool("claim",
+                "Take a lease on an item, for a duration. The receipt in the answer is "
+                    + "what release presents; a caller-chosen holder is refused, and a "
+                    + "second live lease on one item is refused as CLAIM_HELD. Expiry is "
+                    + "lazy: nothing writes when the lease lapses, and the next claim "
+                    + "overwrites the row in place.",
+                schema(
+                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
+                    required(ARG_DURATION, INTEGER,
+                        "The lease duration in seconds. A positive whole number; zero is "
+                            + "inert the moment it is granted and negative is not a "
+                            + "duration at all."))),
+
+            new Tool("release",
+                "Give up a lease, by presenting the receipt that claim minted for it. "
+                    + "The check is on the value in the row, not on the actor, so a "
+                    + "holder that handed the receipt on has passed the lease.",
+                schema(
+                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
+                    required(ARG_RECEIPT, STRING,
+                        "The opaque receipt from the claim's answer."))),
+
+            new Tool("claim_next",
+                "Draw the next unclaimed addressable item in a scope and take the lease "
+                    + "atomically. Exactly one, in the item view's own order. An empty "
+                    + "scope answers ITEM_UNKNOWN and one where every item is held "
+                    + "answers NOTHING_TO_CLAIM — different remedies, different reasons.",
+                schema(
+                    required(ARG_SCOPE, STRING, SCOPE_DOC),
+                    required(ARG_SELECTOR, STRING,
+                        SELECTOR_FIXED_DOC + Selector.ITEM + "."),
+                    required(ARG_DURATION, INTEGER,
+                        "The lease duration in seconds. See 'claim'."))),
+
+            new Tool("relate",
+                "Assert one directed, typed edge from this item to another. Idempotent "
+                    + "under the triple: reasserting an existing asserted edge writes "
+                    + "nothing. Reasserting a withdrawn edge moves the row back to "
+                    + "asserted. The self-edge is refused.",
+                schema(
+                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
+                    required(ARG_TOKEN, STRING, TOKEN_DOC),
+                    required(ARG_TO_ITEM, STRING,
+                        "The identity of the item at the other end of the edge."),
+                    required(ARG_TYPE, STRING,
+                        "The identity of the declared relation type. A display name "
+                            + "would be a value the scope may change under the caller."))),
+
+            new Tool("unrelate",
+                "Withdraw one asserted edge from this item to another. The row remains "
+                    + "and its status moves; a deleted edge would be a delete in a schema "
+                    + "that grants none.",
+                schema(
+                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
+                    required(ARG_TOKEN, STRING, TOKEN_DOC),
+                    required(ARG_TO_ITEM, STRING,
+                        "The identity of the item at the other end of the edge."),
+                    required(ARG_TYPE, STRING,
+                        "The identity of the declared relation type."))),
+
+            new Tool("validate",
+                "Walk the scope and report every consistency the store guarantees. "
+                    + "Mutates nothing. Today the check reported is cycles over blocking "
+                    + "relations — the one rule the schema cannot express with a "
+                    + "constraint, which is precisely the class of rule this verb "
+                    + "carries a red probe for.",
+                schema(
+                    required(ARG_SCOPE, STRING, SCOPE_DOC),
+                    required(ARG_SELECTOR, STRING,
+                        SELECTOR_FIXED_DOC + Selector.ITEM + " — the nearest truncation "
+                            + "this surface offers to the scope."))));
     }
 
     // ----------------------------------------------------------------------
@@ -188,6 +297,21 @@ public final class McpTools {
 
     private static Field required(String name, String type, String description) {
         return new Field(name, type, description, true);
+    }
+
+    /**
+     * A field a caller may leave off.
+     *
+     * <p>Enumerated rather than tolerated: the tool schema declares which
+     * fields are required, so an optional one is a shape decision — the
+     * caller may omit it and the surface answers on the default. The
+     * conformance test requires {@code additionalProperties: false}, which is
+     * separate: closing additional properties refuses fields NAMED in a call
+     * that aren't in the schema at all, and optional fields are in the
+     * schema.
+     */
+    private static Field optional(String name, String type, String description) {
+        return new Field(name, type, description, false);
     }
 
     /**

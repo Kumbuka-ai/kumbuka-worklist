@@ -348,6 +348,18 @@ public class VocabularyRegistry {
         return type;
     }
 
+    /**
+     * The relation type of that identity, or null.
+     *
+     * <p>The scope-less counterpart of {@link #requireRelationType} — a caller
+     * walking the graph is already scope-bound and does not need the refusal.
+     * Nullable rather than typed-refused, matching {@link #attributeById}.
+     */
+    @Transactional
+    public RelationType relationTypeById(UUID typeId) {
+        return typeId == null ? null : vocabulary.relationTypeById(typeId);
+    }
+
     /** Withdraw a relation type. The edges carrying it stay readable. */
     @Transactional
     public RelationType withdrawRelationType(UUID scopeId, UUID typeId) {

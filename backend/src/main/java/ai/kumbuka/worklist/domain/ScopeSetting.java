@@ -40,20 +40,24 @@ import java.util.UUID;
  * and would then need a partial unique index to forbid what a single nullable
  * pointer cannot express in the first place.
  *
- * <h2>The two high-water marks are here and they are not settings</h2>
+ * <h2>The two high-water marks used to be here and are not any more</h2>
  *
- * {@link #milestoneHighWaterMark} and {@link #iterationHighWaterMark} record
- * what has been HANDED OUT on each planning axis, which is not the same set
- * as what exists — a closed milestone stays in the table and a number burned
- * by a failed write stays burned.
+ * V5 added a {@code milestone_high_water_mark} and an
+ * {@code iteration_high_water_mark} to this table, because the two axes were
+ * not selectors at the time and {@link NumberSpace} had nowhere for their
+ * counters to sit. V7 dropped those columns: the axes ARE selectors now, and
+ * each axis's counter is the {@code number_space} row of its selector — the
+ * same mechanism the item allocator has always used, and now the one
+ * mechanism instead of two.
  *
- * <p><strong>Advancing a mark does not rotate this row's token.</strong>
- * Creating an iteration is a write on the ITERATION aggregate; it advances
- * the mark as an allocator side effect, exactly as {@code accept} advances a
- * {@link NumberSpace} while rotating only the item's token. Rotating the
- * setting's token there would move a caller's token with no write of their
- * own in between — which is the defect measured in sprint 169, reproduced by
- * a service that had learnt from it.
+ * <p>What survives that change unaltered: advancing a mark does not rotate
+ * this row's token. Creating an iteration is a write on the ITERATION
+ * aggregate; it advances the mark as an allocator side effect against the
+ * iteration selector's {@link NumberSpace}, exactly as {@code accept}
+ * advances the item selector's {@link NumberSpace} while rotating only the
+ * item's token. Rotating the setting's token there would move a caller's
+ * token with no write of their own in between — the sprint-169 defect,
+ * reproduced by a service that had learnt from it.
  */
 @Entity
 @Table(name = "scope_setting", schema = "worklist")
@@ -84,16 +88,20 @@ public class ScopeSetting extends AggregateRoot {
     /**
      * {@link #PER_SELECTOR} or {@link #SCOPE_WIDE}.
      *
-     * <p>The field initialiser is the same value as the column default in V6,
+     * <p>The field initialiser is the same value as the column default in V7,
      * deliberately: a row inserted through this entity and a row inserted by a
      * statement that omits the column must not start in different positions.
-     * {@link #SCOPE_WIDE} is the position the view model needs — with the
-     * selector reduced to three views, per-selector counters would number a
-     * scope's items, its iterations and its milestones from one each, and the
-     * bare number in an address would stop being unique across the scope.
+     *
+     * <p><strong>{@link #PER_SELECTOR} under the class reading of the
+     * selector.</strong> V6 flipped this to {@link #SCOPE_WIDE} on the family
+     * reading — three views numbered from one each would collide on their
+     * bare numbers. Under the class reading, the three views are three
+     * different classes of thing, and {@code item/1}, {@code iteration/1} and
+     * {@code milestone/1} name three different addresses. The address carries
+     * the view precisely so that this works.
      */
     @Column(name = "allocation_mode", nullable = false)
-    public String allocationMode = SCOPE_WIDE;
+    public String allocationMode = PER_SELECTOR;
 
     /** The iteration being worked, or null. A pointer, unambiguous by construction. */
     @Column(name = "current_iteration_id")
@@ -128,13 +136,13 @@ public class ScopeSetting extends AggregateRoot {
     @Column(name = "default_columns", nullable = false, columnDefinition = "text[]")
     public String[] defaultColumns = new String[0];
 
-    /** What the milestone allocator has handed out. Never carried backwards. */
-    @Column(name = "milestone_high_water_mark", nullable = false)
-    public long milestoneHighWaterMark;
-
-    /** What the iteration allocator has handed out. Never carried backwards. */
-    @Column(name = "iteration_high_water_mark", nullable = false)
-    public long iterationHighWaterMark;
+    // The milestone and iteration high-water marks used to sit here, on two
+    // columns V5 added and V7 removed. They were on this row because the two
+    // axes were not selectors at the time, so `number_space` had nowhere for
+    // their counters to sit. The axes ARE selectors now, and their counters
+    // are the `number_space` rows of the `milestone` and `iteration`
+    // selectors — the same mechanism the item allocator has always used, and
+    // now the one mechanism instead of two.
 
     @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)

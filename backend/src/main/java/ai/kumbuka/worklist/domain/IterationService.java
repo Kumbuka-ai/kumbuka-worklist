@@ -2,6 +2,7 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -48,6 +49,13 @@ public class IterationService extends PlanningService {
 
     /** An address, a scope id, a count, a transition. Never a motto, never an actor. */
     private static final Logger LOG = Logger.getLogger(IterationService.class);
+
+    /**
+     * The iteration selector's number_space row is what this allocator reads.
+     * V7 moved every axis onto its own selector's counter; this class was
+     * one of the two that took the change.
+     */
+    @Inject SelectorRegistry selectors;
 
     /** What the cardinality refusal and its warning call the thing being counted. */
     private static final String OPEN_ITERATIONS = "the number of open iterations in this scope";
@@ -235,18 +243,23 @@ public class IterationService extends PlanningService {
     // ------------------------------------------------------------------
 
     /**
-     * The next number on the time axis, from the scope's persisted mark.
+     * The next number on the time axis, from the scope's persisted mark for
+     * the iteration selector.
      *
-     * <p>Under a write lock, so two concurrent creations cannot read the same
-     * value. Advancing the mark does not rotate the settings' conflict token:
-     * this is an allocator side effect of a write on the ITERATION aggregate,
-     * and rotating there would move a token no caller of this verb holds.
+     * <p>The mark is the {@link NumberSpace} row of the {@code iteration}
+     * selector; the allocator takes it under a write lock and advances it in
+     * the same transaction as the iteration row it numbers, so two concurrent
+     * creations cannot read the same value. The rotation is on the iteration
+     * aggregate the caller wrote; the settings' own token is untouched — the
+     * property {@code advance} depends on to promote one iteration without
+     * refusing every reader of the settings.
+     *
+     * <p>The mechanism is the one {@link SelectorRegistry#allocate} runs on
+     * the item selector too. V7 collapsed the two allocators into one.
      */
     private long allocateNumber(UUID scopeId) {
-        ScopeSetting locked = planning.lockSettingOf(scopeId);
-        locked.iterationHighWaterMark = locked.iterationHighWaterMark + 1;
-        planning.flush();
-        return locked.iterationHighWaterMark;
+        Selector iterationSelector = selectors.require(scopeId, Selector.ITERATION);
+        return selectors.allocate(scopeId, iterationSelector);
     }
 
     private boolean applyEffectiveChanges(Iteration iteration, Map<String, Object> current,

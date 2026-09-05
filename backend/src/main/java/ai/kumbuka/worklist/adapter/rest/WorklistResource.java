@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.adapter.payload.Payloads;
+import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbSurface;
@@ -18,21 +19,23 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * The REST exposition of the verb surface.
  *
- * <p>Ten verbs on their outward forms; the seven the scheme does not carry and
- * the six it carries unbuilt, each answering by name; and a writing verb on a
- * truncated address answering 405 with {@code Allow}. Nothing else. A conformance
- * probe checks both halves of that — coverage and closure — against a
- * specification this class cannot edit.
+ * <p>The verbs the scheme carries on their outward forms; the seven it does not
+ * carry, each answering by name; and a writing verb on a truncated address
+ * answering 405 with {@code Allow}. Nothing else. A conformance probe checks both
+ * halves of that — coverage and closure — against a specification this class
+ * cannot edit.
  *
  * <h2>This is a front door, not an inner leg</h2>
  *
@@ -131,7 +134,10 @@ public class WorklistResource {
         return switch (at.method()) {
             case ADVANCE -> ok(scope, verbs.advance(caller.subject(), scope, at.address(),
                 unquote(ifMatch)));
-            case CLAIM_NEXT -> unbuilt(scope, at.address(), null, at.verb());
+            case CLAIM_NEXT -> ok(scope, verbs.claimNext(caller.subject(), scope,
+                at.address(),
+                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
+            case VALIDATE -> ok(scope, verbs.validate(caller.subject(), scope, at.address()));
             case DIGEST -> uncarried(scope, at.address(), null, at.verb());
             default -> throw new IllegalStateException(
                 "'" + at.verb() + "' is declared at collection depth and has no arm here");
@@ -141,15 +147,48 @@ public class WorklistResource {
     /**
      * GET at collection depth: {@code query}.
      *
-     * <p>Reading on a collection, so GET on the collection URI — the form follows
-     * from the target and the effect class rather than from the verb's name.
+     * <p>Reading on a collection, so GET on the collection URI — the form
+     * follows from the target and the effect class rather than from the
+     * verb's name.
+     *
+     * <p><strong>The filter and the limit travel as query parameters, not as
+     * path segments.</strong> An address without an id part is reserved, so a
+     * segment for a filter would either collapse into the selector or reserve
+     * a form no address can grow into. The query string is the transport
+     * layer for arguments a caller narrows a read with, and its parameters do
+     * not become part of the address the answer is at.
+     *
+     * <p>A filter is written as {@code ?filter.<name>=<value>} — the leading
+     * segment names the collection of arguments, and every one after it
+     * names an enumerated field on the addressed view. An unknown filter name
+     * reaches the domain and is refused by name; the surface does not know
+     * the field set of the addressed view and cannot refuse ahead of it.
      */
     @GET
     @Path("{selector}")
     public Response collectionGet(@PathParam("scope") String scope,
-                                  @PathParam("selector") String selector) {
+                                  @PathParam("selector") String selector,
+                                  @QueryParam("limit") Integer limit,
+                                  jakarta.ws.rs.core.UriInfo info) {
+        Map<String, Object> filter = new LinkedHashMap<>();
+        for (Map.Entry<String, java.util.List<String>> entry : info.getQueryParameters().entrySet()) {
+            String name = entry.getKey();
+            if (!name.startsWith("filter.")) {
+                continue;
+            }
+            java.util.List<String> values = entry.getValue();
+            if (values.size() > 1) {
+                throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                    "the filter '" + name + "' arrived with " + values.size() + " values. "
+                        + "Each enumerated field takes one value; ORing two would be a "
+                        + "shape the domain does not read");
+            }
+            filter.put(name.substring("filter.".length()), values.get(0));
+        }
+
+        QuerySpec spec = new QuerySpec(filter, limit == null ? QuerySpec.DEFAULT_LIMIT : limit);
         return Response.ok(Payloads.of(scope,
-            verbs.query(caller.subject(), scope, selector))).build();
+            verbs.query(caller.subject(), scope, selector, spec))).build();
     }
 
     // ======================================================================
@@ -226,12 +265,19 @@ public class WorklistResource {
                 Payloads.withdrawal(read(body, Payloads.WithdrawRequest.class))));
             case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token));
 
-            case CLAIM, RELEASE, RELATE, UNRELATE, VALIDATE ->
-                unbuilt(scope, selector, id, at.verb());
+            case CLAIM -> ok(scope, verbs.claim(subject, scope, selector, id,
+                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
+            case RELEASE -> ok(scope, verbs.release(subject, scope, selector, id,
+                Payloads.releaseOf(read(body, Payloads.ReleaseRequest.class))));
+            case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
+                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+            case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
+                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
 
-            case ADVANCE, CLAIM_NEXT, DIGEST -> throw new IllegalStateException(
+            case VALIDATE, ADVANCE, CLAIM_NEXT, DIGEST -> throw new IllegalStateException(
                 "'" + at.verb() + "' acts at collection depth and cannot arrive here");
         };
     }
@@ -323,14 +369,6 @@ public class WorklistResource {
                 + "commitment gate it carries is accept and not send: an item is never "
                 + "frozen, so there is nothing for an author to commit outward and nothing "
                 + "for an addendum to hang off.");
-        throw unreachable(verb);
-    }
-
-    private Response unbuilt(String scope, String view, String id, String verb) {
-        verbs.unbuilt(caller.subject(), scope, view, id, verb,
-            "It is declared, it is specified, and no code answers it yet. That is a "
-                + "different sentence from 'this scheme does not have it', which is why it "
-                + "does not get the same status: waiting for this one is reasonable.");
         throw unreachable(verb);
     }
 

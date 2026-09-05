@@ -204,7 +204,76 @@ public class WorklistException extends RuntimeException {
          * <p>The refusal carries the limit, so that a caller can tell a
          * setting they may raise from a platform ceiling they may not.
          */
-        CARDINALITY_EXCEEDED
+        CARDINALITY_EXCEEDED,
+
+        // --- the claim lease -------------------------------------------
+        //
+        // These arrive with the claim family, and not before. The class
+        // comment above says why: enumerating a refusal nothing can raise is
+        // guessing, and a reason with no thrower is a reason nobody has
+        // checked the wording of.
+
+        /**
+         * A live lease already stands on that item.
+         *
+         * <p>The exact race the row exists to prevent, refused rather than
+         * queued: the point of a lease is that one holder acts at a time.
+         */
+        CLAIM_HELD,
+
+        /**
+         * No live lease stands on that item.
+         *
+         * <p>Answered apart from {@code CLAIM_HELD} deliberately: the two
+         * describe the two states a claim can be in from a caller's side, and
+         * a caller told the wrong one goes to the wrong remedy.
+         */
+        CLAIM_ABSENT,
+
+        /**
+         * The receipt presented to {@code release} does not name the lease
+         * held by the row.
+         *
+         * <p>The check is on the value in the row, not on the actor: a holder
+         * that hands the receipt on has passed the lease, and the release from
+         * the second holder is legitimate. A receipt nobody minted is not.
+         */
+        CLAIM_RECEIPT_UNKNOWN,
+
+        /**
+         * The claim draw ran and every addressable item in the scope is
+         * currently leased.
+         *
+         * <p>Kept apart from {@code ITEM_UNKNOWN}, which the same call raises
+         * when the scope holds no addressed item at all — a call to add work
+         * rather than a call to wait. Spelled {@code DRAW_EMPTY} rather than
+         * {@code NOTHING_TO_CLAIM}: the subject is the draw and the state is
+         * empty, matching {@code <SUBJECT>_<STATE>}. The sibling service's
+         * verbatim spelling of the same reason leads with the negation, which
+         * is what the local convention refuses.
+         */
+        DRAW_EMPTY,
+
+        // --- the graph verbs -------------------------------------------
+
+        /**
+         * The relation edge named does not exist between the two items.
+         *
+         * <p>Raised by {@code unrelate} against a triple {@code (from, to,
+         * type)} that is not asserted. A withdrawn edge is answered the same
+         * way from the caller's side: it is not asserted, and reasserting it
+         * is what {@code relate} does — this refusal names an edge that was
+         * never there, so a caller does not try to reassert something that
+         * cannot be found.
+         */
+        RELATION_UNKNOWN,
+
+        // --- validate --------------------------------------------------
+        //
+        // No refusal of its own today. Validate mutates nothing and reports
+        // findings in the answer rather than as a refusal; a finding that
+        // becomes actionable — a scope so inconsistent that reads cannot
+        // continue — will need its own reason and belongs here when it does.
     }
 
     private final transient Reason reason;

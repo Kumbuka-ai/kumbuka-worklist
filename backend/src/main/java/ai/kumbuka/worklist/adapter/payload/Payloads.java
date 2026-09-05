@@ -56,6 +56,21 @@ public final class Payloads {
         return request == null ? null : new VerbInput.Withdrawal(request.status());
     }
 
+    /** The lease duration behind a claim or a draw, or null when no body arrived. */
+    public static VerbInput.Lease lease(LeaseRequest request) {
+        return request == null ? null : new VerbInput.Lease(request.durationSeconds());
+    }
+
+    /** The receipt behind a release, or null when no body arrived. */
+    public static VerbInput.Release releaseOf(ReleaseRequest request) {
+        return request == null ? null : new VerbInput.Release(request.receipt());
+    }
+
+    /** The edge behind a relate or an unrelate, or null when no body arrived. */
+    public static VerbInput.Edge edge(EdgeRequest request) {
+        return request == null ? null : new VerbInput.Edge(request.toItem(), request.type());
+    }
+
     // ----------------------------------------------------------------------
     // Verb answer to wire shape
     // ----------------------------------------------------------------------
@@ -70,7 +85,7 @@ public final class Payloads {
     public static Listing of(String scope, VerbSurface.Listing listing) {
         return new Listing(listing.objects().stream()
             .map(result -> of(scope, result))
-            .toList());
+            .toList(), listing.truncated());
     }
 
     /**
@@ -81,6 +96,38 @@ public final class Payloads {
      * that named one would land somewhere else the day somebody renamed it.
      */
     public record WithdrawRequest(String status) {
+    }
+
+    /**
+     * What a caller supplies to claim a lease or to draw one.
+     *
+     * <p>Seconds because integers travel legibly and a duration string is a
+     * form a caller has to guess at. The domain refuses a non-positive value —
+     * a zero-duration lease is inert the moment it is granted, which is the
+     * predecessor's exact defect.
+     */
+    public record LeaseRequest(long durationSeconds) {
+    }
+
+    /**
+     * What a caller supplies to release a lease.
+     *
+     * <p>The receipt the row was minted with. Opaque here, compared as a
+     * string in the domain — a caller that parses it is a caller that breaks
+     * when the generator changes.
+     */
+    public record ReleaseRequest(String receipt) {
+    }
+
+    /**
+     * What a caller supplies to assert or withdraw one edge.
+     *
+     * <p>The source is the address the verb runs against. The target and the
+     * type both travel as ids, because a declared value has an identity
+     * separate from its name and the display name is what a scope is free to
+     * change.
+     */
+    public record EdgeRequest(String toItem, String type) {
     }
 
     /**
@@ -99,8 +146,13 @@ public final class Payloads {
      * <p>An object around the list rather than the bare array, so that anything a
      * listing later needs to say about itself is an added key rather than a
      * changed shape.
+     *
+     * <p>{@code truncated} is a fact about the write. A caller who did not
+     * name a limit sees {@code false}; a caller whose limit was reached sees
+     * {@code true} — the same silent-ceiling defect the sprint-169 read had
+     * one layer down, refused at the surface.
      */
-    public record Listing(List<ObjectResponse> objects) {
+    public record Listing(List<ObjectResponse> objects, boolean truncated) {
     }
 
     /**

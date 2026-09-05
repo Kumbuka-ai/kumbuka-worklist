@@ -72,20 +72,31 @@ public enum CustomMethod {
      */
     ADVANCE("advance", Depth.COLLECTION, Kind.CARRIED),
 
-    // ---- Carried by the scheme, not built by this service ---------------
+    // ---- Carried, at item depth (built by SPRINT_171.2) -----------------
     //
-    // Each answers 501 naming itself. The form below is the one they will take
-    // when they are built, as far as it is decided: the claim family follows the
-    // sibling service, and the graph verbs are written at item depth here
-    // although their ratified form is a sub-collection — which is recorded in
-    // the specification as provisional rather than settled by this table.
+    // Each answers by acting. The graph verbs sit at item depth with the
+    // source as the address; their ratified form is a sub-collection, and this
+    // surface still has none, so the form here is provisional and the
+    // specification says so. The claim family is at the addresses the verb
+    // catalogue names.
 
-    CLAIM("claim", Depth.ITEM, Kind.UNBUILT),
-    RELEASE("release", Depth.ITEM, Kind.UNBUILT),
-    RELATE("relate", Depth.ITEM, Kind.UNBUILT),
-    UNRELATE("unrelate", Depth.ITEM, Kind.UNBUILT),
-    VALIDATE("validate", Depth.ITEM, Kind.UNBUILT),
-    CLAIM_NEXT("claim_next", Depth.COLLECTION, Kind.UNBUILT),
+    CLAIM("claim", Depth.ITEM, Kind.CARRIED),
+    RELEASE("release", Depth.ITEM, Kind.CARRIED),
+    RELATE("relate", Depth.ITEM, Kind.CARRIED),
+    UNRELATE("unrelate", Depth.ITEM, Kind.CARRIED),
+
+    // ---- Carried, at collection depth -----------------------------------
+    //
+    // {@code validate} was declared at item depth in the previous revision of
+    // the specification, provisionally. The concept fixes it as a check "over
+    // one scope, mutating nothing" — so its ratified target is the scope
+    // rather than one item, and the nearest truncation this surface can
+    // express is the view collection. The item form here would have taken an
+    // id it ignored, which is a shape harder to interpret than a truthful
+    // collection form.
+
+    VALIDATE("validate", Depth.COLLECTION, Kind.CARRIED),
+    CLAIM_NEXT("claim_next", Depth.COLLECTION, Kind.CARRIED),
 
     // ---- Not carried, and answered by name rather than left absent ------
 

@@ -1,11 +1,13 @@
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.AddressRegistry;
+import ai.kumbuka.worklist.domain.ClaimService;
 import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
 import ai.kumbuka.worklist.domain.MilestoneService;
+import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.platform.ScopeDirectory;
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -14,6 +16,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -78,6 +81,7 @@ public class VerbSurface {
     @Inject IterationService iterations;
     @Inject MilestoneService milestones;
     @Inject MembershipService memberships;
+    @Inject ClaimService claims;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
 
@@ -131,12 +135,10 @@ public class VerbSurface {
     /**
      * The objects of one view.
      *
-     * <p>No filters. The three domain queries take a scope and nothing else, and
-     * a filter argument accepted here and dropped on the way down would answer
-     * the full set while looking like a correct narrow one — which is the exact
-     * defect the canonical naming was built against, moved one layer out. When
-     * the domain grows a filter, this passes it through raw and lets the domain
-     * refuse what it does not carry.
+     * <p>The whole set of a view, oldest first for items and in the axis's
+     * own order for the other two. See {@link #query(String, String, String, QuerySpec)}
+     * for a narrowed variant — this signature is the ratified whole-set
+     * form kept for callers who read a scope end to end.
      */
     @Transactional
     public Listing query(String subject, String rawScope, String rawView) {
@@ -152,6 +154,59 @@ public class VerbSurface {
 
         LOG.debugf("query %s in scope %s: %d hit(s)", in.view(), in.scopeId(), found.size());
         return new Listing(found.stream().map(row -> at(in.view(), row)).toList());
+    }
+
+    /**
+     * The objects of one view, narrowed by a filter and capped at a limit.
+     *
+     * <p>The filter is carried through raw — see {@link QuerySpec} — and the
+     * domain refuses what it does not know by name. That refusal is the whole
+     * of the surface guarantee against the "silent narrowing to the whole
+     * set" defect: an unknown filter here becomes an {@code UNKNOWN_FIELD}
+     * from the domain, not an answer that reads correct.
+     *
+     * <p><strong>Only the item view carries a filter today.</strong> The two
+     * axes are queryable end-to-end without one — their whole-set answer is
+     * bounded by construction, because a scope has few iterations and few
+     * milestones — and building filter shapes for them now would guess at
+     * fields nobody asked to narrow on. When they are needed, they arrive
+     * with the same shape and pass through here.
+     */
+    @Transactional
+    public Listing query(String subject, String rawScope, String rawView, QuerySpec spec) {
+        Entry in = entry(subject, rawScope, rawView);
+        addresses.requireView(in.scopeId(), in.view());
+
+        if (!Selector.ITEM.equals(in.view())) {
+            if (!spec.filter().isEmpty()) {
+                throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                    "'query' on the " + in.view() + " view takes no filter today. The two "
+                        + "axes are queryable end-to-end without one, and a filter accepted "
+                        + "and dropped would answer the whole set while looking like a "
+                        + "correct narrow one");
+            }
+            // Pass-through of the whole-set query, so a limit still applies
+            // to the axis. Truncation is reported the same way.
+            List<Map<String, Object>> found = switch (in.view()) {
+                case Selector.ITERATION -> iterations.query(in.scopeId());
+                case Selector.MILESTONE -> milestones.query(in.scopeId());
+                default -> throw unreachableView(in.view());
+            };
+            boolean truncated = found.size() > spec.limit();
+            List<Map<String, Object>> capped = truncated
+                ? found.subList(0, spec.limit())
+                : found;
+            LOG.debugf("query %s in scope %s: %d hit(s) truncated=%s",
+                in.view(), in.scopeId(), capped.size(), truncated);
+            return new Listing(capped.stream().map(row -> at(in.view(), row)).toList(),
+                truncated);
+        }
+
+        ItemService.QueryAnswer answered = items.query(in.scopeId(), spec);
+        LOG.debugf("query item in scope %s: %d hit(s) truncated=%s",
+            in.scopeId(), answered.items().size(), answered.truncated());
+        return new Listing(answered.items().stream().map(row -> at(in.view(), row)).toList(),
+            answered.truncated());
     }
 
     // ======================================================================
@@ -401,6 +456,170 @@ public class VerbSurface {
     }
 
     // ======================================================================
+    // The claim family
+    // ======================================================================
+
+    /**
+     * Take a lease on a named item.
+     *
+     * <p>Only addressable at the item view. The lease is on an item — a
+     * milestone or an iteration has no claim to take, and refusing the
+     * mismatched view here says so as a category error rather than as a
+     * cascaded not-found from the id lookup.
+     */
+    @Transactional
+    public Result claim(String subject, String rawScope, String rawView, String rawId,
+                        VerbInput.Lease body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "claim");
+        UUID id = resolve(in, target);
+
+        Duration lease = requireLease(body);
+        Map<String, Object> answered = claims.claim(in.scopeId(), id, subject, lease);
+        LOG.infof("claim on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    /**
+     * Give up a lease on a named item, by presenting its receipt.
+     *
+     * <p>No conflict token: the receipt IS the token, minted at claim time and
+     * checked against the row. A caller that has to present two proofs of hold
+     * for the same act is a caller doing two things at once, and one of the
+     * two would eventually stop meaning what it says.
+     */
+    @Transactional
+    public Result release(String subject, String rawScope, String rawView, String rawId,
+                          VerbInput.Release body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "release");
+        UUID id = resolve(in, target);
+
+        String receipt = required(body).receipt();
+        Map<String, Object> answered = claims.release(in.scopeId(), id, receipt);
+        LOG.infof("release on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    /**
+     * Draw the next unclaimed item in a scope and take the lease atomically.
+     *
+     * <p>A truncated address, admissible for the same reason {@code advance}
+     * is: the verb contract declares set semantics and the only declarable one
+     * is exactly one. What is drawn is the oldest unclaimed addressable item,
+     * and the domain runs the pick and the write in one transaction so the
+     * two do not race.
+     */
+    @Transactional
+    public Result claimNext(String subject, String rawScope, String rawView,
+                            VerbInput.Lease body) {
+        Entry in = entry(subject, rawScope, rawView);
+        if (!Selector.ITEM.equals(in.view())) {
+            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
+                "'claim_next' draws an item and is addressed at the item view. The "
+                    + "iteration and milestone views have no draw of their own — an "
+                    + "iteration is promoted with 'advance', and a milestone is set "
+                    + "active by ordinary update against its scope-declared status");
+        }
+        addresses.requireView(in.scopeId(), in.view());
+
+        Duration lease = requireLease(body);
+        Map<String, Object> answered = claims.claimNext(in.scopeId(), subject, lease);
+        LOG.infof("claim_next in scope %s", in.scopeId());
+        // The answer's address is the item that was drawn; read from the
+        // projection rather than remembered from the call, exactly as
+        // {@link #create} does.
+        return at(Selector.ITEM, answered);
+    }
+
+    // ======================================================================
+    // The graph verbs
+    // ======================================================================
+
+    /**
+     * Assert one directed, typed edge from this item to another.
+     *
+     * <p>The source is the addressed item; the target and the type arrive in
+     * the body. Item depth is provisional — the ratified form is a
+     * sub-collection under the item — and this surface has no sub-collection
+     * yet.
+     *
+     * <p>Idempotent under the triple: reasserting an edge that already exists
+     * writes nothing, exactly as the whole-set rewrite in {@code update}
+     * treats an unchanged entry.
+     */
+    @Transactional
+    public Result relate(String subject, String rawScope, String rawView, String rawId,
+                         String conflictToken, VerbInput.Edge body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "relate");
+        UUID from = resolve(in, target);
+
+        VerbInput.Edge edge = required(body);
+        UUID toItemId = uuidOf("to_item", edge.toItem());
+        UUID typeId = uuidOf("type", edge.type());
+
+        Map<String, Object> answered = items.relate(in.scopeId(), from, toItemId, typeId,
+            requireToken(conflictToken));
+        LOG.infof("relate on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    /** Withdraw one asserted edge from this item to another. */
+    @Transactional
+    public Result unrelate(String subject, String rawScope, String rawView, String rawId,
+                           String conflictToken, VerbInput.Edge body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "unrelate");
+        UUID from = resolve(in, target);
+
+        VerbInput.Edge edge = required(body);
+        UUID toItemId = uuidOf("to_item", edge.toItem());
+        UUID typeId = uuidOf("type", edge.type());
+
+        Map<String, Object> answered = items.unrelate(in.scopeId(), from, toItemId, typeId,
+            requireToken(conflictToken));
+        LOG.infof("unrelate on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    // ======================================================================
+    // The validation check
+    // ======================================================================
+
+    /**
+     * Walk the scope and report every consistency it currently holds and every
+     * one it does not.
+     *
+     * <p>Mutates nothing — the concept fixes that in one line — and reports
+     * findings in the answer rather than as a refusal. A caller reading the
+     * report is reading a snapshot of the store's own graph; a caller finding
+     * an empty findings list is reading a scope the platform's checks accept.
+     *
+     * <p>Addressed at the ITEM collection because the concept fixes the target
+     * as the scope, and the item view is the nearest truncation this surface
+     * offers. The other two views are refused as category errors: iterations
+     * and milestones do not carry the platform's cross-item consistencies that
+     * validate is here to walk.
+     */
+    @Transactional
+    public Result validate(String subject, String rawScope, String rawView) {
+        Entry in = entry(subject, rawScope, rawView);
+        if (!Selector.ITEM.equals(in.view())) {
+            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
+                "'validate' walks the scope's cross-item consistencies and is addressed "
+                    + "at the item view. Its ratified target is the scope; the nearest "
+                    + "truncation this surface offers is the item collection, and the "
+                    + "iteration and milestone views have no cross-item graph to walk");
+        }
+        addresses.requireView(in.scopeId(), in.view());
+
+        Map<String, Object> answered = items.validate(in.scopeId());
+        LOG.debugf("validate over scope %s", in.scopeId());
+        return new Result(new AddressParser.Target(Selector.ITEM, null, null), answered);
+    }
+
+    // ======================================================================
     // The verbs that do not act, and the two different reasons for it
     // ======================================================================
 
@@ -561,6 +780,44 @@ public class VerbSurface {
         return body;
     }
 
+    /** A lease duration, refused when the body arrives without a positive one. */
+    private static Duration requireLease(VerbInput.Lease body) {
+        VerbInput.Lease lease = required(body);
+        if (lease.durationSeconds() <= 0) {
+            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                "the duration of a lease is a positive number of seconds. A zero "
+                    + "duration is a lease that is inert the moment it is granted, and a "
+                    + "negative one is not a duration at all — the predecessor's exact "
+                    + "defect, refused here rather than passed on to a domain that would "
+                    + "refuse it too");
+        }
+        return Duration.ofSeconds(lease.durationSeconds());
+    }
+
+    /**
+     * A UUID argument, refused where it does not parse.
+     *
+     * <p>Named here rather than in the domain because the domain never sees a
+     * string — the surface converts on the way in, so a caller sending
+     * something that is not a uuid is told which of their arguments it was
+     * rather than being told a hash lookup did not find a row.
+     */
+    private static UUID uuidOf(String name, String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                "the argument '" + name + "' is required and did not arrive.");
+        }
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException notAnId) {
+            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                "the argument '" + name + "' is a declared identity and reads as a uuid: '"
+                    + raw + "' is not one. A declared value's display name is a property "
+                    + "that may be changed at will, so a caller writing one would be "
+                    + "writing something that is allowed to move under it.");
+        }
+    }
+
     /**
      * The switch arm that cannot be reached.
      *
@@ -602,19 +859,27 @@ public class VerbSurface {
     /**
      * What a listing answers with.
      *
-     * <p>An object around the list rather than the bare array, so that anything a
-     * listing later needs to say about itself — a continuation token above all —
-     * is an added key rather than a changed shape. A bare array cannot grow a
-     * sibling field, and this surface is a published contract from the day it
-     * answers.
+     * <p>An object around the list rather than the bare array, so that anything
+     * a listing later needs to say about itself is an added key rather than a
+     * changed shape. A bare array cannot grow a sibling field, and this
+     * surface is a published contract from the day it answers.
      *
-     * <p><strong>There is no paging today and none is implied.</strong> The whole
-     * matching set comes back. That is bounded for a scope of the size this
-     * scheme is built for and unbounded in general, and it is reported rather
-     * than quietly deferred: introducing paging is a decision about the published
-     * contract, which is not this run's to make.
+     * <p>{@code truncated} is a fact about the write, not about the row: the
+     * store carried more than the caller asked to see, and the caller is told
+     * so. A silent ceiling is the sprint-169 defect one layer up — an answer
+     * that reads complete and is not.
+     *
+     * <p>The whole-set signature that takes no {@link QuerySpec} answers
+     * {@code truncated = false} by construction: without a limit, "the whole
+     * set" is what came back and there is no ceiling to trip. Callers that
+     * want a bounded read call {@link #query(String, String, String, QuerySpec)}
+     * with a limit they name.
      */
-    public record Listing(List<Result> objects) {
+    public record Listing(List<Result> objects, boolean truncated) {
+
+        public Listing(List<Result> objects) {
+            this(objects, false);
+        }
     }
 
     /** Everything one call needs once the first two stages have held. */

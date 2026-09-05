@@ -125,6 +125,86 @@ public class ItemService {
             .toList();
     }
 
+    /** A subset of a scope's items, narrowed by the spec, capped at its limit. */
+    @Transactional
+    public QueryAnswer query(UUID scopeId, QuerySpec spec) {
+        Map<String, Object> parsed = parseItemFilter(spec.filter());
+
+        List<Item> rows = items.inScope(scopeId, parsed, spec.limit());
+        boolean truncated = rows.size() > spec.limit();
+        if (truncated) {
+            rows = rows.subList(0, spec.limit());
+        }
+        return new QueryAnswer(rows.stream().map(this::project).toList(), truncated);
+    }
+
+    /**
+     * The item's own enumerated filter fields, parsed for the repository.
+     *
+     * <p>Only {@code status} and {@code milestone} are narrowable today, both
+     * as uuids: they are the two columns of {@link Item} that read a declared
+     * value, and the query is an equality over the stored identity. A free
+     * text — title, description — is refused rather than accepted with
+     * whatever matching rule seemed reasonable, because the shape of a
+     * substring query is a surface commitment this build does not take.
+     *
+     * <p>An unknown field is refused by name here rather than at the
+     * repository. That is the same rule {@link Field#resolve} runs on the
+     * write path, moved to the read: a filter field this service does not
+     * offer would silently narrow to the whole set if the repository dropped
+     * it, and the whole-set answer looks like a correct narrow one — the
+     * exact defect against which {@link ai.kumbuka.worklist.surface.VerbSurface#query}
+     * refused to grow a filter at all until this iteration.
+     */
+    private static Map<String, Object> parseItemFilter(Map<String, Object> raw) {
+        Map<String, Object> parsed = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : raw.entrySet()) {
+            String name = entry.getKey();
+            Object value = entry.getValue();
+            switch (name) {
+                case "status", "milestone" -> parsed.put(name, uuidOrRefuse(name, value));
+                default -> throw new WorklistException(
+                    WorklistException.Reason.UNKNOWN_FIELD,
+                    "no filter of an item names '" + name + "'. Its narrowable fields are "
+                        + "'status' and 'milestone', both by declared identity — a free "
+                        + "text or a declared attribute is not narrowable through this "
+                        + "verb today. Nothing was answered: a filter this service does "
+                        + "not read would be dropped, and a dropped filter makes the "
+                        + "whole set look like a correct narrow answer",
+                    List.of(name));
+            }
+        }
+        return parsed;
+    }
+
+    private static UUID uuidOrRefuse(String field, Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(String.valueOf(raw));
+        } catch (IllegalArgumentException notAnId) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "the filter '" + field + "' takes a declared identity — a uuid — and '"
+                    + raw + "' is not one. A declared value's display name is a property "
+                    + "that may be changed at will, so a caller filtering by one would "
+                    + "be filtering by something that is allowed to move under them",
+                List.of(field));
+        }
+    }
+
+    /**
+     * What a filtered query answers with.
+     *
+     * <p>{@code truncated} is a fact about the WRITE: the store carried more
+     * rows than the caller asked to see, and the caller is told so — a hidden
+     * ceiling is the same silent-truncation defect the sprint-169 read had
+     * one layer down.
+     */
+    public record QueryAnswer(List<Map<String, Object>> items, boolean truncated) {
+    }
+
     // ------------------------------------------------------------------
     // Writing.
     // ------------------------------------------------------------------
@@ -353,6 +433,228 @@ public class ItemService {
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
         LOG.infof("item withdrawn in scope %s", scopeId);
         return answer;
+    }
+
+    /**
+     * Add one edge from this item to another, of a declared type.
+     *
+     * <p>The verb-shape of what {@link #applyRelations} does as a whole-set
+     * write. Two callers legitimately want either — a caller updating an item
+     * end-to-end sends the whole relation set, a caller adding one edge does
+     * not want to know what the other edges are — and having both is what makes
+     * the round-trip usable and one-edge writes possible in the same store.
+     *
+     * <p>Idempotent: asserting an already-asserted edge changes nothing and
+     * writes nothing, exactly as the whole-set rewrite would treat the same
+     * edge in a longer list. Reasserting a WITHDRAWN edge moves it back to
+     * asserted; the row was already there, and no row is created twice.
+     *
+     * <p>The conflict token this verb presents is the SOURCE item's, because
+     * the source is the aggregate being written. The target is looked up
+     * against the schema's foreign key, not held against a token — a caller
+     * that had to present two tokens for one edge would be asked to prove that
+     * nothing had moved on either item, which is a different rule from "this
+     * change lands on top of the state I read".
+     */
+    @Transactional
+    public Map<String, Object> relate(UUID scopeId, UUID itemId, UUID toItemId,
+            UUID relationTypeId, String conflictToken) {
+        Item item = require(scopeId, itemId);
+        item.requireCurrentToken(conflictToken);
+
+        if (itemId.equals(toItemId)) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "an item cannot relate to itself. That is the one cycle a single row can "
+                    + "express, and the only one a constraint can see",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        Item target = items.byId(toItemId);
+        if (target == null || !target.scopeId.equals(scopeId)) {
+            throw new WorklistException(
+                WorklistException.Reason.ITEM_UNKNOWN,
+                "no item " + toItemId + " in scope " + scopeId + " to relate to. A "
+                    + "reference is refused rather than stored dangling: an edge is a "
+                    + "row here, and the foreign key is the check",
+                List.of(String.valueOf(toItemId)));
+        }
+        vocabulary.requireRelationType(scopeId, relationTypeId);
+
+        ItemRelation edge = findEdge(item.id, toItemId, relationTypeId);
+        boolean changed;
+        if (edge == null) {
+            edge = new ItemRelation();
+            edge.fromItemId = item.id;
+            edge.toItemId = toItemId;
+            edge.relationTypeId = relationTypeId;
+            edge.scopeId = scopeId;
+            items.insertEdge(edge);
+            changed = true;
+        } else if (!ItemRelation.ASSERTED.equals(edge.status)) {
+            edge.status = ItemRelation.ASSERTED;
+            changed = true;
+        } else {
+            changed = false;
+        }
+
+        if (changed) {
+            item.stamp();
+            items.flushAndRefresh(item);
+            LOG.infof("relation asserted from %s to %s in scope %s", itemId, toItemId, scopeId);
+        }
+        return project(item);
+    }
+
+    /**
+     * Withdraw one edge from this item to another, of a declared type.
+     *
+     * <p>Withdrawal, not deletion: the row remains and its status moves. That
+     * matches {@link #applyRelations} and every other write in this schema; a
+     * deleted edge would be a delete-in-a-store-that-grants-no-delete, and one
+     * exception would cost the whole of it.
+     *
+     * <p>An unknown edge answers {@code RELATION_UNKNOWN}, and an
+     * already-withdrawn one answers the same way — from a caller's side those
+     * are one state, and the refusal names the triple so the caller knows
+     * which of the three parts they got wrong.
+     */
+    @Transactional
+    public Map<String, Object> unrelate(UUID scopeId, UUID itemId, UUID toItemId,
+            UUID relationTypeId, String conflictToken) {
+        Item item = require(scopeId, itemId);
+        item.requireCurrentToken(conflictToken);
+
+        ItemRelation edge = findEdge(item.id, toItemId, relationTypeId);
+        if (edge == null || ItemRelation.WITHDRAWN.equals(edge.status)) {
+            throw new WorklistException(
+                WorklistException.Reason.RELATION_UNKNOWN,
+                "no asserted edge from item " + itemId + " to item " + toItemId
+                    + " of type " + relationTypeId + " in scope " + scopeId + ". A "
+                    + "withdrawn edge reads the same as an absent one from here; "
+                    + "reasserting it is what 'relate' does",
+                List.of(String.valueOf(toItemId), String.valueOf(relationTypeId)));
+        }
+
+        edge.status = ItemRelation.WITHDRAWN;
+        item.stamp();
+        items.flushAndRefresh(item);
+        LOG.infof("relation withdrawn from %s to %s in scope %s", itemId, toItemId, scopeId);
+        return project(item);
+    }
+
+    private ItemRelation findEdge(UUID fromItemId, UUID toItemId, UUID relationTypeId) {
+        for (ItemRelation edge : items.edgesOf(fromItemId)) {
+            if (edge.toItemId.equals(toItemId) && edge.relationTypeId.equals(relationTypeId)) {
+                return edge;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Walk the scope and report every consistency the store guarantees.
+     *
+     * <p>Mutates nothing — the concept fixes that in one line — and reads the
+     * store rather than a stored copy of the answer. A validation that wrote
+     * would be a validation that could turn a red state green by re-writing it,
+     * and a validation that consulted a stored answer would be a validation of
+     * the writer that stored it.
+     *
+     * <h2>What is checked here today</h2>
+     *
+     * The one property of the graph no constraint expresses: acyclicity over
+     * BLOCKING relations. The migration says so directly — "no constraint
+     * expresses 'this graph is acyclic', it is enforced in the domain at write
+     * time and it needs its own red probe, because a rule with no mechanism is
+     * exactly the class this project keeps finding". The rule with no
+     * mechanism sits here.
+     *
+     * <p>{@code create} and {@code update} do not check acyclicity today, and
+     * that gap is what {@code validate} is for: it reports every cycle the
+     * store currently holds, so a caller has an answer even before the
+     * write-side check exists. When the write-side check is built, the answer
+     * from a healthy scope becomes an empty list — which is what a
+     * red-probed check that turns green looks like.
+     *
+     * <h2>What is deliberately NOT checked here</h2>
+     *
+     * References targeting non-existent items are impossible by construction
+     * (foreign key). Undeclared status ids on items are impossible by
+     * construction (foreign key). Whether an item's status COULD be
+     * out-of-vocabulary in a scope with a withdrawn declaration is a question
+     * about a state the store cannot enter, and answering it here would be
+     * validating something no verb can produce.
+     */
+    @Transactional
+    public Map<String, Object> validate(UUID scopeId) {
+        List<Map<String, Object>> findings = new ArrayList<>();
+
+        for (List<UUID> cycle : blockingCycles(scopeId)) {
+            Map<String, Object> finding = new LinkedHashMap<>();
+            finding.put("kind", "blocking_cycle");
+            finding.put("items", cycle);
+            finding.put("message",
+                "these items form a cycle over blocking relations, so each one is "
+                    + "permanently unready — a deadlock the caller cannot see through a "
+                    + "read of any one of them");
+            findings.add(finding);
+        }
+
+        Map<String, Object> answer = new LinkedHashMap<>();
+        answer.put(Field.SCOPE.canonicalName(), scopeId);
+        answer.put("findings", findings);
+        answer.put("consistent", findings.isEmpty());
+        LOG.debugf("validate reported %d finding(s) in scope %s", findings.size(), scopeId);
+        return answer;
+    }
+
+    /**
+     * Every cycle over blocking edges in a scope, as a list of item ids.
+     *
+     * <p>DFS from every item, following only edges whose relation type is
+     * {@code blocks}. A cycle is a return to a node already on the current
+     * stack, and it is reported as the sequence from that node around to it —
+     * the redundant closing node is left off, because the cycle is the ring
+     * rather than a walk.
+     *
+     * <p>Reported cycles are deduplicated by their SET of nodes, so a triangle
+     * discovered from three starting points is one finding and not three.
+     */
+    private List<List<UUID>> blockingCycles(UUID scopeId) {
+        List<List<UUID>> cycles = new ArrayList<>();
+        java.util.Set<java.util.Set<UUID>> seen = new java.util.HashSet<>();
+
+        for (Item item : items.inScope(scopeId)) {
+            walkForCycles(item.id, new ArrayList<>(), new java.util.HashSet<>(),
+                cycles, seen);
+        }
+        return cycles;
+    }
+
+    private void walkForCycles(UUID here, List<UUID> path, java.util.Set<UUID> onStack,
+            List<List<UUID>> cycles, java.util.Set<java.util.Set<UUID>> seen) {
+        if (onStack.contains(here)) {
+            int at = path.indexOf(here);
+            if (at < 0) {
+                return;
+            }
+            List<UUID> ring = new ArrayList<>(path.subList(at, path.size()));
+            java.util.Set<UUID> key = new java.util.HashSet<>(ring);
+            if (seen.add(key)) {
+                cycles.add(ring);
+            }
+            return;
+        }
+        path.add(here);
+        onStack.add(here);
+        for (ItemRelation edge : items.assertedRelations(here)) {
+            RelationType type = vocabulary.relationTypeById(edge.relationTypeId);
+            if (type != null && type.blocks) {
+                walkForCycles(edge.toItemId, path, onStack, cycles, seen);
+            }
+        }
+        onStack.remove(here);
+        path.remove(path.size() - 1);
     }
 
     // ------------------------------------------------------------------

@@ -2,6 +2,7 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -57,6 +58,12 @@ public class MilestoneService extends PlanningService {
 
     /** An address, a scope id, a count, a transition. Never a title, never an actor. */
     private static final Logger LOG = Logger.getLogger(MilestoneService.class);
+
+    /**
+     * The number spaces the three axes allocate from live under their
+     * selector, and the milestone selector is the one this allocator reads.
+     */
+    @Inject SelectorRegistry selectors;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -179,21 +186,24 @@ public class MilestoneService extends PlanningService {
     // ------------------------------------------------------------------
 
     /**
-     * The next number on the goal axis, from the scope's persisted mark.
+     * The next number on the goal axis, from the scope's persisted mark for
+     * the milestone selector.
      *
-     * <p>The mark is taken under a write lock and advanced in the same
-     * transaction as the row it numbers, so two concurrent creations cannot
-     * read the same value. Advancing it does NOT rotate the settings' own
-     * conflict token: this is an allocator side effect of a write on the
-     * MILESTONE aggregate, and rotating there would move a token no caller of
-     * this verb was holding.
+     * <p>The mark is the {@link NumberSpace} row of the {@code milestone}
+     * selector; the allocator takes it under a write lock and advances it in
+     * the same transaction as the milestone row it numbers, so two concurrent
+     * creations cannot read the same value. The rotation is on the milestone
+     * aggregate the caller wrote; the settings' own token is untouched.
+     *
+     * <p>Advancing this mark is what {@link SelectorRegistry#allocate} does
+     * on the item selector too — one mechanism instead of the two V5 carried,
+     * for the reason V7's header records: the goal axis is a class of its
+     * own, so the selector-keyed counter is where its next number belongs.
      */
     private long allocateNumber(UUID scopeId) {
         requireSetting(scopeId);
-        ScopeSetting locked = planning.lockSettingOf(scopeId);
-        locked.milestoneHighWaterMark = locked.milestoneHighWaterMark + 1;
-        planning.flush();
-        return locked.milestoneHighWaterMark;
+        Selector milestoneSelector = selectors.require(scopeId, Selector.MILESTONE);
+        return selectors.allocate(scopeId, milestoneSelector);
     }
 
     private boolean applyEffectiveChanges(Milestone milestone, Map<String, Object> current,

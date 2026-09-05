@@ -73,6 +73,20 @@ public class McpAdapter {
     private static final String ARG_TOKEN = "conflict_token";
     private static final String ARG_FIELDS = "fields";
 
+    /** The claim family's shared duration argument. */
+    private static final String ARG_DURATION = "duration_seconds";
+
+    /** The receipt {@code release} presents. */
+    private static final String ARG_RECEIPT = "receipt";
+
+    /** The graph verbs' target and type arguments. */
+    private static final String ARG_TO_ITEM = "to_item";
+    private static final String ARG_TYPE = "type";
+
+    /** The query's filter and cap, as arguments rather than address parts. */
+    private static final String ARG_FILTER = "filter";
+    private static final String ARG_LIMIT = "limit";
+
     /** JSON-RPC's own codes. Protocol faults only — a refused verb is not one. */
     private static final int METHOD_NOT_FOUND = -32601;
     private static final int INVALID_PARAMS = -32602;
@@ -184,11 +198,17 @@ public class McpAdapter {
             case "plan" -> plan(in);
             case "unplan" -> unplan(in);
 
+            // Built by SPRINT_171.2, addressed at the item view.
+            case "claim" -> claim(in);
+            case "release" -> release(in);
+            case "claim_next" -> claimNext(in);
+            case "relate" -> relate(in);
+            case "unrelate" -> unrelate(in);
+            case "validate" -> validate(in);
+
             // Not in tools/list, and still answered by name.
             case "send", "append", "digest", "abandon", "block", "resume", "consume" ->
                 refused(in, tool, false);
-            case "claim", "claim_next", "release", "relate", "unrelate", "validate" ->
-                refused(in, tool, true);
 
             default -> throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
                 "'" + tool + "' is not a tool of this server. Its tools are the verbs of "
@@ -223,8 +243,24 @@ public class McpAdapter {
 
     private Object query(Map<String, Object> in) {
         String scope = required(in, ARG_SCOPE);
+        String selector = required(in, ARG_SELECTOR);
+
+        // The filter and the limit arrive as arguments, not as address parts:
+        // an address without an id part is reserved, so a segment for a
+        // filter would either collapse into the selector or reserve a form
+        // no address can grow into. The arguments layer is where a caller
+        // narrows a read.
+        @SuppressWarnings("unchecked")
+        Map<String, Object> rawFilter = in.get(ARG_FILTER) instanceof Map
+            ? (Map<String, Object>) in.get(ARG_FILTER)
+            : Map.of();
+        int limit = in.get(ARG_LIMIT) instanceof Number number
+            ? number.intValue()
+            : ai.kumbuka.worklist.domain.QuerySpec.DEFAULT_LIMIT;
+
+        var spec = new ai.kumbuka.worklist.domain.QuerySpec(rawFilter, limit);
         return Payloads.of(scope,
-            verbs.query(caller.subject(), scope, required(in, ARG_SELECTOR)));
+            verbs.query(caller.subject(), scope, selector, spec));
     }
 
     private Object accept(Map<String, Object> in) {
@@ -262,6 +298,48 @@ public class McpAdapter {
         Address at = address(in);
         return dressed(at.scope(), verbs.unplan(caller.subject(), at.scope(), at.view(),
             at.head(), at.member(), required(in, ARG_TOKEN)));
+    }
+
+    private Object claim(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.claim(caller.subject(), at.scope(), at.view(),
+            at.head(), new VerbInput.Lease(requireLong(in))));
+    }
+    // NOTE: the actor is derived from `subject` inside the surface and
+    // handed to the domain; both adapters pass the same value along the same
+    // path.
+
+    private Object release(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.release(caller.subject(), at.scope(), at.view(),
+            at.head(), new VerbInput.Release(required(in, ARG_RECEIPT))));
+    }
+
+    private Object claimNext(Map<String, Object> in) {
+        String scope = required(in, ARG_SCOPE);
+        return dressed(scope, verbs.claimNext(caller.subject(), scope,
+            required(in, ARG_SELECTOR),
+            new VerbInput.Lease(requireLong(in))));
+    }
+
+    private Object relate(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.relate(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN),
+            new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE))));
+    }
+
+    private Object unrelate(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.unrelate(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN),
+            new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE))));
+    }
+
+    private Object validate(Map<String, Object> in) {
+        String scope = required(in, ARG_SCOPE);
+        return dressed(scope, verbs.validate(caller.subject(), scope,
+            required(in, ARG_SELECTOR)));
     }
 
     /**
@@ -348,6 +426,32 @@ public class McpAdapter {
     private static String optional(Map<String, Object> in, String name) {
         Object value = in.get(name);
         return value == null ? null : value.toString();
+    }
+
+    /**
+     * The lease duration a claim or a draw carries, as an integral number.
+     *
+     * <p>Read here so the domain sees a {@code long} rather than a string. JSON
+     * carries numbers as their own type and a caller sending {@code 3600} does
+     * not expect the surface to reject their integer as unparseable. A missing
+     * or non-numeric value is a typed refusal — the domain will refuse a
+     * non-positive one for its own reason.
+     */
+    private static long requireLong(Map<String, Object> in) {
+        Object value = in.get(ARG_DURATION);
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof CharSequence text) {
+            try {
+                return Long.parseLong(text.toString().trim());
+            } catch (NumberFormatException notNumeric) {
+                // fall through to the refusal below
+            }
+        }
+        throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+            "the argument '" + ARG_DURATION + "' is required and reads as a whole "
+                + "number of seconds. A lease has to name how long it lasts");
     }
 
     @SuppressWarnings("unchecked")

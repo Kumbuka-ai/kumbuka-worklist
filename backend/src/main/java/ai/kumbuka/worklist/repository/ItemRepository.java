@@ -44,6 +44,8 @@ public class ItemRepository {
 
     private static final String P_ITEM = "item";
 
+    private static final String P_STATUS = "status";
+
     @Inject EntityManager em;
 
     // ------------------------------------------------------------------
@@ -67,6 +69,59 @@ public class ItemRepository {
                 Item.class)
             .setParameter(P_SCOPE, scopeId)
             .getResultList();
+    }
+
+    /**
+     * Every item of a scope that matches the given filter, oldest first,
+     * capped at the given limit.
+     *
+     * <p>Kept separate from {@link #inScope(UUID)} so the calling paths are
+     * obviously two: one for the whole set and one for a narrowed set. The
+     * two share nothing but a table name, and folding them would put an
+     * optional filter in a signature every internal caller now has to think
+     * about.
+     *
+     * <p><strong>Enumerated fields only.</strong> {@code status_id} and
+     * {@code milestone_id} are the two the item domain exposes to a query —
+     * both opaque uuids, both compared as equalities, neither leaking a
+     * scope's vocabulary into the JPQL. A filter over a declared attribute
+     * is a natural next step and does NOT sit here today: the containment
+     * index answers it and the surface has no shape for one yet.
+     *
+     * <p>A limit of {@code n} returns at most {@code n + 1} rows. The extra
+     * row is not surfaced; it is what the domain reads to answer
+     * "is there more" without a second query. That is a query-per-answer
+     * discipline, not a cursor.
+     */
+    @Transactional
+    public List<Item> inScope(UUID scopeId, java.util.Map<String, Object> filter, int limit) {
+        StringBuilder jpql = new StringBuilder(
+            "SELECT i FROM Item i WHERE i.scopeId = :scope");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put(P_SCOPE, scopeId);
+
+        for (java.util.Map.Entry<String, Object> entry : filter.entrySet()) {
+            String param = "f_" + params.size();
+            switch (entry.getKey()) {
+                case P_STATUS -> {
+                    jpql.append(" AND i.statusId = :").append(param);
+                    params.put(param, entry.getValue());
+                }
+                case "milestone" -> {
+                    jpql.append(" AND i.milestoneId = :").append(param);
+                    params.put(param, entry.getValue());
+                }
+                default -> throw new IllegalArgumentException(
+                    "the filter field '" + entry.getKey() + "' is not one this query "
+                        + "narrows on — the surface must refuse it above rather than "
+                        + "sending it here");
+            }
+        }
+        jpql.append(" ORDER BY i.createdAt, i.id");
+
+        var query = em.createQuery(jpql.toString(), Item.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(limit + 1).getResultList();
     }
 
     /** The item of that id, or null. Scope membership is checked by the caller. */
@@ -139,10 +194,11 @@ public class ItemRepository {
     public List<ItemRelation> assertedRelations(UUID itemId) {
         return em.createQuery(
                 "SELECT r FROM ItemRelation r "
-                    + "WHERE r.fromItemId = :item AND r.status = :status "
-                    + "ORDER BY r.toItemId, r.relationTypeId", ItemRelation.class)
+                    + "WHERE r.fromItemId = :" + P_ITEM
+                    + " AND r.status = :" + P_STATUS
+                    + " ORDER BY r.toItemId, r.relationTypeId", ItemRelation.class)
             .setParameter(P_ITEM, itemId)
-            .setParameter("status", ItemRelation.ASSERTED)
+            .setParameter(P_STATUS, ItemRelation.ASSERTED)
             .getResultList();
     }
 
@@ -161,10 +217,11 @@ public class ItemRepository {
     public List<ItemReference> assertedReferences(UUID itemId) {
         return em.createQuery(
                 "SELECT r FROM ItemReference r "
-                    + "WHERE r.itemId = :item AND r.status = :status ORDER BY r.ordinal",
+                    + "WHERE r.itemId = :" + P_ITEM
+                    + " AND r.status = :" + P_STATUS + " ORDER BY r.ordinal",
                 ItemReference.class)
             .setParameter(P_ITEM, itemId)
-            .setParameter("status", ItemReference.ASSERTED)
+            .setParameter(P_STATUS, ItemReference.ASSERTED)
             .getResultList();
     }
 

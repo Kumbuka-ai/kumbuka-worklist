@@ -126,15 +126,24 @@ class CheckOrderProbeIT {
     }
 
     /**
-     * The same order holds for a verb that is carried and unbuilt.
+     * The same order holds for the verbs SPRINT_171.2 built.
      *
-     * <p>Worth its own case because this refusal carries a 501 — the one status
-     * on this surface that says the fault is ours — and a 5xx is exactly the
-     * kind of answer that gets written before the visibility check rather than
-     * after it, on the reasoning that it is not about the caller at all.
+     * <p>Worth its own case: the six that arrived with that sprint —
+     * {@code claim}, {@code release}, {@code claim_next}, {@code relate},
+     * {@code unrelate}, {@code validate} — used to answer 501 / VERB_UNBUILT.
+     * They now act, and the order they are checked in must be the same as
+     * every other carried verb's. A stranger addressing any of them answers
+     * SCOPE_UNRESOLVED and learns nothing else; a member gets a refusal about
+     * the address or the body, which is about the request they made rather
+     * than about the deployment they queried.
+     *
+     * <p>The counter-probe is {@code claim} against an item that does not
+     * exist: the check order runs address resolution (stage 4) before body
+     * validation, so the answer is ITEM_UNKNOWN rather than about the missing
+     * lease body. That is the answer a stranger must NOT see.
      */
     @Test
-    void an_unbuilt_verb_leaks_nothing_either() {
+    void the_verbs_built_by_sprint_171_2_leak_nothing_to_a_stranger() {
         SurfaceFixture.asStranger(identity);
         given()
             .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":claim")
@@ -142,12 +151,24 @@ class CheckOrderProbeIT {
             .statusCode(404)
             .body("reason", is("SCOPE_UNRESOLVED"));
 
+        given()
+            .when().post(SurfaceFixture.collection(Selector.ITEM) + ":claim_next")
+            .then()
+            .statusCode(404)
+            .body("reason", is("SCOPE_UNRESOLVED"));
+
+        given()
+            .when().post(SurfaceFixture.collection(Selector.ITEM) + ":validate")
+            .then()
+            .statusCode(404)
+            .body("reason", is("SCOPE_UNRESOLVED"));
+
         SurfaceFixture.asMember(identity);
         given()
-            .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":claim")
+            .when().post(SurfaceFixture.item(Selector.ITEM, 999_999) + ":claim")
             .then()
-            .statusCode(501)
-            .body("reason", is("VERB_UNBUILT"));
+            .statusCode(404)
+            .body("reason", is("ITEM_UNKNOWN"));
     }
 
     /**

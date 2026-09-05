@@ -45,6 +45,12 @@ carried	close	POST	/api/{scope}/{selector}/{id}:close	item	transition-guard
 carried	advance	POST	/api/{scope}/{selector}:advance	collection	exactly-one
 carried	plan	POST	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
 carried	unplan	DELETE	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
+carried	claim	POST	/api/{scope}/{selector}/{id}:claim	item	transition-guard
+carried	release	POST	/api/{scope}/{selector}/{id}:release	item	receipt
+carried	claim_next	POST	/api/{scope}/{selector}:claim_next	collection	exactly-one
+carried	relate	POST	/api/{scope}/{selector}/{id}:relate	item	conflict-token
+carried	unrelate	POST	/api/{scope}/{selector}/{id}:unrelate	item	conflict-token
+carried	validate	POST	/api/{scope}/{selector}:validate	collection	none
 
 # ---------------------------------------------------------------------------
 # UNCARRIED -- the seven the capability declaration does not give this scheme
@@ -68,25 +74,22 @@ uncarried	consume	POST	/api/{scope}/{selector}/{id}:consume	item	none
 uncarried	digest	POST	/api/{scope}/{selector}:digest	collection	none
 
 # ---------------------------------------------------------------------------
-# UNBUILT -- the six this scheme carries and this service has not built
+# UNBUILT -- none today
 # ---------------------------------------------------------------------------
-# The declaration gives the worklist scheme the claim family, the graph verbs
-# and validate. None of them exists in the domain. They answer 501 by name,
-# which is a different sentence from "not carried": that one says the act does
-# not exist here and never will, and a caller that believes it stops asking.
+# The claim family, the graph verbs and validate were carried unbuilt in the
+# previous revision of this file. SPRINT_171.2 built them: they moved up into
+# the carried block above, and this section is empty.
 #
-# THE FORM BELOW IS PROVISIONAL FOR THE GRAPH VERBS. `relate` and `unrelate`
-# are ratified as POST and DELETE on a sub-collection, and this surface has no
-# sub-collection for them yet. They are written at item depth so that the
-# refusal is reachable at all; the run that builds them decides the form, and
-# changing these two rows is expected rather than a drift.
-
-unbuilt	claim	POST	/api/{scope}/{selector}/{id}:claim	item	none
-unbuilt	release	POST	/api/{scope}/{selector}/{id}:release	item	none
-unbuilt	relate	POST	/api/{scope}/{selector}/{id}:relate	item	none
-unbuilt	unrelate	POST	/api/{scope}/{selector}/{id}:unrelate	item	none
-unbuilt	validate	POST	/api/{scope}/{selector}/{id}:validate	item	none
-unbuilt	claim_next	POST	/api/{scope}/{selector}:claim_next	collection	none
+# THE FORM OF THE GRAPH VERBS IS PROVISIONAL. `relate` and `unrelate` are
+# ratified as POST and DELETE on a sub-collection under the item, and this
+# surface has no sub-collection yet. They sit at item depth with the source as
+# the address; the run that builds the sub-collection binding will move them.
+#
+# THE FORM OF `validate` MOVED FROM ITEM TO COLLECTION DEPTH. The concept
+# fixes the target as the scope; the previous form was provisional at item
+# depth and it took an id it ignored, which is a shape harder to interpret
+# than a truthful collection form. Moving it up here rather than sitting
+# validating one item aligns the form with the semantics.
 
 # ---------------------------------------------------------------------------
 # PLATFORM -- answered above the services, not by this one
@@ -132,6 +135,13 @@ binding	-	GET	/api/{scope}/{selector}/{id}/{member}	membership	-
 binding	-	PATCH	/api/{scope}/{selector}/{id}/{member}	membership	-
 binding	-	POST	/api/{scope}/{selector}/{id}/{member}	membership	-
 binding	-	DELETE	/api/{scope}/{selector}/{id}/{member}	membership	-
+
+# Two new bindings arrived with SPRINT_171.2, and neither adds an outward
+# form. `POST /api/{scope}/{selector}/{id}` was already registered above and
+# still carries every item-depth colon verb; `POST /api/{scope}/{selector}`
+# was registered above too and carries `advance`, `claim_next` and
+# `validate`. The colon verb is split off from the routing table, so the
+# number of bindings is bounded by depth rather than by verb count.
 
 # ---------------------------------------------------------------------------
 # THE DECLARED EXTENSIONS
