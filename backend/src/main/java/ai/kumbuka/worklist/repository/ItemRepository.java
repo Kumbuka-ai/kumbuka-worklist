@@ -103,7 +103,7 @@ public class ItemRepository {
         for (java.util.Map.Entry<String, Object> entry : filter.entrySet()) {
             String param = "f_" + params.size();
             switch (entry.getKey()) {
-                case "status" -> {
+                case P_STATUS -> {
                     jpql.append(" AND i.statusId = :").append(param);
                     params.put(param, entry.getValue());
                 }
