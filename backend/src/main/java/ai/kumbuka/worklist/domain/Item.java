@@ -85,7 +85,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "item", schema = "worklist")
-public class Item extends TenantScoped {
+public class Item extends AggregateRoot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -188,18 +188,23 @@ public class Item extends TenantScoped {
     public Instant changedAt;
 
     /**
-     * Opaque, by contract.
+     * The item, as a refusal names it.
      *
-     * <p>A caller reads it, sends it back with a write, and is refused if the
-     * row moved on in between. That it happens to be a uuid is an
-     * implementation detail: a caller that parses it is a caller that breaks
-     * when the generator changes.
-     *
-     * <p>The predecessor's token covers the whole corpus, because every write
-     * rewrote the whole file. This one covers the row, so two callers editing
-     * two different items no longer conflict with each other.
+     * <p>The conflict token itself and the two acts around it are on
+     * {@link AggregateRoot}, which is where they moved when the planning
+     * layer gained three more roots that need the same pair. The
+     * predecessor's token covers the whole corpus, because every write
+     * rewrote the whole file; this one covers the aggregate, so two callers
+     * editing two different items no longer conflict with each other.
      */
-    @Generated(event = EventType.INSERT)
-    @Column(name = "conflict_token", nullable = false, insertable = false)
-    public String conflictToken;
+    @Override
+    protected String subject() {
+        return Addressed.ITEM.description();
+    }
+
+    /** The item's modification column is {@code changed_at}, as the target schema names it. */
+    @Override
+    protected void touch(Instant now) {
+        changedAt = now;
+    }
 }
