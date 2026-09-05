@@ -7,6 +7,7 @@ import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
 import ai.kumbuka.worklist.domain.MilestoneService;
+import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.platform.ScopeDirectory;
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -134,12 +135,10 @@ public class VerbSurface {
     /**
      * The objects of one view.
      *
-     * <p>No filters. The three domain queries take a scope and nothing else, and
-     * a filter argument accepted here and dropped on the way down would answer
-     * the full set while looking like a correct narrow one — which is the exact
-     * defect the canonical naming was built against, moved one layer out. When
-     * the domain grows a filter, this passes it through raw and lets the domain
-     * refuse what it does not carry.
+     * <p>The whole set of a view, oldest first for items and in the axis's
+     * own order for the other two. See {@link #query(String, String, String, QuerySpec)}
+     * for a narrowed variant — this signature is the ratified whole-set
+     * form kept for callers who read a scope end to end.
      */
     @Transactional
     public Listing query(String subject, String rawScope, String rawView) {
@@ -155,6 +154,59 @@ public class VerbSurface {
 
         LOG.debugf("query %s in scope %s: %d hit(s)", in.view(), in.scopeId(), found.size());
         return new Listing(found.stream().map(row -> at(in.view(), row)).toList());
+    }
+
+    /**
+     * The objects of one view, narrowed by a filter and capped at a limit.
+     *
+     * <p>The filter is carried through raw — see {@link QuerySpec} — and the
+     * domain refuses what it does not know by name. That refusal is the whole
+     * of the surface guarantee against the "silent narrowing to the whole
+     * set" defect: an unknown filter here becomes an {@code UNKNOWN_FIELD}
+     * from the domain, not an answer that reads correct.
+     *
+     * <p><strong>Only the item view carries a filter today.</strong> The two
+     * axes are queryable end-to-end without one — their whole-set answer is
+     * bounded by construction, because a scope has few iterations and few
+     * milestones — and building filter shapes for them now would guess at
+     * fields nobody asked to narrow on. When they are needed, they arrive
+     * with the same shape and pass through here.
+     */
+    @Transactional
+    public Listing query(String subject, String rawScope, String rawView, QuerySpec spec) {
+        Entry in = entry(subject, rawScope, rawView);
+        addresses.requireView(in.scopeId(), in.view());
+
+        if (!Selector.ITEM.equals(in.view())) {
+            if (!spec.filter().isEmpty()) {
+                throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                    "'query' on the " + in.view() + " view takes no filter today. The two "
+                        + "axes are queryable end-to-end without one, and a filter accepted "
+                        + "and dropped would answer the whole set while looking like a "
+                        + "correct narrow one");
+            }
+            // Pass-through of the whole-set query, so a limit still applies
+            // to the axis. Truncation is reported the same way.
+            List<Map<String, Object>> found = switch (in.view()) {
+                case Selector.ITERATION -> iterations.query(in.scopeId());
+                case Selector.MILESTONE -> milestones.query(in.scopeId());
+                default -> throw unreachableView(in.view());
+            };
+            boolean truncated = found.size() > spec.limit();
+            List<Map<String, Object>> capped = truncated
+                ? found.subList(0, spec.limit())
+                : found;
+            LOG.debugf("query %s in scope %s: %d hit(s) truncated=%s",
+                in.view(), in.scopeId(), capped.size(), truncated);
+            return new Listing(capped.stream().map(row -> at(in.view(), row)).toList(),
+                truncated);
+        }
+
+        ItemService.QueryAnswer answered = items.query(in.scopeId(), spec);
+        LOG.debugf("query item in scope %s: %d hit(s) truncated=%s",
+            in.scopeId(), answered.items().size(), answered.truncated());
+        return new Listing(answered.items().stream().map(row -> at(in.view(), row)).toList(),
+            answered.truncated());
     }
 
     // ======================================================================
@@ -807,19 +859,27 @@ public class VerbSurface {
     /**
      * What a listing answers with.
      *
-     * <p>An object around the list rather than the bare array, so that anything a
-     * listing later needs to say about itself — a continuation token above all —
-     * is an added key rather than a changed shape. A bare array cannot grow a
-     * sibling field, and this surface is a published contract from the day it
-     * answers.
+     * <p>An object around the list rather than the bare array, so that anything
+     * a listing later needs to say about itself is an added key rather than a
+     * changed shape. A bare array cannot grow a sibling field, and this
+     * surface is a published contract from the day it answers.
      *
-     * <p><strong>There is no paging today and none is implied.</strong> The whole
-     * matching set comes back. That is bounded for a scope of the size this
-     * scheme is built for and unbounded in general, and it is reported rather
-     * than quietly deferred: introducing paging is a decision about the published
-     * contract, which is not this run's to make.
+     * <p>{@code truncated} is a fact about the write, not about the row: the
+     * store carried more than the caller asked to see, and the caller is told
+     * so. A silent ceiling is the sprint-169 defect one layer up — an answer
+     * that reads complete and is not.
+     *
+     * <p>The whole-set signature that takes no {@link QuerySpec} answers
+     * {@code truncated = false} by construction: without a limit, "the whole
+     * set" is what came back and there is no ceiling to trip. Callers that
+     * want a bounded read call {@link #query(String, String, String, QuerySpec)}
+     * with a limit they name.
      */
-    public record Listing(List<Result> objects) {
+    public record Listing(List<Result> objects, boolean truncated) {
+
+        public Listing(List<Result> objects) {
+            this(objects, false);
+        }
     }
 
     /** Everything one call needs once the first two stages have held. */

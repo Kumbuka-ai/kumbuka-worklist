@@ -125,6 +125,86 @@ public class ItemService {
             .toList();
     }
 
+    /** A subset of a scope's items, narrowed by the spec, capped at its limit. */
+    @Transactional
+    public QueryAnswer query(UUID scopeId, QuerySpec spec) {
+        Map<String, Object> parsed = parseItemFilter(spec.filter());
+
+        List<Item> rows = items.inScope(scopeId, parsed, spec.limit());
+        boolean truncated = rows.size() > spec.limit();
+        if (truncated) {
+            rows = rows.subList(0, spec.limit());
+        }
+        return new QueryAnswer(rows.stream().map(this::project).toList(), truncated);
+    }
+
+    /**
+     * The item's own enumerated filter fields, parsed for the repository.
+     *
+     * <p>Only {@code status} and {@code milestone} are narrowable today, both
+     * as uuids: they are the two columns of {@link Item} that read a declared
+     * value, and the query is an equality over the stored identity. A free
+     * text — title, description — is refused rather than accepted with
+     * whatever matching rule seemed reasonable, because the shape of a
+     * substring query is a surface commitment this build does not take.
+     *
+     * <p>An unknown field is refused by name here rather than at the
+     * repository. That is the same rule {@link Field#resolve} runs on the
+     * write path, moved to the read: a filter field this service does not
+     * offer would silently narrow to the whole set if the repository dropped
+     * it, and the whole-set answer looks like a correct narrow one — the
+     * exact defect against which {@link ai.kumbuka.worklist.surface.VerbSurface#query}
+     * refused to grow a filter at all until this iteration.
+     */
+    private static Map<String, Object> parseItemFilter(Map<String, Object> raw) {
+        Map<String, Object> parsed = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : raw.entrySet()) {
+            String name = entry.getKey();
+            Object value = entry.getValue();
+            switch (name) {
+                case "status", "milestone" -> parsed.put(name, uuidOrRefuse(name, value));
+                default -> throw new WorklistException(
+                    WorklistException.Reason.UNKNOWN_FIELD,
+                    "no filter of an item names '" + name + "'. Its narrowable fields are "
+                        + "'status' and 'milestone', both by declared identity — a free "
+                        + "text or a declared attribute is not narrowable through this "
+                        + "verb today. Nothing was answered: a filter this service does "
+                        + "not read would be dropped, and a dropped filter makes the "
+                        + "whole set look like a correct narrow answer",
+                    List.of(name));
+            }
+        }
+        return parsed;
+    }
+
+    private static UUID uuidOrRefuse(String field, Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(String.valueOf(raw));
+        } catch (IllegalArgumentException notAnId) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "the filter '" + field + "' takes a declared identity — a uuid — and '"
+                    + raw + "' is not one. A declared value's display name is a property "
+                    + "that may be changed at will, so a caller filtering by one would "
+                    + "be filtering by something that is allowed to move under them",
+                List.of(field));
+        }
+    }
+
+    /**
+     * What a filtered query answers with.
+     *
+     * <p>{@code truncated} is a fact about the WRITE: the store carried more
+     * rows than the caller asked to see, and the caller is told so — a hidden
+     * ceiling is the same silent-truncation defect the sprint-169 read had
+     * one layer down.
+     */
+    public record QueryAnswer(List<Map<String, Object>> items, boolean truncated) {
+    }
+
     // ------------------------------------------------------------------
     // Writing.
     // ------------------------------------------------------------------

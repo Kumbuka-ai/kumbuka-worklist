@@ -85,7 +85,7 @@ public final class Payloads {
     public static Listing of(String scope, VerbSurface.Listing listing) {
         return new Listing(listing.objects().stream()
             .map(result -> of(scope, result))
-            .toList());
+            .toList(), listing.truncated());
     }
 
     /**
@@ -146,8 +146,13 @@ public final class Payloads {
      * <p>An object around the list rather than the bare array, so that anything a
      * listing later needs to say about itself is an added key rather than a
      * changed shape.
+     *
+     * <p>{@code truncated} is a fact about the write. A caller who did not
+     * name a limit sees {@code false}; a caller whose limit was reached sees
+     * {@code true} — the same silent-ceiling defect the sprint-169 read had
+     * one layer down, refused at the surface.
      */
-    public record Listing(List<ObjectResponse> objects) {
+    public record Listing(List<ObjectResponse> objects, boolean truncated) {
     }
 
     /**

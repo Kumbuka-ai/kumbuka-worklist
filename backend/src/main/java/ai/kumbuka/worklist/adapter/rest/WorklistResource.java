@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.adapter.payload.Payloads;
+import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbSurface;
@@ -18,11 +19,13 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -144,15 +147,48 @@ public class WorklistResource {
     /**
      * GET at collection depth: {@code query}.
      *
-     * <p>Reading on a collection, so GET on the collection URI — the form follows
-     * from the target and the effect class rather than from the verb's name.
+     * <p>Reading on a collection, so GET on the collection URI — the form
+     * follows from the target and the effect class rather than from the
+     * verb's name.
+     *
+     * <p><strong>The filter and the limit travel as query parameters, not as
+     * path segments.</strong> An address without an id part is reserved, so a
+     * segment for a filter would either collapse into the selector or reserve
+     * a form no address can grow into. The query string is the transport
+     * layer for arguments a caller narrows a read with, and its parameters do
+     * not become part of the address the answer is at.
+     *
+     * <p>A filter is written as {@code ?filter.<name>=<value>} — the leading
+     * segment names the collection of arguments, and every one after it
+     * names an enumerated field on the addressed view. An unknown filter name
+     * reaches the domain and is refused by name; the surface does not know
+     * the field set of the addressed view and cannot refuse ahead of it.
      */
     @GET
     @Path("{selector}")
     public Response collectionGet(@PathParam("scope") String scope,
-                                  @PathParam("selector") String selector) {
+                                  @PathParam("selector") String selector,
+                                  @QueryParam("limit") Integer limit,
+                                  jakarta.ws.rs.core.UriInfo info) {
+        Map<String, Object> filter = new LinkedHashMap<>();
+        for (Map.Entry<String, java.util.List<String>> entry : info.getQueryParameters().entrySet()) {
+            String name = entry.getKey();
+            if (!name.startsWith("filter.")) {
+                continue;
+            }
+            java.util.List<String> values = entry.getValue();
+            if (values.size() > 1) {
+                throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                    "the filter '" + name + "' arrived with " + values.size() + " values. "
+                        + "Each enumerated field takes one value; ORing two would be a "
+                        + "shape the domain does not read");
+            }
+            filter.put(name.substring("filter.".length()), values.get(0));
+        }
+
+        QuerySpec spec = new QuerySpec(filter, limit == null ? QuerySpec.DEFAULT_LIMIT : limit);
         return Response.ok(Payloads.of(scope,
-            verbs.query(caller.subject(), scope, selector))).build();
+            verbs.query(caller.subject(), scope, selector, spec))).build();
     }
 
     // ======================================================================

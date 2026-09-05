@@ -125,11 +125,25 @@ public final class McpTools {
 
             new Tool("query",
                 "The objects of one view, oldest first for items and in the axis's own "
-                    + "order for the other two. The whole set comes back; there is no "
-                    + "paging and no filter yet.",
+                    + "order for the other two. A limit caps the answer; a filter narrows "
+                    + "it over enumerated columns of the addressed view (item view only "
+                    + "today: 'status' and 'milestone' as declared ids). The answer names "
+                    + "'truncated' when the store carried more than the caller asked to "
+                    + "see — a silent ceiling would be the sprint-169 defect one layer "
+                    + "up.",
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING, SELECTOR_DOC))),
+                    required(ARG_SELECTOR, STRING, SELECTOR_DOC),
+                    optional("filter", OBJECT,
+                        "A map from an enumerated field name to a declared identity — "
+                            + "'{\"status\": \"<uuid>\"}'. Refused by name if the "
+                            + "addressed view does not narrow on it. A missing filter "
+                            + "returns the whole set, capped at the limit."),
+                    optional("limit", INTEGER,
+                        "The upper bound on this answer, up to "
+                            + ai.kumbuka.worklist.domain.QuerySpec.MAX_LIMIT
+                            + ". A missing limit uses the default of "
+                            + ai.kumbuka.worklist.domain.QuerySpec.DEFAULT_LIMIT + "."))),
 
             new Tool("accept",
                 "The intake gate. It refuses today and says why: the address it used to "
@@ -274,6 +288,21 @@ public final class McpTools {
 
     private static Field required(String name, String type, String description) {
         return new Field(name, type, description, true);
+    }
+
+    /**
+     * A field a caller may leave off.
+     *
+     * <p>Enumerated rather than tolerated: the tool schema declares which
+     * fields are required, so an optional one is a shape decision — the
+     * caller may omit it and the surface answers on the default. The
+     * conformance test requires {@code additionalProperties: false}, which is
+     * separate: closing additional properties refuses fields NAMED in a call
+     * that aren't in the schema at all, and optional fields are in the
+     * schema.
+     */
+    private static Field optional(String name, String type, String description) {
+        return new Field(name, type, description, false);
     }
 
     /**
