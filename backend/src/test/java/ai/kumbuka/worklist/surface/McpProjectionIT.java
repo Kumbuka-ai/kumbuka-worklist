@@ -48,12 +48,15 @@ class McpProjectionIT {
     @Inject TestIdentityAssociation identity;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
+    @Inject ai.kumbuka.worklist.domain.ScopeSettingService settings;
 
     @BeforeEach
     void stage() {
         SurfaceFixture.stage();
         SurfaceFixture.asMember(identity);
-        selectors.declare(SCOPE_ID, Selector.ITEM);
+        for (String view : Selector.VIEWS) {
+            selectors.declare(SCOPE_ID, view);
+        }
     }
 
     @Test
@@ -95,6 +98,122 @@ class McpProjectionIT {
             .body("result.structuredContent.fields.title", is("an mcp probe"));
     }
 
+    /**
+     * The whole chain over MCP, which is the only way "it reaches the same acts"
+     * is a measurement rather than a claim.
+     *
+     * <p>One method for the same reason the REST coverage probe uses one: the
+     * acts form a chain, and splitting it would mean staging the middle of it
+     * behind the surface being probed.
+     */
+    @Test
+    void every_declared_tool_reaches_its_act() {
+        String status = String.valueOf(vocabulary
+            .declareStatus(SCOPE_ID, "mcp-chain-open", 3, true, false, false, false).id);
+        String closed = String.valueOf(vocabulary
+            .declareStatus(SCOPE_ID, "mcp-chain-done", 4, false, false, true, true).id);
+        openTheScope();
+
+        String item = created(Selector.ITEM, Map.of("title", "an mcp chain", "status", status));
+        String itemToken = tokenOf(item);
+
+        itemToken = call("update", Map.of("address", item, "conflict_token", itemToken,
+            "fields", Map.of("title", "an mcp chain, renamed")))
+            .body("result.structuredContent.fields.title", is("an mcp chain, renamed"))
+            .extract().path("result.structuredContent.fields.conflict_token");
+
+        call("query", Map.of("scope", SurfaceFixture.SCOPE, "selector", Selector.ITEM))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.objects.size()",
+                org.hamcrest.Matchers.greaterThan(0));
+
+        String milestone = created(Selector.MILESTONE,
+            Map.of("title", "an mcp goal", "vision", "the north star"));
+        String iteration = created(Selector.ITERATION,
+            Map.of("motto", "mcp", "description", "what this iteration contains"));
+
+        pointAtMilestone(item, milestone);
+
+        String membership = iteration + "/" + numberOf(item);
+        String iterationToken = call("plan",
+            Map.of("address", membership, "conflict_token", tokenOf(iteration)))
+            .body("result.isError", is(false))
+            .extract().path("result.structuredContent.fields.conflict_token");
+
+        call("read", Map.of("address", membership))
+            .body("result.structuredContent.fields.membership_status",
+                org.hamcrest.Matchers.notNullValue());
+
+        iterationToken = call("update", Map.of("address", membership,
+            "conflict_token", iterationToken,
+            "fields", Map.of("membership_status", "active")))
+            .body("result.isError", is(false))
+            .extract().path("result.structuredContent.fields.conflict_token");
+
+        call("advance", Map.of("scope", SurfaceFixture.SCOPE,
+            "selector", Selector.ITERATION, "conflict_token", settingToken()))
+            .body("result.isError", is(false));
+
+        iterationToken = call("unplan",
+            Map.of("address", membership, "conflict_token", iterationToken))
+            .body("result.isError", is(false))
+            .extract().path("result.structuredContent.fields.conflict_token");
+
+        call("close", Map.of("address", iteration, "conflict_token", iterationToken))
+            .body("result.structuredContent.fields.closed_at",
+                org.hamcrest.Matchers.notNullValue());
+        call("close", Map.of("address", milestone, "conflict_token", tokenOf(milestone)))
+            .body("result.structuredContent.fields.status", is("closed"));
+
+        call("accept", Map.of("address", item, "conflict_token", itemToken))
+            .body("result.isError", is(true))
+            .body("result.structuredContent.reason", is("IDENTIFIER_UNDECIDED"));
+
+        call("withdraw", Map.of("address", item, "conflict_token", itemToken,
+            "status", closed))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.status", is(closed));
+    }
+
+    /**
+     * The protocol's own faults, which are not refusals of a verb.
+     *
+     * <p>A JSON-RPC error says the call could not be made; every refusal in this
+     * service is a call that was made and answered. Answering a refused verb as
+     * a protocol error would tell a client to fix its transport when what it has
+     * to fix is its expectation.
+     */
+    @Test
+    void a_protocol_fault_is_a_json_rpc_error_and_a_refused_verb_is_not() {
+        given().contentType(ContentType.JSON)
+            .body(Map.of("jsonrpc", "1.0", "id", 1, "method", "tools/list"))
+            .when().post("/mcp").then()
+            .statusCode(200)
+            .body("error.code", is(-32602));
+
+        rpc("tools/frobnicate", Map.of())
+            .body("error.code", is(-32601))
+            .body("error.message", org.hamcrest.Matchers.containsString("tools/call"));
+
+        // A notification carries no id and takes no answer. Answering one is a
+        // protocol error on our side, not a courtesy.
+        given().contentType(ContentType.JSON)
+            .body(Map.of("jsonrpc", "2.0", "method", "tools/list"))
+            .when().post("/mcp").then()
+            .statusCode(202);
+    }
+
+    @Test
+    void an_argument_the_schema_declares_required_is_refused_when_it_is_absent() {
+        call("read", Map.of())
+            .body("result.isError", is(true))
+            .body("result.structuredContent.reason", is("PAYLOAD_MALFORMED"));
+
+        call("create", Map.of("scope", SurfaceFixture.SCOPE))
+            .body("result.isError", is(true))
+            .body("result.structuredContent.reason", is("PAYLOAD_MALFORMED"));
+    }
+
     @Test
     void a_verb_the_scheme_does_not_carry_is_answered_by_name_and_not_as_an_unknown_tool() {
         call("send", Map.of("address", SurfaceFixture.address(Selector.ITEM, 1)))
@@ -131,6 +250,72 @@ class McpProjectionIT {
         call("send", Map.of("address", SurfaceFixture.address(Selector.ITEM, 1)))
             .body("result.isError", is(true))
             .body("result.structuredContent.reason", is("SCOPE_UNRESOLVED"));
+    }
+
+    /** One object, created over MCP, as its complete address. */
+    private String created(String view, Map<String, Object> fields) {
+        return call("create", Map.of(
+            "scope", SurfaceFixture.SCOPE, "selector", view, "fields", fields))
+            .body("result.isError", is(false))
+            .extract().path("result.structuredContent.address");
+    }
+
+    private String tokenOf(String address) {
+        return call("read", Map.of("address", address))
+            .extract().path("result.structuredContent.fields.conflict_token");
+    }
+
+    /** The number part of an address, which is its last segment. */
+    private static String numberOf(String address) {
+        return address.substring(address.lastIndexOf('/') + 1);
+    }
+
+    /**
+     * The scope's settings row, without which no iteration can be created.
+     *
+     * <p>Written through the service because the surface does not carry it:
+     * {@code scope_setting} has no view and is not addressed. A scope therefore
+     * cannot be opened over the machine surface at all, which is reported rather
+     * than worked around here.
+     */
+    private void openTheScope() {
+        Map<String, Object> limits = Map.of(
+            "max_planned_iterations", 1_000, "warn_planned_iterations", 1_000,
+            "max_memberships_per_iteration", 1_000, "warn_memberships_per_iteration", 1_000);
+        try {
+            settings.create(SCOPE_ID, limits);
+        } catch (ai.kumbuka.worklist.domain.WorklistException alreadyOpen) {
+            if (alreadyOpen.reason()
+                    != ai.kumbuka.worklist.domain.WorklistException.Reason.SETTING_PRESENT) {
+                throw alreadyOpen;
+            }
+            Map<String, Object> raise = new java.util.HashMap<>(limits);
+            raise.put("conflict_token", settingToken());
+            settings.update(SCOPE_ID, raise);
+        }
+    }
+
+    private String settingToken() {
+        return (String) settings.read(SCOPE_ID).get("conflict_token");
+    }
+
+    /**
+     * Points an item at a milestone, over JDBC and under the runtime role.
+     *
+     * <p>No verb of this service assigns {@code item.milestone_id}, so the
+     * precondition {@code plan} enforces is satisfiable only by a write like
+     * this one. Named for what it is: a fixture that goes around the surface is
+     * a finding about the surface.
+     */
+    private static void pointAtMilestone(String itemAddress, String milestoneAddress) {
+        ai.kumbuka.worklist.platform.PlatformFixture.run(
+            "SELECT set_config('app.tenant_id', '"
+                + SubstrateDatabaseResource.TENANT_ID + "', false)",
+            "UPDATE worklist.item SET milestone_id = ("
+                + "  SELECT id FROM worklist.milestone WHERE scope_id = '" + SCOPE_ID
+                + "' AND number = " + numberOf(milestoneAddress) + ")"
+                + " WHERE scope_id = '" + SCOPE_ID + "' AND number = "
+                + numberOf(itemAddress));
     }
 
     private static ValidatableResponse call(String tool, Map<String, Object> arguments) {

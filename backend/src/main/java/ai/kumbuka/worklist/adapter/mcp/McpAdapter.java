@@ -197,28 +197,28 @@ public class McpAdapter {
     }
 
     private Object create(Map<String, Object> in) {
-        return dressed(required(in, ARG_SCOPE), verbs.create(caller.subject(),
-            required(in, ARG_SCOPE), required(in, ARG_SELECTOR), fields(in)));
+        String scope = required(in, ARG_SCOPE);
+        return dressed(scope, verbs.create(caller.subject(), scope,
+            required(in, ARG_SELECTOR), fields(in)));
     }
 
     private Object read(Map<String, Object> in) {
         Address at = address(in);
-        return at.isMembership()
-            ? dressed(at.scope(), verbs.readMembership(caller.subject(), at.scope(),
-                at.view(), at.head(), at.member()))
-            : dressed(at.scope(), verbs.read(caller.subject(), at.scope(), at.view(),
-                at.head()));
+        return dressed(at.scope(), at.isMembership()
+            ? verbs.readMembership(caller.subject(), at.scope(), at.view(), at.head(),
+                at.member())
+            : verbs.read(caller.subject(), at.scope(), at.view(), at.head()));
     }
 
     private Object update(Map<String, Object> in) {
         Address at = address(in);
         String token = required(in, ARG_TOKEN);
 
-        return at.isMembership()
-            ? dressed(at.scope(), verbs.updateMembership(caller.subject(), at.scope(),
-                at.view(), at.head(), at.member(), token, fields(in)))
-            : dressed(at.scope(), verbs.update(caller.subject(), at.scope(), at.view(),
-                at.head(), token, fields(in)));
+        return dressed(at.scope(), at.isMembership()
+            ? verbs.updateMembership(caller.subject(), at.scope(), at.view(), at.head(),
+                at.member(), token, fields(in))
+            : verbs.update(caller.subject(), at.scope(), at.view(), at.head(), token,
+                fields(in)));
     }
 
     private Object query(Map<String, Object> in) {
@@ -276,9 +276,11 @@ public class McpAdapter {
      */
     private Object refused(Map<String, Object> in, String verb, boolean unbuilt) {
         String raw = optional(in, ARG_ADDRESS);
-        String scope = raw == null ? required(in, ARG_SCOPE) : AddressParser.uri(raw).scope();
-        String view = raw == null ? required(in, ARG_SELECTOR) : AddressParser.uri(raw).view();
-        String id = raw == null ? null : AddressParser.uri(raw).id();
+        AddressParser.Parts at = raw == null ? null : AddressParser.uri(raw);
+
+        String scope = at == null ? required(in, ARG_SCOPE) : at.scope();
+        String view = at == null ? required(in, ARG_SELECTOR) : at.view();
+        String id = at == null ? null : at.id();
 
         if (unbuilt) {
             verbs.unbuilt(caller.subject(), scope, view, id, verb, UNBUILT_WHY);

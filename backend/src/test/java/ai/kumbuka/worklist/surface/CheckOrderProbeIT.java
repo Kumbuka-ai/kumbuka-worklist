@@ -58,12 +58,25 @@ class CheckOrderProbeIT {
     /** A scope slug that is well formed and belongs to nobody. */
     private static final String NO_SUCH_SCOPE = "no-such-scope";
 
+    /**
+     * A scope of this tenant that declares nothing, published for one case.
+     *
+     * <p>The vocabulary stage can only be observed where a view is genuinely
+     * undeclared, and the probe scope acquires declarations as other classes run
+     * against it — so an assertion made there would pass or fail by execution
+     * order. This scope is visible and empty, and nothing else touches it.
+     */
+    private static final String EMPTY_SCOPE = "empty-scope";
+    private static final UUID EMPTY_SCOPE_ID =
+        UUID.fromString("00000000-0000-0000-0000-0000000000e1");
+
     @Inject TestIdentityAssociation identity;
     @Inject SelectorRegistry selectors;
 
     @BeforeAll
     static void stage() {
         SurfaceFixture.stage();
+        SurfaceFixture.publishEmptyScope(EMPTY_SCOPE, EMPTY_SCOPE_ID);
     }
 
     /**
@@ -229,7 +242,7 @@ class CheckOrderProbeIT {
         SurfaceFixture.asMember(identity);
 
         given()
-            .when().get(SurfaceFixture.item("milestone", 999_999))
+            .when().get("/api/" + EMPTY_SCOPE + "/" + Selector.MILESTONE + "/999999")
             .then()
             .statusCode(422)
             .body("reason", is("SELECTOR_UNDECLARED"));

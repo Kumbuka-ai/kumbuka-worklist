@@ -166,6 +166,17 @@ class SurfaceCoverageIT {
             .statusCode(200)
             .body("fields.current_iteration", org.hamcrest.Matchers.notNullValue());
 
+        // ---- the moving pointer: readable, and not writable ---------------
+        call("GET", item(Selector.ITERATION, AddressParser.CURRENT), null, null)
+            .statusCode(200)
+            .body("address", org.hamcrest.Matchers.endsWith("/" + AddressParser.CURRENT));
+
+        call("PATCH", item(Selector.ITERATION, AddressParser.CURRENT), iterationToken,
+            Map.of("motto", "written through the pointer"))
+            .statusCode(405)
+            .header("Allow", org.hamcrest.Matchers.is("GET"))
+            .body("reason", org.hamcrest.Matchers.is("ADDRESS_READ_ONLY"));
+
         // ---- unplan ------------------------------------------------------
         iterationToken = call("DELETE", membership(iterationNumber, itemNumber), iterationToken,
             null)
@@ -216,6 +227,45 @@ class SurfaceCoverageIT {
         call("POST", collection(Selector.ITEM) + ":withdraw", null, null)
             .statusCode(405)
             .header("Allow", org.hamcrest.Matchers.is("GET, POST"))
+            .body("reason", org.hamcrest.Matchers.is("WRITE_ON_TRUNCATED_ADDRESS"));
+
+        // ---- a verb aimed at the wrong kind of thing ----------------------
+        call("POST", item(Selector.MILESTONE, milestoneNumber) + ":withdraw", milestoneToken,
+            Map.of("status", closed))
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
+
+        call("POST", item(Selector.ITEM, itemNumber) + ":close", itemToken, null)
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
+
+        call("POST", collection(Selector.ITEM) + ":advance", settingToken(), null)
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
+
+        // ---- what the transport has to carry, and what the body has to say -
+        call("PATCH", item(Selector.ITEM, itemNumber), null, Map.of("title", "no token"))
+            .statusCode(428)
+            .body("reason", org.hamcrest.Matchers.is("CONFLICT_TOKEN_MISSING"));
+
+        call("PATCH", item(Selector.ITEM, itemNumber), "a token from nowhere",
+            Map.of("title", "a stale write"))
+            .statusCode(412)
+            .body("reason", org.hamcrest.Matchers.is("CONFLICT"));
+
+        call("POST", collection(Selector.ITEM), null, null)
+            .statusCode(400)
+            .body("reason", org.hamcrest.Matchers.is("PAYLOAD_MALFORMED"));
+
+        call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
+            Map.of("status", "not a status identity"))
+            .statusCode(400)
+            .body("reason", org.hamcrest.Matchers.is("PAYLOAD_MALFORMED"));
+
+        // ---- POST on an item address with no verb in it --------------------
+        call("POST", item(Selector.ITEM, itemNumber), null, null)
+            .statusCode(405)
+            .header("Allow", org.hamcrest.Matchers.is("GET, PATCH, POST"))
             .body("reason", org.hamcrest.Matchers.is("WRITE_ON_TRUNCATED_ADDRESS"));
 
         // ===================================================================

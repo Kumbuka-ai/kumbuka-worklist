@@ -635,9 +635,8 @@ class ItemDomainIsolationIT {
         return "k" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 
-    /** A token the check constraints accept, unique per call. */
     /**
-     * A selector token that is unique per planted row.
+     * A selector token the check constraints accept, unique per call.
      *
      * <p>Lower case, because the form constraint says so since V6. It is
      * deliberately not one of the three views: what this class plants are rows

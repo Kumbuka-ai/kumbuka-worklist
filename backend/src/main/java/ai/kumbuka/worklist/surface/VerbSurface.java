@@ -98,11 +98,18 @@ public class VerbSurface {
      * that inserts the row and none is ever accepted from a caller. What comes
      * back therefore carries an address the caller could not have predicted,
      * which is the point.
+     *
+     * <p>The vocabulary stage runs even though nothing is resolved: a view this
+     * scope has not declared has no address space, so an object created under it
+     * would answer with an address that resolves to a refusal on the next call.
+     * The item allocator asks anyway; the two axes allocate from their own marks
+     * and would not.
      */
     @Transactional
     public Result create(String subject, String rawScope, String rawView,
                          VerbInput.Fields body) {
         Entry in = entry(subject, rawScope, rawView);
+        addresses.requireView(in.scopeId(), in.view());
         Map<String, Object> fields = required(body).values();
 
         Map<String, Object> created = switch (in.view()) {
@@ -134,6 +141,7 @@ public class VerbSurface {
     @Transactional
     public Listing query(String subject, String rawScope, String rawView) {
         Entry in = entry(subject, rawScope, rawView);
+        addresses.requireView(in.scopeId(), in.view());
 
         List<Map<String, Object>> found = switch (in.view()) {
             case Selector.ITEM -> items.query(in.scopeId());

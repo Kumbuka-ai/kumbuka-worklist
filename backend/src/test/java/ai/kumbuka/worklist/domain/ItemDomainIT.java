@@ -1404,13 +1404,6 @@ class ItemDomainIT {
      * The highest number among items NOT closed — the quantity a derived mark
      * would be computed from.
      *
-     * <p>Closed rather than "withdrawn", because there is no such literal any
-     * more: what counts as terminal is the scope's declaration, and this reads
-     * it through the same join the platform would.
-     */
-    /**
-     * The highest number among the scope's live items.
-     *
      * <p>Over the whole view rather than one family: there is one number space
      * per scope now, so the alternative implementation this stands in for —
      * {@code max(number) + 1} — would compute exactly this.
@@ -1455,8 +1448,7 @@ class ItemDomainIT {
         return out;
     }
 
-    /** The scope-wide high-water mark, read around the ORM. */
-    /** The per-view counter, read around the ORM for the same reason as below. */
+    /** The per-view counter, read around the ORM for the red states above. */
     private long perViewMark() {
         return markFromCatalog("SELECT n.high_water_mark FROM worklist.number_space n "
             + "JOIN worklist.selector s ON s.id = n.selector_id "

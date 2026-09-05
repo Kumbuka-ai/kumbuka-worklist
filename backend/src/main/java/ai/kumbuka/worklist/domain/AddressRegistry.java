@@ -51,6 +51,26 @@ public class AddressRegistry {
     @Inject SelectorRegistry selectors;
 
     /**
+     * The vocabulary stage, without a row behind it.
+     *
+     * <p>For the two verbs that act on no existing object. {@code create} and
+     * {@code query} take the view as an argument rather than as an address, so
+     * they never reach a resolution — and without this they would never reach
+     * the vocabulary stage either.
+     *
+     * <p><strong>Measured before this existed:</strong> a milestone or an
+     * iteration could be created in a scope that had not declared the view,
+     * because only the item allocator asks. The row was written, it was numbered,
+     * and the address it answered with resolved to a refusal on the very next
+     * call. An object that exists at an address nothing can address is worse than
+     * a refused create, and it was reachable in one call.
+     */
+    @Transactional
+    public void requireView(UUID scopeId, String view) {
+        selectors.require(scopeId, view);
+    }
+
+    /**
      * The item at that number, or a typed refusal.
      *
      * <p>The view is resolved to its selector row and passed into the lookup, so

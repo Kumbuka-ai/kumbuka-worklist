@@ -54,6 +54,31 @@ public final class SurfaceFixture {
         PlatformFixture.grantDirectoryAccess();
     }
 
+    /**
+     * A second scope of the same tenant, visible and empty of vocabulary.
+     *
+     * <p>The probe scope acquires declarations as other classes run against it,
+     * so it cannot be used to observe what an UNDECLARED view answers — the
+     * assertion would pass or fail by execution order. This one is published for
+     * the probe that needs it and nothing declares anything in it.
+     *
+     * <p>Visible because the read contract joins a scope to the accounts of its
+     * tenant: publishing the row is enough, and the member sees it for the same
+     * reason it sees the other one.
+     *
+     * @return the slug, so the caller addresses it by the name it published
+     */
+    public static String publishEmptyScope(String slug, java.util.UUID id) {
+        PlatformFixture.run(
+            "SELECT set_config('app.tenant_id', '"
+                + SubstrateDatabaseResource.TENANT_ID + "', false)",
+            "INSERT INTO public.scope (id, tenant_id, slug, kind) SELECT '" + id + "', '"
+                + SubstrateDatabaseResource.TENANT_ID + "', '" + slug + "', 'project' "
+                + "WHERE NOT EXISTS (SELECT 1 FROM public.scope WHERE id = '" + id + "')",
+            "RESET app.tenant_id");
+        return slug;
+    }
+
     /** Calls as the subject the scope is open to. */
     public static void asMember(TestIdentityAssociation identity) {
         as(identity, MEMBER);
