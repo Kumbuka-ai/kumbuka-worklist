@@ -522,7 +522,10 @@ class SchemaConstraintIT {
             st.setObject(1, id);
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
-            st.setString(4, "T" + UUID.randomUUID().toString().replace("-", "")
+            // Lower case, because the form constraint says so since V6, and
+            // deliberately not one of the three views: this class plants rows to
+            // prove a constraint on, and the constraint checks form only.
+            st.setString(4, "t" + UUID.randomUUID().toString().replace("-", "")
                 .substring(0, 12));
             st.executeUpdate();
         }

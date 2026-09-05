@@ -75,6 +75,36 @@ public class ItemRepository {
         return itemId == null ? null : em.find(Item.class, itemId);
     }
 
+    /**
+     * The item at one address, or null.
+     *
+     * <p>The store is keyed by a surrogate id and the surface addresses by
+     * number, so something has to turn the second into the first. It is here
+     * rather than in the surface because a lookup by a stored value is a read
+     * of this schema, and a surface that reconstructed it by walking the
+     * scope's items would be a second reader of the same index — one that gets
+     * slower with the corpus and answers the same question worse.
+     *
+     * <p><strong>The selector is part of the query and not an assumption.</strong>
+     * Under scope-wide allocation the number alone would already identify the
+     * row, and matching on the selector as well is what makes an address whose
+     * view does not fit the object a not-found instead of a second address
+     * resolving to it. Uniqueness in this store is the triple scope, selector
+     * and number under both allocation modes, and this reads it as the triple.
+     */
+    @Transactional
+    public Item byAddress(UUID scopeId, UUID selectorId, long number) {
+        return em.createQuery(
+                "SELECT i FROM Item i WHERE i.scopeId = :scope "
+                    + "AND i.selectorId = :selector AND i.number = :number", Item.class)
+            .setParameter(P_SCOPE, scopeId)
+            .setParameter("selector", selectorId)
+            .setParameter("number", number)
+            .getResultStream()
+            .findFirst()
+            .orElse(null);
+    }
+
     /** The selector of that id, or null. */
     @Transactional
     public Selector selectorById(UUID selectorId) {

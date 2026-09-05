@@ -57,6 +57,7 @@ class FailClosedProbeIT {
     }
 
     @Inject ItemService items;
+    @Inject ai.kumbuka.worklist.domain.SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
     @Inject TenantContext tenantContext;
 
@@ -205,11 +206,25 @@ class FailClosedProbeIT {
      */
     private void plantOneItemPerTenant() throws Exception {
         try (AutoCloseable ignored = tenantContext.bind(tenantA)) {
+            itemView();
             items.create(SCOPE, java.util.Map.of("title", titleA(), "status", status()));
         }
         try (AutoCloseable ignored = tenantContext.bind(tenantB)) {
+            itemView();
             items.create(SCOPE, java.util.Map.of("title", titleB(), "status", status()));
         }
+    }
+
+    /**
+     * The item view, declared under the tenant currently bound.
+     *
+     * <p>Inside the binding and not once for the class, for the same reason the
+     * status is: a selector is tenant-scoped like everything else here, so each
+     * tenant declares its own and neither can see the other's. Declaring is
+     * idempotent, so a second call under the same tenant costs one query.
+     */
+    private void itemView() {
+        selectors.declare(SCOPE, ai.kumbuka.worklist.domain.Selector.ITEM);
     }
 
     /**

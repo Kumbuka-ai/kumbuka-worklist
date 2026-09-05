@@ -70,6 +70,18 @@ public class WorklistException extends RuntimeException {
         SELECTOR_WITHDRAWN,
 
         /**
+         * The token is well formed and names none of the three views.
+         *
+         * <p>Kept apart from {@link #SELECTOR_UNDECLARED}, which says that a
+         * view exists and this scope has not declared it yet — a state a
+         * caller fixes by declaring. This one says the token could never name
+         * anything here, whatever the scope does, and no declaration fixes
+         * it. Collapsing the two would send a caller off to declare a fourth
+         * view that cannot exist.
+         */
+        VIEW_UNKNOWN,
+
+        /**
          * A declared value of that identity does not exist in this scope: a
          * status, an attribute, one of its options, or a relation type.
          *
@@ -83,10 +95,24 @@ public class WorklistException extends RuntimeException {
         VALUE_UNDECLARED,
 
         /**
-         * The item was already accepted, so it carries its identifier, and
-         * that is allocated once.
+         * The intake gate was reached and this scheme has no carrier for the
+         * business identifier it is supposed to allocate.
+         *
+         * <p>It replaces {@code ALREADY_ACCEPTED}, which said that an item
+         * carried its identifier already and that one is allocated once. That
+         * sentence stopped being the truth when the selector became the view:
+         * the address is allocated with the object, and the family that made
+         * {@code FEAT-51} an identifier is no longer an address space. Keeping
+         * the old reason would have answered a caller with a statement about
+         * an allocation that no longer happens.
+         *
+         * <p>Replacing a refusal reason is a change to a published name, and
+         * it is admissible here for a reason that is measured rather than
+         * assumed: nothing consumes this surface — the estate still runs the
+         * predecessor and this store holds no row. It would not be admissible
+         * later.
          */
-        ALREADY_ACCEPTED,
+        IDENTIFIER_UNDECIDED,
 
         /**
          * A high-water mark may be carried forward and never back. Moving it

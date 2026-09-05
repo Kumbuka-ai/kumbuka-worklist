@@ -1,6 +1,8 @@
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.fixture.ServicePrivateVerbFixture;
+import ai.kumbuka.worklist.surface.VerbSurface;
+import ai.kumbuka.worklist.surface.VerbSurfaceSpecification;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -132,6 +134,16 @@ class VerbVocabularyGuardTest {
         ScopeSettingService.class,
         Set.of("create", "read", "update"));
 
+    /**
+     * The public methods of the verb surface that are not verbs.
+     *
+     * <p>Enumerated rather than filtered by a rule, so that adding one is a
+     * decision somebody wrote down. A rule — "anything ending in Membership" —
+     * would silently admit the next method that happened to match it.
+     */
+    private static final Set<String> SURFACE_MECHANICS = Set.of(
+        "read_membership", "update_membership", "uncarried", "unbuilt");
+
     /** Every verb the scheme carries, across all five addresses. */
     private static Set<String> everythingCarried() {
         return CARRIED_BY_THIS_SCHEME.values().stream()
@@ -174,6 +186,61 @@ class VerbVocabularyGuardTest {
                     service.getKey().getSimpleName(), new TreeSet<>(service.getValue()))
                 .isEqualTo(new TreeSet<>(service.getValue()));
         }
+    }
+
+    // =======================================================================
+    // The same guard, one layer out: the verb surface and its specification
+    // =======================================================================
+
+    /**
+     * The specification claims nothing the platform does not have.
+     *
+     * <p>The surface's conformance probe checks that every one of the
+     * twenty-four is placed in a class and that the routing table agrees with
+     * the placement. What it cannot check is whether the words in that file are
+     * the platform's words at all — it would be reading its own transcription
+     * back. This assertion is the join between the two transcriptions, and it is
+     * the reason a fantasy verb cannot be added to both and pass.
+     */
+    @Test
+    void every_verb_the_specification_places_is_a_platform_verb() {
+        assertThat(PLATFORM_VOCABULARY)
+            .as("the verb surface's specification is transcribed from the same catalogue "
+                + "as the list above, in another file and for another purpose. A name in "
+                + "one and not the other is a transcription that has drifted, and the "
+                + "surface is where it would reach a caller")
+            .containsAll(VerbSurfaceSpecification.everyVerb());
+    }
+
+    /**
+     * The public methods of the verb surface are the carried verbs, and the
+     * named exceptions are named.
+     *
+     * <p>The same invariant as the one above, at the layer where a caller meets
+     * it. A verb dropped from the surface is a verb no caller can reach however
+     * carefully the domain still carries it; a public method beyond the set is a
+     * capability the specification does not describe.
+     *
+     * <p>Four names are not verbs and are listed rather than pattern-matched
+     * away. {@code read_membership} and {@code update_membership} are the same
+     * two verbs at the address that grows a segment — Java cannot spell one name
+     * twice with different parameters here, and a membership is addressed under
+     * its iteration rather than as a fourth view. {@code uncarried} and
+     * {@code unbuilt} are how the two classes of non-acting verb are refused;
+     * they are the surface's own vocabulary for saying no, not acts of their
+     * own.
+     */
+    @Test
+    void the_public_methods_of_the_verb_surface_are_the_carried_verbs() {
+        Set<String> expected = new TreeSet<>(
+            VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED));
+        expected.addAll(SURFACE_MECHANICS);
+
+        assertThat(publicVerbsOf(VerbSurface.class))
+            .as("the verb surface offers the carried verbs and the two refusals, and "
+                + "nothing else. A method beyond this set is an act with no row in the "
+                + "specification; one missing is a row with no act — %s", expected)
+            .isEqualTo(expected);
     }
 
     /**

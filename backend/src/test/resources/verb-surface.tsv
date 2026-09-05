@@ -1,0 +1,144 @@
+# The verb surface of the worklist scheme.
+#
+# THIS FILE IS THE EXPECTATION. It is transcribed from the dispatch of this
+# sub-sprint and from the ratified concept documents — the verb catalogue's
+# mapping table 7.2, its capability declaration in section 5.2, and the
+# facade's projection onto REST — and it is deliberately NOT derived from the
+# built code: a probe that reads its expectation out of the thing it is
+# probing checks that two copies agree, never that either is right. Both
+# expositions are probed against this one file and neither is the source for
+# the other.
+#
+# Columns, tab-separated:
+#   class     carried | uncarried | unbuilt | platform | refusal | binding | extension
+#   verb      the platform verb name, or '-' where the row names no verb
+#   method    the HTTP method, or '-' where the row has no HTTP form
+#   path      the form, exactly as it must appear
+#   depth     item | membership | collection | none
+#   repeat    the declared repetition behaviour
+#
+# THE TWENTY-FOUR VERBS ARE ALL HERE, in one of four classes. A verb missing
+# from this file is a verb nobody decided about, which is the state this file
+# exists to make impossible.
+#
+# ---------------------------------------------------------------------------
+# CARRIED -- the ten this scheme has and this service has built
+# ---------------------------------------------------------------------------
+# Probed END TO END against a running service and a running database: each is
+# called and must be answered by the surface rather than by the framework's
+# own not-found. That is the coverage half.
+#
+# `read` and `update` appear twice because a membership is addressed under its
+# iteration, as a second id segment. That is not a fourth view: the address
+# grows a segment, and the verb is the same word aimed at a different thing.
+
+class	verb	method	path	depth	repeat
+carried	create	POST	/api/{scope}/{selector}	collection	idempotency-key
+carried	query	GET	/api/{scope}/{selector}	collection	none
+carried	read	GET	/api/{scope}/{selector}/{id}	item	none
+carried	read	GET	/api/{scope}/{selector}/{id}/{member}	membership	none
+carried	update	PATCH	/api/{scope}/{selector}/{id}	item	conflict-token
+carried	update	PATCH	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
+carried	accept	POST	/api/{scope}/{selector}/{id}:accept	item	transition-guard
+carried	withdraw	POST	/api/{scope}/{selector}/{id}:withdraw	item	transition-guard
+carried	close	POST	/api/{scope}/{selector}/{id}:close	item	transition-guard
+carried	advance	POST	/api/{scope}/{selector}:advance	collection	exactly-one
+carried	plan	POST	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
+carried	unplan	DELETE	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
+
+# ---------------------------------------------------------------------------
+# UNCARRIED -- the seven the capability declaration does not give this scheme
+# ---------------------------------------------------------------------------
+# Each answers a typed category error naming the reason -- never a 404, never
+# an unimplemented path, never a silent absence. A caller that hears one can
+# stop looking.
+#
+# `send` and `append` are absent because an item never freezes: there is
+# nothing for an author to commit outward and nothing for an addendum to hang
+# off. The termination verbs beyond `close` belong to an exchange, which has
+# an executor; an item has a declared status instead. `digest` is the memory
+# scheme's.
+
+uncarried	send	POST	/api/{scope}/{selector}/{id}:send	item	none
+uncarried	append	POST	/api/{scope}/{selector}/{id}:append	item	none
+uncarried	abandon	POST	/api/{scope}/{selector}/{id}:abandon	item	none
+uncarried	block	POST	/api/{scope}/{selector}/{id}:block	item	none
+uncarried	resume	POST	/api/{scope}/{selector}/{id}:resume	item	none
+uncarried	consume	POST	/api/{scope}/{selector}/{id}:consume	item	none
+uncarried	digest	POST	/api/{scope}/{selector}:digest	collection	none
+
+# ---------------------------------------------------------------------------
+# UNBUILT -- the six this scheme carries and this service has not built
+# ---------------------------------------------------------------------------
+# The declaration gives the worklist scheme the claim family, the graph verbs
+# and validate. None of them exists in the domain. They answer 501 by name,
+# which is a different sentence from "not carried": that one says the act does
+# not exist here and never will, and a caller that believes it stops asking.
+#
+# THE FORM BELOW IS PROVISIONAL FOR THE GRAPH VERBS. `relate` and `unrelate`
+# are ratified as POST and DELETE on a sub-collection, and this surface has no
+# sub-collection for them yet. They are written at item depth so that the
+# refusal is reachable at all; the run that builds them decides the form, and
+# changing these two rows is expected rather than a drift.
+
+unbuilt	claim	POST	/api/{scope}/{selector}/{id}:claim	item	none
+unbuilt	release	POST	/api/{scope}/{selector}/{id}:release	item	none
+unbuilt	relate	POST	/api/{scope}/{selector}/{id}:relate	item	none
+unbuilt	unrelate	POST	/api/{scope}/{selector}/{id}:unrelate	item	none
+unbuilt	validate	POST	/api/{scope}/{selector}/{id}:validate	item	none
+unbuilt	claim_next	POST	/api/{scope}/{selector}:claim_next	collection	none
+
+# ---------------------------------------------------------------------------
+# PLATFORM -- answered above the services, not by this one
+# ---------------------------------------------------------------------------
+# `scopes` asks which scopes a subject may see. It is answered by the platform
+# layer against the read contract, and in a community installation by whatever
+# stands in for it. It is not addressed at a view, so there is no form of it
+# here at all -- which is why it is its own class rather than an uncarried
+# verb with an invented path.
+
+platform	scopes	-	-	none	none
+
+# ---------------------------------------------------------------------------
+# THE REFUSAL
+# ---------------------------------------------------------------------------
+# A writing verb on a truncated address that declares no set semantics: 405
+# with `Allow`. The only declarable set semantics is exactly one, which
+# `create` has and `advance` has and no other verb of this scheme does.
+
+refusal	-	POST	/api/{scope}/{selector}:{verb}	collection	none
+
+# ---------------------------------------------------------------------------
+# THE BINDINGS
+# ---------------------------------------------------------------------------
+# What the framework may have registered. These are probed STATICALLY against
+# the annotations, and that is the closure half: a route outside this list is
+# a violation, whatever it does.
+#
+# There are fewer bindings than outward forms, and the reason is measured
+# rather than chosen. Quarkus REST 3.33.2, measured 2026-09-01 in the sibling
+# service: a path template takes the whole segment it appears in, and a
+# narrowing regex on it is ignored -- so `@Path("{id}:close")` registers as
+# `{id}` and the colon verbs would collapse into one route. The colon is
+# therefore split off in the surface, from a table the probe reads separately.
+# The outward form is unchanged; only where the split happens moved.
+
+binding	-	POST	/api/{scope}/{selector}	collection	-
+binding	-	GET	/api/{scope}/{selector}	collection	-
+binding	-	GET	/api/{scope}/{selector}/{id}	item	-
+binding	-	PATCH	/api/{scope}/{selector}/{id}	item	-
+binding	-	POST	/api/{scope}/{selector}/{id}	item	-
+binding	-	GET	/api/{scope}/{selector}/{id}/{member}	membership	-
+binding	-	PATCH	/api/{scope}/{selector}/{id}/{member}	membership	-
+binding	-	POST	/api/{scope}/{selector}/{id}/{member}	membership	-
+binding	-	DELETE	/api/{scope}/{selector}/{id}/{member}	membership	-
+
+# ---------------------------------------------------------------------------
+# THE DECLARED EXTENSIONS
+# ---------------------------------------------------------------------------
+# REST is extensible while an extension adds no effect: reads, projections,
+# protocol furniture. State changes come from a verb, without exception. Every
+# extension is DECLARED, which is what lets the probe check closure at all.
+
+extension	-	GET	/api/whoami	none	-
+extension	-	POST	/mcp	none	-

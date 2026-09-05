@@ -126,6 +126,22 @@
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            The programmatic test identity, for the surface probes.
+
+            The alternative is a Keycloak per suite, and the two-realm one this
+            repository already starts is what proves the REALM binding — a
+            question about which issuer is trusted. What the surface probes ask
+            is a different question: given an authenticated subject, what does
+            the check order answer. Minting real tokens to ask it would put a
+            container in front of every assertion about a status code, and the
+            thing under test would be the same either way.
+        -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-test-security</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
