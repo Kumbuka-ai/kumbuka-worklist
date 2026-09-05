@@ -131,7 +131,10 @@ public class WorklistResource {
         return switch (at.method()) {
             case ADVANCE -> ok(scope, verbs.advance(caller.subject(), scope, at.address(),
                 unquote(ifMatch)));
-            case CLAIM_NEXT -> unbuilt(scope, at.address(), null, at.verb());
+            case CLAIM_NEXT -> ok(scope, verbs.claimNext(caller.subject(), scope,
+                at.address(),
+                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
+            case VALIDATE -> ok(scope, verbs.validate(caller.subject(), scope, at.address()));
             case DIGEST -> uncarried(scope, at.address(), null, at.verb());
             default -> throw new IllegalStateException(
                 "'" + at.verb() + "' is declared at collection depth and has no arm here");
@@ -226,12 +229,19 @@ public class WorklistResource {
                 Payloads.withdrawal(read(body, Payloads.WithdrawRequest.class))));
             case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token));
 
-            case CLAIM, RELEASE, RELATE, UNRELATE, VALIDATE ->
-                unbuilt(scope, selector, id, at.verb());
+            case CLAIM -> ok(scope, verbs.claim(subject, scope, selector, id,
+                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
+            case RELEASE -> ok(scope, verbs.release(subject, scope, selector, id,
+                Payloads.releaseOf(read(body, Payloads.ReleaseRequest.class))));
+            case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
+                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+            case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
+                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
 
-            case ADVANCE, CLAIM_NEXT, DIGEST -> throw new IllegalStateException(
+            case VALIDATE, ADVANCE, CLAIM_NEXT, DIGEST -> throw new IllegalStateException(
                 "'" + at.verb() + "' acts at collection depth and cannot arrive here");
         };
     }

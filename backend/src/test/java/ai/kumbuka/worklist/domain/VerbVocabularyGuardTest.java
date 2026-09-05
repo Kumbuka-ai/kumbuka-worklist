@@ -89,7 +89,7 @@ class VerbVocabularyGuardTest {
      * The verbs each service of this scheme carries TODAY, and therefore
      * exactly the public methods each of those classes has.
      *
-     * <p>The scheme is five services and not one, because the platform
+     * <p>The scheme is six services and not one, because the platform
      * carries ONE vocabulary and it is the ADDRESS that says which object is
      * meant: {@code update} on an iteration and {@code update} on a
      * membership are the same word aimed at two different things, and in Java
@@ -98,12 +98,6 @@ class VerbVocabularyGuardTest {
      * pooling would let a verb move from one service to another unnoticed,
      * which is the drift it exists against wearing a different hat.
      *
-     * <p>The draw, the graph verbs and {@code validate} are still absent, and
-     * they belong here when they are built and not before: a verb listed with
-     * no method behind it would make this guard red on a truthful class, and
-     * a guard that is red for being ahead of the code gets suppressed rather
-     * than fixed.
-     *
      * <p>{@code close} is absent from {@link ItemService} for a different
      * reason and stays absent: an item's terminality is reached through
      * {@code update} against scope-declared status vocabulary, and
@@ -111,10 +105,27 @@ class VerbVocabularyGuardTest {
      * That asymmetry against the sibling service is a decision, not a gap —
      * and the two entries below that DO carry {@code close} are what makes it
      * an asymmetry rather than an omission.
+     *
+     * <p>The claim family sits on {@link ClaimService}, a service of its own,
+     * because the lease has its own table and its own lifecycle and the item
+     * domain knows nothing about it. Its three verbs — {@code claim},
+     * {@code release} and {@code claim_next} — are the platform's own words
+     * spelled identically to the sibling service's.
+     *
+     * <p>{@code relate}, {@code unrelate} and {@code validate} sit on
+     * {@link ItemService}: the graph edges the first two move are stored
+     * alongside the items in {@code item_relation}, and the cross-item
+     * consistency the third walks is the scope's item graph. A separate
+     * relation service would put the walker in one place and the edge
+     * insertion in another, and it is the same domain either way.
      */
     private static final Map<Class<?>, Set<String>> CARRIED_BY_THIS_SCHEME = Map.of(
         ItemService.class,
-        Set.of("create", "read", "update", "withdraw", "query", "accept"),
+        Set.of("create", "read", "update", "withdraw", "query", "accept",
+            "relate", "unrelate", "validate"),
+
+        ClaimService.class,
+        Set.of("claim", "release", "claim_next"),
 
         MilestoneService.class,
         Set.of("create", "read", "update", "query", "close"),

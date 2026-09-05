@@ -161,6 +161,22 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 // that, and it is the same status the surface gives an unbuilt
                 // verb — because it is the same situation seen from the domain.
                 case IDENTIFIER_UNDECIDED -> 501;
+
+                // Claim exclusivity: the row's state says no. A live lease
+                // stands and a second claimant is refused, or a release
+                // arrived at a row nothing holds any more.
+                case CLAIM_HELD, CLAIM_ABSENT, DRAW_EMPTY -> 409;
+
+                // The receipt does not name the lease this row carries. Not
+                // a token conflict — 412 travels with If-Match — and not a
+                // 403 — the row is not hiding from this caller. The receipt
+                // is a value the surface takes; a wrong value is a 422 in
+                // the same class as VALUE_UNDECLARED.
+                case CLAIM_RECEIPT_UNKNOWN -> 422;
+
+                // The edge named does not exist. A withdrawn one reads the
+                // same as an absent one from here; the same 404 group.
+                case RELATION_UNKNOWN -> 404;
             };
         }
     }

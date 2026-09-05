@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.AddressRegistry;
+import ai.kumbuka.worklist.domain.ClaimService;
 import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
@@ -14,6 +15,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -78,6 +80,7 @@ public class VerbSurface {
     @Inject IterationService iterations;
     @Inject MilestoneService milestones;
     @Inject MembershipService memberships;
+    @Inject ClaimService claims;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
 
@@ -401,6 +404,170 @@ public class VerbSurface {
     }
 
     // ======================================================================
+    // The claim family
+    // ======================================================================
+
+    /**
+     * Take a lease on a named item.
+     *
+     * <p>Only addressable at the item view. The lease is on an item — a
+     * milestone or an iteration has no claim to take, and refusing the
+     * mismatched view here says so as a category error rather than as a
+     * cascaded not-found from the id lookup.
+     */
+    @Transactional
+    public Result claim(String subject, String rawScope, String rawView, String rawId,
+                        VerbInput.Lease body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "claim");
+        UUID id = resolve(in, target);
+
+        Duration lease = requireLease(body);
+        Map<String, Object> answered = claims.claim(in.scopeId(), id, subject, lease);
+        LOG.infof("claim on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    /**
+     * Give up a lease on a named item, by presenting its receipt.
+     *
+     * <p>No conflict token: the receipt IS the token, minted at claim time and
+     * checked against the row. A caller that has to present two proofs of hold
+     * for the same act is a caller doing two things at once, and one of the
+     * two would eventually stop meaning what it says.
+     */
+    @Transactional
+    public Result release(String subject, String rawScope, String rawView, String rawId,
+                          VerbInput.Release body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "release");
+        UUID id = resolve(in, target);
+
+        String receipt = required(body).receipt();
+        Map<String, Object> answered = claims.release(in.scopeId(), id, receipt);
+        LOG.infof("release on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    /**
+     * Draw the next unclaimed item in a scope and take the lease atomically.
+     *
+     * <p>A truncated address, admissible for the same reason {@code advance}
+     * is: the verb contract declares set semantics and the only declarable one
+     * is exactly one. What is drawn is the oldest unclaimed addressable item,
+     * and the domain runs the pick and the write in one transaction so the
+     * two do not race.
+     */
+    @Transactional
+    public Result claimNext(String subject, String rawScope, String rawView,
+                            VerbInput.Lease body) {
+        Entry in = entry(subject, rawScope, rawView);
+        if (!Selector.ITEM.equals(in.view())) {
+            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
+                "'claim_next' draws an item and is addressed at the item view. The "
+                    + "iteration and milestone views have no draw of their own — an "
+                    + "iteration is promoted with 'advance', and a milestone is set "
+                    + "active by ordinary update against its scope-declared status");
+        }
+        addresses.requireView(in.scopeId(), in.view());
+
+        Duration lease = requireLease(body);
+        Map<String, Object> answered = claims.claimNext(in.scopeId(), subject, lease);
+        LOG.infof("claim_next in scope %s", in.scopeId());
+        // The answer's address is the item that was drawn; read from the
+        // projection rather than remembered from the call, exactly as
+        // {@link #create} does.
+        return at(Selector.ITEM, answered);
+    }
+
+    // ======================================================================
+    // The graph verbs
+    // ======================================================================
+
+    /**
+     * Assert one directed, typed edge from this item to another.
+     *
+     * <p>The source is the addressed item; the target and the type arrive in
+     * the body. Item depth is provisional — the ratified form is a
+     * sub-collection under the item — and this surface has no sub-collection
+     * yet.
+     *
+     * <p>Idempotent under the triple: reasserting an edge that already exists
+     * writes nothing, exactly as the whole-set rewrite in {@code update}
+     * treats an unchanged entry.
+     */
+    @Transactional
+    public Result relate(String subject, String rawScope, String rawView, String rawId,
+                         String conflictToken, VerbInput.Edge body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "relate");
+        UUID from = resolve(in, target);
+
+        VerbInput.Edge edge = required(body);
+        UUID toItemId = uuidOf("to_item", edge.toItem());
+        UUID typeId = uuidOf("type", edge.type());
+
+        Map<String, Object> answered = items.relate(in.scopeId(), from, toItemId, typeId,
+            requireToken(conflictToken));
+        LOG.infof("relate on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    /** Withdraw one asserted edge from this item to another. */
+    @Transactional
+    public Result unrelate(String subject, String rawScope, String rawView, String rawId,
+                           String conflictToken, VerbInput.Edge body) {
+        Entry in = entry(subject, rawScope, rawView);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "unrelate");
+        UUID from = resolve(in, target);
+
+        VerbInput.Edge edge = required(body);
+        UUID toItemId = uuidOf("to_item", edge.toItem());
+        UUID typeId = uuidOf("type", edge.type());
+
+        Map<String, Object> answered = items.unrelate(in.scopeId(), from, toItemId, typeId,
+            requireToken(conflictToken));
+        LOG.infof("unrelate on %s in scope %s", target.id(), in.scopeId());
+        return at(target, answered);
+    }
+
+    // ======================================================================
+    // The validation check
+    // ======================================================================
+
+    /**
+     * Walk the scope and report every consistency it currently holds and every
+     * one it does not.
+     *
+     * <p>Mutates nothing — the concept fixes that in one line — and reports
+     * findings in the answer rather than as a refusal. A caller reading the
+     * report is reading a snapshot of the store's own graph; a caller finding
+     * an empty findings list is reading a scope the platform's checks accept.
+     *
+     * <p>Addressed at the ITEM collection because the concept fixes the target
+     * as the scope, and the item view is the nearest truncation this surface
+     * offers. The other two views are refused as category errors: iterations
+     * and milestones do not carry the platform's cross-item consistencies that
+     * validate is here to walk.
+     */
+    @Transactional
+    public Result validate(String subject, String rawScope, String rawView) {
+        Entry in = entry(subject, rawScope, rawView);
+        if (!Selector.ITEM.equals(in.view())) {
+            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
+                "'validate' walks the scope's cross-item consistencies and is addressed "
+                    + "at the item view. Its ratified target is the scope; the nearest "
+                    + "truncation this surface offers is the item collection, and the "
+                    + "iteration and milestone views have no cross-item graph to walk");
+        }
+        addresses.requireView(in.scopeId(), in.view());
+
+        Map<String, Object> answered = items.validate(in.scopeId());
+        LOG.debugf("validate over scope %s", in.scopeId());
+        return new Result(new AddressParser.Target(Selector.ITEM, null, null), answered);
+    }
+
+    // ======================================================================
     // The verbs that do not act, and the two different reasons for it
     // ======================================================================
 
@@ -559,6 +726,44 @@ public class VerbSurface {
                 "this verb takes arguments and none arrived.");
         }
         return body;
+    }
+
+    /** A lease duration, refused when the body arrives without a positive one. */
+    private static Duration requireLease(VerbInput.Lease body) {
+        VerbInput.Lease lease = required(body);
+        if (lease.durationSeconds() <= 0) {
+            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                "the duration of a lease is a positive number of seconds. A zero "
+                    + "duration is a lease that is inert the moment it is granted, and a "
+                    + "negative one is not a duration at all — the predecessor's exact "
+                    + "defect, refused here rather than passed on to a domain that would "
+                    + "refuse it too");
+        }
+        return Duration.ofSeconds(lease.durationSeconds());
+    }
+
+    /**
+     * A UUID argument, refused where it does not parse.
+     *
+     * <p>Named here rather than in the domain because the domain never sees a
+     * string — the surface converts on the way in, so a caller sending
+     * something that is not a uuid is told which of their arguments it was
+     * rather than being told a hash lookup did not find a row.
+     */
+    private static UUID uuidOf(String name, String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                "the argument '" + name + "' is required and did not arrive.");
+        }
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException notAnId) {
+            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                "the argument '" + name + "' is a declared identity and reads as a uuid: '"
+                    + raw + "' is not one. A declared value's display name is a property "
+                    + "that may be changed at will, so a caller writing one would be "
+                    + "writing something that is allowed to move under it.");
+        }
     }
 
     /**

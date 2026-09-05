@@ -83,4 +83,41 @@ public final class VerbInput {
      */
     public record Withdrawal(String status) {
     }
+
+    /**
+     * How long a claim lease lasts.
+     *
+     * <p>Carried as seconds because the transport carries integers legibly and
+     * a duration string is a form callers have to guess at. The domain refuses
+     * a non-positive value with a message that says why — the same refusal
+     * that turns a zero-duration claim into a typed error.
+     *
+     * <p>Never a service constant: the concept fixes that a claim is a lease
+     * for a duration and rejects a non-positive one, and it does not fix the
+     * duration itself. A number chosen here would be a platform decision
+     * wearing an implementation's clothes.
+     */
+    public record Lease(long durationSeconds) {
+    }
+
+    /**
+     * The receipt {@code release} presents to the row it ends.
+     *
+     * <p>Opaque to the surface — the domain compares it as a string. A caller
+     * that parses it is a caller that breaks when the generator changes; the
+     * check is on the value in the row, not on a shape.
+     */
+    public record Release(String receipt) {
+    }
+
+    /**
+     * An edge {@code relate} asserts, or {@code unrelate} withdraws.
+     *
+     * <p>The source is the address the verb runs against. The target and the
+     * type both arrive as ids — a declared value travels as its identity
+     * rather than as its display name, which is the same rule
+     * {@link Fields}'s status carries.
+     */
+    public record Edge(String toItem, String type) {
+    }
 }
