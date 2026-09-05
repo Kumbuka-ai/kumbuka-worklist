@@ -266,19 +266,57 @@ class ItemFieldsTest {
     // ------------------------------------------------------------------
 
     @Test
-    void the_selector_token_pattern_accepts_the_corpus_and_rejects_the_rest() {
-        assertThat(Selector.TOKEN_PATTERN.matcher("FEAT").matches()).isTrue();
-        assertThat(Selector.TOKEN_PATTERN.matcher("F").matches()).isTrue();
-        assertThat(Selector.TOKEN_PATTERN.matcher("D-GTM").matches()).isTrue();
-        assertThat(Selector.TOKEN_PATTERN.matcher("CHORE09").matches()).isTrue();
+    void the_selector_token_pattern_accepts_the_three_views_and_rejects_upper_case() {
+        for (String view : Selector.VIEWS) {
+            assertThat(Selector.TOKEN_PATTERN.matcher(view).matches())
+                .as("'%s' is a view and the form has to admit it", view)
+                .isTrue();
+        }
+        assertThat(Selector.TOKEN_PATTERN.matcher("a").matches()).isTrue();
+        assertThat(Selector.TOKEN_PATTERN.matcher("d-gtm").matches()).isTrue();
+        assertThat(Selector.TOKEN_PATTERN.matcher("chore09").matches()).isTrue();
 
-        assertThat(Selector.TOKEN_PATTERN.matcher("1FEAT").matches())
+        assertThat(Selector.TOKEN_PATTERN.matcher("FEAT").matches())
+            .as("upper case is REJECTED and never folded. That is a decision taken with "
+                + "the view model, not a discovery: ADR-0009 fixes the four address parts "
+                + "and says nothing about the case of the selector, and the rest of the "
+                + "address settles it the same way — the scope is a DNS label, and folding "
+                + "would make two strings resolve to one selector")
+            .isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("Item").matches())
+            .as("which is what makes this the interesting case rather than the shouted "
+                + "one: 'Item' is what a caller types by habit, and it must not quietly "
+                + "become 'item'")
+            .isFalse();
+
+        assertThat(Selector.TOKEN_PATTERN.matcher("1item").matches())
             .as("a leading digit — the number is the other half of the address")
             .isFalse();
-        assertThat(Selector.TOKEN_PATTERN.matcher("FEAT-").matches()).isFalse();
-        assertThat(Selector.TOKEN_PATTERN.matcher("D--GTM").matches()).isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("item-").matches()).isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("d--gtm").matches()).isFalse();
         assertThat(Selector.TOKEN_PATTERN.matcher("").matches()).isFalse();
-        assertThat(Selector.TOKEN_PATTERN.matcher("FEAT 51").matches()).isFalse();
+        assertThat(Selector.TOKEN_PATTERN.matcher("item 51").matches()).isFalse();
+    }
+
+    /**
+     * The form admits more than the three, and the three are decided elsewhere.
+     *
+     * <p>Form and vocabulary are two stages of the ratified check order: a
+     * malformed token is decidable without knowing any scope, and which tokens
+     * this platform admits is a different statement in a different place. If the
+     * pattern were narrowed to the three literals, a token outside them would be
+     * a grammar error rather than the typed refusal that names the three — and
+     * the red probe on the view check would have nothing left to observe.
+     */
+    @Test
+    void the_form_is_wider_than_the_vocabulary_and_that_is_the_two_stages() {
+        assertThat(Selector.TOKEN_PATTERN.matcher("sprint").matches())
+            .as("well formed, and not a view. The form says nothing about whether this "
+                + "service holds such a thing")
+            .isTrue();
+        assertThat(Selector.VIEWS)
+            .as("and the vocabulary is what refuses it, by name")
+            .doesNotContain("sprint");
     }
 
     /**
@@ -296,7 +334,7 @@ class ItemFieldsTest {
      */
     @Test
     void the_selector_token_pattern_decides_a_long_input_without_recursing() {
-        String pathological = "A" + "-b".repeat(50_000) + "!";
+        String pathological = "a" + "-b".repeat(50_000) + "!";
 
         assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () ->
             assertThat(Selector.TOKEN_PATTERN.matcher(pathological).matches())

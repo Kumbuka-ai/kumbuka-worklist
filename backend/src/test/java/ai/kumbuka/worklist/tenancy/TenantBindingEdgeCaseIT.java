@@ -51,6 +51,7 @@ class TenantBindingEdgeCaseIT {
     @Inject @PersistenceUnitExtension HibernateTenantResolver hibernateResolver;
 
     @Inject ItemService items;
+    @Inject ai.kumbuka.worklist.domain.SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
 
     // -----------------------------------------------------------------------
@@ -201,6 +202,11 @@ class TenantBindingEdgeCaseIT {
             // its own and no other tenant can see it.
             String status = String.valueOf(
                 vocabulary.declareStatus(scope, "open", 1, true, false, false, false).id);
+            // And the item view, under the same binding and for the same
+            // reason: an item acquires its address at creation, so the view it
+            // is addressed under has to exist first — and a selector is
+            // tenant-scoped like the vocabulary above it.
+            selectors.declare(scope, ai.kumbuka.worklist.domain.Selector.ITEM);
             var created = items.create(scope,
                 java.util.Map.of("title", "count-probe", "status", status));
             assertThat(created.get("title")).isEqualTo("count-probe");

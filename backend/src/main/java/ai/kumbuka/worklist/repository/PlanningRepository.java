@@ -47,6 +47,7 @@ public class PlanningRepository {
     private static final String P_SCOPE = "scope";
     private static final String P_ITERATION = "iteration";
     private static final String P_STATUS = "status";
+    private static final String P_NUMBER = "number";
 
     @Inject EntityManager em;
 
@@ -58,6 +59,23 @@ public class PlanningRepository {
     @Transactional
     public Milestone milestoneById(UUID milestoneId) {
         return milestoneId == null ? null : em.find(Milestone.class, milestoneId);
+    }
+
+    /**
+     * The milestone at that number in a scope, or null.
+     *
+     * <p>The surface addresses by number and the store is keyed by a surrogate
+     * id; this is where the one becomes the other. Numbers on this axis come
+     * from the scope's own high-water mark and are never reused, so the pair
+     * scope and number identifies at most one row for the life of the scope.
+     */
+    @Transactional
+    public Milestone milestoneByNumber(UUID scopeId, long number) {
+        return first(em.createQuery(
+                "SELECT m FROM Milestone m WHERE m.scopeId = :scope AND m.number = :number",
+                Milestone.class)
+            .setParameter(P_SCOPE, scopeId)
+            .setParameter(P_NUMBER, number));
     }
 
     /** Every milestone of a scope, in the axis's own order. */
@@ -102,6 +120,16 @@ public class PlanningRepository {
     @Transactional
     public Iteration iterationById(UUID iterationId) {
         return iterationId == null ? null : em.find(Iteration.class, iterationId);
+    }
+
+    /** The iteration at that number in a scope, or null. See {@link #milestoneByNumber}. */
+    @Transactional
+    public Iteration iterationByNumber(UUID scopeId, long number) {
+        return first(em.createQuery(
+                "SELECT i FROM Iteration i WHERE i.scopeId = :scope AND i.number = :number",
+                Iteration.class)
+            .setParameter(P_SCOPE, scopeId)
+            .setParameter(P_NUMBER, number));
     }
 
     /** Every iteration of a scope, in the order they are to be worked. */

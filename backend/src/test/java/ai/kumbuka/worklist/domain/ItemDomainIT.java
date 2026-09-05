@@ -418,16 +418,18 @@ class ItemDomainIT {
      */
     @Test
     void a_withdrawn_item_does_not_give_its_number_back() {
-        String token = "PF" + shortId();
-        selectors.declare(SCOPE, token);
+        UUID first = createdId("number probe 1");
+        UUID second = createdId("number probe 2");
+        UUID third = createdId("number probe 3");
 
-        UUID first = accepted(token, "number probe 1");
-        UUID second = accepted(token, "number probe 2");
-        UUID third = accepted(token, "number probe 3");
-
-        assertThat(numberOf(first)).isEqualTo(1L);
-        assertThat(numberOf(second)).isEqualTo(2L);
-        assertThat(numberOf(third)).isEqualTo(3L);
+        // Relative and not absolute: the counter is the SCOPE's now, one for
+        // every view, and the probes of this class share a scope. What the
+        // guarantee is about is that consecutive allocations are consecutive
+        // and that none comes back — neither of which says where counting
+        // started.
+        long thirdNumber = numberOf(third);
+        assertThat(numberOf(second)).isEqualTo(numberOf(first) + 1);
+        assertThat(thirdNumber).isEqualTo(numberOf(second) + 1);
 
         // The highest one is taken back. This is what the predecessor's
         // `delete` would have done, and it removed the row.
@@ -436,19 +438,19 @@ class ItemDomainIT {
         assertThat(items.read(SCOPE, third).get("number"))
             .as("a withdrawn item keeps its address. That is what makes the mark a mark "
                 + "by construction rather than by a rule somebody has to keep")
-            .isEqualTo(3L);
+            .isEqualTo(thirdNumber);
 
         // RED STATE, computed on the real data and BEFORE the next
         // allocation, because that is the moment the alternative
         // implementation would have made its decision. Measuring it
         // afterwards would measure a different question.
-        long derivedFromLiveRows = highestLiveNumber(token) + 1;
+        long derivedFromLiveRows = highestLiveNumber() + 1;
 
-        long allocated = numberOf(accepted(token, "number probe 4"));
+        long allocated = numberOf(createdId("number probe 4"));
         assertThat(allocated)
             .as("the next allocation is the next number up, whatever happened to the "
                 + "items already holding numbers")
-            .isEqualTo(4L);
+            .isEqualTo(thirdNumber + 1);
 
         assertThat(derivedFromLiveRows)
             .as("RED STATE, observed: a mark derived from `max(number) + 1` over the live "
@@ -462,91 +464,96 @@ class ItemDomainIT {
                 + "still holds. Two items would answer to one address, and every "
                 + "reference ever written to it would become ambiguous with no error "
                 + "anywhere")
-            .isEqualTo(numberOf(third));
+            .isEqualTo(thirdNumber);
     }
+
 
     /**
      * The mark can be carried forward, for the import that has not happened
      * yet — and never back.
+     *
+     * <p>Carried on the view now, which is where an import of the predecessor's
+     * corpus would arrive: one counter for the scope, and the families that used
+     * to have counters of their own are not address spaces any more.
      */
     @Test
     void the_mark_moves_forward_and_refuses_to_move_back() {
-        String token = "PM" + shortId();
-        selectors.declare(SCOPE, token);
+        itemView();
+        long standing = selectors.markOf(SCOPE, Selector.ITEM);
+        long imported = standing + 500L;
 
-        selectors.carryMarkForward(SCOPE, token, 500L);
-        assertThat(numberOf(accepted(token, "after the import")))
+        selectors.carryMarkForward(SCOPE, Selector.ITEM, imported);
+        assertThat(numberOf(createdId("after the import")))
             .as("an import arrives with numbers already allocated elsewhere, and the mark "
                 + "has to be told where the corpus got to")
-            .isEqualTo(501L);
+            .isEqualTo(imported + 1);
 
         WorklistException refusal = catchWorklistException(() ->
-            selectors.carryMarkForward(SCOPE, token, 100L));
+            selectors.carryMarkForward(SCOPE, Selector.ITEM, standing));
         assertThat(refusal.reason())
             .as("moving a mark back is not a smaller version of moving it forward: it is "
                 + "the act of handing out numbers that are already in use")
             .isEqualTo(WorklistException.Reason.MARK_REGRESSION);
-        assertThat(selectors.markOf(SCOPE, token)).isEqualTo(501L);
+        assertThat(selectors.markOf(SCOPE, Selector.ITEM)).isEqualTo(imported + 1);
     }
 
+
     // ==================================================================
-    // Probe G — the undeclared selector.
+    // Probe G — the undeclared view.
     // ==================================================================
 
     /**
-     * Accepting under a selector that was never declared is refused, and the
-     * selector is NOT created.
+     * Creating in a scope whose view was never declared is refused, and the
+     * view is NOT created by the attempt.
      *
      * <p>The second half is the whole point and is asserted separately. A
      * service that creates a selector on first use answers a misspelt one by
-     * opening a second address space, and afterwards nothing distinguishes
-     * the typo from the intention.
+     * opening a second address space, and afterwards nothing distinguishes the
+     * typo from the intention.
+     *
+     * <p>What moved with the view model is WHEN this is reached: the address is
+     * allocated at creation now, so the refusal arrives at the first write of an
+     * item rather than at its ratification. What it protects is unchanged.
      */
     @Test
-    void an_undeclared_selector_is_refused_and_is_not_created_by_the_attempt() {
-        String neverDeclared = "PG" + shortId();
-        UUID id = createdId("undeclared probe");
-        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
+    void an_undeclared_view_is_refused_and_is_not_created_by_the_attempt() {
+        UUID untouchedScope = UUID.randomUUID();
 
         WorklistException refusal = catchWorklistException(() ->
-            items.accept(SCOPE, id, neverDeclared, conflictToken));
+            items.create(untouchedScope, Map.of(
+                "title", "undeclared probe",
+                "status", String.valueOf(openStatus()))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SELECTOR_UNDECLARED);
-        assertThat(refusal.offenders()).containsExactly(neverDeclared);
+        assertThat(refusal.offenders()).containsExactly(Selector.ITEM);
 
-        // RED STATE, by its trace: had the selector been created on first
-        // use, it would be here now.
-        assertThat(selectors.inScope(SCOPE).stream().map(s -> s.token).toList())
+        // RED STATE, by its trace: had the view been created on first use, it
+        // would be here now.
+        assertThat(selectors.inScope(untouchedScope))
             .as("RED STATE, observed by its absence: creating the selector on first use "
-                + "is the alternative implementation, and it would have left this token "
-                + "in the scope's address spaces. A misspelt selector would then be "
-                + "indistinguishable from an intended one — both exist, both have items")
-            .doesNotContain(neverDeclared);
-
-        assertThat(items.read(SCOPE, id).get("selector"))
-            .as("and the item did not acquire an address")
-            .isNull();
+                + "is the alternative implementation, and it would have left the item view "
+                + "in this scope's address spaces — with an item under it, in a scope "
+                + "nobody had opened")
+            .isEmpty();
     }
 
-    /** A declared selector that was withdrawn accepts nothing further. */
+    /** A declared view that was withdrawn accepts nothing further. */
     @Test
-    void a_withdrawn_selector_accepts_nothing_further() {
-        String token = "PW" + shortId();
-        selectors.declare(SCOPE, token);
-        accepted(token, "before the withdrawal");
-        selectors.withdraw(SCOPE, token);
-
-        UUID id = createdId("after the withdrawal");
-        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
+    void a_withdrawn_view_accepts_nothing_further() {
+        UUID closingScope = UUID.randomUUID();
+        selectors.declare(closingScope, Selector.ITEM);
+        selectors.withdraw(closingScope, Selector.ITEM);
 
         WorklistException refusal = catchWorklistException(() ->
-            items.accept(SCOPE, id, token, conflictToken));
+            items.create(closingScope, Map.of(
+                "title", "after the withdrawal",
+                "status", String.valueOf(openStatus()))));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SELECTOR_WITHDRAWN);
 
-        assertThat(selectors.inScope(SCOPE).stream().map(s -> s.token).toList())
+        assertThat(selectors.inScope(closingScope).stream().map(s -> s.token).toList())
             .as("and the token stays occupied, so it cannot be declared again to mean "
                 + "something else — every address ever issued under it keeps resolving")
-            .contains(token);
+            .contains(Selector.ITEM);
     }
 
     /**
@@ -561,29 +568,29 @@ class ItemDomainIT {
      */
     @Test
     void both_counters_are_maintained_whatever_the_mode_reads() {
-        String first = "NA" + shortId();
-        String second = "NB" + shortId();
-        selectors.declare(SCOPE, first);
-        selectors.declare(SCOPE, second);
-
+        itemView();
         long wideBefore = scopeWideMark();
+        long perViewBefore = perViewMark();
 
-        accepted(first, "counter probe 1");
-        accepted(second, "counter probe 2");
+        createdId("counter probe 1");
+        createdId("counter probe 2");
 
-        assertThat(selectors.markOf(SCOPE, first))
-            .as("each selector draws from its own counter, which is the default position")
-            .isEqualTo(1L);
-        assertThat(selectors.markOf(SCOPE, second))
-            .as("so two selectors legitimately carry the same number — the identity is "
-                + "the triple scope, selector and number")
-            .isEqualTo(1L);
+        assertThat(perViewMark())
+            .as("the per-selector counter advanced by both allocations, though the scope "
+                + "is in the position that does not read it. Keeping it only in the other "
+                + "mode would make switching a reconstruction rather than a read")
+            .isEqualTo(perViewBefore + 2);
 
         assertThat(scopeWideMark())
-            .as("and the scope-wide counter advanced by BOTH allocations, though nothing "
-                + "read it. Keeping it only in the other mode would make switching a "
-                + "reconstruction rather than a read")
+            .as("and so did the scope-wide one, which is the counter this scope's mode "
+                + "reads")
             .isEqualTo(wideBefore + 2);
+
+        assertThat(selectors.markOf(SCOPE, Selector.ITEM))
+            .as("what the registry reports as the standing mark is the counter the mode "
+                + "names — asking where the space stands is asking what the next number "
+                + "will be built on")
+            .isEqualTo(scopeWideMark());
     }
 
     // ==================================================================
@@ -1034,21 +1041,32 @@ class ItemDomainIT {
     // The remaining refusals, each named.
     // ==================================================================
 
-    /** An address is allocated once. */
+    /**
+     * The intake gate refuses, and names the decision it is waiting for.
+     *
+     * <p>This probe used to assert that an address is allocated once, by
+     * accepting twice. Under the view model the address is allocated with the
+     * object, so there is no second allocation to refuse — and what {@code
+     * accept} would allocate instead is an open question about this store. The
+     * guarantee the probe made is not dropped: it is asserted below, on the
+     * address the item already has, which the refusal must leave exactly where
+     * it was.
+     */
     @Test
-    void an_item_is_accepted_once() {
-        String token = "PA" + shortId();
-        selectors.declare(SCOPE, token);
-        UUID id = accepted(token, "double acceptance probe");
+    void the_intake_gate_refuses_and_leaves_the_address_untouched() {
+        UUID id = createdId("intake gate probe");
+        long allocated = numberOf(id);
 
-        WorklistException refusal = catchWorklistException(() -> items.accept(SCOPE, id, token,
+        WorklistException refusal = catchWorklistException(() -> items.accept(SCOPE, id,
             (String) items.read(SCOPE, id).get("conflict_token")));
 
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ALREADY_ACCEPTED);
-        assertThat(items.read(SCOPE, id).get("number"))
-            .as("and the first address is untouched — a re-allocation would make every "
-                + "reference to the old one resolve to something else")
-            .isEqualTo(1L);
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.IDENTIFIER_UNDECIDED);
+        assertThat(refusal.offenders()).containsExactly(String.valueOf(id));
+
+        assertThat(numberOf(id))
+            .as("and the address is untouched — a gate that quietly re-allocated would "
+                + "make every reference to the old address resolve to something else")
+            .isEqualTo(allocated);
     }
 
     /** An item of another scope, or of no scope, is not this scope's item. */
@@ -1122,15 +1140,15 @@ class ItemDomainIT {
 
     /** Declaring twice is the same statement made twice, not a collision. */
     @Test
-    void declaring_a_selector_twice_returns_the_one_that_exists() {
-        String token = "PI" + shortId();
-        UUID first = selectors.declare(SCOPE, token).id;
+    void declaring_a_view_twice_returns_the_one_that_exists() {
+        UUID freshScope = UUID.randomUUID();
+        UUID first = selectors.declare(freshScope, Selector.MILESTONE).id;
 
-        assertThat(selectors.declare(SCOPE, token).id)
+        assertThat(selectors.declare(freshScope, Selector.MILESTONE).id)
             .as("declaration states that the space should exist, and a retry after a "
                 + "timeout should not have to tell 'created' from 'already there'")
             .isEqualTo(first);
-        assertThat(selectors.markOf(SCOPE, token))
+        assertThat(selectors.markOf(freshScope, Selector.MILESTONE))
             .as("and the second declaration did not reset the address space")
             .isZero();
     }
@@ -1317,9 +1335,28 @@ class ItemDomainIT {
 
     /** A created item, with the scope's actionable status. */
     private Map<String, Object> created(String title) {
+        itemView();
         return items.create(SCOPE, Map.of(
             "title", title,
             "status", String.valueOf(openStatus())));
+    }
+
+    /**
+     * The scope's item view, declared before anything is created under it.
+     *
+     * <p>Not scaffolding, and not a shortcut around the declaration rule: it is
+     * the same order the store has always required, moved to where the address
+     * is now allocated. An item acquires its address at creation, so the view it
+     * is addressed under has to exist by then — exactly as a status did before
+     * an item could carry one.
+     *
+     * <p>Idempotent, because declaring is: a second declaration returns the row
+     * that is already there rather than refusing, so calling this from every
+     * fixture costs one query and states the precondition where a reader will
+     * see it.
+     */
+    private void itemView() {
+        selectors.declare(SCOPE, Selector.ITEM);
     }
 
     /** A created item, returning its id. */
@@ -1333,14 +1370,6 @@ class ItemDomainIT {
         arguments.put(field, value);
         arguments.put("conflict_token", items.read(SCOPE, id).get("conflict_token"));
         return items.update(SCOPE, id, arguments);
-    }
-
-    /** A created item, accepted under a selector, returning its id. */
-    private UUID accepted(String selectorToken, String title) {
-        Map<String, Object> created = created(title);
-        UUID id = (UUID) created.get("id");
-        items.accept(SCOPE, id, selectorToken, (String) created.get("conflict_token"));
-        return id;
     }
 
     private long numberOf(UUID id) {
@@ -1379,12 +1408,17 @@ class ItemDomainIT {
      * more: what counts as terminal is the scope's declaration, and this reads
      * it through the same join the platform would.
      */
-    private long highestLiveNumber(String selectorToken) {
+    /**
+     * The highest number among the scope's live items.
+     *
+     * <p>Over the whole view rather than one family: there is one number space
+     * per scope now, so the alternative implementation this stands in for —
+     * {@code max(number) + 1} — would compute exactly this.
+     */
+    private long highestLiveNumber() {
         List<Long> live = new ArrayList<>();
         for (Map<String, Object> item : items.query(SCOPE)) {
-            if (selectorToken.equals(item.get("selector"))
-                && !closedStatus().equals(item.get("status"))
-                && item.get("number") != null) {
+            if (!closedStatus().equals(item.get("status")) && item.get("number") != null) {
                 live.add((Long) item.get("number"));
             }
         }
@@ -1422,19 +1456,29 @@ class ItemDomainIT {
     }
 
     /** The scope-wide high-water mark, read around the ORM. */
-    private long scopeWideMark() throws RuntimeException {
+    /** The per-view counter, read around the ORM for the same reason as below. */
+    private long perViewMark() {
+        return markFromCatalog("SELECT n.high_water_mark FROM worklist.number_space n "
+            + "JOIN worklist.selector s ON s.id = n.selector_id "
+            + "WHERE n.scope_id = ? AND s.token = '" + Selector.ITEM + "'");
+    }
+
+    private long scopeWideMark() {
+        return markFromCatalog("SELECT high_water_mark FROM worklist.number_space "
+            + "WHERE scope_id = ? AND selector_id IS NULL");
+    }
+
+    private long markFromCatalog(String sql) {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, boundTenant());
-            try (var st = c.prepareStatement(
-                    "SELECT high_water_mark FROM worklist.number_space "
-                        + "WHERE scope_id = ? AND selector_id IS NULL")) {
+            try (var st = c.prepareStatement(sql)) {
                 st.setObject(1, SCOPE);
                 try (ResultSet rs = st.executeQuery()) {
                     return rs.next() ? rs.getLong(1) : 0L;
                 }
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("could not read the scope-wide mark", e);
+            throw new IllegalStateException("could not read a high-water mark", e);
         }
     }
 

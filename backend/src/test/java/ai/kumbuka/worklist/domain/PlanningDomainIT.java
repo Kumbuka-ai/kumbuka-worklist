@@ -59,6 +59,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 class PlanningDomainIT {
 
     @Inject ItemService items;
+    @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
     @Inject MilestoneService milestones;
     @Inject IterationService iterations;
@@ -734,6 +735,10 @@ class PlanningDomainIT {
     }
 
     private UUID item(String title, UUID statusId) {
+        // The item view, declared before anything is created under it: an item
+        // acquires its address at creation, so the view it is addressed under
+        // has to exist by then. Declaring is idempotent.
+        selectors.declare(scope, Selector.ITEM);
         return (UUID) items.create(scope, Map.of(
             "title", title, "status", String.valueOf(statusId))).get("id");
     }

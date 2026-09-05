@@ -26,6 +26,11 @@ import java.util.UUID;
  * one, {@code query} a scope. Six, and every one of them is the platform's
  * own word for the act, spelled identically.
  *
+ * <p>Five of the six act. {@code accept} is carried and refuses, because the
+ * identifier it used to allocate was the address the view model now allocates
+ * at creation; the reasoning is on the method and the decision it waits for is
+ * not a build's to make.
+ *
  * <p><strong>Identity is deliberate, and a shared name is not a collision.</strong>
  * These names exist in sibling services too, and that is the mechanism rather
  * than an accident: with one vocabulary the caller-facing surface is the
@@ -139,9 +144,13 @@ public class ItemService {
      * allocated. Inventing a status here would be this service deciding what
      * a scope's list means.
      *
-     * <p>A created item carries no selector and no number. It gets both from
-     * {@link #accept}, when a second party has decided what kind of thing it
-     * is.
+     * <p><strong>A created item carries its address from the insert.</strong>
+     * The selector is the view {@code item} and the number is drawn from the
+     * scope's counter inside this transaction. That is a change: the address
+     * used to arrive at {@link #accept}, because the family at the head of it
+     * was not known before a second party decided what kind of thing this was.
+     * The head is now the view, it is known at creation, and an item that
+     * existed without an address would be an item no verb could address.
      */
     @Transactional
     public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
@@ -180,10 +189,23 @@ public class ItemService {
                 List.of(Field.STATUS.canonicalName()));
         }
 
+        // The address is allocated HERE, transactionally with the insert, and
+        // the view is not a parameter: every item is addressed under the one
+        // view that holds items. Before the selector became the view this
+        // could not be done — the family had to be decided before a number
+        // could be drawn from its space, so a call-in carried no address until
+        // ratification. With one counter per scope and the head of the address
+        // fixed, that reason is gone, and an object that exists without an
+        // address is one no verb can reach.
+        Selector view = selectors.require(scopeId, Selector.ITEM);
+        long number = selectors.allocate(scopeId, view);
+
         Item item = new Item();
         item.scopeId = scopeId;
         item.title = title;
         item.statusId = vocabulary.requireStatus(scopeId, statusId).id;
+        item.selectorId = view.id;
+        item.number = number;
         items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
@@ -199,49 +221,57 @@ public class ItemService {
             items.flush();
         }
 
-        LOG.infof("item created in scope %s", scopeId);
+        LOG.infof("item created as %s-%d in scope %s", Selector.ITEM, number, scopeId);
         return project(item);
     }
 
     /**
-     * Accept an item into the corpus: allocate its number under a declared
-     * selector.
+     * The intake gate — and it has nothing left to allocate.
      *
-     * <p>The intake gate, and the one act of this store a second party
-     * performs rather than the author. What it allocates is the pair
-     * {@code (selector, number)} — {@code FEAT-51} — and the identity of an
-     * item in the store is the TRIPLE scope, selector and number, never the
-     * pair without the selector.
+     * <p><strong>This verb is carried, reachable, and refuses.</strong> What
+     * it used to do was allocate the pair {@code (selector, number)}, which
+     * was both the item's address and its business identifier because the two
+     * were one thing: {@code FEAT-51} named the item and said what kind of
+     * item it was. The selector is now the view, so the address is allocated
+     * with the object ({@link #create}) and the family that made the
+     * identifier an identifier is no longer an address space.
      *
-     * <p>Once. An identifier that could be reallocated would make every
-     * reference to the old one resolve to something else, so a second
-     * acceptance is a typed refusal rather than a re-allocation.
+     * <p>The ratified vocabulary keeps the two apart — {@code create}
+     * allocates the address, {@code accept} allocates the business identifier
+     * — and under the view model this service has no carrier for the second.
+     * <strong>What that carrier should be is a decision about the store and
+     * not one a build makes.</strong> Three answers are available and they are
+     * not equivalent: a column of its own, the family as declared vocabulary
+     * with the identifier composed from it, or the acknowledgement that the
+     * two allocations have collapsed into one for this scheme and the gate
+     * marks a state rather than minting a name.
+     *
+     * <p>So the verb refuses, by name, and says which decision is missing. The
+     * alternatives were both worse. Executing it as a no-op would report a
+     * ratification that is written nowhere and would move the change trail
+     * while doing so. Leaving the method out would take a verb out of the
+     * vocabulary this scheme is recorded as carrying, and the surface would
+     * answer "no such verb" where the truth is "this verb has no carrier yet".
+     *
+     * <p>The item is resolved first, so that a call against something that is
+     * not there is a not-found and only a call against a real item reaches the
+     * refusal. A caller that cannot tell the two apart cannot tell a typo from
+     * a gap.
      */
     @Transactional
-    public Map<String, Object> accept(UUID scopeId, UUID itemId, String selectorToken,
-            String conflictToken) {
+    public Map<String, Object> accept(UUID scopeId, UUID itemId, String conflictToken) {
         Item item = require(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
-        if (item.selectorId != null) {
-            throw new WorklistException(
-                WorklistException.Reason.ALREADY_ACCEPTED,
-                "item " + itemId + " already carries an address and an address is "
-                    + "allocated once. Every reference ever written to it resolves "
-                    + "through that address",
-                List.of(String.valueOf(itemId)));
-        }
-
-        Selector selector = selectors.require(scopeId, selectorToken);
-        long number = selectors.allocate(scopeId, selector);
-
-        item.selectorId = selector.id;
-        item.number = number;
-        item.stamp();
-        items.flushAndRefresh(item);
-
-        LOG.infof("item accepted as %s-%d in scope %s", selectorToken, number, scopeId);
-        return project(item);
+        throw new WorklistException(
+            WorklistException.Reason.IDENTIFIER_UNDECIDED,
+            "item " + itemId + " already carries its address, allocated with it at "
+                + "creation, and this scheme has no carrier for a business identifier "
+                + "beside it. The selector is the view now, so the family that made "
+                + "FEAT-51 an identifier is not an address space any more. The gate is "
+                + "not being skipped and it is not being faked: what it allocates is an "
+                + "open decision about this store",
+            List.of(String.valueOf(itemId)));
     }
 
     /**

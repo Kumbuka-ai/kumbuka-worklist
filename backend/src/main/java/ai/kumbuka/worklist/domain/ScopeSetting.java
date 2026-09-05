@@ -81,9 +81,19 @@ public class ScopeSetting extends AggregateRoot {
     @Column(name = "id", nullable = false)
     public UUID id;
 
-    /** {@link #PER_SELECTOR} or {@link #SCOPE_WIDE}. */
+    /**
+     * {@link #PER_SELECTOR} or {@link #SCOPE_WIDE}.
+     *
+     * <p>The field initialiser is the same value as the column default in V6,
+     * deliberately: a row inserted through this entity and a row inserted by a
+     * statement that omits the column must not start in different positions.
+     * {@link #SCOPE_WIDE} is the position the view model needs — with the
+     * selector reduced to three views, per-selector counters would number a
+     * scope's items, its iterations and its milestones from one each, and the
+     * bare number in an address would stop being unique across the scope.
+     */
     @Column(name = "allocation_mode", nullable = false)
-    public String allocationMode = PER_SELECTOR;
+    public String allocationMode = SCOPE_WIDE;
 
     /** The iteration being worked, or null. A pointer, unambiguous by construction. */
     @Column(name = "current_iteration_id")

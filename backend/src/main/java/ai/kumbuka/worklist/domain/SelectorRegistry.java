@@ -1,5 +1,6 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.PlanningRepository;
 import ai.kumbuka.worklist.repository.SelectorRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -34,6 +35,16 @@ public class SelectorRegistry {
     @Inject SelectorRepository selectors;
 
     /**
+     * Read for one column: the scope's allocation mode.
+     *
+     * <p>The mode lives on the settings row rather than here because it is a
+     * scope's working style and not a property of an address space. Reading it
+     * through the planning repository rather than adding a second reader keeps
+     * the settings row with one owner.
+     */
+    @Inject PlanningRepository planning;
+
+    /**
      * Declare a selector. This is the ONLY way one comes into existence.
      *
      * <p>No other method here or anywhere else inserts into this table, and
@@ -52,9 +63,27 @@ public class SelectorRegistry {
         if (token == null || !Selector.TOKEN_PATTERN.matcher(token).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a selector token is a leading letter followed by alphanumerics and "
-                    + "interior hyphens — FEAT, CHORE, D-GTM. Refused: " + token,
+                "a selector token is a leading lower-case letter followed by lower-case "
+                    + "alphanumerics and interior hyphens. Upper case is refused rather "
+                    + "than folded, because folding would make two strings resolve to one "
+                    + "selector. Refused: " + token,
                 List.of(String.valueOf(token)));
+        }
+
+        // The token is well formed; whether it names a VIEW is the next
+        // question and a different one. Form is decidable without knowing
+        // anything about this deployment, and the admissible set is not —
+        // which is why the two are two checks and not one pattern.
+        if (!Selector.VIEWS.contains(token)) {
+            throw new WorklistException(
+                WorklistException.Reason.VIEW_UNKNOWN,
+                "the selector is the view, and there are three: " + Selector.VIEWS
+                    + ". '" + token + "' is none of them. The families an item may belong "
+                    + "to are a scope's own declared vocabulary and are no longer address "
+                    + "spaces, so declaring one here would open a fourth view — and every "
+                    + "address issued under it would name a kind of thing this service "
+                    + "does not hold",
+                List.of(token));
         }
 
         Selector existing = find(scopeId, token);
@@ -208,9 +237,33 @@ public class SelectorRegistry {
         wide.highWaterMark = wide.highWaterMark + 1;
 
         selectors.flush();
+
+        long allocated = scopeWide(scopeId) ? wide.highWaterMark : space.highWaterMark;
         LOG.debugf("number %d allocated under selector %s in scope %s",
-            space.highWaterMark, selector.token, scopeId);
-        return space.highWaterMark;
+            allocated, selector.token, scopeId);
+        return allocated;
+    }
+
+    /**
+     * Which counter the allocator reads, for one scope.
+     *
+     * <p>Both are advanced above whatever this answers; only the value handed
+     * back differs. That is what makes the mode a setting rather than a
+     * migration, and it is why this method is a read of one column rather
+     * than a branch around the allocation.
+     *
+     * <p><strong>A scope with no settings row allocates scope-wide.</strong>
+     * The settings row carries cardinality limits V4 deliberately left without
+     * defaults, so a scope acquires one when somebody decides what those limits
+     * are — which is later than its first item. Falling back to the per-selector
+     * position instead would mean a scope numbered one way before that decision
+     * and another way after it, with the switch happening as a side effect of an
+     * unrelated act. The column's own default is {@code scope_wide} (V6), so the
+     * fallback and the stored default say the same thing.
+     */
+    private boolean scopeWide(UUID scopeId) {
+        ScopeSetting setting = planning.settingOf(scopeId);
+        return setting == null || ScopeSetting.SCOPE_WIDE.equals(setting.allocationMode);
     }
 
     /**
@@ -226,32 +279,53 @@ public class SelectorRegistry {
     public long carryMarkForward(UUID scopeId, String token, long mark) {
         Selector selector = require(scopeId, token);
         NumberSpace space = selectors.lockSpace(selector.id);
+        NumberSpace wide = selectors.lockScopeWideSpace(scopeId);
 
-        if (space == null || mark < space.highWaterMark) {
-            long current = space == null ? -1 : space.highWaterMark;
+        long standing = standingMark(scopeId, space, wide);
+        if (space == null || wide == null || mark < standing) {
             throw new WorklistException(
                 WorklistException.Reason.MARK_REGRESSION,
                 "the high-water mark of selector " + token + " in scope " + scopeId
-                    + " stands at " + current + " and may not be set to " + mark
+                    + " stands at " + standing + " and may not be set to " + mark
                     + ". A mark is carried forward and never back: every number up to "
                     + "the mark has been handed out, and setting it lower hands the same "
                     + "numbers out a second time",
                 List.of(token));
         }
 
-        space.highWaterMark = mark;
+        // BOTH marks move, for the same reason the allocator advances both: a
+        // mark left behind here is a mark that would be read after a mode
+        // switch and would hand out numbers this scope has already used. An
+        // import carries a corpus forward, and the corpus is the scope's,
+        // whichever counter happens to be answering for it today.
+        space.highWaterMark = Math.max(space.highWaterMark, mark);
+        wide.highWaterMark = Math.max(wide.highWaterMark, mark);
+
         selectors.flush();
         LOG.infof("high-water mark of selector %s in scope %s carried to %d",
             token, scopeId, mark);
         return mark;
     }
 
-    /** The current mark, for a caller that needs to know where a space stands. */
+    /**
+     * The current mark: the one the scope's mode reads.
+     *
+     * <p>A caller asking where a space stands is asking what the next number
+     * will be built on, so this answers with the counter the allocator would
+     * read. The other one is still maintained and is still exact; it is simply
+     * not the answer to this question.
+     */
     @Transactional
     public long markOf(UUID scopeId, String token) {
         Selector selector = require(scopeId, token);
-        NumberSpace space = selectors.space(selector.id);
-        return space == null ? 0L : space.highWaterMark;
+        return standingMark(scopeId, selectors.space(selector.id),
+            selectors.scopeWideSpace(scopeId));
+    }
+
+    /** Whichever of the two counters the scope's allocation mode names. */
+    private long standingMark(UUID scopeId, NumberSpace space, NumberSpace wide) {
+        NumberSpace read = scopeWide(scopeId) ? wide : space;
+        return read == null ? 0L : read.highWaterMark;
     }
 
     private Selector find(UUID scopeId, String token) {
