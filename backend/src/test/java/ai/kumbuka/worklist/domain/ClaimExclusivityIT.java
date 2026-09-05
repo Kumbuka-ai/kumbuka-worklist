@@ -1,11 +1,11 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.platform.PlatformFixture;
 import ai.kumbuka.worklist.repository.ClaimRepository;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -223,13 +223,25 @@ class ClaimExclusivityIT {
      * observing a lapsed claim requires a stored expiry that is already
      * behind the reading clock. A sleeping probe would be observing the
      * clock rather than the guarantee.
+     *
+     * <p>Both {@code granted_at} and {@code expires_at} move together. The
+     * V4 constraint {@code ck_claim_duration} keeps {@code expires_at}
+     * strictly greater than {@code granted_at} — moving only the expiry
+     * back would violate it, and refusing the row is the same guarantee
+     * this probe is not the place to defeat. Written under the superuser
+     * because {@code granted_at} is {@code updatable=false} on the entity
+     * (V4: "Set at the insert and never moved"), so this write cannot
+     * travel through Hibernate at all.
      */
-    @Transactional
     void expireByRow(UUID itemId) {
-        Claim claim = claimRows.byItem(itemId);
-        assertThat(claim).isNotNull();
-        claim.expiresAt = Instant.now().minusSeconds(1);
-        claimRows.flush();
+        assertThat(claimRows.byItem(itemId))
+            .as("the row this probe is about to expire must already exist")
+            .isNotNull();
+        PlatformFixture.run(
+            "UPDATE worklist.claim SET "
+                + "granted_at = now() - interval '2 seconds', "
+                + "expires_at = now() - interval '1 second' "
+                + "WHERE item_id = '" + itemId + "'");
     }
 
     private static WorklistException refusalFrom(ThrowingRunnable call) {

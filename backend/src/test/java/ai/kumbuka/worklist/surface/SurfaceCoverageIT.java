@@ -192,6 +192,66 @@ class SurfaceCoverageIT {
             .statusCode(200)
             .body("fields.status", org.hamcrest.Matchers.is("closed"));
 
+        // ---- claim and release, at item depth ----------------------------
+        //
+        // The lease is minted by the surface — the receipt travels back in
+        // the answer, and 'release' presents it. Reached rather than
+        // refused: the semantics of the claim family live in their own
+        // probe, and here it is enough that the two forms travel end to
+        // end and answer through the surface.
+        String receipt = call("POST", item(Selector.ITEM, itemNumber) + ":claim", null,
+            Map.of("durationSeconds", 60))
+            .statusCode(200)
+            .body("fields.receipt", org.hamcrest.Matchers.notNullValue())
+            .extract().path("fields.receipt");
+        call("POST", item(Selector.ITEM, itemNumber) + ":release", null,
+            Map.of("receipt", receipt))
+            .statusCode(200);
+
+        // ---- claim_next, the draw at collection depth --------------------
+        //
+        // Runs against the same item — it is the only unclaimed
+        // addressable item in the scope — and the answer names it. The
+        // lease is released again so the withdraw below is not talking
+        // to a row a fresh claim just wrote.
+        String drawnReceipt = call("POST", collection(Selector.ITEM) + ":claim_next", null,
+            Map.of("durationSeconds", 60))
+            .statusCode(200)
+            .body("fields.receipt", org.hamcrest.Matchers.notNullValue())
+            .extract().path("fields.receipt");
+        call("POST", item(Selector.ITEM, itemNumber) + ":release", null,
+            Map.of("receipt", drawnReceipt))
+            .statusCode(200);
+
+        // ---- validate, the scope walk at collection depth ----------------
+        //
+        // Reads the store and reports; mutates nothing. An empty findings
+        // list is the shape a caller sees when the scope's checks accept —
+        // the point here is that the collection form reaches the domain.
+        call("POST", collection(Selector.ITEM) + ":validate", null, null)
+            .statusCode(200)
+            .body("fields.findings", org.hamcrest.Matchers.notNullValue())
+            .body("fields.consistent", org.hamcrest.Matchers.notNullValue());
+
+        // ---- relate and unrelate, at item depth --------------------------
+        //
+        // Reached, refused by the domain: the target is not a known item,
+        // and the edge named is not one this scope carries. Both refusals
+        // travel through the surface with the reason on the answer, which
+        // is what the probe measures. The graph verbs' own semantics sit
+        // in their own probe. The item token is unchanged by these calls:
+        // the domain refuses before stamping.
+        call("POST", item(Selector.ITEM, itemNumber) + ":relate", itemToken,
+            Map.of("toItem", UUID.randomUUID().toString(),
+                "type", UUID.randomUUID().toString()))
+            .statusCode(404)
+            .body("reason", org.hamcrest.Matchers.is("ITEM_UNKNOWN"));
+        call("POST", item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
+            Map.of("toItem", UUID.randomUUID().toString(),
+                "type", UUID.randomUUID().toString()))
+            .statusCode(404)
+            .body("reason", org.hamcrest.Matchers.is("RELATION_UNKNOWN"));
+
         // ---- accept, which is carried and refuses -------------------------
         call("POST", item(Selector.ITEM, itemNumber) + ":accept", itemToken, null)
             .statusCode(501)
@@ -212,16 +272,6 @@ class SurfaceCoverageIT {
         call("POST", collection(Selector.ITEM) + ":digest", null, null)
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
-
-        // ---- the six it carries and this service has not built ------------
-        for (String verb : List.of("claim", "release", "relate", "unrelate", "validate")) {
-            call("POST", item(Selector.ITEM, itemNumber) + ":" + verb, null, null)
-                .statusCode(501)
-                .body("reason", org.hamcrest.Matchers.is("VERB_UNBUILT"));
-        }
-        call("POST", collection(Selector.ITEM) + ":claim_next", null, null)
-            .statusCode(501)
-            .body("reason", org.hamcrest.Matchers.is("VERB_UNBUILT"));
 
         // ---- and the refusal of a writing verb on a truncated address -----
         call("POST", collection(Selector.ITEM) + ":withdraw", null, null)

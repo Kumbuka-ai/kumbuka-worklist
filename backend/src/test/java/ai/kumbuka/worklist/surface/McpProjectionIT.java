@@ -221,12 +221,13 @@ class McpProjectionIT {
             .body("result.structuredContent.reason", is("VERB_UNCARRIED"));
     }
 
-    @Test
-    void a_verb_it_carries_unbuilt_is_answered_apart_from_one_it_does_not_carry() {
-        call("claim", Map.of("address", SurfaceFixture.address(Selector.ITEM, 1)))
-            .body("result.isError", is(true))
-            .body("result.structuredContent.reason", is("VERB_UNBUILT"));
-    }
+    // The counter-probe against an unbuilt verb answered by name lived here
+    // before SPRINT_171.2 built the six that were then unbuilt. That
+    // sub-sprint moved 'claim', 'release', 'claim_next', 'relate', 'unrelate'
+    // and 'validate' from UNBUILT to CARRIED and left the class empty — the
+    // TSV under test/resources says so plainly. A probe against VERB_UNBUILT
+    // now has no verb to point at; it will come back when the surface has a
+    // planned-but-not-yet-built verb again, and stays absent until then.
 
     @Test
     void a_tool_this_server_does_not_have_is_a_malformed_call_and_says_so() {
