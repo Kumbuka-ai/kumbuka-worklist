@@ -178,12 +178,20 @@ public class ClaimService {
                 List.of(String.valueOf(itemId)));
         }
 
-        // Move the expiry back to the moment the lease was granted. The row
-        // stays, the store learns the lease is over, and the next claim
-        // overwrites it in place. Nothing is deleted, in keeping with the
-        // whole of this schema's rule about what happens to a row that is no
-        // longer asserted.
-        claim.expiresAt = claim.grantedAt;
+        // Move the expiry to the smallest instant strictly greater than the
+        // grant — the same lapsed state a natural expiry produces, expressed
+        // in a way ck_claim_duration accepts. The check refuses expires_at
+        // <= granted_at at the table (a non-positive-duration insert is the
+        // predecessor's defect this row was rebuilt to refuse), so a release
+        // that assigned granted_at to expires_at directly would be a write
+        // caught by the same constraint the whole grant path travels. One
+        // microsecond is the smallest step the substrate carries — postgres
+        // timestamptz is microsecond-precision — so this is the least the
+        // row can move and still say "the lease ended". Nothing is deleted;
+        // the next claim overwrites the row in place, in keeping with the
+        // whole of this schema's rule about what happens to a row that is
+        // no longer asserted.
+        claim.expiresAt = claim.grantedAt.plusNanos(1_000);
         claims.flushAndRefresh(claim);
 
         LOG.infof("claim released on item %s in scope %s", itemId, scopeId);
