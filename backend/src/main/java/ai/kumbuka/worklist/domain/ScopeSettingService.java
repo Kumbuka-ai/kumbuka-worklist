@@ -2,6 +2,7 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -46,6 +47,19 @@ public class ScopeSettingService extends PlanningService {
 
     /** A scope id and a transition. Never a limit's value, never an actor. */
     private static final Logger LOG = Logger.getLogger(ScopeSettingService.class);
+
+    /**
+     * The scope-opening act seeds the three views through this registry.
+     *
+     * <p>Before V7 the three had to be declared separately by a caller —
+     * usually a test fixture, because nothing outside the service reached
+     * this act. That worked while there was one caller who knew, and it
+     * would never scale: a scope opened through the surface would either
+     * carry three follow-up declarations or would refuse every item,
+     * iteration and milestone created under it. Seeding on open is what
+     * makes {@code create} a call that opens a scope end to end.
+     */
+    @Inject SelectorRegistry selectors;
 
     /** One scope's settings, as the canonical field map. */
     @Transactional
@@ -92,7 +106,20 @@ public class ScopeSettingService extends PlanningService {
 
         planning.insert(setting);
         planning.flushAndRefresh(setting);
-        LOG.infof("scope %s opened", scopeId);
+
+        // Seed the three views the platform's object model fixes. Each
+        // declaration is idempotent, so a fixture that already declared one
+        // of them (the older test setup, the imports of the predecessor's
+        // corpus) collides with nothing here. What is new is that a scope
+        // opened THROUGH this verb no longer needs its three declarations to
+        // be arranged from outside — the surface projection depends on that,
+        // because a caller opening a scope has no verb to declare a view
+        // with, and no reason to know that one exists.
+        for (String view : Selector.VIEWS) {
+            selectors.declare(scopeId, view);
+        }
+
+        LOG.infof("scope %s opened, and the three views seeded", scopeId);
         return project(setting, List.of());
     }
 
