@@ -1,6 +1,6 @@
 -- ===========================================================================
--- V5: the planning layer's conflict tokens, and the high-water marks of the
--- two planning axes.
+-- V5: the planning layer's conflict tokens, and a surrogate identity on
+-- `scope_setting`.
 --
 -- V4 built the planning tables and said so in its own header: "The tables are
 -- here and their VERBS are not." This migration is the half that arrives with
@@ -62,57 +62,10 @@ ALTER TABLE worklist.scope_setting
 
 
 -- ===========================================================================
--- PART 2 — THE HIGH-WATER MARKS OF THE MILESTONE AND ITERATION AXES
+-- PART 2 — A SURROGATE IDENTITY ON `scope_setting`
 -- ===========================================================================
 --
--- Both axes number their objects, and both concepts say the numbers are never
--- reused: "a closed milestone stays in the table, so the allocator counts past
--- it" (concept 6.1), and "iteration numbers are never reused, and the
--- mechanism is a persisted high-water mark rather than the highest number
--- present" (concept 6.2).
---
--- V4 provides no carrier for either mark, and this is the one gap in it that
--- the planning verbs cannot route around. `number_space` is the item
--- allocator and cannot hold them: its rows hang off a selector by foreign
--- key, and its one selector-less row per scope is already taken by the
--- scope-wide ITEM counter, held there by a partial unique index. An axis row
--- with a null selector would collide with that index, and widening the index
--- would mean rewriting a constraint V4 created — which is exactly the
--- narrowing this migration promised not to do.
---
--- SO THE MARKS SIT ON `scope_setting`, one row per scope, as two columns.
--- That table already carries running state beside its settings —
--- `current_iteration_id` is a pointer, not a decision — so the mixture is the
--- ratified design's and not this migration's invention.
---
--- A MARK ADVANCE DOES NOT ROTATE THE SETTING'S TOKEN, and that is the point
--- of putting it in writing. Creating an iteration is a write on the ITERATION
--- aggregate; it advances the mark as an allocator side effect, exactly as
--- `accept` advances `number_space` while rotating only the item's token.
--- Rotating the setting's token here would reproduce the defect measured in
--- sprint 169 — a token that moves between two calls with no write of the
--- caller's own in between — with a single user and no concurrency at all.
---
--- ZERO IS THE FLOOR AND THE STARTING POSITION. The first allocation returns
--- 1, which is what `ck_milestone_number` and `ck_iteration_number` already
--- require. A mark is carried forward and never back; that is a domain check,
--- where the previous value is known, and the constraint below is the floor
--- under it.
--- ---------------------------------------------------------------------------
-
-ALTER TABLE worklist.scope_setting
-    ADD COLUMN milestone_high_water_mark BIGINT NOT NULL DEFAULT 0,
-    ADD COLUMN iteration_high_water_mark BIGINT NOT NULL DEFAULT 0;
-
-ALTER TABLE worklist.scope_setting
-    ADD CONSTRAINT ck_scope_setting_marks CHECK (
-        milestone_high_water_mark >= 0
-        AND iteration_high_water_mark >= 0);
-
-
--- ---------------------------------------------------------------------------
--- A SURROGATE IDENTITY ON `scope_setting`, AND WHY THE TABLE KEY IS NOT
--- TOUCHED.
+-- AND WHY THE TABLE KEY IS NOT TOUCHED.
 --
 -- `pk_scope_setting` is `(tenant_id, scope_id)` and stays exactly that: the
 -- row is one per scope and the key says so. What the column below adds is an

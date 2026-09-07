@@ -15,23 +15,18 @@ import java.util.UUID;
 /**
  * The high-water mark of one address space.
  *
- * <h2>Both counters exist at all times</h2>
+ * <h2>One counter per selector</h2>
  *
- * One row per selector, for the per-selector position of the allocation mode,
- * and one row per scope with a NULL {@link #selectorId}, for the scope-wide
- * position. The allocator reads the row the mode names and advances BOTH.
+ * One row per selector. Each view — item, iteration, milestone — has its own
+ * counter, and that row is the one position. There is no scope-wide counter
+ * beside them: the address form carries the view, so {@code .../item/1},
+ * {@code .../iteration/1} and {@code .../milestone/1} are three different
+ * addresses already, and a bare number that had to disambiguate itself
+ * across them would solve a problem the address form does not have.
  *
- * <p><strong>That is what makes the mode a setting rather than a
- * migration.</strong> Switching it is a read against a counter that was
- * maintained all along; if only the active counter were kept, switching would
- * mean reconstructing the other one from rows that no longer say what was
- * handed out.
- *
- * <p>The key is therefore a surrogate and not the selector. A null selector is
- * not a missing value here — it is the row that belongs to no selector because
- * it belongs to all of them — and a unique constraint over a nullable column
- * would admit any number of such rows, because in SQL two nulls are not equal.
- * V4 uses two partial unique indexes instead.
+ * <p>The key is a surrogate rather than the selector so the ORM key stays
+ * outside the tenancy axis, which the shared superclass owns and no caller
+ * names.
  *
  * <h2>Why the mark is stored rather than computed</h2>
  *
@@ -68,14 +63,12 @@ public class NumberSpace extends TenantScoped {
     public UUID id;
 
     /**
-     * The selector whose address space this is, or null for the scope-wide
-     * counter.
+     * The selector whose address space this is.
      *
-     * <p>Immutable: a counter does not migrate between address spaces, and a
-     * per-selector row that became the scope-wide one would take a mark with
-     * it that was never handed out at that level.
+     * <p>Immutable and never null: a counter belongs to one selector and
+     * does not migrate between address spaces.
      */
-    @Column(name = "selector_id", updatable = false)
+    @Column(name = "selector_id", updatable = false, nullable = false)
     public UUID selectorId;
 
     /**

@@ -51,13 +51,13 @@ public class ScopeSettingService extends PlanningService {
     /**
      * The scope-opening act seeds the three views through this registry.
      *
-     * <p>Before V7 the three had to be declared separately by a caller —
-     * usually a test fixture, because nothing outside the service reached
-     * this act. That worked while there was one caller who knew, and it
-     * would never scale: a scope opened through the surface would either
-     * carry three follow-up declarations or would refuse every item,
-     * iteration and milestone created under it. Seeding on open is what
-     * makes {@code create} a call that opens a scope end to end.
+     * <p>Without the seeding the three views would have to be declared
+     * separately by a caller who knew — a fixture, because nothing outside
+     * this service reaches the declaration path. That would not scale: a
+     * scope opened through the surface would either carry three follow-up
+     * declarations or would refuse every item, iteration and milestone
+     * created under it. Seeding on open is what makes {@code create} a call
+     * that opens a scope end to end.
      */
     @Inject SelectorRegistry selectors;
 
@@ -185,12 +185,6 @@ public class ScopeSettingService extends PlanningService {
             Object value) {
         Object held = current.get(field.canonicalName());
         switch (field) {
-            case ALLOCATION_MODE -> {
-                String mode = oneOf(field, required(field, value,
-                    "a scope allocates in one of two modes, so the mode cannot be cleared"),
-                    ScopeSetting.ALLOCATION_MODES);
-                return moved(held, mode, () -> setting.allocationMode = mode);
-            }
             case MAX_PLANNED_ITERATIONS -> {
                 int limit = positive(field, value);
                 return moved(held, limit, () -> setting.maxPlannedIterations = limit);
@@ -263,7 +257,6 @@ public class ScopeSettingService extends PlanningService {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), setting.id);
         fields.put(Field.SCOPE.canonicalName(), setting.scopeId);
-        fields.put(Field.ALLOCATION_MODE.canonicalName(), setting.allocationMode);
         fields.put(Field.CURRENT_ITERATION.canonicalName(), setting.currentIterationId);
         fields.put(Field.MAX_PLANNED_ITERATIONS.canonicalName(),
             setting.maxPlannedIterations);

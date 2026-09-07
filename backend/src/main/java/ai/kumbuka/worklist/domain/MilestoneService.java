@@ -196,9 +196,9 @@ public class MilestoneService extends PlanningService {
      * aggregate the caller wrote; the settings' own token is untouched.
      *
      * <p>Advancing this mark is what {@link SelectorRegistry#allocate} does
-     * on the item selector too — one mechanism instead of the two V5 carried,
-     * for the reason V7's header records: the goal axis is a class of its
-     * own, so the selector-keyed counter is where its next number belongs.
+     * on the item and iteration selectors too — one mechanism, one counter
+     * per view. The goal axis is a class of its own, so the selector-keyed
+     * counter is where its next number belongs.
      */
     private long allocateNumber(UUID scopeId) {
         requireSetting(scopeId);

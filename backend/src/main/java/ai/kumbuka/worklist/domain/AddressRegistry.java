@@ -73,11 +73,10 @@ public class AddressRegistry {
     /**
      * The item at that number, or a typed refusal.
      *
-     * <p>The view is resolved to its selector row and passed into the lookup, so
-     * that identity is read as the triple scope, selector and number under both
-     * allocation modes. Under the scope-wide position the number alone would do;
-     * relying on that would make the code correct only for the mode it happens
-     * to run in.
+     * <p>The view is resolved to its selector row and passed into the lookup,
+     * so that identity is read as the triple scope, selector and number.
+     * Every view has its own counter, so two selectors legitimately share a
+     * number and only the triple names one object.
      */
     @Transactional
     public UUID itemAt(UUID scopeId, long number) {

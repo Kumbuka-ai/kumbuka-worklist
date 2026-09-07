@@ -464,46 +464,51 @@ class SchemaConstraintIT {
     }
 
     // ==================================================================
-    // The scope-wide counter.
+    // The per-selector counter.
     // ==================================================================
 
     /**
-     * Exactly one scope-wide counter per scope, and any number of per-selector
-     * ones beside it.
+     * Exactly one counter per selector in a scope, and none without a
+     * selector.
      *
-     * <p>A plain unique constraint over {@code (tenant_id, scope_id,
-     * selector_id)} would NOT express this: in SQL two nulls are not equal, so
-     * it would admit any number of scope-wide rows. That is the defect the
-     * partial index exists against, and it is why the counter's key is a
-     * surrogate.
+     * <p>The uniqueness rule is expressed directly by
+     * {@code uq_number_space_selector} over {@code (tenant_id, scope_id,
+     * selector_id)}; {@code selector_id NOT NULL} makes that ordinary rather
+     * than partial. A row without a selector is refused at the column, and a
+     * second row for the same selector is refused at the index.
      */
     @Test
-    void a_scope_holds_one_scope_wide_counter_beside_its_per_selector_ones()
-            throws SQLException {
+    void a_scope_holds_exactly_one_counter_per_selector() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
             UUID first = insertSelector(c);
             UUID second = insertSelector(c);
-            insertNumberSpace(c, null);
             insertNumberSpace(c, first);
             insertNumberSpace(c, second);
             c.commit();
 
-            assertThatThrownBy(() -> insertNumberSpace(c, null))
-                .as("RED STATE, observed: a second scope-wide counter must be refused. "
-                    + "Two of them would mean the scope-wide position has two answers, "
-                    + "and switching the allocation mode would pick whichever the query "
+            assertThatThrownBy(() -> insertNumberSpace(c, first))
+                .as("RED STATE, observed: a second counter for the same selector must "
+                    + "be refused. Two of them would mean the selector's position has "
+                    + "two answers, and every allocation would pick whichever the query "
                     + "happened to find")
                 .isInstanceOf(SQLException.class)
-                .hasMessageContaining("uq_number_space_scope_wide");
+                .hasMessageContaining("uq_number_space_selector");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            assertThatThrownBy(() -> insertNumberSpace(c, null))
+                .as("RED STATE, observed: a counter without a selector must be refused. "
+                    + "There is no scope-wide row beside the per-selector ones; every "
+                    + "counter belongs to a view")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("selector_id");
             c.rollback();
 
             Db.bindTenant(c, tenant);
             assertThat(count(c, "number_space"))
-                .as("one per selector and one for the scope — both counters exist at all "
-                    + "times, which is what makes the mode a setting rather than a "
-                    + "migration")
-                .isEqualTo(3);
+                .as("one per selector, and no other")
+                .isEqualTo(2);
             c.commit();
         }
     }

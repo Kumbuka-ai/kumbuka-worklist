@@ -557,40 +557,31 @@ class ItemDomainIT {
     }
 
     /**
-     * Both counters exist and both move, whatever position the scope is in.
+     * The item selector's counter is the one position, and every allocation
+     * advances exactly it.
      *
-     * <p>That is what makes the allocation mode a setting rather than a
-     * migration: switching it is a read against a counter that was maintained
-     * all along. A scope-wide counter that only started being kept when the
-     * mode was switched would have to be reconstructed from rows that no
-     * longer say what was handed out — and the burnt numbers, which are
-     * exactly the ones that must stay burnt, are the ones no row records.
+     * <p>The item, iteration and milestone selectors each have a counter of
+     * their own; there is no scope-wide row beside them. A creation on the
+     * item axis moves the item counter and nothing else, and what the
+     * registry reports as the standing mark is that counter.
      */
     @Test
-    void both_counters_are_maintained_whatever_the_mode_reads() {
+    void the_item_selector_counter_advances_with_each_allocation() {
         itemView();
-        long wideBefore = scopeWideMark();
         long perViewBefore = perViewMark();
 
         createdId("counter probe 1");
         createdId("counter probe 2");
 
         assertThat(perViewMark())
-            .as("the per-selector counter advanced by both allocations, though the scope "
-                + "is in the position that does not read it. Keeping it only in the other "
-                + "mode would make switching a reconstruction rather than a read")
+            .as("the item selector's counter advanced by both allocations")
             .isEqualTo(perViewBefore + 2);
 
-        assertThat(scopeWideMark())
-            .as("and so did the scope-wide one, which is the counter this scope's mode "
-                + "reads")
-            .isEqualTo(wideBefore + 2);
-
         assertThat(selectors.markOf(SCOPE, Selector.ITEM))
-            .as("what the registry reports as the standing mark is the counter the mode "
-                + "names — asking where the space stands is asking what the next number "
-                + "will be built on")
-            .isEqualTo(scopeWideMark());
+            .as("what the registry reports as the standing mark is the counter of the "
+                + "item selector — asking where the space stands is asking what the "
+                + "next number will be built on")
+            .isEqualTo(perViewMark());
     }
 
     // ==================================================================
@@ -1453,11 +1444,6 @@ class ItemDomainIT {
         return markFromCatalog("SELECT n.high_water_mark FROM worklist.number_space n "
             + "JOIN worklist.selector s ON s.id = n.selector_id "
             + "WHERE n.scope_id = ? AND s.token = '" + Selector.ITEM + "'");
-    }
-
-    private long scopeWideMark() {
-        return markFromCatalog("SELECT high_water_mark FROM worklist.number_space "
-            + "WHERE scope_id = ? AND selector_id IS NULL");
     }
 
     private long markFromCatalog(String sql) {

@@ -141,11 +141,10 @@ public class ItemRepository {
      * slower with the corpus and answers the same question worse.
      *
      * <p><strong>The selector is part of the query and not an assumption.</strong>
-     * Under scope-wide allocation the number alone would already identify the
-     * row, and matching on the selector as well is what makes an address whose
-     * view does not fit the object a not-found instead of a second address
-     * resolving to it. Uniqueness in this store is the triple scope, selector
-     * and number under both allocation modes, and this reads it as the triple.
+     * Each view has its own counter, so two selectors legitimately share a
+     * number and only the triple names one object. Matching on the selector
+     * as well is what makes an address whose view does not fit the object a
+     * not-found instead of a second address resolving to it.
      */
     @Transactional
     public Item byAddress(UUID scopeId, UUID selectorId, long number) {

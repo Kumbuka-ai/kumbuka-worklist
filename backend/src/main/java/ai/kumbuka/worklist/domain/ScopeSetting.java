@@ -12,7 +12,6 @@ import org.hibernate.generator.EventType;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,36 +39,31 @@ import java.util.UUID;
  * and would then need a partial unique index to forbid what a single nullable
  * pointer cannot express in the first place.
  *
- * <h2>The two high-water marks used to be here and are not any more</h2>
+ * <h2>The allocation is per selector and there is no second position</h2>
  *
- * V5 added a {@code milestone_high_water_mark} and an
- * {@code iteration_high_water_mark} to this table, because the two axes were
- * not selectors at the time and {@link NumberSpace} had nowhere for their
- * counters to sit. V7 dropped those columns: the axes ARE selectors now, and
- * each axis's counter is the {@code number_space} row of its selector — the
- * same mechanism the item allocator has always used, and now the one
- * mechanism instead of two.
+ * Each view — item, iteration, milestone — draws from its own
+ * {@link NumberSpace} row, and that row is the one position. There used to
+ * be an {@code allocation_mode} column on this row with a second,
+ * scope-wide, expressible position beside it; the two differed only in
+ * which counter the allocator read. It was removed on the class reading
+ * of the selector: the three views are three different classes of thing,
+ * and {@code .../item/1}, {@code .../iteration/1} and {@code .../milestone/1}
+ * are three different addresses already, so a bare number that had to
+ * disambiguate itself across them was solving a problem the address form
+ * does not have.
  *
- * <p>What survives that change unaltered: advancing a mark does not rotate
- * this row's token. Creating an iteration is a write on the ITERATION
- * aggregate; it advances the mark as an allocator side effect against the
- * iteration selector's {@link NumberSpace}, exactly as {@code accept}
- * advances the item selector's {@link NumberSpace} while rotating only the
- * item's token. Rotating the setting's token there would move a caller's
- * token with no write of their own in between — the sprint-169 defect,
- * reproduced by a service that had learnt from it.
+ * <p>Advancing a mark does not rotate this row's token. Creating an
+ * iteration is a write on the ITERATION aggregate; it advances the mark as
+ * an allocator side effect against the iteration selector's
+ * {@link NumberSpace}, exactly as {@code accept} advances the item
+ * selector's {@link NumberSpace} while rotating only the item's token.
+ * Rotating the setting's token there would move a caller's token with no
+ * write of their own in between — the sprint-169 defect, reproduced by a
+ * service that had learnt from it.
  */
 @Entity
 @Table(name = "scope_setting", schema = "worklist")
 public class ScopeSetting extends AggregateRoot {
-
-    /** Each selector draws from its own counter. Two selectors may share a number. */
-    public static final String PER_SELECTOR = "per_selector";
-    /** The allocator draws from the scope-wide counter. A number is not repeated. */
-    public static final String SCOPE_WIDE = "scope_wide";
-
-    /** Every value {@link #allocationMode} admits. */
-    public static final List<String> ALLOCATION_MODES = List.of(PER_SELECTOR, SCOPE_WIDE);
 
     /**
      * The row's identity, and deliberately not its key.
@@ -84,24 +78,6 @@ public class ScopeSetting extends AggregateRoot {
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
     public UUID id;
-
-    /**
-     * {@link #PER_SELECTOR} or {@link #SCOPE_WIDE}.
-     *
-     * <p>The field initialiser is the same value as the column default in V7,
-     * deliberately: a row inserted through this entity and a row inserted by a
-     * statement that omits the column must not start in different positions.
-     *
-     * <p><strong>{@link #PER_SELECTOR} under the class reading of the
-     * selector.</strong> V6 flipped this to {@link #SCOPE_WIDE} on the family
-     * reading — three views numbered from one each would collide on their
-     * bare numbers. Under the class reading, the three views are three
-     * different classes of thing, and {@code item/1}, {@code iteration/1} and
-     * {@code milestone/1} name three different addresses. The address carries
-     * the view precisely so that this works.
-     */
-    @Column(name = "allocation_mode", nullable = false)
-    public String allocationMode = PER_SELECTOR;
 
     /** The iteration being worked, or null. A pointer, unambiguous by construction. */
     @Column(name = "current_iteration_id")
@@ -136,13 +112,10 @@ public class ScopeSetting extends AggregateRoot {
     @Column(name = "default_columns", nullable = false, columnDefinition = "text[]")
     public String[] defaultColumns = new String[0];
 
-    // The milestone and iteration high-water marks used to sit here, on two
-    // columns V5 added and V7 removed. They were on this row because the two
-    // axes were not selectors at the time, so `number_space` had nowhere for
-    // their counters to sit. The axes ARE selectors now, and their counters
-    // are the `number_space` rows of the `milestone` and `iteration`
-    // selectors — the same mechanism the item allocator has always used, and
-    // now the one mechanism instead of two.
+    // Each axis's counter is the `number_space` row of its selector — one
+    // mechanism, one position. The two high-water marks that briefly lived
+    // here (added while the axes were not selectors, removed once they
+    // became ones) are gone from the schema too.
 
     @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
