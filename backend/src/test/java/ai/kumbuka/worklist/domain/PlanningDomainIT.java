@@ -44,15 +44,13 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * and the failure would read as a broken limit rather than as a shared
  * fixture.
  *
- * <h2>One fixture goes around the service, and that is a finding</h2>
+ * <h2>One fixture writes the milestone column over JDBC on purpose</h2>
  *
- * {@link #onPath} writes {@code item.milestone_id} over JDBC, because
- * <strong>no verb of this service assigns it</strong>: the field is not
- * settable on an item and no planning verb addresses an item. The
- * precondition it satisfies — an item enters an iteration only when it
- * carries a milestone on the product path — is the concept's and is built.
- * The way to satisfy it through the service is missing, and is reported
- * rather than invented here.
+ * {@link #onPath} writes {@code item.milestone_id} directly rather than
+ * through {@code item.update}. The item verb assigns the axis and runs the
+ * existence check, but the planning cases here read it as a precondition —
+ * driving assignment through the item verb here would re-run the same guard
+ * the item probes already cover.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)

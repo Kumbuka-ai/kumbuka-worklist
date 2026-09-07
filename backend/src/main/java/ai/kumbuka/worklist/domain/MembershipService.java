@@ -253,10 +253,9 @@ public class MembershipService extends PlanningService {
      * item without a milestone needs the axis assigned, and one off the path
      * needs a decision that it belongs on it.
      *
-     * <p><strong>The second of those has no verb behind it today.</strong>
-     * Nothing in this service assigns {@code item.milestone_id} — see
-     * {@link MilestoneService} for why that gap is reported rather than
-     * closed here.
+     * <p>The milestone is assigned through {@code item.update} against
+     * {@link Field#MILESTONE_ID}, and the item verb runs the existence check
+     * — same scope, milestone not closed.
      */
     private void refuseUnplannable(UUID scopeId, UUID itemId) {
         Item item = items.byId(itemId);

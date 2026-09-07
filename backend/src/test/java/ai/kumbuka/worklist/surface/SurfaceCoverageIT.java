@@ -139,11 +139,11 @@ class SurfaceCoverageIT {
 
         // ---- plan, which is the membership coming into being -------------
         //
-        // The item has to carry a milestone on the product path, and no verb
-        // of this service assigns one: `item.milestone_id` is not settable and
-        // no planning verb addresses an item. That gap is reported rather than
-        // closed here, and the fixture below is what standing in for the
-        // missing verb looks like.
+        // The item has to carry a milestone on the product path. Assignment
+        // is `item.update` against `milestone` — the item verb runs the
+        // existence check — and the fixture below writes it over JDBC so the
+        // planning coverage does not run the same check that the item
+        // probes cover.
         pointAtMilestone(itemAddress, milestoneNumber);
 
         iterationToken = call("POST", membership(iterationNumber, itemNumber), iterationToken,
@@ -481,12 +481,10 @@ class SurfaceCoverageIT {
     /**
      * Points an item at a milestone, over JDBC and under the runtime role.
      *
-     * <p>No verb of this service assigns {@code item.milestone_id}: the field is
-     * not settable on an item and no planning verb addresses an item, so the
-     * precondition {@code plan} enforces — an item carries a milestone on the
-     * product path — is satisfiable only by a write like this one. It is named
-     * for what it is rather than hidden in a helper, because a fixture that goes
-     * around the surface is a finding about the surface.
+     * <p>The item verb {@code update} assigns {@code item.milestone_id} and
+     * runs the existence check; this fixture writes it directly so the
+     * planning-coverage case does not re-run the same guard the item probes
+     * cover.
      */
     private void pointAtMilestone(String itemAddress, long milestoneNumber) {
         String number = itemAddress.substring(itemAddress.lastIndexOf('/') + 1);
