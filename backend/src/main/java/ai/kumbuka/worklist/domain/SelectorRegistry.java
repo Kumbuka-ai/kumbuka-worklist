@@ -211,14 +211,21 @@ public class SelectorRegistry {
      * it forward — it is the act of handing out numbers that are already in
      * use, which is the one thing the mark exists to prevent. The refusal
      * carries both values so the caller can see by how much it was wrong.
+     *
+     * <p>{@code require} above guarantees the selector was declared, and
+     * {@link #declare} opens the {@link NumberSpace} row for it in the same
+     * transaction — so the space is present here by invariant. The
+     * corresponding null check lives one method up, in {@link #allocate},
+     * where every acceptance passes; a broken invariant surfaces there as a
+     * typed refusal rather than as a rare-path NPE.
      */
     @Transactional
     public long carryMarkForward(UUID scopeId, String token, long mark) {
         Selector selector = require(scopeId, token);
         NumberSpace space = selectors.lockSpace(selector.id);
 
-        long standing = space == null ? 0L : space.highWaterMark;
-        if (space == null || mark < standing) {
+        long standing = space.highWaterMark;
+        if (mark < standing) {
             throw new WorklistException(
                 WorklistException.Reason.MARK_REGRESSION,
                 "the high-water mark of selector " + token + " in scope " + scopeId
@@ -229,7 +236,7 @@ public class SelectorRegistry {
                 List.of(token));
         }
 
-        space.highWaterMark = Math.max(space.highWaterMark, mark);
+        space.highWaterMark = mark;
 
         selectors.flush();
         LOG.infof("high-water mark of selector %s in scope %s carried to %d",
@@ -243,12 +250,14 @@ public class SelectorRegistry {
      *
      * <p>A caller asking where a space stands is asking what the next number
      * will be built on. Each selector has one counter; this reads it.
+     *
+     * <p>The space is present by the same invariant {@link #carryMarkForward}
+     * relies on: a declared selector always has one.
      */
     @Transactional
     public long markOf(UUID scopeId, String token) {
         Selector selector = require(scopeId, token);
-        NumberSpace space = selectors.space(selector.id);
-        return space == null ? 0L : space.highWaterMark;
+        return selectors.space(selector.id).highWaterMark;
     }
 
     private Selector find(UUID scopeId, String token) {
