@@ -1100,25 +1100,15 @@ class SchemaConstraintIT {
      * The same insert on any given connection — used from the migrator
      * connection in the read-path probe, so a row can be planted after the
      * check has been dropped and before it is put back.
+     *
+     * <p>Kept apart from {@link #insertMilestoneWithMission} as a NAMED call
+     * site, so the two probes read at their call sites as "same shape,
+     * different connection". The body delegates to the same helper — this
+     * method exists to name the intention, not to duplicate the code.
      */
     private void insertMilestoneWithMissionAs(Connection c, long number, String mission)
             throws SQLException {
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.milestone
-                    (id, tenant_id, scope_id, number, title, kind, status, mission,
-                     workstream_id)
-                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?, ?)
-                """)) {
-            st.setObject(1, UUID.randomUUID());
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setLong(4, number);
-            st.setString(5, "milestone " + number);
-            st.setString(6, mission);
-            st.setObject(7, workstream);
-            st.executeUpdate();
-        }
+        insertMilestoneWithMission(c, number, mission);
     }
 
     /** The mission of one milestone, as the CURRENT session sees it. */

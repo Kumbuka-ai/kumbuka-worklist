@@ -33,6 +33,10 @@ public class SelectorRepository {
 
     private static final String P_TOKEN = "token";
 
+    private static final String P_SELECTOR = "selector";
+
+    private static final String P_WS = "ws";
+
     @Inject EntityManager em;
 
     /** The selector of that token in a scope, or null. */
@@ -78,7 +82,7 @@ public class SelectorRepository {
     @Transactional
     public NumberSpace lockSpace(UUID selectorId) {
         return single(spaceQuery("s.selectorId = :selector AND s.workstreamId IS NULL")
-            .setParameter("selector", selectorId)
+            .setParameter(P_SELECTOR, selectorId)
             .setLockMode(LockModeType.PESSIMISTIC_WRITE));
     }
 
@@ -94,8 +98,8 @@ public class SelectorRepository {
     public NumberSpace lockSpaceInWorkstream(UUID selectorId, UUID workstreamId) {
         return single(spaceQuery(
                 "s.selectorId = :selector AND s.workstreamId = :ws")
-            .setParameter("selector", selectorId)
-            .setParameter("ws", workstreamId)
+            .setParameter(P_SELECTOR, selectorId)
+            .setParameter(P_WS, workstreamId)
             .setLockMode(LockModeType.PESSIMISTIC_WRITE));
     }
 
@@ -103,7 +107,7 @@ public class SelectorRepository {
     @Transactional
     public NumberSpace space(UUID selectorId) {
         return single(spaceQuery("s.selectorId = :selector AND s.workstreamId IS NULL")
-            .setParameter("selector", selectorId));
+            .setParameter(P_SELECTOR, selectorId));
     }
 
     /** The selector's per-workstream number space without a lock. */
@@ -111,8 +115,8 @@ public class SelectorRepository {
     public NumberSpace spaceInWorkstream(UUID selectorId, UUID workstreamId) {
         return single(spaceQuery(
                 "s.selectorId = :selector AND s.workstreamId = :ws")
-            .setParameter("selector", selectorId)
-            .setParameter("ws", workstreamId));
+            .setParameter(P_SELECTOR, selectorId)
+            .setParameter(P_WS, workstreamId));
     }
 
     private TypedQuery<NumberSpace> spaceQuery(String predicate) {
