@@ -11,7 +11,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -90,6 +93,13 @@ class ItemDomainIsolationIT {
         "claim", "scope_setting", "view_preference");
 
     private static final UUID SCOPE = UUID.fromString(SubstrateDatabaseResource.SCOPE_ID);
+
+    /**
+     * Per-tenant address counter used by {@link #insertItem}. Fresh tenant
+     * per test means fresh counter — the suite never carries a value from one
+     * method into the next.
+     */
+    private static final Map<UUID, AtomicLong> nextNumber = new ConcurrentHashMap<>();
 
     private UUID tenantA;
     private UUID tenantB;
@@ -483,25 +493,56 @@ class ItemDomainIsolationIT {
     }
 
     /**
-     * An item, with the status its tenant declared.
+     * An item, with the status its tenant declared and the address the schema
+     * requires.
      *
-     * <p>Planted after {@link #insertStatus}, because the reference is
+     * <p>Planted after {@link #insertStatus}, because the status reference is
      * mandatory: a status is a declared value and there is no literal to fall
-     * back on.
+     * back on. Since V7 the address is mandatory too — {@code selector_id} and
+     * {@code number} are NOT NULL at the column.
+     *
+     * <p>The selector is reused across every item of a tenant, because
+     * {@link #plantOneOfEach} counts on exactly one selector row per tenant to
+     * observe the row-level policy on that table. A fresh selector per item
+     * would leave the isolation probe reading "3 rows" where it wrote "1".
+     * The number is a per-tenant counter, so two items under the same
+     * selector do not collide on {@code uq_item_address}.
      */
     private UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
         UUID id = UUID.randomUUID();
+        UUID selector = anySelector(c, tenant);
+        long number = nextNumber
+            .computeIfAbsent(tenant, t -> new AtomicLong()).incrementAndGet();
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item (id, tenant_id, scope_id, title, status_id)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO worklist.item
+                    (id, tenant_id, scope_id, title, status_id, selector_id, number)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
             st.setString(4, title);
             st.setObject(5, anyStatus(c, tenant));
+            st.setObject(6, selector);
+            st.setLong(7, number);
             st.executeUpdate();
         }
+        return id;
+    }
+
+    /** The tenant's own selector, declared on first use and reused after. */
+    private UUID anySelector(Connection c, UUID tenant) throws SQLException {
+        try (var st = c.prepareStatement(
+                "SELECT id FROM worklist.selector WHERE tenant_id = ? LIMIT 1")) {
+            st.setObject(1, tenant);
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next()) {
+                    return UUID.fromString(rs.getString(1));
+                }
+            }
+        }
+        UUID id = UUID.randomUUID();
+        insertSelector(c, tenant, id);
         return id;
     }
 

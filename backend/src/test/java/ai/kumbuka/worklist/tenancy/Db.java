@@ -32,8 +32,16 @@ public final class Db {
     /**
      * CREATEROLE and nothing more — the role the migration set runs under, and
      * the owner of this schema and everything in it.
+     *
+     * <p>Public so a probe outside {@code tenancy} can borrow the owner
+     * briefly, for instance to drop a check constraint and put it back so a
+     * row that violates it can be planted for a read-path probe. What a
+     * migrator can do that the service role cannot is exactly what such a
+     * probe needs, and staging it in a helper here would mean the helper
+     * imports the probe's intent — which is the coupling this class exists to
+     * avoid.
      */
-    static Connection asMigrator() throws SQLException {
+    public static Connection asMigrator() throws SQLException {
         return connect(SubstrateDatabaseResource.MIGRATOR_ROLE,
             SubstrateDatabaseResource.MIGRATOR_PASSWORD);
     }
@@ -134,18 +142,54 @@ public final class Db {
      * status is a value the scope declared rather than a literal, so a scope
      * has a vocabulary before it has an item, and a fixture that faked its way
      * past that would be planting a row the service could not have written.
+     *
+     * <p>A selector is declared next, and the address is set with the insert.
+     * V7 made {@code selector_id} and {@code number} both NOT NULL, so an
+     * item without them is refused at the column — a fixture that inserted
+     * without them would be planting a row the service could not have written
+     * either.
      */
     static UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
         UUID status = declaredStatus(c, tenant);
+        UUID selector = insertSelector(c, tenant);
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item (tenant_id, scope_id, title, status_id)
-                VALUES (?::uuid, ?::uuid, ?, ?::uuid)
+                INSERT INTO worklist.item
+                    (tenant_id, scope_id, title, status_id, selector_id, number)
+                VALUES (?::uuid, ?::uuid, ?, ?::uuid, ?::uuid, ?)
                 RETURNING id
                 """)) {
             st.setString(1, tenant.toString());
             st.setString(2, SubstrateDatabaseResource.SCOPE_ID);
             st.setString(3, title);
             st.setString(4, status.toString());
+            st.setString(5, selector.toString());
+            st.setLong(6, 1L);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return UUID.fromString(rs.getString(1));
+            }
+        }
+    }
+
+    /**
+     * A fresh selector for this tenant, so an item inserted afterwards can
+     * carry its address at the column NOT NULL requires it.
+     *
+     * <p>One selector per insert, because two items using the same selector
+     * would need distinct numbers per {@code uq_item_address}, and threading a
+     * counter through every caller of {@link #insertItem} would put allocation
+     * logic in a helper whose only job is to plant one row.
+     */
+    private static UUID insertSelector(Connection c, UUID tenant) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.selector (tenant_id, scope_id, token)
+                VALUES (?::uuid, ?::uuid, ?)
+                RETURNING id
+                """)) {
+            st.setString(1, tenant.toString());
+            st.setString(2, SubstrateDatabaseResource.SCOPE_ID);
+            st.setString(3, "t" + UUID.randomUUID().toString().replace("-", "")
+                .substring(0, 12));
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
                 return UUID.fromString(rs.getString(1));
