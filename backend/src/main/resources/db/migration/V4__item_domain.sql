@@ -77,11 +77,14 @@
 --      cardinality warnings and the derivation of `planned` are their own
 --      piece of work.
 --
---   7. `number_space` CARRIES BOTH COUNTERS. One row per selector, and one
---      row per scope with a null selector. Both are maintained whatever the
---      allocation mode says, which is what makes the mode a setting rather
---      than a migration: switching it is a read against a counter that was
---      kept all along.
+--   7. `number_space` CARRIES ONE COUNTER PER SELECTOR. Each view — item,
+--      iteration, milestone — draws from its own row, and that row is the
+--      one position. There is no scope-wide counter beside them: under the
+--      view model an address carries the view, so `.../item/1`,
+--      `.../iteration/1` and `.../milestone/1` name three different objects
+--      already, and a second counter that would collapse the three views to
+--      one number line would remove nothing and take an ambiguity in
+--      exchange.
 --
 --   8. `updated_at` IS `changed_at` on `item`, as the study names it. The
 --      column keeps its type and its meaning; only the name follows the
@@ -432,8 +435,7 @@ GRANT SELECT, INSERT, UPDATE ON worklist.relation_type TO kumbuka_worklist;
 -- is a rule that the next raw UPDATE walks past.
 --
 -- THE SELECTOR DISCRIMINATES AND IT DESCRIBES, and the second is not a
--- leftover. Under the scope-wide allocation mode it no longer distinguishes
--- two items, but it still tells a reader what stands at the other end of an
+-- leftover. It still tells a reader what stands at the other end of an
 -- address without resolving it (concept 9).
 --
 -- Withdrawal is a STATUS, for the same reason there is no delete anywhere in
@@ -512,22 +514,22 @@ CREATE TRIGGER selector_address_is_immutable
 
 
 -- ---------------------------------------------------------------------------
--- number_space — the high-water marks, and BOTH of them exist at all times.
+-- number_space — the high-water marks, one per selector.
 --
--- One row per selector, for the per-selector position of the allocation mode,
--- and one row per scope with a NULL selector, for the scope-wide position.
--- The allocator reads the row the mode names and advances BOTH.
+-- One row per selector. Each view — item, iteration, milestone — draws from
+-- its own counter, and that row is the one position. There is no scope-wide
+-- counter beside them: the address carries the view, so `.../item/1`,
+-- `.../iteration/1` and `.../milestone/1` are three different addresses
+-- already. A second counter that would collapse them to one number line
+-- would remove nothing and take an ambiguity in exchange.
 --
--- THAT IS WHAT MAKES THE MODE A SETTING RATHER THAN A MIGRATION. Switching it
--- is a read against a counter that was maintained all along; if only the
--- active counter were kept, switching would mean reconstructing the other one
--- from rows that no longer say what was handed out.
---
--- A PARTIAL UNIQUE INDEX ENFORCES EXACTLY ONE SCOPE-WIDE ROW PER SCOPE. A
--- plain unique constraint over `(tenant_id, scope_id, selector_id)` would
--- not: in SQL two NULLs are not equal, so it would admit any number of
--- scope-wide rows — which is the defect this index exists against and the
--- reason the primary key here is a surrogate rather than the selector.
+-- A UNIQUE INDEX FORBIDS TWO COUNTERS FOR THE SAME SELECTOR IN THE SAME
+-- SCOPE. `selector_id` is `NOT NULL` here, so a plain unique constraint over
+-- `(tenant_id, scope_id, selector_id)` expresses the rule directly. The
+-- primary key stays a surrogate for one reason: the counter is looked up by
+-- the selector it belongs to, and mapping the ORM key onto that lookup path
+-- would draw the tenancy axis into every entity key in the schema, which
+-- the shared superclass owns and no caller names.
 --
 -- WHY A TABLE AND NOT A SEQUENCE
 --
@@ -561,9 +563,9 @@ CREATE TABLE worklist.number_space (
     id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id        UUID         NOT NULL,
     scope_id         UUID         NOT NULL,
-    -- NULL is the scope-wide counter. Not a missing value: it is the row that
-    -- belongs to no selector because it belongs to all of them.
-    selector_id      UUID,
+    -- The selector this counter belongs to. Every counter belongs to one;
+    -- there is no scope-wide row beside them.
+    selector_id      UUID         NOT NULL,
     high_water_mark  BIGINT       NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -581,15 +583,9 @@ CREATE TABLE worklist.number_space (
     CONSTRAINT uq_number_space_tenant_id UNIQUE (tenant_id, id)
 );
 
--- One counter per selector …
+-- One counter per selector, and only one.
 CREATE UNIQUE INDEX uq_number_space_selector
-    ON worklist.number_space (tenant_id, scope_id, selector_id)
-    WHERE selector_id IS NOT NULL;
-
--- … and exactly one scope-wide counter beside them.
-CREATE UNIQUE INDEX uq_number_space_scope_wide
-    ON worklist.number_space (tenant_id, scope_id)
-    WHERE selector_id IS NULL;
+    ON worklist.number_space (tenant_id, scope_id, selector_id);
 
 ALTER TABLE worklist.number_space ENABLE ROW LEVEL SECURITY;
 ALTER TABLE worklist.number_space FORCE  ROW LEVEL SECURITY;
@@ -868,10 +864,9 @@ ALTER TABLE worklist.item
     ADD CONSTRAINT uq_item_tenant_id UNIQUE (tenant_id, id);
 
 -- THE IDENTITY IS THE TRIPLE SCOPE, SELECTOR AND NUMBER — never the pair
--- without the selector. A store constraining the pair cannot later admit
--- per-selector numbering, and once two selectors have shared a number the
--- constraint can never be switched on again. It holds under BOTH allocation
--- modes, which is why the address is three-part in the first place.
+-- without the selector. The three views each carry their own counter, so
+-- two selectors legitimately share a number and only the triple names one
+-- object. That is why the address is three-part in the first place.
 --
 -- Partial, because a raw row has no address and any number of raw rows may
 -- exist at once.
@@ -1218,13 +1213,15 @@ GRANT SELECT, INSERT, UPDATE ON worklist.claim TO kumbuka_worklist;
 -- ---------------------------------------------------------------------------
 -- scope_setting — one row per scope, and everything the scope decides.
 --
--- THE ALLOCATION MODE has two positions. In the default position each
--- selector draws from its own counter, so two selectors may carry the same
--- number; in the other the allocator draws from the scope-wide counter, so a
--- number is not repeated across selectors. The two differ ONLY in which
--- counter the allocator reads — neither adds nor removes an assurance,
--- because uniqueness is the triple either way, and `number_space` maintains
--- both counters regardless. That is what makes this a setting.
+-- THE ADDRESS SPACE IS PER VIEW AND THE ROW SAYS NOTHING ABOUT IT. Each
+-- selector — item, iteration, milestone — has its own counter in
+-- `number_space`, and that counter is the one position. There used to be a
+-- second, expressible position beside it — a scope-wide counter, chosen by
+-- an `allocation_mode` column here — and it was removed on the class reading
+-- of the selector: the three views are three different classes of thing, so
+-- `.../item/1`, `.../iteration/1` and `.../milestone/1` name three
+-- different addresses and a bare number that had to disambiguate itself
+-- across them was solving a problem the address form does not have.
 --
 -- THE CURRENT ITERATION IS A POINTER AND LIVES HERE rather than as a boolean
 -- on the iteration, which would allow two current ones and would then need a
@@ -1248,7 +1245,6 @@ GRANT SELECT, INSERT, UPDATE ON worklist.claim TO kumbuka_worklist;
 CREATE TABLE worklist.scope_setting (
     tenant_id                       UUID         NOT NULL,
     scope_id                        UUID         NOT NULL,
-    allocation_mode                 TEXT         NOT NULL DEFAULT 'per_selector',
     current_iteration_id            UUID,
     max_planned_iterations          INTEGER      NOT NULL,
     warn_planned_iterations         INTEGER      NOT NULL,
@@ -1259,9 +1255,6 @@ CREATE TABLE worklist.scope_setting (
     updated_at                      TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
     CONSTRAINT pk_scope_setting PRIMARY KEY (tenant_id, scope_id),
-
-    CONSTRAINT ck_scope_setting_allocation_mode
-        CHECK (allocation_mode IN ('per_selector', 'scope_wide')),
 
     -- A limit of zero forbids what the setting exists to bound, and a
     -- negative one is not a limit at all. The relation between a warning and

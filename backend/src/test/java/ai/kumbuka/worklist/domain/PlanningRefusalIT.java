@@ -121,14 +121,12 @@ class PlanningRefusalIT {
                 "conflict_token", settingToken()))).reason())
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
 
-        // The admitted neighbour, and the mode and column set beside it.
+        // The admitted neighbour, and the column set beside the four numbers.
         UUID opened = UUID.randomUUID();
         Map<String, Object> answer = settings.create(opened, Map.of(
             "max_planned_iterations", 5, "warn_planned_iterations", 4,
             "max_memberships_per_iteration", 5, "warn_memberships_per_iteration", 4,
-            "allocation_mode", ScopeSetting.SCOPE_WIDE,
             "default_columns", List.of("title", "status")));
-        assertThat(answer.get("allocation_mode")).isEqualTo(ScopeSetting.SCOPE_WIDE);
         assertThat(answer.get("default_columns")).isEqualTo(List.of("title", "status"));
         assertThat(answer.get("current_iteration")).isNull();
     }
@@ -150,34 +148,15 @@ class PlanningRefusalIT {
                 + "other reader")
             .isEqualTo(settled);
 
-        // The other position, whichever this scope is in. Naming a fixed value
-        // here would make the assertion depend on the default — and the default
-        // moved to scope_wide with the view model, at which point "set it to
-        // scope_wide" stopped being a change at all.
-        String other = ScopeSetting.SCOPE_WIDE.equals(read.get("allocation_mode"))
-            ? ScopeSetting.PER_SELECTOR
-            : ScopeSetting.SCOPE_WIDE;
-
-        settings.update(scope, Map.of("allocation_mode", other,
+        // An effective change on any settable field must rotate the token.
+        // The default column set is the one that has no defended value at the
+        // migration layer, so a straight replacement here is a change.
+        settings.update(scope, Map.of("default_columns", List.of("title"),
             "conflict_token", settled));
         assertThat(settingToken())
             .as("and an effective change must rotate it, or the check above would be "
                 + "satisfied by never rotating at all")
             .isNotEqualTo(settled);
-    }
-
-    /** An unknown allocation mode is refused against the platform's own two. */
-    @Test
-    void the_allocation_mode_is_one_of_the_platforms_two() {
-        WorklistException refusal = refusalFrom(() -> settings.update(scope, Map.of(
-            "allocation_mode", "by_the_phase_of_the_moon",
-            "conflict_token", settingToken())));
-
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("allocation_mode");
-
-        settings.update(scope, Map.of("allocation_mode", ScopeSetting.PER_SELECTOR,
-            "conflict_token", settingToken()));
     }
 
     // ==================================================================

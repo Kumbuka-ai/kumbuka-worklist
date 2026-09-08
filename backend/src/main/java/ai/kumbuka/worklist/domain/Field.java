@@ -297,9 +297,6 @@ public enum Field {
 
     // --- the scope's own settings -----------------------------------------
 
-    /** Whether the item allocator draws per selector or scope-wide. */
-    ALLOCATION_MODE("allocation_mode", Set.of(SETTING), Set.of(SETTING)),
-
     /**
      * The iteration being worked, or null.
      *

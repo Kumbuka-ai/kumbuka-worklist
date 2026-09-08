@@ -51,9 +51,9 @@ public class IterationService extends PlanningService {
     private static final Logger LOG = Logger.getLogger(IterationService.class);
 
     /**
-     * The iteration selector's number_space row is what this allocator reads.
-     * V7 moved every axis onto its own selector's counter; this class was
-     * one of the two that took the change.
+     * The iteration selector's number_space row is what this allocator
+     * reads. Each axis has its own selector's counter; this class is one of
+     * the three that read one.
      */
     @Inject SelectorRegistry selectors;
 
@@ -255,7 +255,8 @@ public class IterationService extends PlanningService {
      * refusing every reader of the settings.
      *
      * <p>The mechanism is the one {@link SelectorRegistry#allocate} runs on
-     * the item selector too. V7 collapsed the two allocators into one.
+     * the item and milestone selectors too — one allocator, one counter per
+     * view.
      */
     private long allocateNumber(UUID scopeId) {
         Selector iterationSelector = selectors.require(scopeId, Selector.ITERATION);
