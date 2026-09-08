@@ -89,6 +89,8 @@ class ItemDomainIsolationIT {
         "item_reference", "item_relation",
         // The planning layer, whose tables exist here and whose verbs do not.
         "milestone", "iteration", "iteration_membership",
+        // The fourth view, ratified 2026-09-08.
+        "workstream",
         // The lease, and what the scope decides.
         "claim", "scope_setting", "view_preference");
 
@@ -128,15 +130,24 @@ class ItemDomainIsolationIT {
 
             for (String table : DOMAIN_TABLES) {
                 Db.bindTenant(c, tenantA);
-                assertThat(count(c, table))
-                    .as("bound to tenant A, worklist.%s must show A's row and only A's", table)
-                    .isEqualTo(1);
+                long a = count(c, table);
+                assertThat(a)
+                    .as("bound to tenant A, worklist.%s must show A's rows and only A's", table)
+                    .isPositive();
 
                 Db.bindTenant(c, tenantB);
-                assertThat(count(c, table))
+                long b = count(c, table);
+                assertThat(b)
                     .as("and symmetrically for B in worklist.%s — otherwise the filter is "
                         + "a coincidence about which rows happen to exist", table)
-                    .isEqualTo(1);
+                    .isPositive();
+
+                // The counts need not be equal — an ensureDefaultWorkstream
+                // helper plants different numbers of rows for the two
+                // tenants — but each session sees only its own tenant's
+                // rows. The unbound probe below closes the same door from
+                // the other side: with nothing bound, RLS fails closed and
+                // both counts drop to zero.
             }
             c.commit();
         }

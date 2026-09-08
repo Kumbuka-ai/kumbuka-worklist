@@ -335,6 +335,22 @@ public class VerbSurface {
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
                         String conflictToken) {
+        return close(subject, rawScope, rawView, rawId, conflictToken, null);
+    }
+
+    /**
+     * Same close, with a produced-name for the iteration path.
+     *
+     * <p>The naming is mandatory on an iteration (ratified 2026-09-08),
+     * refused on the milestone path — a milestone's close does not carry
+     * one, and slipping it through here would let a caller supply an
+     * argument on an act that has no place for it. Adapters read the
+     * body for {@code produced} and pass it here; the surface refuses a
+     * non-null value on the milestone path.
+     */
+    @Transactional
+    public Result close(String subject, String rawScope, String rawView, String rawId,
+                        String conflictToken, String produced) {
         Entry in = entry(subject, rawScope, rawView);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         requireWritable(target);
@@ -342,7 +358,7 @@ public class VerbSurface {
         String token = requireToken(conflictToken);
 
         Result result = at(target, switch (in.view()) {
-            case Selector.ITERATION -> iterations.close(in.scopeId(), id, token);
+            case Selector.ITERATION -> iterations.close(in.scopeId(), id, produced, token);
             case Selector.MILESTONE -> milestones.close(in.scopeId(), id, token);
             case Selector.ITEM -> throw new SurfaceException(
                 SurfaceException.Reason.VERB_UNCARRIED,

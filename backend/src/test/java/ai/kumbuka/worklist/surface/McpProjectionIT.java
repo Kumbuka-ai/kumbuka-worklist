@@ -159,7 +159,8 @@ class McpProjectionIT {
             .body("result.isError", is(false))
             .extract().path("result.structuredContent.fields.conflict_token");
 
-        call("close", Map.of("address", iteration, "conflict_token", iterationToken))
+        call("close", Map.of("address", iteration, "conflict_token", iterationToken,
+                "produced", "a test iteration outcome"))
             .body("result.structuredContent.fields.closed_at",
                 org.hamcrest.Matchers.notNullValue());
         call("close", Map.of("address", milestone, "conflict_token", tokenOf(milestone)))

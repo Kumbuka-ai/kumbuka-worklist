@@ -263,7 +263,8 @@ public class WorklistResource {
             case ACCEPT -> ok(scope, verbs.accept(subject, scope, selector, id, token));
             case WITHDRAW -> ok(scope, verbs.withdraw(subject, scope, selector, id, token,
                 Payloads.withdrawal(read(body, Payloads.WithdrawRequest.class))));
-            case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token));
+            case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token,
+                producedOr(read(body, Payloads.CloseRequest.class))));
 
             case CLAIM -> ok(scope, verbs.claim(subject, scope, selector, id,
                 Payloads.lease(read(body, Payloads.LeaseRequest.class))));
@@ -430,6 +431,11 @@ public class WorklistResource {
      */
     private Map<String, Object> readObject(String body) {
         return read(body, OBJECT);
+    }
+
+    /** The `produced` field of a close body, or null if no body arrived. */
+    private static String producedOr(Payloads.CloseRequest request) {
+        return request == null ? null : request.produced();
     }
 
     private <T> T read(String body, Class<T> shape) {
