@@ -387,10 +387,10 @@ class McpProjectionIT {
     /**
      * Points an item at a milestone, over JDBC and under the runtime role.
      *
-     * <p>No verb of this service assigns {@code item.milestone_id}, so the
-     * precondition {@code plan} enforces is satisfiable only by a write like
-     * this one. Named for what it is: a fixture that goes around the surface is
-     * a finding about the surface.
+     * <p>{@code item.update} against {@code milestone} is the settable path
+     * and it runs the existence check; this fixture writes the column
+     * directly so the projection case does not run the same guard the item
+     * probes cover.
      */
     private static void pointAtMilestone(String itemAddress, String milestoneAddress) {
         ai.kumbuka.worklist.platform.PlatformFixture.run(

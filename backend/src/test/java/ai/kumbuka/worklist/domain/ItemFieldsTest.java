@@ -53,9 +53,9 @@ class ItemFieldsTest {
     @Test
     void the_settable_names_are_the_ones_a_caller_may_change() {
         assertThat(Field.settableNames(Addressed.ITEM))
-            .contains("title", "description", "status", "attributes", "references",
-                "relations")
-            .doesNotContain("id", "number", "selector", "milestone", "created_at",
+            .contains("title", "description", "status", "milestone", "attributes",
+                "references", "relations")
+            .doesNotContain("id", "number", "selector", "created_at",
                 "conflict_token");
     }
 

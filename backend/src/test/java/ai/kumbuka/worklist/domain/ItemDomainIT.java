@@ -388,7 +388,6 @@ class ItemDomainIT {
         Map<String, Object> tampered = new HashMap<>(before);
         tampered.put("id", UUID.randomUUID());
         tampered.put("number", 99L);
-        tampered.put("milestone", UUID.randomUUID());
 
         WorklistException refusal = catchWorklistException(() ->
             items.update(SCOPE, id, tampered));
@@ -396,9 +395,8 @@ class ItemDomainIT {
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders())
             .as("echoing state back is fine; setting it is not, and the difference is "
-                + "which fields carried a value other than the one held. The milestone is "
-                + "among them because setting it is a planning act")
-            .containsExactlyInAnyOrder("id", "number", "milestone");
+                + "which fields carried a value other than the one held")
+            .containsExactlyInAnyOrder("id", "number");
     }
 
     // ==================================================================

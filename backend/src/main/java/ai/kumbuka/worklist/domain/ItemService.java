@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
+import ai.kumbuka.worklist.repository.PlanningRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -98,6 +99,7 @@ public class ItemService {
     @Inject ItemRepository items;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
+    @Inject PlanningRepository planning;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -745,6 +747,9 @@ public class ItemService {
             case STATUS -> {
                 return applyStatus(item, held, field, value);
             }
+            case MILESTONE_ID -> {
+                return applyMilestone(item, held, field, value);
+            }
             case ATTRIBUTES -> {
                 return applyAttributes(item, ItemFields.attributes(value));
             }
@@ -757,6 +762,56 @@ public class ItemService {
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable and has no application");
         }
+    }
+
+    /**
+     * The milestone assignment: resolved against the milestone's identity in
+     * the same scope, and null clears it.
+     *
+     * <p>The value travels as an identity, never as a title. A title is a
+     * property the scope may change at any moment, so a caller writing one
+     * would be writing something that can move under them. A value that is
+     * not a UUID is a typed refusal that names the field, on the same road
+     * every other identity-carrying field takes here.
+     *
+     * <p>Existence is checked before writing: a milestone that does not
+     * exist, or that belongs to another scope, or that has been closed, is a
+     * typed refusal — and the scope check is written in explicitly so that
+     * an id from another tenant cannot slip through as a not-found. The
+     * three marker rows are legitimate targets: they are milestones in the
+     * table and positions on the axis, and they are rows for exactly that
+     * reason.
+     */
+    private boolean applyMilestone(Item item, Object held, Field field, Object value) {
+        UUID milestoneId = ItemFields.id(field, value);
+        if (ItemFields.unchangedAsText(held, milestoneId)) {
+            return false;
+        }
+        if (milestoneId == null) {
+            item.milestoneId = null;
+            return true;
+        }
+        Milestone milestone = planning.milestoneById(milestoneId);
+        if (milestone == null || !item.scopeId.equals(milestone.scopeId)) {
+            throw new WorklistException(
+                WorklistException.Reason.MILESTONE_UNKNOWN,
+                "no milestone " + milestoneId + " in scope " + item.scopeId + ". A "
+                    + "milestone from another scope is refused rather than reported "
+                    + "as absent: the two answers look the same to the caller but "
+                    + "differ in what they let through — an id that names something "
+                    + "elsewhere is a mistake, not a missing row",
+                List.of(field.canonicalName()));
+        }
+        if (Milestone.CLOSED.equals(milestone.status)) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "milestone " + milestoneId + " is closed. An item's assignment is what "
+                    + "the item is working towards, and a closed milestone is not "
+                    + "something anything is working towards any more",
+                List.of(field.canonicalName()));
+        }
+        item.milestoneId = milestone.id;
+        return true;
     }
 
     /** The status: resolved against the scope's own declared vocabulary. */

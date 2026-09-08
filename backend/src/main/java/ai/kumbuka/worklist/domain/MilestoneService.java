@@ -27,23 +27,14 @@ import java.util.UUID;
  * the status its scope declared, which is a different mechanism for a
  * different kind of object.
  *
- * <h2>What this service cannot do, and it is a finding rather than a design</h2>
+ * <h2>Assignment is an item update, not a verb of this service</h2>
  *
- * <strong>Nothing here assigns a milestone to an item.</strong>
- * {@code item.milestone_id} is read through the item verbs and written by
- * nobody: {@link Field#MILESTONE_ID} is not settable on an item, and no verb
- * of this service addresses an item. So the precondition in
- * {@link MembershipService#plan} — that an item carries a milestone on the
- * product path — is today satisfiable only by a write that goes around the
- * service.
- *
- * <p>That gap is reported rather than closed. Closing it means deciding
- * WHICH verb assigns the axis, and the verb catalogue's mapping table for
- * this scheme names none: {@code update} carries iteration order and
- * membership status, and nothing else on the planning side. Inventing a
- * seventh verb here, or quietly making the field settable on the item, would
- * answer a question nobody has asked — and the item verbs are explicitly out
- * of scope for this piece of work.
+ * The milestone an item serves is written through {@code item.update} against
+ * {@link Field#MILESTONE_ID}. A verb here would be the surface's, and the
+ * verb catalogue's mapping table for this scheme names none — {@code update}
+ * carries iteration order and membership status on the planning side, and
+ * nothing else. The precondition in {@link MembershipService#plan} — that an
+ * item carries a milestone on the product path — is met by the item verb.
  *
  * <h2>At most one active, and setting one demotes the other</h2>
  *

@@ -212,12 +212,13 @@ public enum Field {
      * The milestone an item serves, or null — including the three marker
      * rows, which are milestones in the table and positions on the axis.
      *
-     * <p>Read-only through every verb this service carries, and that is a
-     * FINDING rather than a design: no verb assigns it. See
-     * {@code MilestoneService} for what is missing and why it was not
-     * invented here.
+     * <p>Written through {@code item.update} against the milestone's
+     * identity, never against its title. A title is a property the scope
+     * may change at any moment, so a value that travelled as one would move
+     * under any caller who wrote it. {@code null} clears the assignment —
+     * an item that serves no milestone is a regular state.
      */
-    MILESTONE_ID("milestone", Set.of(ITEM), Set.of()),
+    MILESTONE_ID("milestone", Set.of(ITEM), Set.of(ITEM)),
 
     /**
      * Whether a milestone is a goal or one of the three positions on the axis

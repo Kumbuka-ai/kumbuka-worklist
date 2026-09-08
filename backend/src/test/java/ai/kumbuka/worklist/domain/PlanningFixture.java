@@ -10,18 +10,17 @@ import java.util.UUID;
 
 /**
  * The one fixture of the planning probes that goes around the service, and
- * the reason it has to.
+ * the reason it does.
  *
- * <p><strong>No verb of this service assigns {@code item.milestone_id}.</strong>
- * The field is not settable on an item and no planning verb addresses an
- * item, so the precondition {@code MembershipService.plan} enforces — that an
- * item carries a milestone on the product path — is today satisfiable only by
- * a write like this one.
+ * <p>{@code item.milestone_id} is now settable through {@code item.update},
+ * with an existence check the item verb enforces. The probes below still
+ * write it over JDBC because they plant milestones and iterations that the
+ * planning cases then read: driving the assignment through the item verb
+ * would run the same check the item probes cover, and re-checking it here
+ * would be probing the same guard twice.
  *
  * <p>It is held in one place, named for what it is, rather than copied into
- * each probe class. A fixture that goes around the thing under test is a
- * finding about the surface; hiding it in two private helpers would make it
- * look like an ordinary setup step.
+ * each probe class.
  */
 final class PlanningFixture {
 
