@@ -511,12 +511,14 @@ class ItemDomainIsolationIT {
     private UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
         UUID id = UUID.randomUUID();
         UUID selector = anySelector(c, tenant);
+        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         long number = nextNumber
             .computeIfAbsent(tenant, t -> new AtomicLong()).incrementAndGet();
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (id, tenant_id, scope_id, title, status_id, selector_id, number)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, title, status_id, selector_id, number,
+                     workstream_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);
@@ -525,6 +527,7 @@ class ItemDomainIsolationIT {
             st.setObject(5, anyStatus(c, tenant));
             st.setObject(6, selector);
             st.setLong(7, number);
+            st.setObject(8, workstream);
             st.executeUpdate();
         }
         return id;
@@ -576,13 +579,16 @@ class ItemDomainIsolationIT {
     }
 
     private void insertMilestone(Connection c, UUID tenant) throws SQLException {
+        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.milestone (id, tenant_id, scope_id, number, title)
-                VALUES (?, ?, ?, 1, 'a milestone')
+                INSERT INTO worklist.milestone
+                    (id, tenant_id, scope_id, number, title, workstream_id)
+                VALUES (?, ?, ?, 1, 'a milestone', ?)
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
+            st.setObject(4, workstream);
             st.executeUpdate();
         }
     }

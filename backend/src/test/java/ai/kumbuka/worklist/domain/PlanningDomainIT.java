@@ -206,7 +206,7 @@ class PlanningDomainIT {
         memberships.update(scope, iteration, item, Map.of(
             "membership_status", "done",
             "conflict_token", token(iteration)));
-        iterations.close(scope, iteration, token(iteration));
+        iterations.close(scope, iteration, "test outcome", token(iteration));
 
         assertThat(memberships.query(scope))
             .as("closed iteration, terminal membership: not planned")
@@ -684,7 +684,7 @@ class PlanningDomainIT {
         memberships.plan(scope, firstId, onPath(item("in the first")), token(firstId));
         memberships.update(scope, firstId, memberships.query(scope).get(0), Map.of(
             "membership_status", "done", "conflict_token", token(firstId)));
-        iterations.close(scope, firstId, token(firstId));
+        iterations.close(scope, firstId, "first outcome", token(firstId));
 
         Map<String, Object> second = created("second", 2);
 

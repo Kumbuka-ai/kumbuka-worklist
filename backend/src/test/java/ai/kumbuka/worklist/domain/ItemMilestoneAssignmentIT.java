@@ -231,13 +231,16 @@ class ItemMilestoneAssignmentIT {
         UUID id = UUID.randomUUID();
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, PlanningFixture.boundTenant());
+            UUID workstream = Db.ensureDefaultWorkstream(c,
+                PlanningFixture.boundTenant(), scope);
             try (var st = c.prepareStatement(
                     "INSERT INTO worklist.milestone "
-                        + "(id, tenant_id, scope_id, number, title, kind, status) "
+                        + "(id, tenant_id, scope_id, number, title, kind, status, "
+                        + " workstream_id) "
                         + "VALUES (?, ?, ?, "
                         + "(SELECT coalesce(max(number),0)+1 FROM worklist.milestone "
                         + "  WHERE scope_id = ?), "
-                        + "?, ?, ?)")) {
+                        + "?, ?, ?, ?)")) {
                 st.setObject(1, id);
                 st.setObject(2, PlanningFixture.boundTenant());
                 st.setObject(3, scope);
@@ -245,6 +248,7 @@ class ItemMilestoneAssignmentIT {
                 st.setString(5, "on-path marker");
                 st.setString(6, Milestone.NO_VISION);
                 st.setString(7, Milestone.PLANNED);
+                st.setObject(8, workstream);
                 st.executeUpdate();
             }
             c.commit();

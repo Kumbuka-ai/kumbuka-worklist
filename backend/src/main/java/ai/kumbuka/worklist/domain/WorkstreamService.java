@@ -67,12 +67,22 @@ public class WorkstreamService {
     }
 
     /**
-     * The default workstream of the scope, as the canonical field map.
+     * The default workstream of the scope. Created lazily on first read if
+     * missing — the default IS a property of every scope by the ratified
+     * design, and its concrete row is where that property is expressed.
      *
-     * <p>Every scope has one, created by V8 or by
-     * {@link ScopeSettingService} at scope open. Its absence is a defect
-     * worth a typed refusal rather than a silent null — a scope whose
-     * default is missing has an intake path with no landing.
+     * <p>Lazy creation is not a licence for other workstreams to appear on
+     * first use: the frame refuses that flatly for CALLER-declared ones,
+     * because a service that mints a workstream on first mention makes a
+     * typo indistinguishable from an intention. The default is not
+     * caller-mentioned. It is the intake landing every scope carries by
+     * construction, and its identity comes from its {@code is_default}
+     * flag rather than from any name a caller might name.
+     *
+     * <p>The lazy path also ensures the workstream selector and the
+     * workstream selector's number-space row exist for the scope, so a
+     * scope opened outside the bootstrap path (a test fixture) has the
+     * same shape as one opened through it.
      */
     @Transactional
     public Workstream requireDefault(UUID scopeId) {
@@ -80,12 +90,26 @@ public class WorkstreamService {
         if (defaultWs != null) {
             return defaultWs;
         }
-        throw new WorklistException(
-            WorklistException.Reason.WORKSTREAM_UNKNOWN,
-            "scope " + scopeId + " has no default workstream. V8 creates one for every "
-                + "scope registered in scope_setting; its absence means a scope was "
-                + "opened outside the bootstrap path",
-            List.of(String.valueOf(scopeId)));
+        // Ensure the workstream selector exists in this scope. `declare`
+        // is idempotent — it returns the existing selector row and opens
+        // its number-space row if that is missing too.
+        Selector workstreamSelector = selectors.declare(scopeId, Selector.WORKSTREAM);
+        long number = selectors.allocate(scopeId, workstreamSelector);
+
+        Workstream defaultRow = new Workstream();
+        defaultRow.scopeId     = scopeId;
+        defaultRow.number      = number;
+        defaultRow.token       = Workstream.DEFAULT_TOKEN;
+        defaultRow.description = "The default workstream. Everything that names no other "
+            + "lands here; its identity is fixed and only the description is settable.";
+        defaultRow.status      = Workstream.DECLARED;
+        defaultRow.isDefault   = true;
+        workstreams.insert(defaultRow);
+        workstreams.refresh(defaultRow);
+
+        LOG.infof("default workstream created lazily in scope %s (number %d)",
+            scopeId, number);
+        return defaultRow;
     }
 
     // ------------------------------------------------------------------
