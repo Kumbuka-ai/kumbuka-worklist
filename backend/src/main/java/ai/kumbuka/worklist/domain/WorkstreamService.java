@@ -107,6 +107,14 @@ public class WorkstreamService {
         workstreams.insert(defaultRow);
         workstreams.refresh(defaultRow);
 
+        // Ensure the milestone counter for this workstream exists too. A
+        // scope that never declared the milestone selector never gets one
+        // — that is the intended shape — but if the milestone selector IS
+        // declared and no counter belongs to this workstream, the next
+        // milestone create would allocate against nothing. Idempotent.
+        Selector milestoneSelector = selectors.declare(scopeId, Selector.MILESTONE);
+        selectors.openSpaceInWorkstream(scopeId, milestoneSelector, defaultRow.id);
+
         LOG.infof("default workstream created lazily in scope %s (number %d)",
             scopeId, number);
         return defaultRow;
