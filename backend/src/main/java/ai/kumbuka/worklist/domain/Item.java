@@ -140,6 +140,23 @@ public class Item extends AggregateRoot {
     public UUID milestoneId;
 
     /**
+     * The workstream this item belongs to. Mandatory, once V10 lands.
+     *
+     * <p>Ratified 2026-09-08: an item carries a workstream as an
+     * obligation, and a milestone reference on this item — if it carries
+     * one — has to lie in this same workstream. The invariant is enforced
+     * by {@code ItemService}, not by a database constraint, because the
+     * check spans two tables and a check constraint cannot join.
+     *
+     * <p>Field is left {@code nullable = false = false} implicitly through the
+     * V10 migration; the entity does not mark it {@code nullable = false} to
+     * keep the entity forward-compatible with a service that runs against a
+     * schema at V9 (backfilled but not narrowed).
+     */
+    @Column(name = "workstream_id")
+    public UUID workstreamId;
+
+    /**
      * Every declared attribute of this item, keyed by the DEFINITION'S
      * IDENTITY.
      *

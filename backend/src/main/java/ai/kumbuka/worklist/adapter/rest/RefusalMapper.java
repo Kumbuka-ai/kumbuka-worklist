@@ -177,6 +177,23 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 // The edge named does not exist. A withdrawn one reads the
                 // same as an absent one from here; the same 404 group.
                 case RELATION_UNKNOWN -> 404;
+
+                // --- the workstream ---------------------------------------
+                //
+                // Ratified 2026-09-08 as the fourth view.
+
+                // Nothing there — same class as the other three view
+                // absences.
+                case WORKSTREAM_UNKNOWN -> 404;
+
+                // The object is real and its state says no.
+                case WORKSTREAM_WITHDRAWN, WORKSTREAM_HAS_REFERENCES,
+                     WORKSTREAM_DEFAULT_LOCKED, WORKSTREAM_MILESTONE_MISMATCH -> 409;
+
+                // The call is missing a value it is required to name.
+                // Same class as INVALID_VALUE — a caller correction, not a
+                // conflict with the store.
+                case ITEM_WORKSTREAM_MISSING, ITERATION_PRODUCED_MISSING -> 422;
             };
         }
     }

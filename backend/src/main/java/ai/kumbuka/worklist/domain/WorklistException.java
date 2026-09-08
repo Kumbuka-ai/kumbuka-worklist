@@ -274,6 +274,53 @@ public class WorklistException extends RuntimeException {
         // findings in the answer rather than as a refusal; a finding that
         // becomes actionable — a scope so inconsistent that reads cannot
         // continue — will need its own reason and belongs here when it does.
+
+        // --- the workstream --------------------------------------------
+        //
+        // Arrived with the fourth view, ratified 2026-09-08. Each of these
+        // names a refusal `WorkstreamService`, `ItemService` or
+        // `IterationService` actually raises against the ratified
+        // invariants — one per class of violation.
+
+        /** No workstream of that id or token in this scope. */
+        WORKSTREAM_UNKNOWN,
+
+        /** The workstream exists and has been withdrawn, so nothing new is accepted under it. */
+        WORKSTREAM_WITHDRAWN,
+
+        /**
+         * A workstream is renamable only while nothing points at it. Something
+         * does, so the rename is refused; the refusal names the pointers.
+         */
+        WORKSTREAM_HAS_REFERENCES,
+
+        /**
+         * The default workstream admits no rename and no withdrawal. Its
+         * identity is fixed and only its description is settable.
+         */
+        WORKSTREAM_DEFAULT_LOCKED,
+
+        /**
+         * An item carries a milestone that lies in a different workstream than
+         * the item does. The invariant is: an item with a milestone shares its
+         * workstream, and this refusal is the one that keeps it.
+         */
+        WORKSTREAM_MILESTONE_MISMATCH,
+
+        /**
+         * A create or update presented no workstream, and the item is required
+         * to carry one. The refusal is raised before the row is written, so an
+         * item without a workstream is inexpressible from the outside.
+         */
+        ITEM_WORKSTREAM_MISSING,
+
+        /**
+         * An iteration close carried no naming of what was produced. The
+         * check is presence rather than form — a specification, a concept,
+         * a set of corpus nodes qualify on the same conditions as a release —
+         * but empty and whitespace-only are refused.
+         */
+        ITERATION_PRODUCED_MISSING,
     }
 
     private final transient Reason reason;

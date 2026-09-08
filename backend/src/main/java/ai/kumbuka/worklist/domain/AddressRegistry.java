@@ -49,6 +49,7 @@ public class AddressRegistry {
     @Inject ItemRepository items;
     @Inject PlanningRepository planning;
     @Inject SelectorRegistry selectors;
+    @Inject ai.kumbuka.worklist.repository.WorkstreamRepository workstreams;
 
     /**
      * The vocabulary stage, without a row behind it.
@@ -110,6 +111,24 @@ public class AddressRegistry {
                 Selector.MILESTONE, number, scopeId);
         }
         return milestone.id;
+    }
+
+    /**
+     * The workstream at that number, or a typed refusal.
+     *
+     * <p>Ratified 2026-09-08 as the fourth view. Its counter runs
+     * per-scope like {@code item} and {@code iteration}; the milestone is
+     * the outlier whose counter runs per-workstream.
+     */
+    @Transactional
+    public UUID workstreamAt(UUID scopeId, long number) {
+        selectors.require(scopeId, Selector.WORKSTREAM);
+        Workstream workstream = workstreams.findByNumber(scopeId, number);
+        if (workstream == null) {
+            throw absent(WorklistException.Reason.WORKSTREAM_UNKNOWN,
+                Selector.WORKSTREAM, number, scopeId);
+        }
+        return workstream.id;
     }
 
     /**
