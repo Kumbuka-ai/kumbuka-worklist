@@ -514,6 +514,215 @@ class SchemaConstraintIT {
     }
 
     // ==================================================================
+    // V7: the address is mandatory, and text fields carry an upper bound.
+    // ==================================================================
+
+    /**
+     * An item without a selector is refused at the column.
+     *
+     * <p>Both halves of the address were nullable through V6 as the intake
+     * state of a raw call-in — a state no verb reaches any more since the
+     * selector became the view and {@code accept} refuses. V7 restates that
+     * observation as a column NOT NULL: an item exists at an address, and a
+     * row without one cannot exist at all.
+     *
+     * <p>The green half is what {@link #insertItem} plants at every other test
+     * in this class: an item with a selector, a number and a status, admitted
+     * without a word about the constraint below.
+     */
+    @Test
+    void an_item_without_a_selector_is_refused_and_a_full_address_stands()
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+            UUID status = anyStatus(c);
+            c.commit();
+
+            Db.bindTenant(c, tenant);
+            assertThatThrownBy(() -> insertItemWithAddress(c, "no selector",
+                    status, null, 1L))
+                .as("RED STATE, observed: an item without a selector must be refused. "
+                    + "The address names the object, and half an address names nothing "
+                    + "the caller can hold on to")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("selector_id");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            UUID selector = insertSelector(c);
+            insertItemWithAddress(c, "full address", status, selector, 1L);
+            c.commit();
+
+            assertThat(count(c, "item"))
+                .as("and an item with a selector and a number is admitted, which is the "
+                    + "shape every verb produces since the selector became the view")
+                .isEqualTo(1);
+            c.commit();
+        }
+    }
+
+    /**
+     * An item without a number is refused at the column.
+     *
+     * <p>Named apart from the selector case rather than folded in with it,
+     * because the column checks are two independent NOT NULLs and each has to
+     * be observed refusing on its own. A single test that supplied neither
+     * would not tell one column from the other.
+     */
+    @Test
+    void an_item_without_a_number_is_refused() throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+            UUID status = anyStatus(c);
+            UUID selector = insertSelector(c);
+            c.commit();
+
+            Db.bindTenant(c, tenant);
+            assertThatThrownBy(() -> insertItemWithAddress(c, "no number",
+                    status, selector, null))
+                .as("RED STATE, observed: an item without a number must be refused. "
+                    + "The counter is the mechanism that keeps two objects from sharing "
+                    + "an address, and a row without one is the state that would let "
+                    + "them")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("number");
+            c.rollback();
+        }
+    }
+
+    /**
+     * An item title of 201 characters is refused; 200 go through.
+     *
+     * <p>The boundary case is the case. A cap only ever observed rejecting
+     * "obviously too long" is a cap ungoverned at its own edge, and the
+     * predecessor's cap-at-150 was measured against inputs of 400+ but never
+     * against 151 — which is where drift lives.
+     */
+    @Test
+    void an_item_title_of_201_is_refused_and_200_go_through() throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+            UUID status = anyStatus(c);
+            UUID atCap = insertSelector(c);
+            UUID overCap = insertSelector(c);
+            c.commit();
+
+            Db.bindTenant(c, tenant);
+            assertThatThrownBy(() -> insertItemWithTitle(c, repeat('a', 201),
+                    status, overCap))
+                .as("RED STATE, observed: a title one character over the cap must be "
+                    + "refused. A cap that admits 201 is a cap the reader has to guess "
+                    + "at, and the predecessor's cap drifted from 150 to whatever the "
+                    + "longest historical row happened to carry")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("ck_item_title_length");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            insertItemWithTitle(c, repeat('a', 200), status, atCap);
+            c.commit();
+
+            assertThat(count(c, "item"))
+                .as("and exactly 200 characters go through — the equality case, which is "
+                    + "the one only a boundary test catches")
+                .isEqualTo(1);
+            c.commit();
+        }
+    }
+
+    /**
+     * A milestone mission of 1501 characters is refused; 1500 go through.
+     *
+     * <p>The mission is the field with the largest cap and therefore the one
+     * most likely to be misread as unbounded. The boundary case is asserted
+     * at 1500 and 1501 for the same reason as the item title.
+     */
+    @Test
+    void a_milestone_mission_of_1501_is_refused_and_1500_go_through() throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+
+            assertThatThrownBy(() -> insertMilestoneWithMission(c, 1, repeat('m', 1501)))
+                .as("RED STATE, observed: a mission one character over the cap must be "
+                    + "refused. 1500 is the largest ceiling this migration writes, and a "
+                    + "cap that only rejected 2000 would leave 1501 to 1999 unchecked")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("ck_milestone_mission_length");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            insertMilestoneWithMission(c, 1, repeat('m', 1500));
+            c.commit();
+
+            assertThat(count(c, "milestone"))
+                .as("and exactly 1500 characters go through")
+                .isEqualTo(1);
+            c.commit();
+        }
+    }
+
+    /**
+     * An over-cap row already in the store stays readable.
+     *
+     * <p>The whole point of a CHECK on the write path is that the read path is
+     * untouched: a corpus already carrying an over-length value must not be
+     * sealed against its own content. The predecessor learnt this the hard
+     * way — a cap on the read path made an over-long row unrepairable through
+     * the service.
+     *
+     * <p>To prove it here the constraint is dropped, an over-cap row is
+     * planted, and the constraint is put back as {@code NOT VALID} — which is
+     * what would obtain in production if a row like this had somehow been
+     * written before the cap was tightened. The service role then reads the
+     * row through the same channel a caller would.
+     *
+     * <p>The constraint is restored so the rest of this class's tests find
+     * the schema they were written against; {@code NOT VALID} keeps the
+     * planted row and re-checks every subsequent INSERT and UPDATE against
+     * the ceiling.
+     */
+    @Test
+    void an_over_cap_mission_planted_by_dropping_the_check_stays_readable()
+            throws SQLException {
+        String overCap = repeat('m', 2000);
+
+        try (Connection migrator = Db.asMigrator()) {
+            // The migrator owns the schema but carries NOBYPASSRLS, so the
+            // planting insert is subject to the same tenant policy any writer
+            // would face. Binding the tenant is not a workaround: it is the
+            // policy this insert satisfies, the same way every other insert
+            // in this class does.
+            Db.bindTenant(migrator, tenant);
+            Db.exec(migrator, "ALTER TABLE worklist.milestone "
+                + "DROP CONSTRAINT ck_milestone_mission_length");
+            insertMilestoneWithMissionAs(migrator, 42, overCap);
+            Db.exec(migrator, "ALTER TABLE worklist.milestone "
+                + "ADD CONSTRAINT ck_milestone_mission_length "
+                + "CHECK (mission IS NULL OR char_length(mission) <= 1500) NOT VALID");
+            migrator.commit();
+        }
+
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+            assertThat(missionAtNumber(c, 42))
+                .as("the row planted at 2000 characters must remain readable through the "
+                    + "runtime role. A cap on the read path would have sealed the store "
+                    + "against its own content, and the content could not then be "
+                    + "repaired through the service")
+                .hasSize(2000);
+
+            // And the constraint is still on the write path — a new over-cap
+            // row is refused even though the planted one stands.
+            assertThatThrownBy(() -> insertMilestoneWithMission(c, 43, overCap))
+                .as("NOT VALID leaves existing rows alone and checks every subsequent "
+                    + "write; a second over-cap row must therefore be refused")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("ck_milestone_mission_length");
+            c.rollback();
+        }
+    }
+
+    // ==================================================================
     // Planting. Every statement is issued as the runtime role, under a bound
     // tenant, so a refusal is the constraint and never the policy.
     // ==================================================================
@@ -566,18 +775,30 @@ class SchemaConstraintIT {
         return id;
     }
 
-    /** An item, with the tenant's status — declared once and reused. */
+    /**
+     * An item, with the tenant's status — declared once and reused — and a
+     * fresh address per insert.
+     *
+     * <p>Since V7 both halves of the address are NOT NULL at the column, so an
+     * item without them is refused. A fresh selector per insert keeps the
+     * number at 1 for every planted row without threading a counter through
+     * every caller.
+     */
     private UUID insertItem(Connection c, String title) throws SQLException {
         UUID id = UUID.randomUUID();
+        UUID selector = insertSelector(c);
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item (id, tenant_id, scope_id, title, status_id)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO worklist.item
+                    (id, tenant_id, scope_id, title, status_id, selector_id, number)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
             st.setString(4, title);
             st.setObject(5, anyStatus(c));
+            st.setObject(6, selector);
+            st.setLong(7, 1L);
             st.executeUpdate();
         }
         return id;
@@ -801,5 +1022,107 @@ class SchemaConstraintIT {
                 return rs.getLong(1);
             }
         }
+    }
+
+    /**
+     * An item at the address given, or with either half deliberately unset —
+     * used by the two probes that watch a column NOT NULL refuse an insert.
+     * Every other insert path in this class uses {@link #insertItem}, which
+     * always supplies both halves.
+     */
+    private void insertItemWithAddress(Connection c, String title, UUID status,
+            UUID selector, Long number) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item
+                    (id, tenant_id, scope_id, title, status_id, selector_id, number)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setString(4, title);
+            st.setObject(5, status);
+            st.setObject(6, selector);
+            if (number == null) {
+                st.setNull(7, java.sql.Types.BIGINT);
+            } else {
+                st.setLong(7, number);
+            }
+            st.executeUpdate();
+        }
+    }
+
+    /**
+     * An item at a title of the given length — the address is a fresh valid
+     * pair so the refusal, when one comes, names the length check and nothing
+     * else.
+     */
+    private void insertItemWithTitle(Connection c, String title, UUID status,
+            UUID selector) throws SQLException {
+        insertItemWithAddress(c, title, status, selector, 1L);
+    }
+
+    /**
+     * A milestone with a mission of the given length. The kind is
+     * {@code milestone} because a marker may not carry a mission at all, and
+     * that is a different constraint under test elsewhere.
+     */
+    private void insertMilestoneWithMission(Connection c, long number, String mission)
+            throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.milestone
+                    (id, tenant_id, scope_id, number, title, kind, status, mission)
+                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?)
+                """)) {
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setLong(4, number);
+            st.setString(5, "milestone " + number);
+            st.setString(6, mission);
+            st.executeUpdate();
+        }
+    }
+
+    /**
+     * The same insert on any given connection — used from the migrator
+     * connection in the read-path probe, so a row can be planted after the
+     * check has been dropped and before it is put back.
+     */
+    private void insertMilestoneWithMissionAs(Connection c, long number, String mission)
+            throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.milestone
+                    (id, tenant_id, scope_id, number, title, kind, status, mission)
+                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?)
+                """)) {
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setLong(4, number);
+            st.setString(5, "milestone " + number);
+            st.setString(6, mission);
+            st.executeUpdate();
+        }
+    }
+
+    /** The mission of one milestone, as the CURRENT session sees it. */
+    private String missionAtNumber(Connection c, long number) throws SQLException {
+        try (var st = c.prepareStatement(
+                "SELECT mission FROM worklist.milestone "
+                    + "WHERE tenant_id = ? AND number = ?")) {
+            st.setObject(1, tenant);
+            st.setLong(2, number);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getString(1);
+            }
+        }
+    }
+
+    private static String repeat(char ch, int times) {
+        char[] buf = new char[times];
+        java.util.Arrays.fill(buf, ch);
+        return new String(buf);
     }
 }
