@@ -99,6 +99,18 @@ public final class Payloads {
     }
 
     /**
+     * What a caller supplies to close.
+     *
+     * <p>{@code produced} names what the iteration produced — free text,
+     * mandatory on the iteration path (ratified 2026-09-08). Presence is
+     * checked in the domain; form is not, so a specification, a concept,
+     * or a set of corpus nodes all qualify. The milestone path uses no
+     * body — the field is ignored there.
+     */
+    public record CloseRequest(String produced) {
+    }
+
+    /**
      * What a caller supplies to claim a lease or to draw one.
      *
      * <p>Seconds because integers travel legibly and a duration string is a

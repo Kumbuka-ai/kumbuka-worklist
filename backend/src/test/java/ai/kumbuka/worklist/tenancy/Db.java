@@ -152,10 +152,12 @@ public final class Db {
     static UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
         UUID status = declaredStatus(c, tenant);
         UUID selector = insertSelector(c, tenant);
+        UUID workstream = ensureDefaultWorkstream(c, tenant);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (tenant_id, scope_id, title, status_id, selector_id, number)
-                VALUES (?::uuid, ?::uuid, ?, ?::uuid, ?::uuid, ?)
+                    (tenant_id, scope_id, title, status_id, selector_id, number,
+                     workstream_id)
+                VALUES (?::uuid, ?::uuid, ?, ?::uuid, ?::uuid, ?, ?::uuid)
                 RETURNING id
                 """)) {
             st.setString(1, tenant.toString());
@@ -164,6 +166,97 @@ public final class Db {
             st.setString(4, status.toString());
             st.setString(5, selector.toString());
             st.setLong(6, 1L);
+            st.setString(7, workstream.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return UUID.fromString(rs.getString(1));
+            }
+        }
+    }
+
+    /**
+     * The tenant's default workstream, planted on first use exactly the way
+     * {@link #declaredStatus} plants a status.
+     *
+     * <p>V10 makes {@code workstream_id} NOT NULL on {@code item} and
+     * {@code milestone}. A fixture that inserts either without it would be
+     * planting a row the service could not have written; this helper is
+     * what keeps the fixtures shaped like the service.
+     *
+     * <p>The workstream selector and its number-space row are opened along
+     * the way if they were not already, and the mark is advanced to 1 so
+     * the next allocation returns 2. The row is only created when it is
+     * missing; subsequent calls return the existing one.
+     */
+    public static UUID ensureDefaultWorkstream(Connection c, UUID tenant) throws SQLException {
+        return ensureDefaultWorkstream(c, tenant,
+            UUID.fromString(SubstrateDatabaseResource.SCOPE_ID));
+    }
+
+    /** Same helper, for a scope other than the substrate's fixed one. */
+    public static UUID ensureDefaultWorkstream(Connection c, UUID tenant, UUID scope)
+            throws SQLException {
+        try (var st = c.prepareStatement(
+                "SELECT id FROM worklist.workstream "
+                    + "WHERE tenant_id = ?::uuid AND scope_id = ?::uuid AND is_default = true")) {
+            st.setString(1, tenant.toString());
+            st.setString(2, scope.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next()) {
+                    return UUID.fromString(rs.getString(1));
+                }
+            }
+        }
+        UUID workstreamSelector;
+        try (var st = c.prepareStatement(
+                "SELECT id FROM worklist.selector "
+                    + "WHERE tenant_id = ?::uuid AND scope_id = ?::uuid AND token = 'workstream'")) {
+            st.setString(1, tenant.toString());
+            st.setString(2, scope.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next()) {
+                    workstreamSelector = UUID.fromString(rs.getString(1));
+                } else {
+                    workstreamSelector = null;
+                }
+            }
+        }
+        if (workstreamSelector == null) {
+            try (var st = c.prepareStatement("""
+                    INSERT INTO worklist.selector (tenant_id, scope_id, token)
+                    VALUES (?::uuid, ?::uuid, 'workstream')
+                    RETURNING id
+                    """)) {
+                st.setString(1, tenant.toString());
+                st.setString(2, scope.toString());
+                try (ResultSet rs = st.executeQuery()) {
+                    rs.next();
+                    workstreamSelector = UUID.fromString(rs.getString(1));
+                }
+            }
+        }
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.number_space
+                    (tenant_id, scope_id, selector_id, high_water_mark)
+                VALUES (?::uuid, ?::uuid, ?::uuid, 1)
+                ON CONFLICT (tenant_id, scope_id, selector_id) WHERE workstream_id IS NULL
+                DO UPDATE SET high_water_mark = GREATEST(worklist.number_space.high_water_mark, 1)
+                """)) {
+            st.setString(1, tenant.toString());
+            st.setString(2, scope.toString());
+            st.setString(3, workstreamSelector.toString());
+            st.execute();
+        }
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.workstream
+                    (tenant_id, scope_id, number, token, description, is_default)
+                VALUES (?::uuid, ?::uuid, 1, 'default',
+                    'test-fixture default workstream — the intake landing of every '
+                        || 'row a fixture plants directly', true)
+                RETURNING id
+                """)) {
+            st.setString(1, tenant.toString());
+            st.setString(2, scope.toString());
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
                 return UUID.fromString(rs.getString(1));

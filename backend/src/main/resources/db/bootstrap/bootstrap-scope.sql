@@ -111,7 +111,59 @@ INSERT INTO worklist.selector (tenant_id, scope_id, token)
 VALUES
     (:'tenant_id', :'scope_id', 'item'),
     (:'tenant_id', :'scope_id', 'iteration'),
-    (:'tenant_id', :'scope_id', 'milestone')
+    (:'tenant_id', :'scope_id', 'milestone'),
+    (:'tenant_id', :'scope_id', 'workstream')
+ON CONFLICT DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- The default workstream.
+--
+-- Ratified 2026-09-08: the fourth view. Every scope opens with a default
+-- workstream that catches everything not explicitly filed elsewhere; its
+-- identity is fixed by the `is_default` flag and only its description is
+-- settable. Number 1 is reserved for it, and the number space for the
+-- workstream selector is advanced to match.
+--
+-- No milestone counter is opened here for the default workstream — the
+-- existing per-scope milestone counter is repurposed as the default's per
+-- V9's backfill logic, which for a scope opened after V9 needs the same
+-- shape from the start: the milestone counter belongs to the default
+-- workstream from the outset.
+-- ---------------------------------------------------------------------------
+INSERT INTO worklist.workstream
+    (tenant_id, scope_id, number, token, description, is_default)
+VALUES
+    (:'tenant_id', :'scope_id', 1, 'default',
+     'The default workstream. Everything that names no other lands here; '
+        || 'its identity is fixed and only the description is settable.',
+     true)
+ON CONFLICT DO NOTHING;
+
+-- Advance the workstream selector's own counter so the next declare
+-- allocates 2 rather than colliding at 1.
+UPDATE worklist.number_space ns
+SET high_water_mark = GREATEST(ns.high_water_mark, 1)
+FROM worklist.selector s
+WHERE ns.tenant_id   = :'tenant_id'
+  AND ns.scope_id    = :'scope_id'
+  AND ns.selector_id = s.id
+  AND s.token        = 'workstream';
+
+-- The milestone counter for the default workstream: created here so a
+-- scope opened after V9 has the same per-(scope, workstream) shape the
+-- backfill left behind for scopes opened before. Bind the counter to the
+-- default's id and open it at zero.
+INSERT INTO worklist.number_space
+    (tenant_id, scope_id, selector_id, workstream_id, high_water_mark)
+SELECT :'tenant_id', :'scope_id', s.id, w.id, 0
+FROM worklist.selector s
+CROSS JOIN worklist.workstream w
+WHERE s.tenant_id = :'tenant_id'
+  AND s.scope_id  = :'scope_id'
+  AND s.token     = 'milestone'
+  AND w.tenant_id = :'tenant_id'
+  AND w.scope_id  = :'scope_id'
+  AND w.is_default = true
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------

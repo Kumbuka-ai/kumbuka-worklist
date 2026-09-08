@@ -118,6 +118,9 @@ class ServiceRolePrivilegeIT {
         // planning layer added later would be a second replacement of the
         // migration that carries these, in a store that by then holds rows.
         "milestone", "iteration", "iteration_membership",
+        // The fourth view, ratified 2026-09-08. Its table carries the same
+        // SELECT/INSERT/UPDATE the schema hands out to every other one.
+        "workstream",
         // The lease, and what the scope decides.
         "claim", "scope_setting", "view_preference",
         // The migrator's own record: no privilege for the runtime role, and

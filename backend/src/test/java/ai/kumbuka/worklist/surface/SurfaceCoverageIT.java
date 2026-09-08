@@ -184,7 +184,8 @@ class SurfaceCoverageIT {
             .extract().path("fields.conflict_token");
 
         // ---- close, on both axes -----------------------------------------
-        call("POST", item(Selector.ITERATION, iterationNumber) + ":close", iterationToken, null)
+        call("POST", item(Selector.ITERATION, iterationNumber) + ":close", iterationToken,
+                Map.of("produced", "a test iteration outcome"))
             .statusCode(200)
             .body("fields.closed_at", org.hamcrest.Matchers.notNullValue());
 

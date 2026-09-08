@@ -68,14 +68,25 @@ public class Selector extends TenantScoped {
     public static final String MILESTONE = "milestone";
 
     /**
-     * The three views, in the order the address space reads them.
+     * The view onto its workstream axis.
+     *
+     * <p>The fourth view, ratified 2026-09-08. An item carries a workstream
+     * as an obligation and a milestone as an option; a milestone carries a
+     * workstream too, and the invariant that binds them is enforced in the
+     * core — an item with a milestone lies in the same workstream the
+     * milestone does.
+     */
+    public static final String WORKSTREAM = "workstream";
+
+    /**
+     * The four views, in the order the address space reads them.
      *
      * <p>A {@code List} and not a {@code Set}, because a refusal that names
      * the admissible values reads better in a fixed order than in whatever
      * order a hash produced — and this list appears in refusal messages a
      * caller has to act on.
      */
-    public static final List<String> VIEWS = List.of(ITEM, ITERATION, MILESTONE);
+    public static final List<String> VIEWS = List.of(ITEM, ITERATION, MILESTONE, WORKSTREAM);
 
     /**
      * The shape of a token: a leading letter, then alphanumerics and interior

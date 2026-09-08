@@ -228,7 +228,7 @@ class PlanningRefusalIT {
             "conflict_token", token(iteration)));
 
         WorklistException refusal = refusalFrom(() ->
-            iterations.close(scope, iteration, token(iteration)));
+            iterations.close(scope, iteration, "test outcome", token(iteration)));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.ITERATION_INCOMPLETE);
         assertThat(refusal.offenders())
@@ -240,7 +240,7 @@ class PlanningRefusalIT {
         memberships.update(scope, iteration, standing, Map.of(
             "membership_status", IterationMembership.DROPPED,
             "conflict_token", token(iteration)));
-        assertThat(iterations.close(scope, iteration, token(iteration)).get("closed_at"))
+        assertThat(iterations.close(scope, iteration, "test outcome", token(iteration)).get("closed_at"))
             .isNotNull();
     }
 
@@ -254,13 +254,13 @@ class PlanningRefusalIT {
             "membership_status", IterationMembership.DONE,
             "conflict_token", token(iteration)));
         String last = token(iteration);
-        iterations.close(scope, iteration, last);
+        iterations.close(scope, iteration, "test outcome", last);
 
         assertThat(refusalFrom(() -> iterations.update(scope, iteration, Map.of(
                 "motto", "reopened", "conflict_token", token(iteration)))).reason())
             .isEqualTo(WorklistException.Reason.ITERATION_CLOSED);
         assertThat(refusalFrom(() ->
-                iterations.close(scope, iteration, token(iteration))).reason())
+                iterations.close(scope, iteration, "test outcome", token(iteration))).reason())
             .as("and closing it twice is the same refusal")
             .isEqualTo(WorklistException.Reason.ITERATION_CLOSED);
         assertThat(refusalFrom(() -> memberships.plan(scope, iteration,
@@ -302,7 +302,7 @@ class PlanningRefusalIT {
         iterations.advance(scope, settingToken());
         assertThat(settings.read(scope).get("current_iteration")).isEqualTo(iteration);
 
-        iterations.close(scope, iteration, token(iteration));
+        iterations.close(scope, iteration, "test outcome", token(iteration));
 
         assertThat(settings.read(scope).get("current_iteration"))
             .as("RED STATE, by its trace: a pointer left behind would name a closed "

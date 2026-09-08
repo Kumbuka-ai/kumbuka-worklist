@@ -126,6 +126,20 @@ public class Milestone extends AggregateRoot {
     @Column(name = "rank", nullable = false)
     public int rank;
 
+    /**
+     * The workstream this milestone lives in. Mandatory once V10 lands.
+     *
+     * <p>Ratified 2026-09-08. Numbering is per workstream — two workstreams
+     * legitimately share a milestone number, and the address form
+     * disambiguates them through the scope alone because the workstream is
+     * a field on the milestone and never an address component. The reason
+     * is that pulling the workstream into the address would break the
+     * fixed address shape and with it citability of every existing
+     * milestone reference.
+     */
+    @Column(name = "workstream_id")
+    public UUID workstreamId;
+
     @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     public Instant createdAt;

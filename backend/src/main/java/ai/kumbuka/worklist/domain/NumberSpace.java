@@ -72,6 +72,20 @@ public class NumberSpace extends TenantScoped {
     public UUID selectorId;
 
     /**
+     * The workstream this counter belongs to, or null for a scope-wide one.
+     *
+     * <p>Two shapes coexist by design: the {@code item} and {@code iteration}
+     * selectors carry ONE counter per scope (workstream absent), while the
+     * {@code milestone} selector carries one counter per (scope, workstream)
+     * — the fourth axis's ratification of 2026-09-08. The partial unique
+     * indexes in V9 encode both without conflicting: one for the wide row
+     * and one for the per-workstream ones, so a selector's counter takes
+     * exactly one shape in a given scope.
+     */
+    @Column(name = "workstream_id")
+    public UUID workstreamId;
+
+    /**
      * The highest number ever handed out in this space. Zero means none has
      * been, so the first allocation is 1.
      */

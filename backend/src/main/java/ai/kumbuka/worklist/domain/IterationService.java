@@ -180,6 +180,27 @@ public class IterationService extends PlanningService {
      */
     @Transactional
     public Map<String, Object> close(UUID scopeId, UUID iterationId, String conflictToken) {
+        // The single-argument close is the compatibility shim: it forwards
+        // with a null produced-name so the enforcement path in the ratified
+        // signature raises `ITERATION_PRODUCED_MISSING` uniformly. A caller
+        // wired against the old signature therefore fails LOUD rather than
+        // slipping past the naming requirement.
+        return close(scopeId, iterationId, null, conflictToken);
+    }
+
+    /**
+     * Close an iteration, naming what was produced.
+     *
+     * <p>Ratified 2026-09-08: an iteration is closed only when the operator
+     * NAMES what was produced. The check is presence rather than form —
+     * a specification, a concept, a set of corpus nodes qualify on the same
+     * conditions as a release — but empty and whitespace-only are refused.
+     */
+    @Transactional
+    public Map<String, Object> close(UUID scopeId, UUID iterationId,
+            String produced, String conflictToken) {
+        String producedNamed = requireNamed(produced);
+
         Iteration iteration = require(scopeId, iterationId);
         refuseClosed(iteration);
         iteration.requireCurrentToken(conflictToken);
@@ -199,8 +220,32 @@ public class IterationService extends PlanningService {
         }
 
         planning.flushAndRefresh(iteration);
-        LOG.infof("iteration %d closed in scope %s", iteration.number, scopeId);
+        LOG.infof("iteration %d closed in scope %s (produced: %s)",
+            iteration.number, scopeId, producedNamed);
         return project(iteration, List.of());
+    }
+
+    /**
+     * Presence check for the naming of what was produced by an iteration.
+     *
+     * <p>Ratified 2026-09-08: closing an iteration requires the operator
+     * to NAME what was produced. Form is not checked — a specification, a
+     * concept, a set of corpus nodes qualify on the same conditions as a
+     * release — but empty and whitespace-only are refused, because a
+     * naming that reduces to nothing is exactly the abstention the rule
+     * exists against.
+     */
+    private static String requireNamed(String produced) {
+        if (produced != null && !produced.isBlank()) {
+            return produced.strip();
+        }
+        throw new WorklistException(
+            WorklistException.Reason.ITERATION_PRODUCED_MISSING,
+            "an iteration is closed only when what was produced is NAMED. Presence is "
+                + "checked, form is not — a specification, a concept, a set of corpus "
+                + "nodes qualify on the same conditions as a release. Empty and "
+                + "whitespace-only are refused",
+            List.of("produced"));
     }
 
     /**

@@ -100,6 +100,7 @@ public class ItemService {
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
     @Inject PlanningRepository planning;
+    @Inject WorkstreamService workstreams;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -282,12 +283,22 @@ public class ItemService {
         Selector view = selectors.require(scopeId, Selector.ITEM);
         long number = selectors.allocate(scopeId, view);
 
+        // The workstream is mandatory — ratified 2026-09-08. If the caller
+        // named one, use it (existence, refusal on withdrawn); if not, fall
+        // to the scope's default. `item.workstream_id` will be NOT NULL
+        // once V10 lands, and this branch is what makes an item without a
+        // workstream inexpressible from the outside long before the store
+        // starts refusing it.
+        Workstream workstream = resolveWorkstream(scopeId,
+            given.get(Field.WORKSTREAM_ID));
+
         Item item = new Item();
         item.scopeId = scopeId;
         item.title = title;
         item.statusId = vocabulary.requireStatus(scopeId, statusId).id;
         item.selectorId = view.id;
         item.number = number;
+        item.workstreamId = workstream.id;
         items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
@@ -298,6 +309,7 @@ public class ItemService {
         rest.putAll(given);
         rest.remove(Field.TITLE);
         rest.remove(Field.STATUS);
+        rest.remove(Field.WORKSTREAM_ID);
         if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
             item.stamp();
             items.flush();
@@ -750,6 +762,9 @@ public class ItemService {
             case MILESTONE_ID -> {
                 return applyMilestone(item, held, field, value);
             }
+            case WORKSTREAM_ID -> {
+                return applyWorkstream(item, held, field, value);
+            }
             case ATTRIBUTES -> {
                 return applyAttributes(item, ItemFields.attributes(value));
             }
@@ -810,8 +825,114 @@ public class ItemService {
                     + "something anything is working towards any more",
                 List.of(field.canonicalName()));
         }
+        // The invariant that binds the fourth axis: an item's milestone lies
+        // in the item's workstream. Enforced at the write, so the pair
+        // cannot come apart even for a moment.
+        refuseCrossWorkstreamMilestone(item, milestone);
         item.milestoneId = milestone.id;
         return true;
+    }
+
+    /**
+     * Refuse a milestone assignment whose workstream is not the item's.
+     *
+     * <p>The invariant of 2026-09-08: an item carries a workstream as an
+     * obligation, and if it carries a milestone too the milestone lies in
+     * the same workstream. Both sides may name the default and it still
+     * passes — the default is a workstream like any other.
+     */
+    private static void refuseCrossWorkstreamMilestone(Item item, Milestone milestone) {
+        if (milestone.workstreamId != null && item.workstreamId != null
+                && milestone.workstreamId.equals(item.workstreamId)) {
+            return;
+        }
+        if (milestone.workstreamId == null || item.workstreamId == null) {
+            // A row without a workstream is a defect V10 rules out. Report
+            // rather than repair.
+            throw new WorklistException(
+                WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH,
+                "item or milestone lacks a workstream (item=" + item.workstreamId
+                    + ", milestone=" + milestone.workstreamId + "). The fourth axis is "
+                    + "an obligation on both",
+                List.of(Field.WORKSTREAM_ID.canonicalName()));
+        }
+        throw new WorklistException(
+            WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH,
+            "milestone " + milestone.id + " lies in workstream " + milestone.workstreamId
+                + " while the item lies in " + item.workstreamId + ". The ratified "
+                + "invariant is that an item with a milestone shares its workstream. "
+                + "Move the item to the milestone's workstream, or pick a milestone in "
+                + "the item's workstream",
+            List.of(Field.WORKSTREAM_ID.canonicalName()));
+    }
+
+    /**
+     * Change the item's workstream.
+     *
+     * <p>The workstream is mandatory, so clearing is refused. Setting it
+     * checks existence and refuses a withdrawn one; if the item carries a
+     * milestone, the invariant that binds the two applies to the new
+     * workstream too — an assignment that would leave the item pointing at
+     * a milestone in another workstream is refused.
+     */
+    private boolean applyWorkstream(Item item, Object held, Field field, Object value) {
+        UUID workstreamId = ItemFields.id(field, value);
+        if (workstreamId == null) {
+            throw new WorklistException(
+                WorklistException.Reason.ITEM_WORKSTREAM_MISSING,
+                "an item carries a workstream on every status, so it cannot be cleared. "
+                    + "Move it to another workstream instead",
+                List.of(field.canonicalName()));
+        }
+        if (ItemFields.unchangedAsText(held, workstreamId)) {
+            return false;
+        }
+        Workstream workstream = workstreams.require(item.scopeId, workstreamId);
+        workstreams.refuseWithdrawn(workstream);
+
+        if (item.milestoneId != null) {
+            Milestone milestone = planning.milestoneById(item.milestoneId);
+            if (milestone != null
+                    && (milestone.workstreamId == null
+                        || !milestone.workstreamId.equals(workstream.id))) {
+                throw new WorklistException(
+                    WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH,
+                    "the item's milestone lies in workstream " + milestone.workstreamId
+                        + ", and moving the item to workstream " + workstream.id
+                        + " would break the invariant that binds the two. Clear the "
+                        + "milestone first, or move to a workstream the milestone lies in",
+                    List.of(field.canonicalName()));
+            }
+        }
+        item.workstreamId = workstream.id;
+        return true;
+    }
+
+    /**
+     * Resolve a workstream at item-create time.
+     *
+     * <p>Named → require + refuse-withdrawn. Absent → the scope's default.
+     * A withdrawn default would be a defect V8 rules out and
+     * {@code WorkstreamService.withdraw} refuses; the branch below trusts
+     * that.
+     */
+    private Workstream resolveWorkstream(UUID scopeId, Object value) {
+        if (value == null) {
+            return workstreams.requireDefault(scopeId);
+        }
+        UUID workstreamId;
+        try {
+            workstreamId = UUID.fromString(String.valueOf(value));
+        } catch (IllegalArgumentException notAnId) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "the workstream is named by its identity, not by its token. Refused: "
+                    + value,
+                List.of(Field.WORKSTREAM_ID.canonicalName()));
+        }
+        Workstream workstream = workstreams.require(scopeId, workstreamId);
+        workstreams.refuseWithdrawn(workstream);
+        return workstream;
     }
 
     /** The status: resolved against the scope's own declared vocabulary. */
@@ -1053,6 +1174,7 @@ public class ItemService {
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item));
         fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneId);
+        fields.put(Field.WORKSTREAM_ID.canonicalName(), item.workstreamId);
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken);

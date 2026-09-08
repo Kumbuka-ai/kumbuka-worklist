@@ -278,8 +278,10 @@ public class McpAdapter {
 
     private Object close(Map<String, Object> in) {
         Address at = address(in);
+        Object produced = in.get("produced");
         return dressed(at.scope(), verbs.close(caller.subject(), at.scope(), at.view(),
-            at.head(), required(in, ARG_TOKEN)));
+            at.head(), required(in, ARG_TOKEN),
+            produced == null ? null : String.valueOf(produced)));
     }
 
     private Object advance(Map<String, Object> in) {

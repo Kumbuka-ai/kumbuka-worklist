@@ -221,6 +221,22 @@ public enum Field {
     MILESTONE_ID("milestone", Set.of(ITEM), Set.of(ITEM)),
 
     /**
+     * The workstream an item or a milestone belongs to.
+     *
+     * <p>Ratified 2026-09-08. An item carries a workstream as an
+     * OBLIGATION (created without it, the create refuses; V10 turns the
+     * column NOT NULL), and a milestone carries one too. The invariant that
+     * binds the two is enforced in {@code ItemService}: if the item also
+     * carries a milestone, the milestone lies in the item's workstream.
+     *
+     * <p>The value travels as the workstream's IDENTITY, never as its
+     * token, for the same reason {@link #MILESTONE_ID} does — the token
+     * is renamable up to the first pointer, and a caller writing a token
+     * would be writing something that can move under them.
+     */
+    WORKSTREAM_ID("workstream", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
+
+    /**
      * Whether a milestone is a goal or one of the three positions on the axis
      * that never carry one.
      *

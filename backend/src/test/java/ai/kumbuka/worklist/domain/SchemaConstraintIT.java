@@ -787,10 +787,12 @@ class SchemaConstraintIT {
     private UUID insertItem(Connection c, String title) throws SQLException {
         UUID id = UUID.randomUUID();
         UUID selector = insertSelector(c);
+        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (id, tenant_id, scope_id, title, status_id, selector_id, number)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, title, status_id, selector_id, number,
+                     workstream_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);
@@ -799,6 +801,7 @@ class SchemaConstraintIT {
             st.setObject(5, anyStatus(c));
             st.setObject(6, selector);
             st.setLong(7, 1L);
+            st.setObject(8, workstream);
             st.executeUpdate();
         }
         return id;
@@ -913,10 +916,12 @@ class SchemaConstraintIT {
 
     private void insertMilestone(Connection c, long number, String kind, String status,
             String vision) throws SQLException {
+        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.milestone
-                    (id, tenant_id, scope_id, number, title, kind, status, vision)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, number, title, kind, status, vision,
+                     workstream_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
@@ -926,6 +931,7 @@ class SchemaConstraintIT {
             st.setString(6, kind);
             st.setString(7, status);
             st.setString(8, vision);
+            st.setObject(9, workstream);
             st.executeUpdate();
         }
     }
@@ -1032,10 +1038,12 @@ class SchemaConstraintIT {
      */
     private void insertItemWithAddress(Connection c, String title, UUID status,
             UUID selector, Long number) throws SQLException {
+        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (id, tenant_id, scope_id, title, status_id, selector_id, number)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, title, status_id, selector_id, number,
+                     workstream_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
@@ -1048,6 +1056,7 @@ class SchemaConstraintIT {
             } else {
                 st.setLong(7, number);
             }
+            st.setObject(8, workstream);
             st.executeUpdate();
         }
     }
@@ -1069,10 +1078,12 @@ class SchemaConstraintIT {
      */
     private void insertMilestoneWithMission(Connection c, long number, String mission)
             throws SQLException {
+        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.milestone
-                    (id, tenant_id, scope_id, number, title, kind, status, mission)
-                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?)
+                    (id, tenant_id, scope_id, number, title, kind, status, mission,
+                     workstream_id)
+                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?, ?)
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
@@ -1080,6 +1091,7 @@ class SchemaConstraintIT {
             st.setLong(4, number);
             st.setString(5, "milestone " + number);
             st.setString(6, mission);
+            st.setObject(7, workstream);
             st.executeUpdate();
         }
     }
@@ -1088,22 +1100,15 @@ class SchemaConstraintIT {
      * The same insert on any given connection — used from the migrator
      * connection in the read-path probe, so a row can be planted after the
      * check has been dropped and before it is put back.
+     *
+     * <p>Kept apart from {@link #insertMilestoneWithMission} as a NAMED call
+     * site, so the two probes read at their call sites as "same shape,
+     * different connection". The body delegates to the same helper — this
+     * method exists to name the intention, not to duplicate the code.
      */
     private void insertMilestoneWithMissionAs(Connection c, long number, String mission)
             throws SQLException {
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.milestone
-                    (id, tenant_id, scope_id, number, title, kind, status, mission)
-                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?)
-                """)) {
-            st.setObject(1, UUID.randomUUID());
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setLong(4, number);
-            st.setString(5, "milestone " + number);
-            st.setString(6, mission);
-            st.executeUpdate();
-        }
+        insertMilestoneWithMission(c, number, mission);
     }
 
     /** The mission of one milestone, as the CURRENT session sees it. */

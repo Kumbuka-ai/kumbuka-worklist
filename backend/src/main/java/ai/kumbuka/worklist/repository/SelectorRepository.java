@@ -33,6 +33,10 @@ public class SelectorRepository {
 
     private static final String P_TOKEN = "token";
 
+    private static final String P_SELECTOR = "selector";
+
+    private static final String P_WS = "ws";
+
     @Inject EntityManager em;
 
     /** The selector of that token in a scope, or null. */
@@ -61,8 +65,8 @@ public class SelectorRepository {
     }
 
     /**
-     * The selector's number space, locked for the caller's transaction, or
-     * null when it has none.
+     * The selector's SCOPE-WIDE number space, locked for the caller's
+     * transaction, or null when it has none.
      *
      * <p>The lock is what makes two concurrent acceptances serialise rather
      * than collide, and taking it in the accepting transaction is what makes a
@@ -70,19 +74,49 @@ public class SelectorRepository {
      *
      * <p>Looked up by the selector rather than found by key: the counter's
      * own key is a surrogate so the ORM key stays outside the tenancy axis.
+     *
+     * <p>Scope-wide means {@code workstream_id IS NULL} — the shape the
+     * {@code item} and {@code iteration} selectors carry. Milestones use
+     * {@link #lockSpaceInWorkstream(UUID, UUID)} instead.
      */
     @Transactional
     public NumberSpace lockSpace(UUID selectorId) {
-        return single(spaceQuery("s.selectorId = :selector")
-            .setParameter("selector", selectorId)
+        return single(spaceQuery("s.selectorId = :selector AND s.workstreamId IS NULL")
+            .setParameter(P_SELECTOR, selectorId)
             .setLockMode(LockModeType.PESSIMISTIC_WRITE));
     }
 
-    /** The selector's number space without a lock, for a read that only reports it. */
+    /**
+     * The selector's number space for one workstream, locked for the
+     * caller's transaction, or null when it has none.
+     *
+     * <p>Same mechanism as {@link #lockSpace}, but for the counters that
+     * live per (selector, workstream) — today only the milestone selector
+     * carries a counter of this shape.
+     */
+    @Transactional
+    public NumberSpace lockSpaceInWorkstream(UUID selectorId, UUID workstreamId) {
+        return single(spaceQuery(
+                "s.selectorId = :selector AND s.workstreamId = :ws")
+            .setParameter(P_SELECTOR, selectorId)
+            .setParameter(P_WS, workstreamId)
+            .setLockMode(LockModeType.PESSIMISTIC_WRITE));
+    }
+
+    /** The selector's scope-wide number space without a lock, for a read that only reports it. */
     @Transactional
     public NumberSpace space(UUID selectorId) {
-        return single(spaceQuery("s.selectorId = :selector")
-            .setParameter("selector", selectorId));
+        return single(spaceQuery("s.selectorId = :selector AND s.workstreamId IS NULL")
+            .setParameter(P_SELECTOR, selectorId));
+    }
+
+    /** The selector's per-workstream number space without a lock. */
+    @Transactional
+    public NumberSpace spaceInWorkstream(UUID selectorId, UUID workstreamId) {
+        return single(spaceQuery(
+                "s.selectorId = :selector AND s.workstreamId = :ws")
+            .setParameter(P_SELECTOR, selectorId)
+            .setParameter(P_WS, workstreamId));
     }
 
     private TypedQuery<NumberSpace> spaceQuery(String predicate) {

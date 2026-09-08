@@ -204,6 +204,70 @@ public class SelectorRegistry {
     }
 
     /**
+     * The next number in a selector's per-workstream space, and the mark
+     * moved to match.
+     *
+     * <p>Same mechanism as {@link #allocate(UUID, Selector)}, but for a
+     * counter that lives per (selector, workstream) — today only the
+     * milestone selector does. The lock is on the workstream-specific row,
+     * so two workstreams' milestone counters advance independently.
+     */
+    @Transactional
+    public long allocateInWorkstream(UUID scopeId, Selector selector, UUID workstreamId) {
+        if (Selector.WITHDRAWN.equals(selector.status)) {
+            throw new WorklistException(
+                WorklistException.Reason.SELECTOR_WITHDRAWN,
+                "selector " + selector.token + " is withdrawn in scope " + scopeId
+                    + ", so no further address is issued under it",
+                List.of(selector.token));
+        }
+
+        NumberSpace space = selectors.lockSpaceInWorkstream(selector.id, workstreamId);
+        if (space == null) {
+            // A workstream without its milestone counter is a workstream
+            // that was not declared through the declaring verb, or one
+            // whose scope predates the split. Reported rather than
+            // repaired: creating one here would silently accept both.
+            throw new WorklistException(
+                WorklistException.Reason.SELECTOR_UNDECLARED,
+                "selector " + selector.token + " has no number space in scope " + scopeId
+                    + " for workstream " + workstreamId + ". A declared workstream carries "
+                    + "one; this workstream was not declared through the declaring verb",
+                List.of(selector.token, String.valueOf(workstreamId)));
+        }
+
+        space.highWaterMark = space.highWaterMark + 1;
+        selectors.flush();
+
+        long allocated = space.highWaterMark;
+        LOG.debugf("number %d allocated under selector %s in scope %s for workstream %s",
+            allocated, selector.token, scopeId, workstreamId);
+        return allocated;
+    }
+
+    /**
+     * Open a workstream-scoped number space for a selector.
+     *
+     * <p>Called by {@code WorkstreamService.declare} for the milestone
+     * selector, so a new workstream opens with a milestone counter of its
+     * own at zero.
+     */
+    @Transactional
+    public NumberSpace openSpaceInWorkstream(UUID scopeId, Selector selector, UUID workstreamId) {
+        NumberSpace existing = selectors.spaceInWorkstream(selector.id, workstreamId);
+        if (existing != null) {
+            return existing;
+        }
+        NumberSpace space = new NumberSpace();
+        space.selectorId    = selector.id;
+        space.scopeId       = scopeId;
+        space.workstreamId  = workstreamId;
+        space.highWaterMark = 0L;
+        selectors.insert(space);
+        return space;
+    }
+
+    /**
      * Carry a high-water mark forward, for an import that arrives with
      * numbers already allocated elsewhere.
      *

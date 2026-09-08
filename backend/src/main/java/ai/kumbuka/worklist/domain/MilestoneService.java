@@ -55,6 +55,7 @@ public class MilestoneService extends PlanningService {
      * selector, and the milestone selector is the one this allocator reads.
      */
     @Inject SelectorRegistry selectors;
+    @Inject WorkstreamService workstreams;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -95,15 +96,29 @@ public class MilestoneService extends PlanningService {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         refuseUnsettableChanges(Addressed.MILESTONE, Map.of(), given);
 
+        // The workstream is mandatory on a milestone. Named → require +
+        // refuse-withdrawn; absent → the scope's default. This runs BEFORE
+        // the number is allocated, because the counter itself is
+        // per-workstream now and the allocator needs the workstream to
+        // know which counter to advance.
+        Workstream workstream = resolveWorkstream(scopeId, given.get(Field.WORKSTREAM_ID));
+
         Milestone milestone = new Milestone();
         milestone.scopeId = scopeId;
+        milestone.workstreamId = workstream.id;
         milestone.title = required(Field.TITLE, given.get(Field.TITLE),
             "a milestone carries a title. It is the axis position's handle in every "
                 + "listing, and the one field a marker needs as much as a goal does");
-        milestone.number = allocateNumber(scopeId);
+        milestone.number = allocateNumber(scopeId, workstream.id);
 
         Map<Field, Object> settable = settableOnly(Addressed.MILESTONE, given);
         settable.remove(Field.TITLE);
+        // Workstream was resolved above and is set on the row already; leaving
+        // it in the settable map would send it through `applyOne`, whose
+        // switch has no case for it (the frame ratifies the workstream on a
+        // milestone as write-once from create, and moving it later would
+        // change which counter numbered the milestone).
+        settable.remove(Field.WORKSTREAM_ID);
         applyEffectiveChanges(milestone, project(milestone, List.of()), settable);
         refuseGoalOnAMarker(milestone);
 
@@ -191,10 +206,37 @@ public class MilestoneService extends PlanningService {
      * per view. The goal axis is a class of its own, so the selector-keyed
      * counter is where its next number belongs.
      */
-    private long allocateNumber(UUID scopeId) {
+    private long allocateNumber(UUID scopeId, UUID workstreamId) {
         requireSetting(scopeId);
         Selector milestoneSelector = selectors.require(scopeId, Selector.MILESTONE);
-        return selectors.allocate(scopeId, milestoneSelector);
+        return selectors.allocateInWorkstream(scopeId, milestoneSelector, workstreamId);
+    }
+
+    /**
+     * Resolve a workstream at milestone-create time.
+     *
+     * <p>Named → require + refuse-withdrawn. Absent → the scope's default.
+     * The check runs before number allocation because the milestone
+     * counter is per-workstream — the allocator needs to know which
+     * counter to advance.
+     */
+    private Workstream resolveWorkstream(UUID scopeId, Object value) {
+        if (value == null) {
+            return workstreams.requireDefault(scopeId);
+        }
+        UUID workstreamId;
+        try {
+            workstreamId = UUID.fromString(String.valueOf(value));
+        } catch (IllegalArgumentException notAnId) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "the workstream is named by its identity, not by its token. Refused: "
+                    + value,
+                List.of(Field.WORKSTREAM_ID.canonicalName()));
+        }
+        Workstream workstream = workstreams.require(scopeId, workstreamId);
+        workstreams.refuseWithdrawn(workstream);
+        return workstream;
     }
 
     private boolean applyEffectiveChanges(Milestone milestone, Map<String, Object> current,
@@ -235,6 +277,27 @@ public class MilestoneService extends PlanningService {
             case RANK -> {
                 Integer rank = whole(field, value);
                 return rank != null && moved(held, rank, () -> milestone.rank = rank);
+            }
+            case WORKSTREAM_ID -> {
+                // A milestone's workstream is set at create (from an argument
+                // or from the scope's default) and is not moved after: the
+                // milestone's number was allocated from THIS workstream's
+                // counter, and moving the row would break the invariant that
+                // its number belongs to its workstream. A caller wanting to
+                // move a goal creates a new milestone in the other workstream
+                // and closes this one — which is the shape the reasoning has
+                // wherever a number binds to an axis.
+                UUID given = ItemFields.id(field, value);
+                if (ItemFields.unchangedAsText(held, given)) {
+                    return false;
+                }
+                throw new WorklistException(
+                    WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH,
+                    "a milestone's workstream is set at create and is not moved after. "
+                        + "The number was allocated from this workstream's counter and "
+                        + "belongs to it; declare a new milestone in the other workstream "
+                        + "and close this one",
+                    List.of(field.canonicalName()));
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable on a milestone and has no application");
@@ -343,6 +406,7 @@ public class MilestoneService extends PlanningService {
         fields.put(Field.VISION.canonicalName(), milestone.vision);
         fields.put(Field.MISSION.canonicalName(), milestone.mission);
         fields.put(Field.RANK.canonicalName(), milestone.rank);
+        fields.put(Field.WORKSTREAM_ID.canonicalName(), milestone.workstreamId);
         fields.put(Field.CREATED_AT.canonicalName(), milestone.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), milestone.updatedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), milestone.conflictToken);
