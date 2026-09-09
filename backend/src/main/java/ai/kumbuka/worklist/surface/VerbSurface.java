@@ -9,6 +9,7 @@ import ai.kumbuka.worklist.domain.MembershipService;
 import ai.kumbuka.worklist.domain.MilestoneService;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
+import ai.kumbuka.worklist.domain.WorkstreamService;
 import ai.kumbuka.worklist.platform.ScopeDirectory;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -52,18 +53,35 @@ import java.util.UUID;
  *
  * <h2>Three classes of verb, answered three ways</h2>
  *
- * <p><strong>Carried</strong> — the ten this scheme has and this service has
- * built. They act.
+ * <p><strong>Carried</strong> — the sixteen this scheme has and this service
+ * has built. They act. The count is the distinct verbs of the catalogue in the
+ * carried class, and the authoritative list is transcribed in the specification
+ * {@code verb-surface.tsv} the conformance probe reads.
  *
  * <p><strong>Uncarried</strong> — {@code send}, {@code append}, {@code digest},
  * {@code abandon}, {@code block}, {@code resume}, {@code consume}. The capability
  * declaration does not give them to this scheme; they answer a typed category
  * error naming the reason, never a not-found and never a silent absence.
  *
- * <p><strong>Unbuilt</strong> — the claim family, the graph verbs and
- * {@code validate}. The declaration DOES give them to this scheme and this
- * service has not built them. Answering them as uncarried would be a lie a
- * caller acts on: it says the act will never exist here.
+ * <p><strong>Unbuilt</strong> — none today. The claim family, the graph verbs
+ * and {@code validate} sat here in a previous revision; they were built in
+ * SPRINT_171.2 and moved up into the carried class. The section is kept in the
+ * register so that a verb the scheme carries and this service has not built
+ * again gets its own sentence — {@code VERB_UNBUILT} rather than the two
+ * refusals a caller could act on incorrectly.
+ *
+ * <h2>A fourth class the surface answers, keyed on the view rather than on the
+ * verb</h2>
+ *
+ * <p>The workstream view is declared, not written through this surface. A
+ * caller aiming {@code create} or {@code update} at it hears a third sentence
+ * ({@link SurfaceException.Reason#SELECTOR_DECLARED_NOT_WRITTEN}) that says the
+ * act exists and runs on the selector-declaration surface, not here. {@code read}
+ * and {@code query} on the same view do act — a workstream is addressable like
+ * any other declared view — and every other verb refuses on the existing view
+ * checks (item-only for {@code accept}/{@code withdraw}/{@code claim} et al.,
+ * iteration-only for {@code close}/{@code advance}, iteration-and-milestone for
+ * {@code close}, iteration-only for the membership addresses).
  */
 @ApplicationScoped
 @TenantBound
@@ -80,6 +98,7 @@ public class VerbSurface {
     @Inject ItemService items;
     @Inject IterationService iterations;
     @Inject MilestoneService milestones;
+    @Inject WorkstreamService workstreams;
     @Inject MembershipService memberships;
     @Inject ClaimService claims;
     @Inject AddressRegistry addresses;
@@ -113,6 +132,7 @@ public class VerbSurface {
     public Result create(String subject, String rawScope, String rawView,
                          VerbInput.Fields body) {
         Entry in = entry(subject, rawScope, rawView);
+        refuseWriteOnDeclaredView(in.view(), "create");
         addresses.requireView(in.scopeId(), in.view());
         Map<String, Object> fields = required(body).values();
 
@@ -149,6 +169,7 @@ public class VerbSurface {
             case Selector.ITEM -> items.query(in.scopeId());
             case Selector.ITERATION -> iterations.query(in.scopeId());
             case Selector.MILESTONE -> milestones.query(in.scopeId());
+            case Selector.WORKSTREAM -> workstreams.query(in.scopeId());
             default -> throw unreachableView(in.view());
         };
 
@@ -165,12 +186,12 @@ public class VerbSurface {
      * set" defect: an unknown filter here becomes an {@code UNKNOWN_FIELD}
      * from the domain, not an answer that reads correct.
      *
-     * <p><strong>Only the item view carries a filter today.</strong> The two
-     * axes are queryable end-to-end without one — their whole-set answer is
-     * bounded by construction, because a scope has few iterations and few
-     * milestones — and building filter shapes for them now would guess at
-     * fields nobody asked to narrow on. When they are needed, they arrive
-     * with the same shape and pass through here.
+     * <p><strong>Only the item view carries a filter today.</strong> The three
+     * other views are queryable end-to-end without one — their whole-set answer
+     * is bounded by construction, because a scope has few iterations, few
+     * milestones and few workstreams — and building filter shapes for them now
+     * would guess at fields nobody asked to narrow on. When they are needed,
+     * they arrive with the same shape and pass through here.
      */
     @Transactional
     public Listing query(String subject, String rawScope, String rawView, QuerySpec spec) {
@@ -180,16 +201,17 @@ public class VerbSurface {
         if (!Selector.ITEM.equals(in.view())) {
             if (!spec.filter().isEmpty()) {
                 throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                    "'query' on the " + in.view() + " view takes no filter today. The two "
-                        + "axes are queryable end-to-end without one, and a filter accepted "
-                        + "and dropped would answer the whole set while looking like a "
-                        + "correct narrow one");
+                    "'query' on the " + in.view() + " view takes no filter today. The three "
+                        + "non-item views are queryable end-to-end without one, and a filter "
+                        + "accepted and dropped would answer the whole set while looking like "
+                        + "a correct narrow one");
             }
             // Pass-through of the whole-set query, so a limit still applies
             // to the axis. Truncation is reported the same way.
             List<Map<String, Object>> found = switch (in.view()) {
                 case Selector.ITERATION -> iterations.query(in.scopeId());
                 case Selector.MILESTONE -> milestones.query(in.scopeId());
+                case Selector.WORKSTREAM -> workstreams.query(in.scopeId());
                 default -> throw unreachableView(in.view());
             };
             boolean truncated = found.size() > spec.limit();
@@ -223,6 +245,7 @@ public class VerbSurface {
             case Selector.ITEM -> items.read(in.scopeId(), id);
             case Selector.ITERATION -> iterations.read(in.scopeId(), id);
             case Selector.MILESTONE -> milestones.read(in.scopeId(), id);
+            case Selector.WORKSTREAM -> workstreams.read(in.scopeId(), id);
             default -> throw unreachableView(in.view());
         });
     }
@@ -240,6 +263,7 @@ public class VerbSurface {
     public Result update(String subject, String rawScope, String rawView, String rawId,
                          String conflictToken, VerbInput.Fields body) {
         Entry in = entry(subject, rawScope, rawView);
+        refuseWriteOnDeclaredView(in.view(), "update");
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         requireWritable(target);
         UUID id = resolve(in, target);
@@ -367,6 +391,12 @@ public class VerbSurface {
                     + "one is an ordinary change of a declared value and not a transition "
                     + "of its own. On this scheme 'close' addresses the iteration or the "
                     + "milestone, both of which have a terminal transition at form level.");
+            case Selector.WORKSTREAM -> throw new SurfaceException(
+                SurfaceException.Reason.VERB_UNCARRIED,
+                "'close' is not addressed at a workstream. A workstream has no terminal "
+                    + "transition — it is declared, and its retirement is 'withdraw' on the "
+                    + "selector-declaration surface, not a close here. Aiming 'close' at it "
+                    + "is a category error and not a spelling.");
             default -> throw unreachableView(in.view());
         });
         LOG.infof("close %s in scope %s", target.id(), in.scopeId());
@@ -717,6 +747,7 @@ public class VerbSurface {
             case Selector.ITEM -> addresses.itemAt(in.scopeId(), target.number());
             case Selector.ITERATION -> addresses.iterationAt(in.scopeId(), target.number());
             case Selector.MILESTONE -> addresses.milestoneAt(in.scopeId(), target.number());
+            case Selector.WORKSTREAM -> addresses.workstreamAt(in.scopeId(), target.number());
             default -> throw unreachableView(target.view());
         };
     }
@@ -748,6 +779,28 @@ public class VerbSurface {
                     + "write at its number.",
                 "GET");
         }
+    }
+
+    /**
+     * A writing verb of the verb surface arrived on a view that is declared,
+     * not written through this surface.
+     *
+     * <p>The one such view today is {@code workstream}. Refused here rather
+     * than in the domain and BEFORE any resolution or vocabulary check, so
+     * that the answer says which surface the act belongs on rather than
+     * cascading into a not-found or a permission error from the store.
+     */
+    private static void refuseWriteOnDeclaredView(String view, String verb) {
+        if (!Selector.WORKSTREAM.equals(view)) {
+            return;
+        }
+        throw new SurfaceException(SurfaceException.Reason.SELECTOR_DECLARED_NOT_WRITTEN,
+            "'" + verb + "' is not addressed at the workstream view. A workstream is "
+                + "declared, and a declaration is a different act from acting on an object: "
+                + "it runs on the selector-declaration surface, not through this verb. This "
+                + "surface reads workstreams — 'read' and 'query' answer as they do on any "
+                + "other view — and refuses writes on them so that a caller does not learn "
+                + "to declare through the wrong door.");
     }
 
     /** A verb that only one view carries, addressed at another. */
@@ -838,9 +891,12 @@ public class VerbSurface {
      * The switch arm that cannot be reached.
      *
      * <p>Every switch over the view above has one, because the grammar admits
-     * exactly three values and a Java switch over a String does not know that. It
-     * throws rather than returning something, so that a fourth view added to the
-     * grammar without an arm here is a loud failure and not a silent branch.
+     * a closed set of view tokens and a Java switch over a String does not know
+     * that. It throws rather than returning something, so that a view added to
+     * the grammar without an arm here is a loud failure and not a silent
+     * branch. The count is not stated here: it lives on {@link Selector#VIEWS}
+     * and only there, so that adding one does not silently invalidate a comment
+     * this far from it.
      */
     private static IllegalStateException unreachableView(String view) {
         return new IllegalStateException(

@@ -34,13 +34,14 @@ import java.util.regex.Pattern;
  *
  * <h2>Why the view is checked here and the declaration is not</h2>
  *
- * There are three views and they are the platform's object model, so "is this a
- * view" is decidable without knowing any scope and belongs in stage 1 with the
- * rest of the grammar. Whether a given scope has DECLARED that view is a
- * different question with a different answer path: it needs the scope, so it
- * sits behind scope visibility, and it is the domain that answers it. Moving
- * the first check back would cost nothing; moving the second one forward would
- * turn the error path into a scope enumerator.
+ * The platform's views are a closed set — see {@link Selector#VIEWS} — and
+ * they are the platform's object model, so "is this a view" is decidable
+ * without knowing any scope and belongs in stage 1 with the rest of the
+ * grammar. Whether a given scope has DECLARED that view is a different
+ * question with a different answer path: it needs the scope, so it sits behind
+ * scope visibility, and it is the domain that answers it. Moving the first
+ * check back would cost nothing; moving the second one forward would turn the
+ * error path into a scope enumerator.
  */
 public final class AddressParser {
 
@@ -155,7 +156,7 @@ public final class AddressParser {
     }
 
     /**
-     * The view, checked against the three.
+     * The view, checked against the platform's set.
      *
      * <p>The form check runs first and the membership check second, so that a
      * token which is not even a token is told apart from one that is a
@@ -169,10 +170,11 @@ public final class AddressParser {
                 + "rather than folded.");
         }
         if (!Selector.VIEWS.contains(candidate)) {
-            throw malformed("the selector is the view, and there are three: " + Selector.VIEWS
-                + ". '" + candidate + "' is none of them. An item's family is a scope's own "
-                + "declared vocabulary and is not a view: it says something about the item, "
-                + "not about which kind of thing stands at the other end of the address.");
+            throw malformed("the selector is the view, and the platform's views are "
+                + Selector.VIEWS + ". '" + candidate + "' is none of them. An item's family "
+                + "is a scope's own declared vocabulary and is not a view: it says something "
+                + "about the item, not about which kind of thing stands at the other end of "
+                + "the address.");
         }
         return candidate;
     }

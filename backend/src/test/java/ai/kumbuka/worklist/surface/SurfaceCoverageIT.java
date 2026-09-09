@@ -41,8 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * surface chose AND on the {@code reason} it carries — the second half is what
  * tells a framework 404 apart from a surface one.
  *
- * <p>The ten carried verbs are <strong>executed</strong> rather than probed for
- * a refusal. A verb that answered a typed refusal for every input would satisfy
+ * <p>The carried verbs are <strong>executed</strong> rather than probed for a
+ * refusal. A verb that answered a typed refusal for every input would satisfy
  * a probe that only looked at the shape of the answer, and it would be a surface
  * that does nothing.
  *

@@ -22,7 +22,7 @@
 # exists to make impossible.
 #
 # ---------------------------------------------------------------------------
-# CARRIED -- the ten this scheme has and this service has built
+# CARRIED -- the sixteen this scheme has and this service has built
 # ---------------------------------------------------------------------------
 # Probed END TO END against a running service and a running database: each is
 # called and must be answered by the surface rather than by the framework's
