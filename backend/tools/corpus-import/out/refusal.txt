@@ -1,0 +1,163 @@
+# Nicht zuordenbar (153 Zeilen)
+# Eine nicht platzierbare Zeile bricht den Echtlauf ab (REA-0007 Abschnitt 3).
+#
+# empty-cluster: 138
+# milestone-workstream-conflict: 15
+#
+
+## empty-cluster
+475	(no-id)		new	empty-cluster	ADR fuer den Verbprozess: wie neue Verben und neue Schemata hinzukommen
+474	(no-id)		new	empty-cluster	Plattform-Datenschicht und der Schnitt Team gegen Mandant
+473	(no-id)		new	empty-cluster	ee-Topologie schneiden: ee-server nach Platform umbenennen, Importer nach ee-memory, abuse-control a
+472	(no-id)		new	empty-cluster	ADR-0041 Schema-Menge gegen ADR-0043 in Deckung bringen: audit und event sind dort geroutet und hier
+471	(no-id)		new	empty-cluster	Fehler der Gedaechtnis-Maschine hinterlassen keine Spur im Log; Fehlerprotokollierung nachziehen, oh
+470	(no-id)		new	empty-cluster	Falscher Kopfkommentar in ee-server zur Konfigurationszusammenfuehrung und die daran haengende Folge
+448	(no-id)		new	empty-cluster	Generierter Index ueber docs/adr/ und docs/decisions/: welches Papier existiert, was es regelt, was 
+443	(no-id)		new	empty-cluster	Index ueber ADRs und Entscheidungs-Ledger mechanisch generieren statt von Hand pflegen
+367	(no-id)		new	empty-cluster	Skills liegen ausserhalb jeder Ground-Truth-Messung: nicht im Steering-Repo, nicht im Bestand, kein 
+366	(no-id)		new	empty-cluster	Vier Skills sind nach dem Umbau von Sprint 132 sachlich falsch: session-closure beschreibt den still
+365	(no-id)		new	empty-cluster	Kein CI-Job uebt die Realm-Import-Skip-Bedingung: docker build smoke baut nur das Image ohne import-
+364	(no-id)		new	empty-cluster	code-handover-Skill nachschaerfen: SonarQube wird pauschal fuer jeden Code-PR unterstellt (keycloak 
+362	(no-id)		new	empty-cluster	Redirect-URI des wlm-mcp-Clients traegt einen Wildcard-Stern (claude.ai/api/mcp/auth_callback*), erl
+125	CHORE-262		done	empty-cluster	Analyse geschrieben: fuenf Achsen werden deployt, eine ist versioniert. IST-Anker ist Kopie statt Me
+124	CHORE-274		done	empty-cluster	MCP-Client wlm-mcp angelegt und Connector verbunden; elf Werkzeuge nachgewiesen bis auf den Push nac
+123	CHORE-268		done	empty-cluster	Worklist-Manager als Dienst gebaut und live: Web plus MCP auf wlm.jbaconsult.com, Auth ueber provide
+122	CHORE-261		done	empty-cluster	Immutability-Gate textgleich in server, ee-server und ops-console; nur neue Migrationsdateien erlaub
+121	CHORE-249		done	empty-cluster	Provider-Oberflaeche mit zwei nicht-veraltbaren Waechtern gegatet (Backend-Reflection, Frontend-Verh
+120	CHORE-257		done	empty-cluster	Guidance-Keys produktiv auf den reservierten Namespace umgezogen; Host-Pull plus Container-Recreate,
+119	CHORE-254		done	empty-cluster	Trigger-Aera abgeraeumt: DELETE_BLOCKED weg, tote SYSTEM-Zweige in eine fail-loud Ablehnung umgebaut
+118	CHORE-253		done	empty-cluster	Loeschpfad lehnt reservierte Keys jetzt typisiert ab, ueber alle drei Adresswege und row-independent
+117	CHORE-250		done	empty-cluster	Cold-Start-Replay laeuft als CI-Job, der immer eine Conclusion meldet (Variante B) und damit require
+116	BUG-33		done	empty-cluster	Connector-Delete liefert NOTHING_TO_DO, REMOVED oder FAILED; der Lifecycle-Drop gated auf FAILED, Ab
+115	CHORE-208		done	empty-cluster	Stage E vollstaendig: Seeder ueber drei Repos abgebaut, Trigger und Funktion per V20 gedroppt, Keys 
+114	CHORE-243		done	empty-cluster	Beantwortet mit negativem Ergebnis: kein Relay ist gangbar; Nachfolger ist CHORE-251 nach ADR-0032
+113	CHORE-237		done	empty-cluster	Waitlist-Grant ist im Cold-Start-Grantshape verdrahtet; apply.sh und Replay-Gate assertieren beide G
+112	CHORE-236		done	empty-cluster	Provider-Frontend-Secrets haben eine fail-loud Startup-Assertion unter NODE_ENV=production, Build-Ph
+111	BUG-32		done	empty-cluster	Ops-Surface-DELETE-Fehler gated jetzt den Lifecycle-Drop; Tenant bleibt Kandidat statt als Purge-Erf
+110	CHORE-231		done	empty-cluster	Produktebene gemessen: Server-Schnittstellen und Konsole sind S1 (Gate mit Test); die Schuld liegt b
+109	CHORE-210		done	empty-cluster	v0.8.3 released; ee-server v0.1.10 live; V19+V10001 applied out-of-order (rank 19/20 above V10000), 
+108	CHORE-199		done	empty-cluster	Additiver Overlay A-D,F gemerged (PR #88, 91.3%): Guidance aus Resource; Merge in recall+listShared;
+107	FEAT-62		done	empty-cluster	Stufe 1 gemerged (PR #87, 86.6%): memory_update non-creating verb + reservierter system-Namespace am
+106	CHORE-198		done	empty-cluster	ADR-0024 Am6 im OSS-Kern: ContentUnit als @MappedSuperclass, Kanalwert import, existence→is_deleted 
+105	CHORE-147		done	empty-cluster	ops-no-content-Log-Gate geschlossen: ai.kumbuka + io.quarkiverse.mcp gemessen INFO (0 Content-Zeilen
+104	CHORE-162		done	empty-cluster	user_account-Betreiber-Reads fail-closed (Prod live): table-SELECT REVOKE + column-Allowlist über 14
+103	CHORE-191		done	empty-cluster	DB_MIGRATION true->false Revert (CHORE-189-Schluss); infra 459f6f7 auf main; Webhook-Image-Deploy-Pf
+102	CHORE-189		done	empty-cluster	FEAT-28 limiter live: ee v0.1.9 (BUG-26) + ops v0.13.4 via infra PR #50; V10000 tenant_limits succes
+101	FEAT-28		done	empty-cluster	Layer-2 write-rate limiter: built (SPRINT_112.1) then relocated CE→EE (SPRINT_112.2) — lives in ee-s
+100	CHORE-82		done	empty-cluster	Abuse/DoS threat model as design raster: 9 AB-cases x 4 surfaces, ratified-vs-open control table for
+99	CHORE-99		done	empty-cluster	Receiver liefert log_file_id (rclone lsjson) in allen Response-Pfaden; hermetischer Test; test_recei
+98	CHORE-172		done	empty-cluster	Laufzeit-Identitaets-Gate scharf: deploy.sh reicht EXPECT_VERSION (KUMBUKA_EE_VERSION, v-gestrippt) 
+97	CHORE-138		done	empty-cluster	rollback.sh + ROLLBACK-DRILL.md retired (PV-15); out-of-band rollback = declarative revert-merge; de
+96	CHORE-178		done	empty-cluster	Welle #103 komplett: EE-server v0.1.7 (core 0.8.2) nach 4 gruenen Gates deployt (Migrations-Delta nu
+95	CHORE-171		done	empty-cluster	ADR-0035 Faltung Host-Hälfte LIVE: additiver 27-Key-Merge (jeder ×1, kein Split-Brain), Insel-down→f
+94	CHORE-170		done	empty-cluster	ADR-0035 Faltung Repo-Hälfte: ops-backend/-frontend als 2 Services in infra/compose, 2 Matrix-Zeilen
+93	FEAT-58		done	empty-cluster	Lokalisierte Enrolment-Mail (messages_de) + Registrierungssprache web→ops→KC-locale; trägt F-0175/AD
+92	CHORE-177		done	empty-cluster	Slug-Grammatik kanonisiert (ADR-0036: 2 Pattern, SSoT-Pin-Tests, scope-create 400 statt 500, alias-A
+91	CHORE-105		done	empty-cluster	Enrolment-Leg-Fix 4/4: termsText v0.9.6 live + ops-console v0.13.2 (F-0172-Redirect) + voller First-
+90	BUG-24		done	empty-cluster	ops-console Waitlist-Approve 400: der ops-frontend BFF-Handler rief req.json() bedingungslos und 400
+89	CHORE-117		done	empty-cluster	Doku-Vollpruefung PUBLIC (SPRINT_100.1): docs.kumbuka.ai DE+EN + server/console README/docs gegen AD
+88	BUG-23		done	empty-cluster	ee-server-Release stempelte die pom.xml-Version nie -> jedes Image meldete `0.1.0-SNAPSHOT`. Fix (SP
+87	BUG-19		done	empty-cluster	ops-console Version-Anzeige zeigte Dev-Default statt Release-Tag; PR #127 war seit #96 gemergt, offe
+86	CHORE-164		done	empty-cluster	Wirkungs-Guard + Matrix LIVE (infra PR #42, 8519812): die Mapping-Tabelle ist EINE Datei (scripts/_m
+85	CHORE-160		done	empty-cluster	Eigentumsfrage der Provider-Deploy-Assets -- durch ADR-0035 mit einer GROESSEREN Antwort aufgeloest:
+84	FEAT-53		done	empty-cluster	Console Connect-Wizard: lief laengst LIVE, wurde aber als "PR #69 offen" gefuehrt. Gemessen in #96: 
+83	BUG-22		done	empty-cluster	ee-console rendert kein Markdown: Fix nachweislich im ee-console-Dockerfile (/md-stage, find-getrieb
+82	FEAT-57		done	empty-cluster	user.settings-JSON LIVE: Flyway V18 (user_account.settings JSONB), typisiert an der Grenze (unbekann
+81	CHORE-155		done	empty-cluster	Oeffentlicher n8n-Support-Webhook gesperrt: pfadgenauer `respond 404` (KEIN Praefix-Block - der GitH
+80	CHORE-135		done	empty-cluster	D-OPS-34-Monitoring-Mounts in die kanonische ops-console/deploy/compose.prod.yml uebernommen (PR #12
+79	CHORE-121		done	empty-cluster	Wildcard-Removal *.kumbuka.ai: caddy/sites/wildcard.caddy per `git rm` retired (auf dem Host laengst
+78	CHORE-150		done	empty-cluster	Versions-Provenienz Backend-Haelfte: /api/version liefert {name, version, core}, ee-server verdrahte
+77	CHORE-154		done	empty-cluster	ee-console-Cutover live: deploy.cfg + compose.prod.yml auf ghcr.io/kumbuka-ai/kumbuka-ee-console (Se
+76	BUG-21		done	empty-cluster	CIMD-Fetch brach bei unbekannten Client-Metadata-Feldern hart ab (Upstream-KC, RFC-7591-Verstoss) ->
+75	FEAT-49		done	empty-cluster	FTS fuer memory_recall (substring -> tsvector, DE/EN-Stemming). ABSORBIERT von FEAT-56 (Suchvertrag 
+74	CHORE-148		done	empty-cluster	Console-EE-Seam GEBAUT: console v0.5.1 als Source-Package + Slots mit typ-erzwungenen Defaults + Rou
+73	CHORE-144		done	empty-cluster	F-0140-Header durabel: `header_down` mit RFC-9728-`resource_metadata` aus host-direkt ins infra-Repo
+72	CHORE-143		done	empty-cluster	RFC-9728-Fix: /mcp WWW-Authenticate liefert jetzt resource_metadata-Parameter (Fix = Caddy header_do
+71	CHORE-141		done	empty-cluster	Policy-Wiring scope-attach-Executor live: Template-Diff fresh-import-verifiziert, PR #25 gemergt, kc
+70	BUG-20		done	empty-cluster	KC-info.ftl-Konto-Sackgasse: bereits im Code gefixt (F-0104-Nachbarschaft), Operator-Live-Test auf P
+69	CHORE-128		done	empty-cluster	Server-Metriken-Dashboard live (v0.12.6, PR #125 gruen inkl. Sonar): Host-Sampler tmpfs 10s-JSON roh
+68	CHORE-123		done	empty-cluster	ChatGPT-Onboarding-Anleitung (Fake-Secret-Tanz) obsolet: ChatGPT verbindet seit #84 via CIMD URL-onl
+67	CHORE-125		done	empty-cluster	F-0121-Review erledigt durch T4-Messung: Mistral-DCR-Blockade war Trusted-Hosts-IP-Pruefung; via gat
+66	CHORE-133		done	empty-cluster	GoAccess-iframe in /caddy live (v0.12.7, PR #126): BFF-Route-Handler serviert Frontend-Mount (1b, AD
+65	CHORE-134		done	empty-cluster	Version-Footer ops-console (v0.12.7, PR #126); Quelle-Fix -> BUG-19 (CI-Stamp), ein Chip statt zwei 
+64	CHORE-127		done	empty-cluster	GoAccess-Edge-Analytics live (Variant 2 Host-Binary): 3 statische Reports www/console/mcp + GeoLite2
+63	CHORE-126		done	empty-cluster	Caddy-JSON-Access-Logs live auf 3 Hosts (www/console/mcp): REAL IP + Authorization auto-redacted (0-
+62	CHORE-124		done	empty-cluster	MCP-Registry-Listing gemintet: ai.kumbuka/kumbuka-server v1.0.1 latest in offizieller MCP Registry (
+61	CHORE-122		done	empty-cluster	Realm-Template kumbuka-connector durabel auf public + Vendor-Origins (SPRINT_79.1, PR #18 keycloak);
+60	FEAT-18		done	empty-cluster	MCP-Adress-Umbau auf mcp.kumbuka.ai LIVE: Cutover Phase 0-2 (Deploy-Welle ee v0.1.2/kc v0.8.1, Smoke
+59	CHORE-119		done	empty-cluster	audience=kumbuka-connector auf /mcp erzwungen + Boot-Guard (fail-loud), in #77-Deploy-Welle live (ee
+58	BUG-18		done	empty-cluster	server resolveClientId: per-tenant-Connector-Addressing (B2) entfernt, AdminConnectorResourceSaasTes
+57	CHORE-110		done	empty-cluster	SEC-08 re-geratet auf Low (interner Kanal via compose-Alias gegen LE-Cert) + Fix SPRINT_74.1: %prod-
+56	BUG-17		done	empty-cluster	CSV-Formula-Injection im ops-console Audit-Export gefixt (SPRINT_74.2): AuditCsv.cell() Apostroph-Ne
+55	CHORE-108		done	empty-cluster	Beta-Gate A2 komplett: drei read-only-Detektoren (Provider-Full-Pass, Produkt-Delta-Pass, /security-
+54	CHORE-104		done	empty-cluster	Closed-Beta-Ankuendigungs-Paket #72: Waitlist-Betriebsstrecke prod-grün (v0.12.3, Reject-Mail, Hairp
+53	BUG-16		done	empty-cluster	Waitlist-Filter (F-0043-Promotion): Status-Filter in #117 gefixt/restauriert, mit v0.12.3 deployt + 
+52	CHORE-07		done	empty-cluster	Reject-Email-Code-Return: durch F-0106 konkretisiert und miterledigt (PR #117 fail-loud + n8n Header
+51	BUG-05		done	empty-cluster	KC-Post-Password-Set-Sackgasse: beide Reset-Endpfade auf Prod v0.8.0 gemessen (26.6.4-Redirect + CTA
+50	CHORE-96		done	empty-cluster	KC-Basis-Upgrade 26.0->26.6.4 (v0.8.0 live): F-0101-NPE-Fix, CVE-2026-37982, Recovery-Codes-Faehigke
+49	BUG-14		done	empty-cluster	Passkey-Fallback "Invalid Request" (F-0081): Theme-`?`->`&` (PR #12) + KC-26.6.4-NPE-Fix (PR #13), b
+48	CHORE-93		done	empty-cluster	Tag-&-Deploy-Welle #69: 5 Tags, ee-CE-Bump (69.1), Recovery-Hide v0.4.18 (69.2), deploy.cfg-Merge-Ro
+47	FEAT-42		done	empty-cluster	Notfall-Hard-Delete live: Purge-Endpoint (server 0.7.3) + ops-console-Strecke (v0.12.2) deployt, ope
+46	FEAT-32		done	empty-cluster	Account-Security-Surface e2e: TOTP/Passkey-Listen+Remove (F-0075 zu), Recovery-Karte, Sessions-sid-F
+45	CHORE-91		done	empty-cluster	Nachdoku #67: F-0087 (JDK-26-Toolchain), F-0088 (Lock-Trigger-Purge-Blockade), F-0084/F-0086-Addenda
+44	CHORE-92		done	empty-cluster	Merge-Welle #68: server#72 (erasure-Isolation via Worktree), ops-console#116, FEAT-32-Branch-FF auf 
+43	CHORE-72		done	empty-cluster	`getcfg()`-Pipefail-Fix (release.sh, T17-Regressionstest) — infra#20 gemergt 2026-07-01; WORKLIST-Ze
+42	CHORE-88		done	empty-cluster	D-OPS-31 (Backend-Scaling + Abuse-Control) persistiert: Ledger+INDEX (#66) + Mnemonic decision.d-ops
+41	CHORE-89		done	empty-cluster	ops-console-UI lokal auf ops.kumbuka.dev angebunden (OPS_OIDC_ISSUER-Fix, dev-Operator-Overlay, F-00
+40	CHORE-90		done	empty-cluster	ops-console Audit-Log-Batch (Filter/Sort/CSV-Export, Tenant-Name global, Tabellen-/Lifecycle-UX; PR 
+39	CHORE-80		done	empty-cluster	WORKLIST auf schlanke Steuerungs-Tabelle reduziert, F-ID-Kollision behoben, STARTER-Template v4 + dr
+38	CHORE-23		done	empty-cluster	Stehendes off-host DR-Backup (age-Blob), Restore-Round-Trip data-perfect n=2
+37	CHORE-03		done	empty-cluster	Keycloak-v0.7.0-Cutover faktisch erledigt, prod lief bereits v0.7.6
+36	FEAT-02		done	empty-cluster	Onboarding-Server-Feld `user_account.onboarding` — resolved-by-prior-work (V15/PR#63)
+35	BUG-03		done	empty-cluster	Console-Crash write-policy "active project scope" + global fallback
+34	CHORE-22		done	empty-cluster	n8n-DB-Fold + Edge-Fold, n8n-Rolle auf eigene DB confined
+33	CHORE-21		done	empty-cluster	FHS-Umzug + non-root (Variante 2), konsolidierter Stack live
+32	CHORE-13		done	empty-cluster	Keystone-Migration-Shape ratifiziert — erfüllt durch ADR-0024
+31	FEAT-19		done	empty-cluster	Scope-Content-Lock CE end-to-end (Server+Console+e2e-V16)
+30	CHORE-56		done	empty-cluster	ADR-0018 revidiert+re-ratifiziert: Variant A2, Zwei-Produkt-Topologie
+29	CHORE-57		done	empty-cluster	FEAT-19-Scope-Lock-Gating-Specs gelandet (e2e-Welle)
+28	BUG-08		done	empty-cluster	Wurzel `permission denied for table governance_audit` — Flyway-Superuser-Ownership
+27	BUG-09		done	empty-cluster	v4-Deploy-Verify-Email fehlte — n8n-Workflow-Fix (alwaysOutputData/Retry)
+26	CHORE-30		done	empty-cluster	Slop-Detektor-Configs gelandet (4 PRs, PIT+Stryker)
+25	CHORE-32		done	empty-cluster	Dependabot-CI entsperrt, alle Bot-PRs grün
+24	CHORE-28		done	empty-cluster	SonarCloud-Gate-Schärfung: PR-Check required (3 Repos)
+23	BUG-07		done	empty-cluster	scope-remap Mnemonik-Verschieben-Fehler — remap guard gemergt
+22	CHORE-34		done	empty-cluster	Compose-Repo-Konvergenz: caddy-Alias + n8n-CVE-Pin 2.27.3
+21	CHORE-35		done	empty-cluster	Idempotenter CONNECT-Grant-Sweep (11-ops-connect-grants.sql)
+20	CHORE-36		done	empty-cluster	Edge-IP stabilisiert (statische caddy-IP, reboot-bewiesen)
+19	CHORE-49		done	empty-cluster	Host-Aktivierung deklarative Deploy-Steuerung (deploy.cfg-SSoT)
+18	CHORE-52		done	empty-cluster	Erster echter vollautomatischer v4-Webhook-Deploy grün
+17	CHORE-53		done	empty-cluster	V16-Schema-Adaption gemergt, `gating` grün
+16	CHORE-60		done	empty-cluster	ADR-0014 revidiert (Variante 3): eine breite kumbuka_operator-Rolle
+15	CHORE-62		done	empty-cluster	G9-Operator-Rollen-Cutover live, Memory-Wand am Live-System bewiesen
+14	CHORE-63		done	empty-cluster	ops-console v0.12.0 getaggt + deployt (manuell, F-0062b)
+13	CHORE-65		done	empty-cluster	ops-console Auth/Session-Hardening (Gating+Refresh) live verifiziert
+12	CHORE-68		done	empty-cluster	saas-runtime → ee-server Migration (ADR-0018 Teil 1)
+11	CHORE-69		done	empty-cluster	Private-Repo-Renames (infra/web/keycloak)
+10	BUG-12		done	empty-cluster	ops-console `/tenants` down — CONNECT-Grant fehlte den ops-Rollen
+9	CHORE-83		done	empty-cluster	local-dev KC-Org-Bootstrap, Directory-500 über vier Bausteine geschlossen
+8	CHORE-43		done	empty-cluster	resolve_blob/ensure_op_session-Fixes — superseded, gebündelt in CHORE-47
+7	CHORE-44		done	empty-cluster	Verify-Härtung (externer Ingress+Cert-Trust) — superseded, gebündelt in CHORE-47
+6	CHORE-02		done	empty-cluster	no-mock-at-trust-boundary ratifizieren — durch ADR-0019 gedeckt
+5	CHORE-08		done	empty-cluster	Read-only-Full-Repo-Audit — P1/Tenant-Isolation halten strukturell
+4	F-0076		dissolved	empty-cluster	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+3	F-0077		dissolved	empty-cluster	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+2	F-0078		dissolved	empty-cluster	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+1	F-0079		dissolved	empty-cluster	Record-Drift FEAT-02/BUG-06 als offen geführt trotz gelandeter Impl
+
+## milestone-workstream-conflict
+504	CHORE-355	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Steuerungskorpus aus dem Python-Logbuch in das Schema dispatch migrieren: SQL-Importskript mit Trock
+497	CHORE-351	DEPLOY	planned	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Worklist-Dienst, Betriebsstrang: Matrixzeile, Compose-Dienst, Rollen und Schluessel in deploy.env, C
+487	CHORE-347	CORE	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	Innenansicht der Plattform-Komponente festhalten: Revision 2 von platform-layer.md
+478	CHORE-341	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M1)	Graph-Validator fuer den Architektur-Knotenkorpus bauen — das in Schritt 5 vorgeschriebene Gate hat 
+464	CHORE-336	CORE	open	milestone-workstream-conflict (would-have-been:Architektur, M5)	Restarbeit der Extraktion: Artefaktveroeffentlichung von kumbuka-memory und Zuordnung der EE-Module
+463	FEAT-85	DEPLOY	done	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Deployment des leeren Gedaechtnisdienstes: Container-Image, Health-Endpunkt, Grant-Behauptung im Pla
+459	CHORE-334	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M1)	release.sh haertet: Umgebungs-Waechter vor dem Rendern, Gesundheit im Effect Guard, Checkout-Stand u
+442	CHORE-326	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M5)	Zielbild der Worklist pflegen und in einen ADR zurueckspiegeln
+440	CHORE-324	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M5)	Zielbild des Dispatch-Dienstes pflegen und in ADR-0042 und ADR-0038 zurueckspiegeln
+438	CHORE-323	HK	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	M5-Gatter: Architekturreview und Gap-Analyse nach beiden Dienstspezifikationen, vor Implementierungs
+434	CHORE-320	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Abschaltung des Vorgaengers: REGISTRY.md, state/, alter Dienststapel und Steuerungs-Repository ausse
+433	CHORE-319	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Umzug des Bestands: Git-Korpus, Agent-Run-SQLite und die unversionierten Zustandsdateien, drei Vorga
+427	CHORE-318	HK	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	Spezifikation Worklist Manager (Stufe 2): 25 Verbenvertraege, veraenderliche Zeilen, Append-on-Write
+426	CHORE-317	HK	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	Spezifikation Logbuch (Stufe 2): 20 Verbenvertraege, Statusmaschine, Invarianten, Fehlerformen, Numm
+424	CHORE-316	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M2)	INDEX-Dateien auf Zeigergroesse zuruecknehmen: Prosa gehoert in das Dokument, der Index traegt Titel
