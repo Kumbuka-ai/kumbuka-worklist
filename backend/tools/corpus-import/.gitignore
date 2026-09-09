@@ -1,0 +1,9 @@
+# The generated import files are per-scope and per-UUID; each run
+# produces one. Deterministic and reproducible from the generator +
+# snapshot pin + UUIDs, so no reason to check them in.
+out/import.sql
+out/import-*.sql
+out/import-*.sql.bak
+
+# Python cache from the generator's dry_run.py import.
+__pycache__/
