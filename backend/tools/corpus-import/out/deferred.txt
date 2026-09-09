@@ -1,0 +1,20 @@
+# Zurueckgestellt fuer scope jbaconsult (16 Zeilen)
+# HK-Split: method/apparatus/skills/working-discipline gehen nach jbaconsult (REA-0007 Abschnitt 3).
+# Alle Zuordnungen hier sind HEURISTISCH und brauchen Concept-Ratifikation.
+#
+485	CHORE-345	open	hk-heuristic:jba-keyword	Methodikschicht neu schneiden: Entscheidungsverfahren, Doktrin-Zustaendigkeit, Kontextsemantik
+436	CHORE-322	open	hk-heuristic:jba-keyword	kumbuka-server nach kumbuka-memory umbenennen: Submodulpfade, Imagenamen, Matrixschluessel, Caddy-Ei
+423	CHORE-315	done	hk-heuristic:jba-keyword	M5 planen: Spezifikation als erste Etappe der Neuimplementierung, Meilensteinzerlegung in Zeilen
+404		new	hk-heuristic:jba-keyword	Terminierungsstufe in session-closure: Merge pruefen, Worklist-Zeilen schliessen, close_iteration au
+385	CHORE-304	done	hk-heuristic:jba-keyword	session-closure und code-handover auf die Steering-Dienste umstellen (Logbuch-Objekte statt Dateien,
+376	CHORE-297	open	hk-heuristic:jba-keyword	Skill-Drift-Waechter fuer session-start: die fixen Sektionen wandern ins Skill, damit stirbt die Tem
+344	CHORE-247	open	hk-heuristic:jba-keyword	Worktree-Isolation paralleler Code-Sub-Sprints: Submodul-Disjunktheit ist notwendig, nicht hinreiche
+330	CHORE-200	open	hk-heuristic:jba-keyword	Cluster OPS einführen: Marker + Abgrenzung zu DEPLOY, closure.py-Vokabular, WORKING_CONCEPT §11, wor
+245	CHORE-100	open	hk-heuristic:jba-keyword	Suchdisziplin aus F-0094 in docs/TOOLING.md + fs-write-Skill dokumentieren
+173	CHORE-206	open	hk-heuristic:jba-keyword	WORKING_CONCEPT 16 (Analysepflicht): nach dem ersten echten Skill-Lauf schreiben
+156	CHORE-230	open	hk-heuristic:jba-keyword	Priorisierungsschema v2 doppelt verankern: WORKING_CONCEPT als massgeblich und worklist-manager-Skil
+145	CHORE-259	open	hk-heuristic:jba-keyword	Zaehlkorrektur in der Architektur-Inventur: 17 Provider-Resource-Klassen statt 16 (MetricsResource),
+132	CHORE-282	open	hk-heuristic:jba-keyword	Rot-Probe fuer CI-Gates laeuft auf einem Wegwerf-PR, nie auf dem Lieferbranch: Konvention und code-h
+130	CHORE-271	open	hk-heuristic:jba-keyword	Umschalten der Steuerungslinie auf den Worklist-Manager: REGISTRY-Umzug, closure.py und Skills auf d
+128	CHORE-284	done	hk-heuristic:jba-keyword	Finale Spec der Steuerungsschicht aus dem Zielbild: Dienstgrenzen, Dispatch-Objekt fuer beide Appara
+127	CHORE-269	done	hk-heuristic:jba-keyword	Logbuch als zweiter Steuerungsdienst: Sprint- und Finding-Records hinter MCP, Branch pro Sprint, Dis
