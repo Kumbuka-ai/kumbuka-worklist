@@ -33,12 +33,12 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 478	CHORE-341	HK	open	assigned	kumbuka	Architektur	1	hk-heuristic:arch-keyword	yes	Graph-Validator fuer den Architektur-Knotenkorpus bauen — das in Schritt 5 vorge
 477	CHORE-340	CORE	done	assigned	kumbuka	Architektur		named-exception:architektur	no	Zweite Runde der Korpusmigration: CON- und Leitplankenknoten, TAR/REA-Spaltung, 
 476	CHORE-339	CORE	done	assigned	kumbuka	Architektur		named-exception:architektur	no	Erste Runde der Korpusmigration: VIS-Setzung, Nordstern-Invarianten als REQ, CON
-475			new	refused	-			empty-cluster	no	ADR fuer den Verbprozess: wie neue Verben und neue Schemata hinzukommen
-474			new	refused	-			empty-cluster	no	Plattform-Datenschicht und der Schnitt Team gegen Mandant
-473			new	refused	-			empty-cluster	no	ee-Topologie schneiden: ee-server nach Platform umbenennen, Importer nach ee-mem
-472			new	refused	-			empty-cluster	no	ADR-0041 Schema-Menge gegen ADR-0043 in Deckung bringen: audit und event sind do
-471			new	refused	-			empty-cluster	no	Fehler der Gedaechtnis-Maschine hinterlassen keine Spur im Log; Fehlerprotokolli
-470			new	refused	-			empty-cluster	no	Falscher Kopfkommentar in ee-server zur Konfigurationszusammenfuehrung und die d
+475			new	assigned	kumbuka	Architektur		open-call-in:ADR fuer den Verbprozess	no	ADR fuer den Verbprozess: wie neue Verben und neue Schemata hinzukommen
+474			new	assigned	kumbuka	Architektur		open-call-in:Plattform-Datenschicht und der Schnitt Team gegen Mandant	no	Plattform-Datenschicht und der Schnitt Team gegen Mandant
+473			new	assigned	kumbuka	Produktlinie		open-call-in:ee-Topologie schneiden	no	ee-Topologie schneiden: ee-server nach Platform umbenennen, Importer nach ee-mem
+472			new	assigned	kumbuka	Architektur		open-call-in:ADR-0041 Schema-Menge gegen ADR-0043 in Deckung bringen	no	ADR-0041 Schema-Menge gegen ADR-0043 in Deckung bringen: audit und event sind do
+471			new	assigned	kumbuka	Produktlinie		open-call-in:Fehler der Gedaechtnis-Maschine hinterlassen keine Spur im L	no	Fehler der Gedaechtnis-Maschine hinterlassen keine Spur im Log; Fehlerprotokolli
+470			new	assigned	kumbuka	Produktlinie		open-call-in:Falscher Kopfkommentar in ee-server	no	Falscher Kopfkommentar in ee-server zur Konfigurationszusammenfuehrung und die d
 469	CHORE-338	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Rueckbau des Gedaechtniscodes aus kumbuka-server samt Abschaltung der alten Tabe
 468	FEAT-87	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Umschaltung auf den Gedaechtnisdienst: Schreibstopp auf dem Altspeicher, Kopie d
 467	FEAT-86	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	MCP- und REST-Oberflaeche des Gedaechtnisdienstes samt Authentifizierung und dem
@@ -60,12 +60,12 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 451	FEAT-83	CORE	planned	assigned	kumbuka	Produktlinie		cluster:CORE	no	Navigationskonzept der Konsole und Scope-Dashboard als Einstieg: erweiterbar um 
 450	FEAT-82	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst, Verbflaeche: REST gegen den Verbkatalog und MCP-Adapter als Pro
 449	CHORE-330	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Logging-Konvention der Plattformdienste: Ebenen, was eine Zeile tragen darf, und
-448			new	refused	-			empty-cluster	no	Generierter Index ueber docs/adr/ und docs/decisions/: welches Papier existiert,
+448			new	assigned	kumbuka	Architektur		open-call-in:Generierter Index ueber docs/adr/ und docs/decisions/	no	Generierter Index ueber docs/adr/ und docs/decisions/: welches Papier existiert,
 447	CHORE-329	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Post-Mortem des M5-Umbaus: warum der Bestand bei jeder Sitzung Diskrepanzen prod
 446	CHORE-328	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	M5-Umsetzungsplan als Dokument: Bauordnung, Lueckenliste des Gatters, rote Probe
 445	FEAT-81	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienst, Oberflaechenhaelfte: REST-Flaeche gegen den ratifizierten Verbk
 444	CHORE-327	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Fassade und einheitliches URI-adressiertes Verbvokabular: Harmonisierung auf ein
-443			new	refused	-			empty-cluster	no	Index ueber ADRs und Entscheidungs-Ledger mechanisch generieren statt von Hand p
+443			new	assigned	kumbuka	Architektur		open-call-in:Index ueber ADRs und Entscheidungs-Ledger mechanisch generie	no	Index ueber ADRs und Entscheidungs-Ledger mechanisch generieren statt von Hand p
 442	CHORE-326	HK	open	assigned	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Zielbild der Worklist pflegen und in einen ADR zurueckspiegeln
 441		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	Kontextkosten der MCP-Verbflaeche gegen die API messen statt schaetzen
 440	CHORE-324	HK	open	assigned	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Zielbild des Dispatch-Dienstes pflegen und in ADR-0042 und ADR-0038 zurueckspieg
@@ -139,12 +139,12 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 370	CHORE-291	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Sortierordnung nach D-STEER-6: active aus dem Sortierschluessel, (not-P1, Cluste
 369	CHORE-290	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	BFF und Web-UI haben keinen ratify-Pfad: eine Zeile kommt in der Oberflaeche nic
 368	FEAT-69	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Worklist-Manager Webinterface und JSON-BFF gebaut, als v0.2.0 released und auf w
-367			new	refused	-			empty-cluster	no	Skills liegen ausserhalb jeder Ground-Truth-Messung: nicht im Steering-Repo, nic
-366			new	refused	-			empty-cluster	no	Vier Skills sind nach dem Umbau von Sprint 132 sachlich falsch: session-closure 
-365			new	refused	-			empty-cluster	no	Kein CI-Job uebt die Realm-Import-Skip-Bedingung: docker build smoke baut nur da
-364			new	refused	-			empty-cluster	no	code-handover-Skill nachschaerfen: SonarQube wird pauschal fuer jeden Code-PR un
+367			new	deferred	jbaconsult			open-call-in:Skills liegen ausserhalb jeder Ground-Truth-Messung	no	Skills liegen ausserhalb jeder Ground-Truth-Messung: nicht im Steering-Repo, nic
+366			new	deferred	jbaconsult			open-call-in:Vier Skills sind nach dem Umbau von Sprint 132 sachlich fals	no	Vier Skills sind nach dem Umbau von Sprint 132 sachlich falsch: session-closure 
+365			new	assigned	kumbuka	Betrieb		open-call-in:Kein CI-Job uebt die Realm-Import-Skip-Bedingung	no	Kein CI-Job uebt die Realm-Import-Skip-Bedingung: docker build smoke baut nur da
+364			new	deferred	jbaconsult			open-call-in:code-handover-Skill nachschaerfen	no	code-handover-Skill nachschaerfen: SonarQube wird pauschal fuer jeden Code-PR un
 363	CHORE-289	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	CLI hat keinen Push-Pfad: --commit schreibt nur lokal, ohne Push laeuft der Klon
-362			new	refused	-			empty-cluster	no	Redirect-URI des wlm-mcp-Clients traegt einen Wildcard-Stern (claude.ai/api/mcp/
+362			new	assigned	kumbuka	Betrieb		open-call-in:Redirect-URI des wlm-mcp-Clients traegt einen Wildcard-Stern	no	Redirect-URI des wlm-mcp-Clients traegt einen Wildcard-Stern (claude.ai/api/mcp/
 361	CHORE-288	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Dienst-Zustand state/ neben den Steering-Klon legen: eigener state_dir-Parameter
 360	CHORE-287	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Stale Kommentarkopf in deploy/compose.yml: behauptet eigenen Stack, Dienst laeuf
 359	CHORE-286	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	ratify-Sperre im Dienstmodus aufgehoben: gebaut in PR #8, deployed mit v0.2.0, L
@@ -381,128 +381,128 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 128	CHORE-284	HK	done	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Finale Spec der Steuerungsschicht aus dem Zielbild: Dienstgrenzen, Dispatch-Obje
 127	CHORE-269	HK	done	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Logbuch als zweiter Steuerungsdienst: Sprint- und Finding-Records hinter MCP, Br
 126	CHORE-263	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Schema-Deploy server und ee-server mit V20 (Drop des Delete-Block-Triggers): Cor
-125	CHORE-262		done	refused	-			empty-cluster	no	Analyse geschrieben: fuenf Achsen werden deployt, eine ist versioniert. IST-Anke
-124	CHORE-274		done	refused	-			empty-cluster	no	MCP-Client wlm-mcp angelegt und Connector verbunden; elf Werkzeuge nachgewiesen 
-123	CHORE-268		done	refused	-			empty-cluster	no	Worklist-Manager als Dienst gebaut und live: Web plus MCP auf wlm.jbaconsult.com
-122	CHORE-261		done	refused	-			empty-cluster	no	Immutability-Gate textgleich in server, ee-server und ops-console; nur neue Migr
-121	CHORE-249		done	refused	-			empty-cluster	no	Provider-Oberflaeche mit zwei nicht-veraltbaren Waechtern gegatet (Backend-Refle
-120	CHORE-257		done	refused	-			empty-cluster	no	Guidance-Keys produktiv auf den reservierten Namespace umgezogen; Host-Pull plus
-119	CHORE-254		done	refused	-			empty-cluster	no	Trigger-Aera abgeraeumt: DELETE_BLOCKED weg, tote SYSTEM-Zweige in eine fail-lou
-118	CHORE-253		done	refused	-			empty-cluster	no	Loeschpfad lehnt reservierte Keys jetzt typisiert ab, ueber alle drei Adresswege
-117	CHORE-250		done	refused	-			empty-cluster	no	Cold-Start-Replay laeuft als CI-Job, der immer eine Conclusion meldet (Variante 
-116	BUG-33		done	refused	-			empty-cluster	no	Connector-Delete liefert NOTHING_TO_DO, REMOVED oder FAILED; der Lifecycle-Drop 
-115	CHORE-208		done	refused	-			empty-cluster	no	Stage E vollstaendig: Seeder ueber drei Repos abgebaut, Trigger und Funktion per
-114	CHORE-243		done	refused	-			empty-cluster	no	Beantwortet mit negativem Ergebnis: kein Relay ist gangbar; Nachfolger ist CHORE
-113	CHORE-237		done	refused	-			empty-cluster	no	Waitlist-Grant ist im Cold-Start-Grantshape verdrahtet; apply.sh und Replay-Gate
-112	CHORE-236		done	refused	-			empty-cluster	no	Provider-Frontend-Secrets haben eine fail-loud Startup-Assertion unter NODE_ENV=
-111	BUG-32		done	refused	-			empty-cluster	no	Ops-Surface-DELETE-Fehler gated jetzt den Lifecycle-Drop; Tenant bleibt Kandidat
-110	CHORE-231		done	refused	-			empty-cluster	no	Produktebene gemessen: Server-Schnittstellen und Konsole sind S1 (Gate mit Test)
-109	CHORE-210		done	refused	-			empty-cluster	no	v0.8.3 released; ee-server v0.1.10 live; V19+V10001 applied out-of-order (rank 1
-108	CHORE-199		done	refused	-			empty-cluster	no	Additiver Overlay A-D,F gemerged (PR #88, 91.3%): Guidance aus Resource; Merge i
-107	FEAT-62		done	refused	-			empty-cluster	no	Stufe 1 gemerged (PR #87, 86.6%): memory_update non-creating verb + reservierter
-106	CHORE-198		done	refused	-			empty-cluster	no	ADR-0024 Am6 im OSS-Kern: ContentUnit als @MappedSuperclass, Kanalwert import, e
-105	CHORE-147		done	refused	-			empty-cluster	no	ops-no-content-Log-Gate geschlossen: ai.kumbuka + io.quarkiverse.mcp gemessen IN
-104	CHORE-162		done	refused	-			empty-cluster	no	user_account-Betreiber-Reads fail-closed (Prod live): table-SELECT REVOKE + colu
-103	CHORE-191		done	refused	-			empty-cluster	no	DB_MIGRATION true->false Revert (CHORE-189-Schluss); infra 459f6f7 auf main; Web
-102	CHORE-189		done	refused	-			empty-cluster	no	FEAT-28 limiter live: ee v0.1.9 (BUG-26) + ops v0.13.4 via infra PR #50; V10000 
-101	FEAT-28		done	refused	-			empty-cluster	no	Layer-2 write-rate limiter: built (SPRINT_112.1) then relocated CE→EE (SPRINT_11
-100	CHORE-82		done	refused	-			empty-cluster	no	Abuse/DoS threat model as design raster: 9 AB-cases x 4 surfaces, ratified-vs-op
-99	CHORE-99		done	refused	-			empty-cluster	no	Receiver liefert log_file_id (rclone lsjson) in allen Response-Pfaden; hermetisc
-98	CHORE-172		done	refused	-			empty-cluster	no	Laufzeit-Identitaets-Gate scharf: deploy.sh reicht EXPECT_VERSION (KUMBUKA_EE_VE
-97	CHORE-138		done	refused	-			empty-cluster	no	rollback.sh + ROLLBACK-DRILL.md retired (PV-15); out-of-band rollback = declarat
-96	CHORE-178		done	refused	-			empty-cluster	no	Welle #103 komplett: EE-server v0.1.7 (core 0.8.2) nach 4 gruenen Gates deployt 
-95	CHORE-171		done	refused	-			empty-cluster	no	ADR-0035 Faltung Host-Hälfte LIVE: additiver 27-Key-Merge (jeder ×1, kein Split-
-94	CHORE-170		done	refused	-			empty-cluster	no	ADR-0035 Faltung Repo-Hälfte: ops-backend/-frontend als 2 Services in infra/comp
-93	FEAT-58		done	refused	-			empty-cluster	no	Lokalisierte Enrolment-Mail (messages_de) + Registrierungssprache web→ops→KC-loc
-92	CHORE-177		done	refused	-			empty-cluster	no	Slug-Grammatik kanonisiert (ADR-0036: 2 Pattern, SSoT-Pin-Tests, scope-create 40
-91	CHORE-105		done	refused	-			empty-cluster	no	Enrolment-Leg-Fix 4/4: termsText v0.9.6 live + ops-console v0.13.2 (F-0172-Redir
-90	BUG-24		done	refused	-			empty-cluster	no	ops-console Waitlist-Approve 400: der ops-frontend BFF-Handler rief req.json() b
-89	CHORE-117		done	refused	-			empty-cluster	no	Doku-Vollpruefung PUBLIC (SPRINT_100.1): docs.kumbuka.ai DE+EN + server/console 
-88	BUG-23		done	refused	-			empty-cluster	no	ee-server-Release stempelte die pom.xml-Version nie -> jedes Image meldete `0.1.
-87	BUG-19		done	refused	-			empty-cluster	no	ops-console Version-Anzeige zeigte Dev-Default statt Release-Tag; PR #127 war se
-86	CHORE-164		done	refused	-			empty-cluster	no	Wirkungs-Guard + Matrix LIVE (infra PR #42, 8519812): die Mapping-Tabelle ist EI
-85	CHORE-160		done	refused	-			empty-cluster	no	Eigentumsfrage der Provider-Deploy-Assets -- durch ADR-0035 mit einer GROESSEREN
-84	FEAT-53		done	refused	-			empty-cluster	no	Console Connect-Wizard: lief laengst LIVE, wurde aber als "PR #69 offen" gefuehr
-83	BUG-22		done	refused	-			empty-cluster	no	ee-console rendert kein Markdown: Fix nachweislich im ee-console-Dockerfile (/md
-82	FEAT-57		done	refused	-			empty-cluster	no	user.settings-JSON LIVE: Flyway V18 (user_account.settings JSONB), typisiert an 
-81	CHORE-155		done	refused	-			empty-cluster	no	Oeffentlicher n8n-Support-Webhook gesperrt: pfadgenauer `respond 404` (KEIN Prae
-80	CHORE-135		done	refused	-			empty-cluster	no	D-OPS-34-Monitoring-Mounts in die kanonische ops-console/deploy/compose.prod.yml
-79	CHORE-121		done	refused	-			empty-cluster	no	Wildcard-Removal *.kumbuka.ai: caddy/sites/wildcard.caddy per `git rm` retired (
-78	CHORE-150		done	refused	-			empty-cluster	no	Versions-Provenienz Backend-Haelfte: /api/version liefert {name, version, core},
-77	CHORE-154		done	refused	-			empty-cluster	no	ee-console-Cutover live: deploy.cfg + compose.prod.yml auf ghcr.io/kumbuka-ai/ku
-76	BUG-21		done	refused	-			empty-cluster	no	CIMD-Fetch brach bei unbekannten Client-Metadata-Feldern hart ab (Upstream-KC, R
-75	FEAT-49		done	refused	-			empty-cluster	no	FTS fuer memory_recall (substring -> tsvector, DE/EN-Stemming). ABSORBIERT von F
-74	CHORE-148		done	refused	-			empty-cluster	no	Console-EE-Seam GEBAUT: console v0.5.1 als Source-Package + Slots mit typ-erzwun
-73	CHORE-144		done	refused	-			empty-cluster	no	F-0140-Header durabel: `header_down` mit RFC-9728-`resource_metadata` aus host-d
-72	CHORE-143		done	refused	-			empty-cluster	no	RFC-9728-Fix: /mcp WWW-Authenticate liefert jetzt resource_metadata-Parameter (F
-71	CHORE-141		done	refused	-			empty-cluster	no	Policy-Wiring scope-attach-Executor live: Template-Diff fresh-import-verifiziert
-70	BUG-20		done	refused	-			empty-cluster	no	KC-info.ftl-Konto-Sackgasse: bereits im Code gefixt (F-0104-Nachbarschaft), Oper
-69	CHORE-128		done	refused	-			empty-cluster	no	Server-Metriken-Dashboard live (v0.12.6, PR #125 gruen inkl. Sonar): Host-Sample
-68	CHORE-123		done	refused	-			empty-cluster	no	ChatGPT-Onboarding-Anleitung (Fake-Secret-Tanz) obsolet: ChatGPT verbindet seit 
-67	CHORE-125		done	refused	-			empty-cluster	no	F-0121-Review erledigt durch T4-Messung: Mistral-DCR-Blockade war Trusted-Hosts-
-66	CHORE-133		done	refused	-			empty-cluster	no	GoAccess-iframe in /caddy live (v0.12.7, PR #126): BFF-Route-Handler serviert Fr
-65	CHORE-134		done	refused	-			empty-cluster	no	Version-Footer ops-console (v0.12.7, PR #126); Quelle-Fix -> BUG-19 (CI-Stamp), 
-64	CHORE-127		done	refused	-			empty-cluster	no	GoAccess-Edge-Analytics live (Variant 2 Host-Binary): 3 statische Reports www/co
-63	CHORE-126		done	refused	-			empty-cluster	no	Caddy-JSON-Access-Logs live auf 3 Hosts (www/console/mcp): REAL IP + Authorizati
-62	CHORE-124		done	refused	-			empty-cluster	no	MCP-Registry-Listing gemintet: ai.kumbuka/kumbuka-server v1.0.1 latest in offizi
-61	CHORE-122		done	refused	-			empty-cluster	no	Realm-Template kumbuka-connector durabel auf public + Vendor-Origins (SPRINT_79.
-60	FEAT-18		done	refused	-			empty-cluster	no	MCP-Adress-Umbau auf mcp.kumbuka.ai LIVE: Cutover Phase 0-2 (Deploy-Welle ee v0.
-59	CHORE-119		done	refused	-			empty-cluster	no	audience=kumbuka-connector auf /mcp erzwungen + Boot-Guard (fail-loud), in #77-D
-58	BUG-18		done	refused	-			empty-cluster	no	server resolveClientId: per-tenant-Connector-Addressing (B2) entfernt, AdminConn
-57	CHORE-110		done	refused	-			empty-cluster	no	SEC-08 re-geratet auf Low (interner Kanal via compose-Alias gegen LE-Cert) + Fix
-56	BUG-17		done	refused	-			empty-cluster	no	CSV-Formula-Injection im ops-console Audit-Export gefixt (SPRINT_74.2): AuditCsv
-55	CHORE-108		done	refused	-			empty-cluster	no	Beta-Gate A2 komplett: drei read-only-Detektoren (Provider-Full-Pass, Produkt-De
-54	CHORE-104		done	refused	-			empty-cluster	no	Closed-Beta-Ankuendigungs-Paket #72: Waitlist-Betriebsstrecke prod-grün (v0.12.3
-53	BUG-16		done	refused	-			empty-cluster	no	Waitlist-Filter (F-0043-Promotion): Status-Filter in #117 gefixt/restauriert, mi
-52	CHORE-07		done	refused	-			empty-cluster	no	Reject-Email-Code-Return: durch F-0106 konkretisiert und miterledigt (PR #117 fa
-51	BUG-05		done	refused	-			empty-cluster	no	KC-Post-Password-Set-Sackgasse: beide Reset-Endpfade auf Prod v0.8.0 gemessen (2
-50	CHORE-96		done	refused	-			empty-cluster	no	KC-Basis-Upgrade 26.0->26.6.4 (v0.8.0 live): F-0101-NPE-Fix, CVE-2026-37982, Rec
-49	BUG-14		done	refused	-			empty-cluster	no	Passkey-Fallback "Invalid Request" (F-0081): Theme-`?`->`&` (PR #12) + KC-26.6.4
-48	CHORE-93		done	refused	-			empty-cluster	no	Tag-&-Deploy-Welle #69: 5 Tags, ee-CE-Bump (69.1), Recovery-Hide v0.4.18 (69.2),
-47	FEAT-42		done	refused	-			empty-cluster	no	Notfall-Hard-Delete live: Purge-Endpoint (server 0.7.3) + ops-console-Strecke (v
-46	FEAT-32		done	refused	-			empty-cluster	no	Account-Security-Surface e2e: TOTP/Passkey-Listen+Remove (F-0075 zu), Recovery-K
-45	CHORE-91		done	refused	-			empty-cluster	no	Nachdoku #67: F-0087 (JDK-26-Toolchain), F-0088 (Lock-Trigger-Purge-Blockade), F
-44	CHORE-92		done	refused	-			empty-cluster	no	Merge-Welle #68: server#72 (erasure-Isolation via Worktree), ops-console#116, FE
-43	CHORE-72		done	refused	-			empty-cluster	no	`getcfg()`-Pipefail-Fix (release.sh, T17-Regressionstest) — infra#20 gemergt 202
-42	CHORE-88		done	refused	-			empty-cluster	no	D-OPS-31 (Backend-Scaling + Abuse-Control) persistiert: Ledger+INDEX (#66) + Mne
-41	CHORE-89		done	refused	-			empty-cluster	no	ops-console-UI lokal auf ops.kumbuka.dev angebunden (OPS_OIDC_ISSUER-Fix, dev-Op
-40	CHORE-90		done	refused	-			empty-cluster	no	ops-console Audit-Log-Batch (Filter/Sort/CSV-Export, Tenant-Name global, Tabelle
-39	CHORE-80		done	refused	-			empty-cluster	no	WORKLIST auf schlanke Steuerungs-Tabelle reduziert, F-ID-Kollision behoben, STAR
-38	CHORE-23		done	refused	-			empty-cluster	no	Stehendes off-host DR-Backup (age-Blob), Restore-Round-Trip data-perfect n=2
-37	CHORE-03		done	refused	-			empty-cluster	no	Keycloak-v0.7.0-Cutover faktisch erledigt, prod lief bereits v0.7.6
-36	FEAT-02		done	refused	-			empty-cluster	no	Onboarding-Server-Feld `user_account.onboarding` — resolved-by-prior-work (V15/P
-35	BUG-03		done	refused	-			empty-cluster	no	Console-Crash write-policy "active project scope" + global fallback
-34	CHORE-22		done	refused	-			empty-cluster	no	n8n-DB-Fold + Edge-Fold, n8n-Rolle auf eigene DB confined
-33	CHORE-21		done	refused	-			empty-cluster	no	FHS-Umzug + non-root (Variante 2), konsolidierter Stack live
-32	CHORE-13		done	refused	-			empty-cluster	no	Keystone-Migration-Shape ratifiziert — erfüllt durch ADR-0024
-31	FEAT-19		done	refused	-			empty-cluster	no	Scope-Content-Lock CE end-to-end (Server+Console+e2e-V16)
-30	CHORE-56		done	refused	-			empty-cluster	no	ADR-0018 revidiert+re-ratifiziert: Variant A2, Zwei-Produkt-Topologie
-29	CHORE-57		done	refused	-			empty-cluster	no	FEAT-19-Scope-Lock-Gating-Specs gelandet (e2e-Welle)
-28	BUG-08		done	refused	-			empty-cluster	no	Wurzel `permission denied for table governance_audit` — Flyway-Superuser-Ownersh
-27	BUG-09		done	refused	-			empty-cluster	no	v4-Deploy-Verify-Email fehlte — n8n-Workflow-Fix (alwaysOutputData/Retry)
-26	CHORE-30		done	refused	-			empty-cluster	no	Slop-Detektor-Configs gelandet (4 PRs, PIT+Stryker)
-25	CHORE-32		done	refused	-			empty-cluster	no	Dependabot-CI entsperrt, alle Bot-PRs grün
-24	CHORE-28		done	refused	-			empty-cluster	no	SonarCloud-Gate-Schärfung: PR-Check required (3 Repos)
-23	BUG-07		done	refused	-			empty-cluster	no	scope-remap Mnemonik-Verschieben-Fehler — remap guard gemergt
-22	CHORE-34		done	refused	-			empty-cluster	no	Compose-Repo-Konvergenz: caddy-Alias + n8n-CVE-Pin 2.27.3
-21	CHORE-35		done	refused	-			empty-cluster	no	Idempotenter CONNECT-Grant-Sweep (11-ops-connect-grants.sql)
-20	CHORE-36		done	refused	-			empty-cluster	no	Edge-IP stabilisiert (statische caddy-IP, reboot-bewiesen)
-19	CHORE-49		done	refused	-			empty-cluster	no	Host-Aktivierung deklarative Deploy-Steuerung (deploy.cfg-SSoT)
-18	CHORE-52		done	refused	-			empty-cluster	no	Erster echter vollautomatischer v4-Webhook-Deploy grün
-17	CHORE-53		done	refused	-			empty-cluster	no	V16-Schema-Adaption gemergt, `gating` grün
-16	CHORE-60		done	refused	-			empty-cluster	no	ADR-0014 revidiert (Variante 3): eine breite kumbuka_operator-Rolle
-15	CHORE-62		done	refused	-			empty-cluster	no	G9-Operator-Rollen-Cutover live, Memory-Wand am Live-System bewiesen
-14	CHORE-63		done	refused	-			empty-cluster	no	ops-console v0.12.0 getaggt + deployt (manuell, F-0062b)
-13	CHORE-65		done	refused	-			empty-cluster	no	ops-console Auth/Session-Hardening (Gating+Refresh) live verifiziert
-12	CHORE-68		done	refused	-			empty-cluster	no	saas-runtime → ee-server Migration (ADR-0018 Teil 1)
-11	CHORE-69		done	refused	-			empty-cluster	no	Private-Repo-Renames (infra/web/keycloak)
-10	BUG-12		done	refused	-			empty-cluster	no	ops-console `/tenants` down — CONNECT-Grant fehlte den ops-Rollen
-9	CHORE-83		done	refused	-			empty-cluster	no	local-dev KC-Org-Bootstrap, Directory-500 über vier Bausteine geschlossen
-8	CHORE-43		done	refused	-			empty-cluster	no	resolve_blob/ensure_op_session-Fixes — superseded, gebündelt in CHORE-47
-7	CHORE-44		done	refused	-			empty-cluster	no	Verify-Härtung (externer Ingress+Cert-Trust) — superseded, gebündelt in CHORE-47
-6	CHORE-02		done	refused	-			empty-cluster	no	no-mock-at-trust-boundary ratifizieren — durch ADR-0019 gedeckt
-5	CHORE-08		done	refused	-			empty-cluster	no	Read-only-Full-Repo-Audit — P1/Tenant-Isolation halten strukturell
-4	F-0076		dissolved	refused	-			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
-3	F-0077		dissolved	refused	-			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
-2	F-0078		dissolved	refused	-			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
-1	F-0079		dissolved	refused	-			empty-cluster	no	Record-Drift FEAT-02/BUG-06 als offen geführt trotz gelandeter Impl
+125	CHORE-262		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Analyse geschrieben: fuenf Achsen werden deployt, eine ist versioniert. IST-Anke
+124	CHORE-274		done	assigned	kumbuka	default		terminal-to-catchall:done	no	MCP-Client wlm-mcp angelegt und Connector verbunden; elf Werkzeuge nachgewiesen 
+123	CHORE-268		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Worklist-Manager als Dienst gebaut und live: Web plus MCP auf wlm.jbaconsult.com
+122	CHORE-261		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Immutability-Gate textgleich in server, ee-server und ops-console; nur neue Migr
+121	CHORE-249		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Provider-Oberflaeche mit zwei nicht-veraltbaren Waechtern gegatet (Backend-Refle
+120	CHORE-257		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Guidance-Keys produktiv auf den reservierten Namespace umgezogen; Host-Pull plus
+119	CHORE-254		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Trigger-Aera abgeraeumt: DELETE_BLOCKED weg, tote SYSTEM-Zweige in eine fail-lou
+118	CHORE-253		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Loeschpfad lehnt reservierte Keys jetzt typisiert ab, ueber alle drei Adresswege
+117	CHORE-250		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Cold-Start-Replay laeuft als CI-Job, der immer eine Conclusion meldet (Variante 
+116	BUG-33		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Connector-Delete liefert NOTHING_TO_DO, REMOVED oder FAILED; der Lifecycle-Drop 
+115	CHORE-208		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Stage E vollstaendig: Seeder ueber drei Repos abgebaut, Trigger und Funktion per
+114	CHORE-243		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Beantwortet mit negativem Ergebnis: kein Relay ist gangbar; Nachfolger ist CHORE
+113	CHORE-237		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Waitlist-Grant ist im Cold-Start-Grantshape verdrahtet; apply.sh und Replay-Gate
+112	CHORE-236		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Provider-Frontend-Secrets haben eine fail-loud Startup-Assertion unter NODE_ENV=
+111	BUG-32		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Ops-Surface-DELETE-Fehler gated jetzt den Lifecycle-Drop; Tenant bleibt Kandidat
+110	CHORE-231		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Produktebene gemessen: Server-Schnittstellen und Konsole sind S1 (Gate mit Test)
+109	CHORE-210		done	assigned	kumbuka	default		terminal-to-catchall:done	no	v0.8.3 released; ee-server v0.1.10 live; V19+V10001 applied out-of-order (rank 1
+108	CHORE-199		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Additiver Overlay A-D,F gemerged (PR #88, 91.3%): Guidance aus Resource; Merge i
+107	FEAT-62		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Stufe 1 gemerged (PR #87, 86.6%): memory_update non-creating verb + reservierter
+106	CHORE-198		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ADR-0024 Am6 im OSS-Kern: ContentUnit als @MappedSuperclass, Kanalwert import, e
+105	CHORE-147		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-no-content-Log-Gate geschlossen: ai.kumbuka + io.quarkiverse.mcp gemessen IN
+104	CHORE-162		done	assigned	kumbuka	default		terminal-to-catchall:done	no	user_account-Betreiber-Reads fail-closed (Prod live): table-SELECT REVOKE + colu
+103	CHORE-191		done	assigned	kumbuka	default		terminal-to-catchall:done	no	DB_MIGRATION true->false Revert (CHORE-189-Schluss); infra 459f6f7 auf main; Web
+102	CHORE-189		done	assigned	kumbuka	default		terminal-to-catchall:done	no	FEAT-28 limiter live: ee v0.1.9 (BUG-26) + ops v0.13.4 via infra PR #50; V10000 
+101	FEAT-28		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Layer-2 write-rate limiter: built (SPRINT_112.1) then relocated CE→EE (SPRINT_11
+100	CHORE-82		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Abuse/DoS threat model as design raster: 9 AB-cases x 4 surfaces, ratified-vs-op
+99	CHORE-99		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Receiver liefert log_file_id (rclone lsjson) in allen Response-Pfaden; hermetisc
+98	CHORE-172		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Laufzeit-Identitaets-Gate scharf: deploy.sh reicht EXPECT_VERSION (KUMBUKA_EE_VE
+97	CHORE-138		done	assigned	kumbuka	default		terminal-to-catchall:done	no	rollback.sh + ROLLBACK-DRILL.md retired (PV-15); out-of-band rollback = declarat
+96	CHORE-178		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Welle #103 komplett: EE-server v0.1.7 (core 0.8.2) nach 4 gruenen Gates deployt 
+95	CHORE-171		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ADR-0035 Faltung Host-Hälfte LIVE: additiver 27-Key-Merge (jeder ×1, kein Split-
+94	CHORE-170		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ADR-0035 Faltung Repo-Hälfte: ops-backend/-frontend als 2 Services in infra/comp
+93	FEAT-58		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Lokalisierte Enrolment-Mail (messages_de) + Registrierungssprache web→ops→KC-loc
+92	CHORE-177		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Slug-Grammatik kanonisiert (ADR-0036: 2 Pattern, SSoT-Pin-Tests, scope-create 40
+91	CHORE-105		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Enrolment-Leg-Fix 4/4: termsText v0.9.6 live + ops-console v0.13.2 (F-0172-Redir
+90	BUG-24		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-console Waitlist-Approve 400: der ops-frontend BFF-Handler rief req.json() b
+89	CHORE-117		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Doku-Vollpruefung PUBLIC (SPRINT_100.1): docs.kumbuka.ai DE+EN + server/console 
+88	BUG-23		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ee-server-Release stempelte die pom.xml-Version nie -> jedes Image meldete `0.1.
+87	BUG-19		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-console Version-Anzeige zeigte Dev-Default statt Release-Tag; PR #127 war se
+86	CHORE-164		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Wirkungs-Guard + Matrix LIVE (infra PR #42, 8519812): die Mapping-Tabelle ist EI
+85	CHORE-160		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Eigentumsfrage der Provider-Deploy-Assets -- durch ADR-0035 mit einer GROESSEREN
+84	FEAT-53		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Console Connect-Wizard: lief laengst LIVE, wurde aber als "PR #69 offen" gefuehr
+83	BUG-22		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ee-console rendert kein Markdown: Fix nachweislich im ee-console-Dockerfile (/md
+82	FEAT-57		done	assigned	kumbuka	default		terminal-to-catchall:done	no	user.settings-JSON LIVE: Flyway V18 (user_account.settings JSONB), typisiert an 
+81	CHORE-155		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Oeffentlicher n8n-Support-Webhook gesperrt: pfadgenauer `respond 404` (KEIN Prae
+80	CHORE-135		done	assigned	kumbuka	default		terminal-to-catchall:done	no	D-OPS-34-Monitoring-Mounts in die kanonische ops-console/deploy/compose.prod.yml
+79	CHORE-121		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Wildcard-Removal *.kumbuka.ai: caddy/sites/wildcard.caddy per `git rm` retired (
+78	CHORE-150		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Versions-Provenienz Backend-Haelfte: /api/version liefert {name, version, core},
+77	CHORE-154		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ee-console-Cutover live: deploy.cfg + compose.prod.yml auf ghcr.io/kumbuka-ai/ku
+76	BUG-21		done	assigned	kumbuka	default		terminal-to-catchall:done	no	CIMD-Fetch brach bei unbekannten Client-Metadata-Feldern hart ab (Upstream-KC, R
+75	FEAT-49		done	assigned	kumbuka	default		terminal-to-catchall:done	no	FTS fuer memory_recall (substring -> tsvector, DE/EN-Stemming). ABSORBIERT von F
+74	CHORE-148		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Console-EE-Seam GEBAUT: console v0.5.1 als Source-Package + Slots mit typ-erzwun
+73	CHORE-144		done	assigned	kumbuka	default		terminal-to-catchall:done	no	F-0140-Header durabel: `header_down` mit RFC-9728-`resource_metadata` aus host-d
+72	CHORE-143		done	assigned	kumbuka	default		terminal-to-catchall:done	no	RFC-9728-Fix: /mcp WWW-Authenticate liefert jetzt resource_metadata-Parameter (F
+71	CHORE-141		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Policy-Wiring scope-attach-Executor live: Template-Diff fresh-import-verifiziert
+70	BUG-20		done	assigned	kumbuka	default		terminal-to-catchall:done	no	KC-info.ftl-Konto-Sackgasse: bereits im Code gefixt (F-0104-Nachbarschaft), Oper
+69	CHORE-128		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Server-Metriken-Dashboard live (v0.12.6, PR #125 gruen inkl. Sonar): Host-Sample
+68	CHORE-123		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ChatGPT-Onboarding-Anleitung (Fake-Secret-Tanz) obsolet: ChatGPT verbindet seit 
+67	CHORE-125		done	assigned	kumbuka	default		terminal-to-catchall:done	no	F-0121-Review erledigt durch T4-Messung: Mistral-DCR-Blockade war Trusted-Hosts-
+66	CHORE-133		done	assigned	kumbuka	default		terminal-to-catchall:done	no	GoAccess-iframe in /caddy live (v0.12.7, PR #126): BFF-Route-Handler serviert Fr
+65	CHORE-134		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Version-Footer ops-console (v0.12.7, PR #126); Quelle-Fix -> BUG-19 (CI-Stamp), 
+64	CHORE-127		done	assigned	kumbuka	default		terminal-to-catchall:done	no	GoAccess-Edge-Analytics live (Variant 2 Host-Binary): 3 statische Reports www/co
+63	CHORE-126		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Caddy-JSON-Access-Logs live auf 3 Hosts (www/console/mcp): REAL IP + Authorizati
+62	CHORE-124		done	assigned	kumbuka	default		terminal-to-catchall:done	no	MCP-Registry-Listing gemintet: ai.kumbuka/kumbuka-server v1.0.1 latest in offizi
+61	CHORE-122		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Realm-Template kumbuka-connector durabel auf public + Vendor-Origins (SPRINT_79.
+60	FEAT-18		done	assigned	kumbuka	default		terminal-to-catchall:done	no	MCP-Adress-Umbau auf mcp.kumbuka.ai LIVE: Cutover Phase 0-2 (Deploy-Welle ee v0.
+59	CHORE-119		done	assigned	kumbuka	default		terminal-to-catchall:done	no	audience=kumbuka-connector auf /mcp erzwungen + Boot-Guard (fail-loud), in #77-D
+58	BUG-18		done	assigned	kumbuka	default		terminal-to-catchall:done	no	server resolveClientId: per-tenant-Connector-Addressing (B2) entfernt, AdminConn
+57	CHORE-110		done	assigned	kumbuka	default		terminal-to-catchall:done	no	SEC-08 re-geratet auf Low (interner Kanal via compose-Alias gegen LE-Cert) + Fix
+56	BUG-17		done	assigned	kumbuka	default		terminal-to-catchall:done	no	CSV-Formula-Injection im ops-console Audit-Export gefixt (SPRINT_74.2): AuditCsv
+55	CHORE-108		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Beta-Gate A2 komplett: drei read-only-Detektoren (Provider-Full-Pass, Produkt-De
+54	CHORE-104		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Closed-Beta-Ankuendigungs-Paket #72: Waitlist-Betriebsstrecke prod-grün (v0.12.3
+53	BUG-16		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Waitlist-Filter (F-0043-Promotion): Status-Filter in #117 gefixt/restauriert, mi
+52	CHORE-07		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Reject-Email-Code-Return: durch F-0106 konkretisiert und miterledigt (PR #117 fa
+51	BUG-05		done	assigned	kumbuka	default		terminal-to-catchall:done	no	KC-Post-Password-Set-Sackgasse: beide Reset-Endpfade auf Prod v0.8.0 gemessen (2
+50	CHORE-96		done	assigned	kumbuka	default		terminal-to-catchall:done	no	KC-Basis-Upgrade 26.0->26.6.4 (v0.8.0 live): F-0101-NPE-Fix, CVE-2026-37982, Rec
+49	BUG-14		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Passkey-Fallback "Invalid Request" (F-0081): Theme-`?`->`&` (PR #12) + KC-26.6.4
+48	CHORE-93		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Tag-&-Deploy-Welle #69: 5 Tags, ee-CE-Bump (69.1), Recovery-Hide v0.4.18 (69.2),
+47	FEAT-42		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Notfall-Hard-Delete live: Purge-Endpoint (server 0.7.3) + ops-console-Strecke (v
+46	FEAT-32		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Account-Security-Surface e2e: TOTP/Passkey-Listen+Remove (F-0075 zu), Recovery-K
+45	CHORE-91		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Nachdoku #67: F-0087 (JDK-26-Toolchain), F-0088 (Lock-Trigger-Purge-Blockade), F
+44	CHORE-92		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Merge-Welle #68: server#72 (erasure-Isolation via Worktree), ops-console#116, FE
+43	CHORE-72		done	assigned	kumbuka	default		terminal-to-catchall:done	no	`getcfg()`-Pipefail-Fix (release.sh, T17-Regressionstest) — infra#20 gemergt 202
+42	CHORE-88		done	assigned	kumbuka	default		terminal-to-catchall:done	no	D-OPS-31 (Backend-Scaling + Abuse-Control) persistiert: Ledger+INDEX (#66) + Mne
+41	CHORE-89		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-console-UI lokal auf ops.kumbuka.dev angebunden (OPS_OIDC_ISSUER-Fix, dev-Op
+40	CHORE-90		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-console Audit-Log-Batch (Filter/Sort/CSV-Export, Tenant-Name global, Tabelle
+39	CHORE-80		done	assigned	kumbuka	default		terminal-to-catchall:done	no	WORKLIST auf schlanke Steuerungs-Tabelle reduziert, F-ID-Kollision behoben, STAR
+38	CHORE-23		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Stehendes off-host DR-Backup (age-Blob), Restore-Round-Trip data-perfect n=2
+37	CHORE-03		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Keycloak-v0.7.0-Cutover faktisch erledigt, prod lief bereits v0.7.6
+36	FEAT-02		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Onboarding-Server-Feld `user_account.onboarding` — resolved-by-prior-work (V15/P
+35	BUG-03		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Console-Crash write-policy "active project scope" + global fallback
+34	CHORE-22		done	assigned	kumbuka	default		terminal-to-catchall:done	no	n8n-DB-Fold + Edge-Fold, n8n-Rolle auf eigene DB confined
+33	CHORE-21		done	assigned	kumbuka	default		terminal-to-catchall:done	no	FHS-Umzug + non-root (Variante 2), konsolidierter Stack live
+32	CHORE-13		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Keystone-Migration-Shape ratifiziert — erfüllt durch ADR-0024
+31	FEAT-19		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Scope-Content-Lock CE end-to-end (Server+Console+e2e-V16)
+30	CHORE-56		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ADR-0018 revidiert+re-ratifiziert: Variant A2, Zwei-Produkt-Topologie
+29	CHORE-57		done	assigned	kumbuka	default		terminal-to-catchall:done	no	FEAT-19-Scope-Lock-Gating-Specs gelandet (e2e-Welle)
+28	BUG-08		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Wurzel `permission denied for table governance_audit` — Flyway-Superuser-Ownersh
+27	BUG-09		done	assigned	kumbuka	default		terminal-to-catchall:done	no	v4-Deploy-Verify-Email fehlte — n8n-Workflow-Fix (alwaysOutputData/Retry)
+26	CHORE-30		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Slop-Detektor-Configs gelandet (4 PRs, PIT+Stryker)
+25	CHORE-32		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Dependabot-CI entsperrt, alle Bot-PRs grün
+24	CHORE-28		done	assigned	kumbuka	default		terminal-to-catchall:done	no	SonarCloud-Gate-Schärfung: PR-Check required (3 Repos)
+23	BUG-07		done	assigned	kumbuka	default		terminal-to-catchall:done	no	scope-remap Mnemonik-Verschieben-Fehler — remap guard gemergt
+22	CHORE-34		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Compose-Repo-Konvergenz: caddy-Alias + n8n-CVE-Pin 2.27.3
+21	CHORE-35		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Idempotenter CONNECT-Grant-Sweep (11-ops-connect-grants.sql)
+20	CHORE-36		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Edge-IP stabilisiert (statische caddy-IP, reboot-bewiesen)
+19	CHORE-49		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Host-Aktivierung deklarative Deploy-Steuerung (deploy.cfg-SSoT)
+18	CHORE-52		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Erster echter vollautomatischer v4-Webhook-Deploy grün
+17	CHORE-53		done	assigned	kumbuka	default		terminal-to-catchall:done	no	V16-Schema-Adaption gemergt, `gating` grün
+16	CHORE-60		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ADR-0014 revidiert (Variante 3): eine breite kumbuka_operator-Rolle
+15	CHORE-62		done	assigned	kumbuka	default		terminal-to-catchall:done	no	G9-Operator-Rollen-Cutover live, Memory-Wand am Live-System bewiesen
+14	CHORE-63		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-console v0.12.0 getaggt + deployt (manuell, F-0062b)
+13	CHORE-65		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-console Auth/Session-Hardening (Gating+Refresh) live verifiziert
+12	CHORE-68		done	assigned	kumbuka	default		terminal-to-catchall:done	no	saas-runtime → ee-server Migration (ADR-0018 Teil 1)
+11	CHORE-69		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Private-Repo-Renames (infra/web/keycloak)
+10	BUG-12		done	assigned	kumbuka	default		terminal-to-catchall:done	no	ops-console `/tenants` down — CONNECT-Grant fehlte den ops-Rollen
+9	CHORE-83		done	assigned	kumbuka	default		terminal-to-catchall:done	no	local-dev KC-Org-Bootstrap, Directory-500 über vier Bausteine geschlossen
+8	CHORE-43		done	assigned	kumbuka	default		terminal-to-catchall:done	no	resolve_blob/ensure_op_session-Fixes — superseded, gebündelt in CHORE-47
+7	CHORE-44		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Verify-Härtung (externer Ingress+Cert-Trust) — superseded, gebündelt in CHORE-47
+6	CHORE-02		done	assigned	kumbuka	default		terminal-to-catchall:done	no	no-mock-at-trust-boundary ratifizieren — durch ADR-0019 gedeckt
+5	CHORE-08		done	assigned	kumbuka	default		terminal-to-catchall:done	no	Read-only-Full-Repo-Audit — P1/Tenant-Isolation halten strukturell
+4	F-0076		dissolved	assigned	kumbuka	default		terminal-to-catchall:dissolved	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+3	F-0077		dissolved	assigned	kumbuka	default		terminal-to-catchall:dissolved	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+2	F-0078		dissolved	assigned	kumbuka	default		terminal-to-catchall:dissolved	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+1	F-0079		dissolved	assigned	kumbuka	default		terminal-to-catchall:dissolved	no	Record-Drift FEAT-02/BUG-06 als offen geführt trotz gelandeter Impl

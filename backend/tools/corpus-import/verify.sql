@@ -23,22 +23,53 @@ BEGIN;
 SELECT set_config('app.tenant_id', :tenant_id, true);
 
 -- ---------------------------------------------------------------------------
--- V1. default ist leer.
--- Nachbedingung: 0 Items im default-Workstream (REA-0007 Abschnitt 8).
+-- V1. Keine OFFENE Zeile im Auffang (REA-0007 §8, verschaerft durch 177.8).
+-- Terminale Zeilen (done/dissolved beim Vorgaenger) sind im Auffang
+-- erwartet — sie sind keine offene Planungsfrage. Eine offene Zeile
+-- dort ist ein Fehler, keine Warnung.
+--
+-- Die Terminalitaet wird ueber den deklarierten Status-Token gepruef.
+-- Der Kumbuka-Scope deklariert 'done' und 'dissolved' als terminal;
+-- andere Werte gelten als offen. Wenn ein anderer Scope andere Terminal-
+-- Werte hat, ist die Liste unten zu ergaenzen.
 -- ---------------------------------------------------------------------------
-\echo 'V1: items im default-workstream (erwartet 0):'
-SELECT count(*) AS items_in_default
+\echo 'V1a: items im default-workstream, gruppiert nach status (informational):'
+SELECT s.token AS status, count(i.*) AS items_in_default
   FROM worklist.item i
   JOIN worklist.workstream ws ON ws.id = i.workstream_id
+  JOIN worklist.status s ON s.id = i.status_id
  WHERE ws.tenant_id = :tenant_id AND ws.scope_id = :scope_id
-   AND ws.is_default = true;
+   AND ws.is_default = true
+ GROUP BY s.token
+ ORDER BY items_in_default DESC;
+
+\echo 'V1b: OFFENE items im default-workstream (erwartet 0, RAISE bei Verletzung):'
+DO $$
+DECLARE
+    open_in_default int;
+BEGIN
+    PERFORM set_config('app.tenant_id', :tenant_id, true);
+    SELECT count(*) INTO open_in_default
+      FROM worklist.item i
+      JOIN worklist.workstream ws ON ws.id = i.workstream_id
+      JOIN worklist.status s ON s.id = i.status_id
+     WHERE ws.tenant_id = :tenant_id AND ws.scope_id = :scope_id
+       AND ws.is_default = true
+       AND s.token NOT IN ('done', 'dissolved');
+    IF open_in_default <> 0 THEN
+        RAISE EXCEPTION
+            'REA-0007 §8 (verschaerft): % offene Zeilen im default-Workstream. '
+            'Terminale Zeilen dort sind erwartet; offene sind ein Fehler.',
+            open_in_default;
+    END IF;
+    RAISE NOTICE 'V1b gruen: keine offene Zeile im default-Workstream.';
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- V2. Vollstaendigkeit: jede erwartete Zielzeile ist im Item-Bestand.
--- Nachbedingung: die Zeilenzahl je Strang matcht den Trockenlauf-Report.
--- Erwartet (aus dry_run.py output):
---   produktlinie: 247, betrieb: 58, architektur: 31, gtm: 14,
---   agenten-entwicklung: 1, default: 0
+-- Nachbedingung: die Zeilenzahl je Strang matcht den Trockenlauf-Report
+-- (siehe backend/tools/corpus-import/out/report.md, Abschnitt
+-- "Verteilung der assigned-Zeilen").
 -- ---------------------------------------------------------------------------
 \echo 'V2: Zeilenzahl je workstream:'
 SELECT ws.token AS workstream, count(i.*) AS items
