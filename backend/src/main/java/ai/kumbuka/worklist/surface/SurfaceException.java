@@ -70,6 +70,28 @@ public class SurfaceException extends RuntimeException {
         VERB_UNBUILT(501),
 
         /**
+         * A writing verb of the verb surface arrived on a view that is
+         * declared, not written through this surface.
+         *
+         * <p>The one such view today is {@code workstream}. A workstream is
+         * brought into being by declaring it — the same act that brings a
+         * scope's items, iterations and milestones into their vocabularies —
+         * and the declaration is the selector-declaration surface's, not this
+         * one's. Answering {@code VERB_UNCARRIED} would say the act does not
+         * exist in this scheme, which is false; answering {@code VERB_UNBUILT}
+         * would say the act is coming here, which is also false. The act
+         * exists and runs elsewhere, and that is a third sentence.
+         *
+         * <p>422, which is what {@code VERB_UNCARRIED} carries too: the call
+         * is syntactically fine, and the surface refuses to act on it for a
+         * reason it names. The status is the same as {@code VERB_UNCARRIED}
+         * on purpose — both are typed category errors — but the reason is a
+         * distinct sentence a caller reads, because acting on the two the
+         * same way would smooth over which surface the act belongs on.
+         */
+        SELECTOR_DECLARED_NOT_WRITTEN(422),
+
+        /**
          * A writing verb arrived on a truncated address that declares no set
          * semantics.
          *

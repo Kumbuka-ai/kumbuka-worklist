@@ -19,18 +19,19 @@ import java.util.UUID;
  *
  * <h2>The selector is the view, and no longer the item's family</h2>
  *
- * A token names one of three <strong>views</strong> onto what a scope holds:
- * its items, its iterations, its milestones. It used to name the family of an
- * item — {@code FEAT}, {@code CHORE}, {@code BUG} — and each family was an
- * address space of its own. That is what changed: the families are no longer
- * a number space, one counter serves the whole scope, and what stands at the
- * head of an address now says which KIND of thing is at the other end of it.
+ * A token names one of the {@linkplain #VIEWS platform views} onto what a
+ * scope holds: its items, its iterations, its milestones, its workstreams. It
+ * used to name the family of an item — {@code FEAT}, {@code CHORE},
+ * {@code BUG} — and each family was an address space of its own. That is what
+ * changed: the families are no longer a number space, one counter serves the
+ * whole scope, and what stands at the head of an address now says which KIND
+ * of thing is at the other end of it.
  *
- * <p>The three are platform vocabulary and not a scope's declaration. A scope
+ * <p>The views are platform vocabulary and not a scope's declaration. A scope
  * declares which statuses and attributes its items carry; it does not declare
  * that iterations exist. {@link SelectorRegistry#declare} therefore refuses a
  * token outside {@link #VIEWS} — the check is in the domain rather than in a
- * constraint, because "these three and no others" is a statement about the
+ * constraint, because "these views and no others" is a statement about the
  * platform's object model, and a scope-local table is the wrong place to keep
  * one.
  *
@@ -96,12 +97,12 @@ public class Selector extends TenantScoped {
      * ADR-0009 fixes the four address parts and says nothing about the case of
      * the selector; the constraint this pattern mirrors admitted upper case,
      * because the families it was written for were spelled {@code FEAT} and
-     * {@code CHORE}. With the selector reduced to three fixed views the
-     * question stops being open and is settled the way the rest of the address
-     * settles it: the scope is a DNS label and is lower case, upper case is
-     * rejected rather than folded, and the selector now reads the same way.
-     * Folding would make {@code Item} and {@code item} resolve to one
-     * selector, which is an identity statement arrived at by leniency.
+     * {@code CHORE}. With the selector reduced to a closed set of platform
+     * views the question stops being open and is settled the way the rest of
+     * the address settles it: the scope is a DNS label and is lower case,
+     * upper case is rejected rather than folded, and the selector now reads
+     * the same way. Folding would make {@code Item} and {@code item} resolve
+     * to one selector, which is an identity statement arrived at by leniency.
      *
      * <p>Here rather than in the registry that uses it, because
      * {@code ck_selector_token} in V6 is the same expression and the two must
@@ -110,11 +111,11 @@ public class Selector extends TenantScoped {
      * would let a token through that nothing can store.
      *
      * <p>The pattern stays a FORM check even though the admissible set is now
-     * three literals. Form and vocabulary are two stages of the ratified check
-     * order — a malformed token is decidable without knowing any scope, and
-     * which tokens a deployment admits is not — and collapsing them here would
-     * put the vocabulary stage in front of the visibility stage for this one
-     * value.
+     * a fixed handful of literals. Form and vocabulary are two stages of the
+     * ratified check order — a malformed token is decidable without knowing
+     * any scope, and which tokens a deployment admits is not — and collapsing
+     * them here would put the vocabulary stage in front of the visibility
+     * stage for this one value.
      *
      * <p><strong>The quantifiers are possessive, and that is load-bearing.</strong>
      * Written as {@code [a-z0-9]*(-[a-z0-9]+)*} — the obvious form, and the one
@@ -134,7 +135,7 @@ public class Selector extends TenantScoped {
     public UUID id;
 
 
-    /** {@code item}, {@code iteration}, {@code milestone}. Immutable. */
+    /** One of the tokens in {@link #VIEWS}. Immutable. */
     @Column(name = "token", nullable = false, updatable = false)
     public String token;
 
