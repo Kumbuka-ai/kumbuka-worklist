@@ -1,4 +1,4 @@
-# Steuerungskorpus-Import (Sprint 177.5 + 177.6 + 177.7)
+# Steuerungskorpus-Import (Sprint 177.5 → 177.8)
 
 Ueberfuehrung des Bestands der Vorgaenger-Worklist in den Worklist-Dienst.
 Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche.
@@ -18,12 +18,15 @@ Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche.
   Zielscope an. Der Meilenstein-Zaehler ist seit V12 (177.7) wieder
   scope-weit; die Saat hebt die Zaehler-Zeile per UPDATE auf die
   hoechste vergebene Milestone-Nummer.
-- `verify.sql` — fuenf Verifikationsabfragen (V1..V5) fuer die
-  Nachbedingungen. Die vormalige V3 (cross-workstream milestones) ist
-  mit V12 entfallen — die Invariante existiert nicht mehr.
+- `verify.sql` — fuenf Verifikationsabfragen (V1..V5). V1 ist seit
+  177.8 geschaerft: keine OFFENE Zeile im Auffang (terminale sind dort
+  erwartet). Die vormalige cross-workstream-milestone-Abfrage ist mit
+  V12 entfallen.
 - `out/` — Ausgabe des Trockenlaufs (assignment.tsv, deferred.txt,
-  refusal.txt, report.md, diff-to-177-5.md, diff-to-177-6.md). In git
-  eingecheckt zum Nachlesen; wird bei jedem Lauf ueberschrieben.
+  report.md, diff-to-177-5.md, diff-to-177-6.md, diff-to-177-7.md). In
+  git eingecheckt zum Nachlesen; wird bei jedem Lauf ueberschrieben.
+  Seit 177.8 gibt es keine `refusal.txt` mehr — die Refusal-Kategorie
+  `empty-cluster` ist aufgeloest.
 
 ## Ablauf
 
@@ -89,31 +92,25 @@ SELECT set_config('app.tenant_id', :tenant_id, true);
 INSERT INTO worklist.workstream (...) VALUES (...);
 ```
 
-## Warum der Echtlauf jetzt nicht laeuft
+## Zustand nach 177.8 — Echtlauf zulaessig
 
-Der Trockenlauf gegen den aktuellen Pin liefert 138 refused Zeilen (aus
-507 total), alle mit leerem Cluster (121 done, 13 new als unratifizierte
-Zurufe, 4 dissolved). Die REA-0007-Regel ordnet primaer nach Cluster
-zu; ohne Cluster gibt es keinen Zweig.
+Der Trockenlauf gegen den aktuellen Pin liefert **0 refused Zeilen**
+(507 total): 488 assigned, 19 deferred (jbaconsult), 0 refused. Die
+`empty-cluster`-Kategorie ist mit 177.8 aufgeloest (REA-0007 §3
+Unterabschnitt): 13 offene Zurufe wandern per Titel-Prefix (10 in
+`kumbuka`, 3 nach `jbaconsult`), 125 terminale Zeilen (121 done, 4
+dissolved) landen im Auffang `default`.
 
-Der Auftrag (dispatch 177.5, Abschnitt "Ablauf") verlangt Abbruch des
-Echtlaufs bei nicht leerer Refusal-Liste. Der Trockenlauf respektiert
-das: er benennt die 138 Zeilen und laesst den Echtlauf nicht laufen.
+**Damit ist der Echtlauf entsperrt.** Was Concept vor dem Echtlauf noch
+ratifizieren mag, sind die 110 HK-heuristischen Zuordnungen — im
+`assignment.tsv` mit `heuristic=yes` markiert. Sie sind Vorschlaege des
+Trockenlaufs, keine Blocker.
 
-Concept muss entscheiden, ob die 138 empty-cluster-Zeilen einen
-Sonderzweig bekommen (call-in-Workstream, terminal-Auffang, oder etwas
-anderes) oder ob die REA-0007-Regel erweitert wird.
-
-Die vormaligen 15 Milestone/Workstream-Konflikte sind mit V12 (Sprint
-177.7) entfallen: die Kante zwischen Meilenstein und Arbeitsstrang wurde
-zurueckgebaut (TAR-0002 §4, REQ-0148 obsolete), und diese 15 Zeilen
-stehen jetzt in ihrem urspruenglichen Cluster-Strang.
-
-Ausserdem sind 103 HK-Zuordnungen heuristisch: die REA-0007-Regel
-spaltet HK in drei Richtungen semantisch, nicht mechanisch. Der
-Trockenlauf schlaegt eine Klassifikation aus Titeltext-Schluesselwoertern
-vor; jede dieser Zuordnungen ist im `assignment.tsv` mit `heuristic=yes`
-markiert und braucht Concept-Ratifikation.
+Die geschaerfte §8-Nachbedingung ("keine offene Zeile im Auffang") faellt
+konstruktiv gruen: alle 125 Zeilen im Auffang sind terminal. Der rote
+Probelauf `--red-probe` beweist, dass die Nachbedingung eine offene
+Zeile im Auffang tatsaechlich findet — die Schaerfung ist von einer
+Abschaltung unterscheidbar.
 
 ## Was 177.6 gegenueber 177.5 geaendert hat
 
@@ -161,3 +158,29 @@ Details unter `out/diff-to-177-6.md`. Kurzfassung:
    die Invariante, die er probte, nicht mehr existiert. `dry_run.py`
    entfernt `apply_milestone_invariant`, und die
    `milestone-workstream-conflict`-Refusal-Kategorie verschwindet.
+
+## Was 177.8 gegenueber 177.7 geaendert hat
+
+Details unter `out/diff-to-177-7.md`. Kurzfassung:
+
+1. **Die letzte Refusal-Kategorie `empty-cluster` ist aufgeloest.**
+   REA-0007 §3 traegt einen neuen Unterabschnitt "Rows the cluster
+   cannot place" — zwei Faelle, unterschieden am Status:
+   - 13 **offene Zurufe** (status=new) wandern per Titel-Prefix. Zehn
+     in kumbuka-Straenge (5 Architektur, 3 Produktlinie, 2 Betrieb),
+     drei nach jbaconsult (Skills/handover). Als benannte Ausnahmen
+     `heuristic=no`.
+   - 125 **terminale Zeilen** (121 done, 4 dissolved) wandern in den
+     Auffang `default`. Der Grund ist ratifiziert: der Arbeitsstrang
+     ist eine Planungsachse, und fuer eine Zeile die niemand mehr
+     plant, ist die Frage nicht offen sondern gegenstandslos.
+2. **REA-0007 §8 verschaerft** in `dry_run.py` und `verify.sql`: nicht
+   mehr "default leer", sondern "keine offene Zeile im default".
+   Terminale sind dort erwartet.
+3. **Roter Probelauf der Schaerfung** in `--red-probe`: eine offene
+   Zeile wird kuenstlich in den Auffang verschoben, das Gatter findet
+   sie mit Wortlaut. Ohne diesen Beleg waere die Schaerfung von einer
+   Abschaltung nicht zu unterscheiden.
+4. **Trockenlauf entsperrt Echtlauf.** 507 = 488 assigned + 19 deferred
+   + 0 refused. Auffang: 125 terminal, 0 offen. Selbstpruefung gruen,
+   beide roten Probeläufe gruen-rot-gruen.

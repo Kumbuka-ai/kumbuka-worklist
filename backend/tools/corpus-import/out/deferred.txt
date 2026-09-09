@@ -1,4 +1,4 @@
-# Zurueckgestellt fuer scope jbaconsult (16 Zeilen)
+# Zurueckgestellt fuer scope jbaconsult (19 Zeilen)
 # HK-Split: method/apparatus/skills/working-discipline gehen nach jbaconsult (REA-0007 Abschnitt 3).
 # Alle Zuordnungen hier sind HEURISTISCH und brauchen Concept-Ratifikation.
 #
@@ -8,6 +8,9 @@
 404		new	hk-heuristic:jba-keyword	Terminierungsstufe in session-closure: Merge pruefen, Worklist-Zeilen schliessen, close_iteration au
 385	CHORE-304	done	hk-heuristic:jba-keyword	session-closure und code-handover auf die Steering-Dienste umstellen (Logbuch-Objekte statt Dateien,
 376	CHORE-297	open	hk-heuristic:jba-keyword	Skill-Drift-Waechter fuer session-start: die fixen Sektionen wandern ins Skill, damit stirbt die Tem
+367		new	open-call-in:Skills liegen ausserhalb jeder Ground-Truth-Messung	Skills liegen ausserhalb jeder Ground-Truth-Messung: nicht im Steering-Repo, nicht im Bestand, kein 
+366		new	open-call-in:Vier Skills sind nach dem Umbau von Sprint 132 sachlich fals	Vier Skills sind nach dem Umbau von Sprint 132 sachlich falsch: session-closure beschreibt den still
+364		new	open-call-in:code-handover-Skill nachschaerfen	code-handover-Skill nachschaerfen: SonarQube wird pauschal fuer jeden Code-PR unterstellt (keycloak 
 344	CHORE-247	open	hk-heuristic:jba-keyword	Worktree-Isolation paralleler Code-Sub-Sprints: Submodul-Disjunktheit ist notwendig, nicht hinreiche
 330	CHORE-200	open	hk-heuristic:jba-keyword	Cluster OPS einführen: Marker + Abgrenzung zu DEPLOY, closure.py-Vokabular, WORKING_CONCEPT §11, wor
 245	CHORE-100	open	hk-heuristic:jba-keyword	Suchdisziplin aus F-0094 in docs/TOOLING.md + fs-write-Skill dokumentieren

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trockenlauf des Steuerungskorpus-Imports (Sprint 177.5 + 177.6).
+"""Trockenlauf des Steuerungskorpus-Imports (Sprint 177.5 → 177.8).
 
 Reads the frozen source (WORKLIST.md + REGISTRY.md at the pinned steering
 commit), applies the REA-0007 assignment rule, and writes the report
@@ -71,6 +71,49 @@ HK_ARCH_KEYWORDS = [
     "realization", "realisierung",
     "adr-", "adrs",
 ]
+
+# ---------------------------------------------------------------------------
+# The 13 open call-ins that carry no cluster (REA-0007 §3, subsection
+# "Rows the cluster cannot place").
+#
+# An unratified call-in has no cluster because the cluster is set at
+# ratification. The 13 present at the time of writing are placed from
+# their content, by exact title-prefix match. This is a NAMED EXCEPTION
+# and not a heuristic — see the dispatch and REA-0007 §3.
+#
+# Identified by title prefix, not by row number: the predecessor's Nr is
+# not an identifier that survives the move. If a prefix matches more than
+# one row, the run refuses to choose. If a prefix matches no row, the run
+# refuses to proceed. Both are asserted after assign_all in
+# verify_all_open_call_ins_matched.
+# ---------------------------------------------------------------------------
+
+OPEN_CALL_IN_EXCEPTIONS: dict[str, tuple[str, Optional[str]]] = {
+    "ADR fuer den Verbprozess":                                         ("kumbuka",    "Architektur"),
+    "Plattform-Datenschicht und der Schnitt Team gegen Mandant":        ("kumbuka",    "Architektur"),
+    "ADR-0041 Schema-Menge gegen ADR-0043 in Deckung bringen":          ("kumbuka",    "Architektur"),
+    "Generierter Index ueber docs/adr/ und docs/decisions/":            ("kumbuka",    "Architektur"),
+    "Index ueber ADRs und Entscheidungs-Ledger mechanisch generieren":  ("kumbuka",    "Architektur"),
+    "ee-Topologie schneiden":                                           ("kumbuka",    "Produktlinie"),
+    "Fehler der Gedaechtnis-Maschine hinterlassen keine Spur im Log":   ("kumbuka",    "Produktlinie"),
+    "Falscher Kopfkommentar in ee-server":                              ("kumbuka",    "Produktlinie"),
+    "Kein CI-Job uebt die Realm-Import-Skip-Bedingung":                 ("kumbuka",    "Betrieb"),
+    "Redirect-URI des wlm-mcp-Clients traegt einen Wildcard-Stern":     ("kumbuka",    "Betrieb"),
+    "Skills liegen ausserhalb jeder Ground-Truth-Messung":              ("jbaconsult", None),
+    "Vier Skills sind nach dem Umbau von Sprint 132 sachlich falsch":   ("jbaconsult", None),
+    "code-handover-Skill nachschaerfen":                                ("jbaconsult", None),
+}
+
+# Terminal statuses of the predecessor's row lifecycle. REA-0007 §3
+# refuses to name new lifecycle states here; if a further terminal
+# status appears the run stops rather than guessing.
+TERMINAL_STATUSES = {"done", "dissolved"}
+
+# The catch-all workstream that receives terminal rows without a cluster.
+# It stays as `default` because that is the platform's built-in name for
+# the mandatory landing under REA-0007 §2. Open rows in it are refused
+# by the sharpened §8 gate.
+CATCH_ALL_WORKSTREAM = "default"
 
 
 @dataclasses.dataclass
@@ -290,8 +333,73 @@ def initial_assign(row: Row) -> Assignment:
                               rule=rule, heuristic=True)
         return _assigned(row, ws, milestone, rule, heuristic=True)
     if cluster == "":
-        return _refused(row, "empty-cluster")
+        return assign_empty_cluster(row, milestone)
     return _refused(row, f"unknown-cluster:{cluster}")
+
+
+def match_open_call_in_exception(
+    row: Row,
+) -> Optional[tuple[str, tuple[str, Optional[str]]]]:
+    """Return (matching_prefix, (target_scope, workstream)) if the row's
+    title starts with exactly one of the 13 known open-call-in prefixes.
+    Zero matches returns None; more than one matches raises."""
+    title = row.title.strip()
+    matches = [(prefix, mapping)
+               for prefix, mapping in OPEN_CALL_IN_EXCEPTIONS.items()
+               if title.startswith(prefix)]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        raise SystemExit(
+            f"Zeile Nr {row.nr!r} matcht mehr als einen offenen-Zuruf-Prefix: "
+            f"{[p for p, _ in matches]}. Der Import waehlt nicht (REA-0007 §3)."
+        )
+    return matches[0]
+
+
+def assign_empty_cluster(row: Row, milestone: Optional[int]) -> Assignment:
+    """REA-0007 §3 subsection 'Rows the cluster cannot place'.
+
+    Two cases distinguished by status:
+
+    - `new` — an unratified call-in. Placed from its title via the
+      13-entry named-exception table. Zero or ambiguous matches raise.
+    - `done`/`dissolved` — terminal. Filed in the catch-all `default`;
+      REA-0007 §2 explicitly allows this for terminal rows.
+    - anything else — refused. A further terminal status would be a
+      lifecycle assumption this run must not make.
+    """
+    status = row.status.strip()
+    if status == "new":
+        match = match_open_call_in_exception(row)
+        if match is None:
+            raise SystemExit(
+                f"Zeile Nr {row.nr!r} (status=new, leerer Cluster) matcht "
+                f"keinen bekannten offenen-Zuruf-Prefix. Title: "
+                f"{row.title[:80]!r}. REA-0007 §3 zaehlt 13 solcher Zeilen; "
+                f"eine ausserhalb der Tabelle waere ein neuer Fall und der "
+                f"Lauf raet nicht."
+            )
+        prefix, (target_scope, workstream) = match
+        rule = f"open-call-in:{prefix[:60]}"
+        if target_scope == "jbaconsult":
+            return Assignment(row, bucket="deferred",
+                              target_scope="jbaconsult",
+                              workstream=None, milestone=None,
+                              rule=rule, heuristic=False)
+        return _assigned(row, workstream, milestone, rule, heuristic=False)
+    if status in TERMINAL_STATUSES:
+        # Terminal rows go into the catch-all workstream (REA-0007 §3
+        # subsection, §2). Their subject is void as a planning question.
+        # Milestones are dropped: they were part of the planning axis.
+        return _assigned(row, CATCH_ALL_WORKSTREAM, None,
+                         f"terminal-to-catchall:{status}", heuristic=False)
+    raise SystemExit(
+        f"Zeile Nr {row.nr!r} hat leeren Cluster und Status {status!r}. "
+        f"REA-0007 §3 kennt nur 'new' (offener Zuruf) und 'done'/'dissolved' "
+        f"(terminal). Ein neuer Statuswert ohne Cluster ist ein Fall, den der "
+        f"Lauf nicht mit einer Vermutung schliesst."
+    )
 
 
 def _assigned(row: Row, workstream: str, milestone: Optional[int],
@@ -319,7 +427,39 @@ def assign_all(rows: list[Row]) -> list[Assignment]:
     # was not in Produktlinie — is gone; several workstreams reach one
     # milestone together, and a milestone stays with the item wherever
     # the item's workstream lies.
-    return [initial_assign(r) for r in rows]
+    assignments = [initial_assign(r) for r in rows]
+    verify_all_open_call_ins_matched(rows, assignments)
+    return assignments
+
+
+def verify_all_open_call_ins_matched(
+    rows: list[Row], assignments: list[Assignment]
+) -> None:
+    """Assert every entry in OPEN_CALL_IN_EXCEPTIONS matched exactly one
+    row. A prefix that matches zero rows means the source drifted from the
+    ratified table; a prefix that matches several means the run would
+    have chosen without saying so."""
+    matched: dict[str, list[str]] = {p: [] for p in OPEN_CALL_IN_EXCEPTIONS}
+    for row, a in zip(rows, assignments):
+        if not a.rule.startswith("open-call-in:"):
+            continue
+        title = row.title.strip()
+        for prefix in OPEN_CALL_IN_EXCEPTIONS:
+            if title.startswith(prefix):
+                matched[prefix].append(row.nr)
+    missing = [p for p, nrs in matched.items() if len(nrs) == 0]
+    duplicated = {p: nrs for p, nrs in matched.items() if len(nrs) > 1}
+    if missing:
+        raise SystemExit(
+            f"Offene-Zuruf-Prefixe ohne Match in der Quelle: {missing}. "
+            f"REA-0007 §3 zaehlt 13; hier fehlen welche. Concept muss die "
+            f"Regel oder den Bestand pruefen."
+        )
+    if duplicated:
+        raise SystemExit(
+            f"Offene-Zuruf-Prefixe mit mehr als einem Match: {duplicated}. "
+            f"Der Lauf waehlt nicht."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -374,12 +514,12 @@ def self_check(rows: list[Row], assignments: list[Assignment]) -> None:
 # ---------------------------------------------------------------------------
 
 def red_probe(rows: list[Row], assignments: list[Assignment]) -> str:
-    """Kontrolllauf → Verletzung → Kontrolllauf. Returns a report."""
+    """Kontrolllauf → Verletzung → Kontrolllauf für die Disjunktheits-
+    Selbstpruefung."""
     log: list[str] = []
-    log.append("# Roter Probelauf der Selbstpruefung")
+    log.append("# Roter Probelauf der Selbstpruefung (Disjunktheit)")
     log.append("")
 
-    # 1. Kontrolllauf davor: die echten Zuweisungen laufen gruen.
     try:
         self_check(rows, assignments)
     except SelfCheckFailed as e:
@@ -389,24 +529,24 @@ def red_probe(rows: list[Row], assignments: list[Assignment]) -> str:
     log.append("1. Kontrolllauf davor: **gruen** (drei Mengen disjunkt, "
                "Summe = Quellzeilen).")
 
-    # 2. Verletzung einbauen: eine refused-Zeile ADDITIONALLY als assigned
-    # duplizieren. Diese Zeile ist dann in zwei Buckets.
-    refused_examples = [a for a in assignments if a.bucket == "refused"]
-    if not refused_examples:
-        log.append("2. VERLETZUNG NICHT EINBAUBAR: keine refused-Zeile "
+    # Verletzung einbauen: die erste assigned-Zeile ADDITIONALLY als
+    # deferred duplizieren. Damit steht sie in zwei Mengen. Refused
+    # examples sind seit 177.8 leer, deshalb wechseln wir auf assigned.
+    assigned_examples = [a for a in assignments if a.bucket == "assigned"]
+    if not assigned_examples:
+        log.append("2. VERLETZUNG NICHT EINBAUBAR: keine assigned-Zeile "
                    "vorhanden. Probelauf abgebrochen.")
         return "\n".join(log)
-    victim = refused_examples[0]
+    victim = assigned_examples[0]
     poisoned = list(assignments) + [Assignment(
-        row=victim.row, bucket="assigned", target_scope="kumbuka",
-        workstream="Produktlinie", milestone=None,
+        row=victim.row, bucket="deferred", target_scope="jbaconsult",
+        workstream=None, milestone=None,
         rule="red-probe:injected-duplicate", heuristic=False,
     )]
     log.append(f"2. Verletzung eingebaut: Nr {victim.row.nr} zusaetzlich "
-               f"als assigned dupliziert (steht damit in refused UND "
-               f"assigned).")
+               f"als deferred dupliziert (steht damit in assigned UND "
+               f"deferred).")
 
-    # 3. Pruefung erwartet rot.
     try:
         self_check(rows, poisoned)
     except SelfCheckFailed as e:
@@ -417,22 +557,115 @@ def red_probe(rows: list[Row], assignments: list[Assignment]) -> str:
                    "Sie ist unwirksam.")
         return "\n".join(log)
 
-    # 4. Kontrolllauf danach: das echte Ergebnis ist unangetastet, laeuft
-    # gruen. Das beweist, dass die Injection lokal war und nicht den
-    # produktiven Bestand befleckt hat.
     try:
         self_check(rows, assignments)
     except SelfCheckFailed as e:
         log.append(f"4. Kontrolllauf danach: ROT ({e}) — der Ist-Zustand "
-                   f"wurde durch die Injection verunreinigt. Das ist ein "
-                   f"Bug im Probelauf, nicht in der Pruefung.")
+                   f"wurde durch die Injection verunreinigt.")
         return "\n".join(log)
     log.append("4. Kontrolllauf danach: **gruen** (Injection war lokal, "
                "produktive Zuweisung unverunreinigt).")
     log.append("")
     log.append("**Ergebnis:** die Selbstpruefung ist rot beobachtet und "
-               "wieder gruen. Sie ist damit ein Gate im Wortsinn — nicht "
-               "nur ein grundgruener Textbaustein.")
+               "wieder gruen.")
+    return "\n".join(log)
+
+
+# ---------------------------------------------------------------------------
+# Sharpened gate for the catch-all (REA-0007 §8, 177.8)
+# ---------------------------------------------------------------------------
+
+class CatchAllHoldsOpenRow(Exception):
+    """Raised when an open row sits in the catch-all workstream. Terminal
+    rows there are expected and do not raise."""
+
+
+def check_no_open_row_in_catchall(
+    assignments: list[Assignment],
+) -> None:
+    """REA-0007 §8 (sharpened): "no row that is still open sits in the
+    catch-all after the run. An open row there is an error and not a
+    warning. Terminal rows are expected there and are not counted."""
+    open_in_catchall = [
+        a.row.nr for a in assignments
+        if a.bucket == "assigned"
+        and a.workstream == CATCH_ALL_WORKSTREAM
+        and a.row.status.strip() not in TERMINAL_STATUSES
+    ]
+    if open_in_catchall:
+        raise CatchAllHoldsOpenRow(
+            f"offene Zeilen im Auffang '{CATCH_ALL_WORKSTREAM}': "
+            f"{sorted(open_in_catchall)[:20]}"
+        )
+
+
+def red_probe_catchall(
+    rows: list[Row], assignments: list[Assignment]
+) -> str:
+    """Kontrolllauf → Verletzung → Kontrolllauf für die geschaerfte
+    Auffang-Nachbedingung. Ohne diesen Beleg ist die Schaerfung nicht
+    von einer Abschaltung zu unterscheiden (Auftrag 177.8)."""
+    log: list[str] = []
+    log.append("# Roter Probelauf der geschaerften Auffang-Nachbedingung")
+    log.append("")
+
+    try:
+        check_no_open_row_in_catchall(assignments)
+    except CatchAllHoldsOpenRow as e:
+        log.append(f"KONTROLLLAUF DAVOR: ROT ({e}) — der Ist-Zustand ist "
+                   f"bereits verletzt.")
+        return "\n".join(log)
+    log.append("1. Kontrolllauf davor: **gruen** (keine offenen Zeilen "
+               f"im Auffang '{CATCH_ALL_WORKSTREAM}').")
+
+    # Verletzung: nimm die erste OFFENE zugewiesene Zeile (nicht im
+    # Auffang), verlege sie in den Auffang. Dort waere sie eine offene
+    # Zeile im default — genau der Fehlerfall, den §8 refuse't.
+    open_non_catchall = [
+        a for a in assignments
+        if a.bucket == "assigned"
+        and a.workstream != CATCH_ALL_WORKSTREAM
+        and a.row.status.strip() not in TERMINAL_STATUSES
+    ]
+    if not open_non_catchall:
+        log.append("2. VERLETZUNG NICHT EINBAUBAR: keine offene assigned-"
+                   "Zeile ausserhalb des Auffangs. Probelauf abgebrochen.")
+        return "\n".join(log)
+    victim = open_non_catchall[0]
+    poisoned = [
+        (Assignment(row=a.row, bucket=a.bucket, target_scope=a.target_scope,
+                    workstream=CATCH_ALL_WORKSTREAM, milestone=a.milestone,
+                    rule="red-probe:moved-open-into-catchall",
+                    heuristic=a.heuristic)
+         if a is victim else a)
+        for a in assignments
+    ]
+    log.append(f"2. Verletzung eingebaut: Nr {victim.row.nr} "
+               f"(status={victim.row.status.strip()!r}) in den Auffang "
+               f"verschoben — damit eine offene Zeile im default.")
+
+    try:
+        check_no_open_row_in_catchall(poisoned)
+    except CatchAllHoldsOpenRow as e:
+        log.append(f"3. Nachbedingung: **rot** — Wortlaut: `{e}`.")
+    else:
+        log.append("3. Nachbedingung: **GRUEN — DEFEKT**. Die Pruefung "
+                   "hat die absichtlich verschobene offene Zeile im "
+                   "Auffang nicht gefunden. Die Schaerfung waere von "
+                   "einer Abschaltung nicht zu unterscheiden.")
+        return "\n".join(log)
+
+    try:
+        check_no_open_row_in_catchall(assignments)
+    except CatchAllHoldsOpenRow as e:
+        log.append(f"4. Kontrolllauf danach: ROT ({e}) — Injection war "
+                   f"nicht lokal.")
+        return "\n".join(log)
+    log.append("4. Kontrolllauf danach: **gruen** (Injection war lokal).")
+    log.append("")
+    log.append("**Ergebnis:** die geschaerfte Auffang-Nachbedingung ist "
+               "rot beobachtet und wieder gruen. Sie ist damit ein Gate "
+               "und keine Abschaltung.")
     return "\n".join(log)
 
 
@@ -473,23 +706,33 @@ def write_report(rows: list[Row], assignments: list[Assignment],
             f.write(f"{a.row.nr}\t{a.row.ident}\t{a.row.status}\t"
                     f"{a.rule}\t{a.row.title[:100]}\n")
 
-    # 3. Refusal list.
-    with (out_dir / "refusal.txt").open("w") as f:
-        f.write(f"# Nicht zuordenbar ({len(refused)} Zeilen)\n")
-        f.write(f"# Eine nicht platzierbare Zeile bricht den Echtlauf ab "
-                f"(REA-0007 Abschnitt 3).\n#\n")
-        by_reason = Counter(a.rule for a in refused)
-        for reason, n in by_reason.most_common():
-            f.write(f"# {reason}: {n}\n")
-        f.write("#\n")
-        for reason, _ in by_reason.most_common():
-            f.write(f"\n## {reason}\n")
-            for a in refused:
-                if a.rule != reason:
-                    continue
-                f.write(f"{a.row.nr}\t{a.row.ident or '(no-id)'}\t"
-                        f"{a.row.cluster}\t{a.row.status}\t"
-                        f"{a.conflict_reason}\t{a.row.title[:100]}\n")
+    # 3. Refusal list — only when there is anything to refuse. Since
+    # 177.8 the empty-cluster class is gone; a run against the current
+    # rule shape produces no refusals, and an empty refusal.txt would
+    # be noise. When something IS refused (a future new case), the file
+    # reappears with content.
+    refusal_path = out_dir / "refusal.txt"
+    if refused:
+        with refusal_path.open("w") as f:
+            f.write(f"# Nicht zuordenbar ({len(refused)} Zeilen)\n")
+            f.write(f"# Eine nicht platzierbare Zeile bricht den Echtlauf ab "
+                    f"(REA-0007 §3).\n#\n")
+            by_reason = Counter(a.rule for a in refused)
+            for reason, n in by_reason.most_common():
+                f.write(f"# {reason}: {n}\n")
+            f.write("#\n")
+            for reason, _ in by_reason.most_common():
+                f.write(f"\n## {reason}\n")
+                for a in refused:
+                    if a.rule != reason:
+                        continue
+                    f.write(f"{a.row.nr}\t{a.row.ident or '(no-id)'}\t"
+                            f"{a.row.cluster}\t{a.row.status}\t"
+                            f"{a.conflict_reason}\t{a.row.title[:100]}\n")
+    elif refusal_path.exists():
+        # Leftover file from a previous run under an older rule shape.
+        # Remove it so the on-disk state matches the current one.
+        refusal_path.unlink()
 
     # 4. Human-readable report.
     stats_by_ws = Counter()
@@ -503,7 +746,7 @@ def write_report(rows: list[Row], assignments: list[Assignment],
             stats_heuristic[a.rule] += 1
 
     with (out_dir / "report.md").open("w") as f:
-        f.write("# Trockenlauf-Bericht (Sprint 177.7)\n\n")
+        f.write("# Trockenlauf-Bericht (Sprint 177.8)\n\n")
         f.write(f"steering commit: `{steering_sha}`\n\n")
         f.write(f"Quellzeilen im Backlog: **{len(rows)}**\n\n")
         f.write("## Die drei disjunkten Ausgabemengen\n\n")
@@ -520,35 +763,47 @@ def write_report(rows: list[Row], assignments: list[Assignment],
         f.write("## Verteilung der assigned-Zeilen auf kumbuka-Straenge\n\n")
         for ws, n in stats_by_ws.most_common():
             f.write(f"- {ws}: {n}\n")
-        f.write(f"\ndefault: 0 (Nachbedingung; die Straenge-Saat legt keine "
-                f"Items an, deshalb konstruktiv).\n")
+        catchall_total = stats_by_ws.get(CATCH_ALL_WORKSTREAM, 0)
+        catchall_terminal = sum(
+            1 for a in assigned
+            if a.workstream == CATCH_ALL_WORKSTREAM
+            and a.row.status.strip() in TERMINAL_STATUSES
+        )
+        catchall_open = catchall_total - catchall_terminal
+        f.write(f"\nAuffang `{CATCH_ALL_WORKSTREAM}` insgesamt: "
+                f"{catchall_total} (davon {catchall_terminal} terminal, "
+                f"{catchall_open} offen). REA-0007 §8 (verschaerft): "
+                f"offene Zeilen im Auffang sind ein Fehler; terminale sind "
+                f"dort erwartet.\n")
         f.write("\n## Zuordnung/Verweigerung nach Regel-Zweig\n\n")
         for rule, n in stats_by_rule.most_common():
             f.write(f"- {rule}: {n}\n")
         f.write(f"\n## Heuristische Zuordnungen: {sum(stats_heuristic.values())}\n\n")
         f.write("Aus Titeltext/Ref abgeleitet, nicht mechanisch aus einer "
-                "Spalte. Brauchen Concept-Ratifikation.\n\n")
+                "Spalte. Brauchen Concept-Ratifikation. Die 13 offenen "
+                "Zurufe (REA-0007 §3 Unterabschnitt) sind **nicht** "
+                "heuristisch — sie sind namentlich ratifiziert und im "
+                "assignment.tsv mit `heuristic=no` markiert.\n\n")
         for rule, n in stats_heuristic.most_common():
             f.write(f"- {rule}: {n}\n")
         f.write("\n## Refusal-Bilanz\n\n")
         f.write(f"Insgesamt refused: **{len(refused)}**\n\n")
-        by_reason = Counter(a.rule for a in refused)
-        for reason, n in by_reason.most_common():
-            f.write(f"- {reason}: {n}\n")
-        refused_status = Counter(a.row.status for a in refused
-                                 if a.rule == "empty-cluster")
-        if refused_status:
-            f.write(f"\n### empty-cluster nach status\n\n")
-            for s, n in refused_status.most_common():
-                f.write(f"- {s or '(leer)'}: {n}\n")
+        if refused:
+            by_reason = Counter(a.rule for a in refused)
+            for reason, n in by_reason.most_common():
+                f.write(f"- {reason}: {n}\n")
+        else:
+            f.write("Die Refusal-Kategorie `empty-cluster` ist mit 177.8 "
+                    "aufgeloest (REA-0007 §3 Unterabschnitt). Offene Zurufe "
+                    "wandern per Titel-Prefix, terminale Zeilen in den "
+                    "Auffang.\n")
         f.write("\n## Nachbedingung Echtlauf\n\n")
         if len(refused) == 0:
             f.write("**Echtlauf zulaessig.** Refusal-Liste ist leer.\n")
         else:
             f.write(f"**Echtlauf NICHT zulaessig.** {len(refused)} Zeilen "
                     f"sind refused. Der Echtlauf bricht per Design ab, wenn "
-                    f"die Refusal-Liste nicht leer ist (REA-0007 Abschnitt 3, "
-                    f"dispatch 177.5 Ablauf).\n")
+                    f"die Refusal-Liste nicht leer ist (REA-0007 §3).\n")
         f.write("\n---\n\n")
         f.write(probe_report)
         f.write("\n")
@@ -578,18 +833,27 @@ def main() -> None:
 
     if args.red_probe:
         print(red_probe(rows, assignments))
+        print()
+        print(red_probe_catchall(rows, assignments))
         return
 
-    # Hard invariant: the disjoint/complete self-check must pass. Every
-    # normal run rides on this gate; a failure aborts before any file is
-    # written.
+    # Hard invariants. Every normal run rides on these gates; a failure
+    # aborts before any output file is written.
     try:
         self_check(rows, assignments)
     except SelfCheckFailed as e:
         raise SystemExit(f"SELF CHECK FAILED: {e}")
     print("self-check green", file=sys.stderr)
 
-    probe_report = red_probe(rows, assignments)
+    try:
+        check_no_open_row_in_catchall(assignments)
+    except CatchAllHoldsOpenRow as e:
+        raise SystemExit(f"CATCH-ALL GATE FAILED: {e}")
+    print("catch-all gate green (no open row in default)", file=sys.stderr)
+
+    probe_report = (red_probe(rows, assignments)
+                    + "\n\n---\n\n"
+                    + red_probe_catchall(rows, assignments))
 
     write_report(rows, assignments, args.out_dir, sha, probe_report)
     print(f"wrote report to {args.out_dir}", file=sys.stderr)
