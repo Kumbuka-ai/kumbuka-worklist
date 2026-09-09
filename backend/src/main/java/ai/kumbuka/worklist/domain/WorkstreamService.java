@@ -107,13 +107,11 @@ public class WorkstreamService {
         workstreams.insert(defaultRow);
         workstreams.refresh(defaultRow);
 
-        // Ensure the milestone counter for this workstream exists too. A
-        // scope that never declared the milestone selector never gets one
-        // — that is the intended shape — but if the milestone selector IS
-        // declared and no counter belongs to this workstream, the next
-        // milestone create would allocate against nothing. Idempotent.
-        Selector milestoneSelector = selectors.declare(scopeId, Selector.MILESTONE);
-        selectors.openSpaceInWorkstream(scopeId, milestoneSelector, defaultRow.id);
+        // V12 (2026-09-09): the milestone counter is scope-wide again
+        // (TAR-0002 section 4, REQ-0148 obsolete), so no per-workstream
+        // milestone-counter row is opened here. The scope-wide milestone
+        // number_space row is planted by bootstrap or by the first
+        // `selectors.declare(scope, MILESTONE)` call.
 
         LOG.infof("default workstream created lazily in scope %s (number %d)",
             scopeId, number);
@@ -128,10 +126,11 @@ public class WorkstreamService {
      * Declare a new workstream in a scope.
      *
      * <p>Refuses a token that is malformed, an empty description, and any
-     * token already declared in the scope. Opens the milestone counter for
-     * the new workstream in the same transaction — a new workstream that
-     * had no milestone counter of its own would collapse to whichever
-     * counter was there instead.
+     * token already declared in the scope.
+     *
+     * <p>V12 (2026-09-09): the milestone number space is scope-wide again
+     * (TAR-0002 section 4, REQ-0148 obsolete), so no per-workstream
+     * milestone counter is opened for a new workstream.
      */
     @Transactional
     public Workstream declare(UUID scopeId, String token, String description) {
@@ -169,11 +168,8 @@ public class WorkstreamService {
         workstreams.insert(workstream);
         workstreams.refresh(workstream);
 
-        // Open the milestone counter for this workstream. A workstream
-        // without one is a workstream that would collapse to another
-        // workstream's counter on its first milestone create.
-        Selector milestoneSelector = selectors.require(scopeId, Selector.MILESTONE);
-        selectors.openSpaceInWorkstream(scopeId, milestoneSelector, workstream.id);
+        // V12 (2026-09-09): no per-workstream milestone counter is opened;
+        // the counter is scope-wide (see class comment above).
 
         LOG.infof("workstream %s (number %d) declared in scope %s",
             token, number, scopeId);

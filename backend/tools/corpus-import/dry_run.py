@@ -312,23 +312,14 @@ def _refused(row: Row, reason: str,
                          if prev_workstream else ""))
 
 
-def apply_milestone_invariant(a: Assignment) -> Assignment:
-    """REA-0007: milestones live in Produktlinie only. An item whose
-    workstream is not Produktlinie but which carries a real milestone
-    is refused (would break refuseCrossWorkstreamMilestone)."""
-    if a.bucket != "assigned":
-        return a
-    if a.milestone is None:
-        return a
-    if a.workstream == "Produktlinie":
-        return a
-    return _refused(a.row, "milestone-workstream-conflict",
-                    prev_workstream=a.workstream,
-                    prev_milestone=a.milestone)
-
-
 def assign_all(rows: list[Row]) -> list[Assignment]:
-    return [apply_milestone_invariant(initial_assign(r)) for r in rows]
+    # V12 (2026-09-09) retracted the milestone-workstream edge
+    # (TAR-0002 section 4, REQ-0148 obsolete). The former
+    # `apply_milestone_invariant` — which refused rows whose milestone
+    # was not in Produktlinie — is gone; several workstreams reach one
+    # milestone together, and a milestone stays with the item wherever
+    # the item's workstream lies.
+    return [initial_assign(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -512,7 +503,7 @@ def write_report(rows: list[Row], assignments: list[Assignment],
             stats_heuristic[a.rule] += 1
 
     with (out_dir / "report.md").open("w") as f:
-        f.write("# Trockenlauf-Bericht (Sprint 177.6)\n\n")
+        f.write("# Trockenlauf-Bericht (Sprint 177.7)\n\n")
         f.write(f"steering commit: `{steering_sha}`\n\n")
         f.write(f"Quellzeilen im Backlog: **{len(rows)}**\n\n")
         f.write("## Die drei disjunkten Ausgabemengen\n\n")

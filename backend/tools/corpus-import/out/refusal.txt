@@ -1,8 +1,7 @@
-# Nicht zuordenbar (153 Zeilen)
+# Nicht zuordenbar (138 Zeilen)
 # Eine nicht platzierbare Zeile bricht den Echtlauf ab (REA-0007 Abschnitt 3).
 #
 # empty-cluster: 138
-# milestone-workstream-conflict: 15
 #
 
 ## empty-cluster
@@ -144,20 +143,3 @@
 3	F-0077		dissolved	empty-cluster	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
 2	F-0078		dissolved	empty-cluster	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
 1	F-0079		dissolved	empty-cluster	Record-Drift FEAT-02/BUG-06 als offen geführt trotz gelandeter Impl
-
-## milestone-workstream-conflict
-504	CHORE-355	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Steuerungskorpus aus dem Python-Logbuch in das Schema dispatch migrieren: SQL-Importskript mit Trock
-497	CHORE-351	DEPLOY	planned	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Worklist-Dienst, Betriebsstrang: Matrixzeile, Compose-Dienst, Rollen und Schluessel in deploy.env, C
-487	CHORE-347	CORE	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	Innenansicht der Plattform-Komponente festhalten: Revision 2 von platform-layer.md
-478	CHORE-341	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M1)	Graph-Validator fuer den Architektur-Knotenkorpus bauen — das in Schritt 5 vorgeschriebene Gate hat 
-464	CHORE-336	CORE	open	milestone-workstream-conflict (would-have-been:Architektur, M5)	Restarbeit der Extraktion: Artefaktveroeffentlichung von kumbuka-memory und Zuordnung der EE-Module
-463	FEAT-85	DEPLOY	done	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Deployment des leeren Gedaechtnisdienstes: Container-Image, Health-Endpunkt, Grant-Behauptung im Pla
-459	CHORE-334	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M1)	release.sh haertet: Umgebungs-Waechter vor dem Rendern, Gesundheit im Effect Guard, Checkout-Stand u
-442	CHORE-326	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M5)	Zielbild der Worklist pflegen und in einen ADR zurueckspiegeln
-440	CHORE-324	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M5)	Zielbild des Dispatch-Dienstes pflegen und in ADR-0042 und ADR-0038 zurueckspiegeln
-438	CHORE-323	HK	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	M5-Gatter: Architekturreview und Gap-Analyse nach beiden Dienstspezifikationen, vor Implementierungs
-434	CHORE-320	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Abschaltung des Vorgaengers: REGISTRY.md, state/, alter Dienststapel und Steuerungs-Repository ausse
-433	CHORE-319	DEPLOY	open	milestone-workstream-conflict (would-have-been:Betrieb, M5)	Umzug des Bestands: Git-Korpus, Agent-Run-SQLite und die unversionierten Zustandsdateien, drei Vorga
-427	CHORE-318	HK	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	Spezifikation Worklist Manager (Stufe 2): 25 Verbenvertraege, veraenderliche Zeilen, Append-on-Write
-426	CHORE-317	HK	done	milestone-workstream-conflict (would-have-been:Architektur, M5)	Spezifikation Logbuch (Stufe 2): 20 Verbenvertraege, Statusmaschine, Invarianten, Fehlerformen, Numm
-424	CHORE-316	HK	open	milestone-workstream-conflict (would-have-been:Architektur, M2)	INDEX-Dateien auf Zeigergroesse zuruecknehmen: Prosa gehoert in das Dokument, der Index traegt Titel

@@ -1,4 +1,4 @@
-# Steuerungskorpus-Import (Sprint 177.5 + 177.6)
+# Steuerungskorpus-Import (Sprint 177.5 + 177.6 + 177.7)
 
 Ueberfuehrung des Bestands der Vorgaenger-Worklist in den Worklist-Dienst.
 Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche.
@@ -15,14 +15,15 @@ Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche.
   Disjunktheit und Vollstaendigkeit, schreibt nichts an die Datenbank.
   Ausgabe unter `out/`.
 - `seed_workstreams.sql` — Straenge-Saat: legt die fuenf Straenge im
-  Zielscope an und traegt die Meilenstein-Zaehler nach.
-- `verify.sql` — sechs Verifikationsabfragen (V1..V6) fuer die
-  Nachbedingungen.
-- `red_probe.sql` — roter Probelauf fuer die Milestone-Invariante (V3),
-  laeuft in einer Wegwerf-Transaktion und rollt zurueck.
+  Zielscope an. Der Meilenstein-Zaehler ist seit V12 (177.7) wieder
+  scope-weit; die Saat hebt die Zaehler-Zeile per UPDATE auf die
+  hoechste vergebene Milestone-Nummer.
+- `verify.sql` — fuenf Verifikationsabfragen (V1..V5) fuer die
+  Nachbedingungen. Die vormalige V3 (cross-workstream milestones) ist
+  mit V12 entfallen — die Invariante existiert nicht mehr.
 - `out/` — Ausgabe des Trockenlaufs (assignment.tsv, deferred.txt,
-  refusal.txt, report.md, diff-to-177-5.md). In git eingecheckt zum
-  Nachlesen; wird bei jedem Lauf ueberschrieben.
+  refusal.txt, report.md, diff-to-177-5.md, diff-to-177-6.md). In git
+  eingecheckt zum Nachlesen; wird bei jedem Lauf ueberschrieben.
 
 ## Ablauf
 
@@ -60,8 +61,6 @@ Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche.
    # <Insert-Skript fuer Items/Milestones — noch nicht gebaut, blockiert>
    psql -v tenant_id="'<uuid>'" -v scope_id="'<uuid>'" \
         -f verify.sql
-   psql -v tenant_id="'<uuid>'" -v scope_id="'<uuid>'" \
-        -f red_probe.sql
    ```
 
 ## Warum die Quelle gepinnt ist, und aus dem Objektspeicher gelesen
@@ -92,30 +91,23 @@ INSERT INTO worklist.workstream (...) VALUES (...);
 
 ## Warum der Echtlauf jetzt nicht laeuft
 
-Der Trockenlauf gegen den aktuellen Pin liefert 153 refused Zeilen (aus
-507 total):
-
-- **138 leerer Cluster** — die REA-0007-Regel ordnet primaer nach
-  Cluster zu; ohne Cluster gibt es keinen Zweig. Verteilung: 121 done,
-  13 new (unratifizierte Zurufe), 4 dissolved.
-- **15 Milestone/Workstream-Konflikte** — Items, deren Cluster sie NICHT
-  in den Produktlinie-Strang schickt, aber die einen echten Milestone
-  (M1..M7) tragen. REA-0007 verortet Milestones ausschliesslich in
-  Produktlinie. Der SQL-Import wuerde die in ItemService.java:844
-  durchgesetzte Cross-Workstream-Milestone-Invariante brechen.
+Der Trockenlauf gegen den aktuellen Pin liefert 138 refused Zeilen (aus
+507 total), alle mit leerem Cluster (121 done, 13 new als unratifizierte
+Zurufe, 4 dissolved). Die REA-0007-Regel ordnet primaer nach Cluster
+zu; ohne Cluster gibt es keinen Zweig.
 
 Der Auftrag (dispatch 177.5, Abschnitt "Ablauf") verlangt Abbruch des
 Echtlaufs bei nicht leerer Refusal-Liste. Der Trockenlauf respektiert
-das: er benennt die 153 Zeilen und laesst den Echtlauf nicht laufen.
+das: er benennt die 138 Zeilen und laesst den Echtlauf nicht laufen.
 
-Concept muss entscheiden:
+Concept muss entscheiden, ob die 138 empty-cluster-Zeilen einen
+Sonderzweig bekommen (call-in-Workstream, terminal-Auffang, oder etwas
+anderes) oder ob die REA-0007-Regel erweitert wird.
 
-- Ob die 138 empty-cluster-Zeilen einen Sonderzweig bekommen (call-in-
-  Workstream, terminal-Auffang, oder etwas anderes) oder ob die
-  REA-0007-Regel erweitert wird.
-- Ob die 15 Milestone-Konflikte den Milestone verlieren (Datenverlust),
-  in Produktlinie umgeschrieben werden (Cluster-Regel ueberrumpelt),
-  oder einzeln geklaert werden.
+Die vormaligen 15 Milestone/Workstream-Konflikte sind mit V12 (Sprint
+177.7) entfallen: die Kante zwischen Meilenstein und Arbeitsstrang wurde
+zurueckgebaut (TAR-0002 §4, REQ-0148 obsolete), und diese 15 Zeilen
+stehen jetzt in ihrem urspruenglichen Cluster-Strang.
 
 Ausserdem sind 103 HK-Zuordnungen heuristisch: die REA-0007-Regel
 spaltet HK in drei Richtungen semantisch, nicht mechanisch. Der
@@ -142,3 +134,30 @@ Details unter `out/diff-to-177-5.md`. Kurzfassung:
    findet, bevor sie leise mitlaufen.
 4. **Lesen per `git show`.** dry_run.py greift die Quelle direkt aus
    dem steering-Objektspeicher ab; der Checkout-HEAD ist egal geworden.
+
+## Was 177.7 gegenueber 177.6 geaendert hat
+
+Details unter `out/diff-to-177-6.md`. Kurzfassung:
+
+1. **V12 rueckt die Meilenstein-Workstream-Kante zurueck.** TAR-0002 §4
+   und REQ-0148 (obsolete) ordnen: keine der drei Achsen um das Item
+   traegt eine Kante zu einer anderen. Der Meilenstein-Zaehler ist
+   wieder scope-weit; die per-workstream Uniqueness auf `milestone`
+   weicht der wiederhergestellten scope-weiten. `milestone.workstream_id`
+   und `number_space.workstream_id` bleiben stehen mit
+   COMMENT-Verfallshinweis.
+2. **Die Java-Invariante `refuseCrossWorkstreamMilestone` faellt.**
+   ItemService und MilestoneService lassen Cross-Workstream-Zuweisungen
+   jetzt zu; WorkstreamService legt beim Anlegen eines Workstreams keine
+   per-workstream Milestone-Zaehler-Zeile mehr an; MilestoneService
+   allokiert Nummern scope-weit.
+3. **Umkehr-Test in beiden Zustaenden gefahren.**
+   `MilestoneWorkstreamDecouplingIT` beweist, dass eine
+   Cross-Workstream-Milestone-Zuweisung, die vor dem Rueckbau mit
+   `WORKSTREAM_MILESTONE_MISMATCH` refused wurde, jetzt passiert.
+4. **Bauplatz nachgezogen.** `seed_workstreams.sql` legt keine
+   per-Strang Milestone-Zaehlerzeilen mehr an. `verify.sql` hat fuenf
+   Nachbedingungen statt sechs. `red_probe.sql` faellt ersatzlos, weil
+   die Invariante, die er probte, nicht mehr existiert. `dry_run.py`
+   entfernt `apply_milestone_invariant`, und die
+   `milestone-workstream-conflict`-Refusal-Kategorie verschwindet.

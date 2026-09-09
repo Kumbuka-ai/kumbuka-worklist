@@ -84,72 +84,60 @@ VALUES
      'der Arbeit ist und nicht ihre Vorbedingung.',
      'active', false, gen_random_uuid(), now(), now());
 
--- Meilenstein-Zaehler je neuem Strang. V9:184 verlangt einen Zaehler-Eintrag
--- pro Workstream fuer den milestone-Selektor, sonst vergibt das naechste
--- create eine schon belegte Nummer. Fuer den bestehenden default steht der
--- Zaehler schon (V8:230-234).
+-- V12 (2026-09-09) rueckt den Meilenstein-Zaehler wieder auf scope-weit.
+-- Die per-workstream Zaehler-Zeilen sind entfallen; es gibt EINE
+-- number_space-Zeile pro (tenant, scope, milestone-selector) mit
+-- workstream_id IS NULL. Der Bootstrap-Skript legt sie schon an; hier ist
+-- deshalb kein number_space-INSERT mehr noetig.
 --
--- Der Import setzt sie initial auf 0; die einzige Ausnahme ist 'produktlinie',
--- die die bestehenden Milestones erbt. Wir setzen produktlinie sofort auf die
--- hoechste existierende Milestone-Nummer (heute 7 fuer M7), damit ein
--- anschliessendes create den naechsten freien Wert liefert. Alle vier anderen
--- Straenge starten mit 0 leer.
+-- Der scope-weite Meilenstein-Zaehler muss auf der hoechsten vergebenen
+-- Nummer stehen, damit das naechste create N+1 vergibt. Der Import setzt
+-- ihn nach dem Einspielen der bestehenden Milestones — der Trockenlauf
+-- meldet 7 als hoechste. Das UPDATE laeuft idempotent per COALESCE.
 
-INSERT INTO worklist.number_space
-    (id, tenant_id, scope_id, selector_id, workstream_id, high_water_mark,
-     created_at, updated_at)
-SELECT gen_random_uuid(), :tenant_id, :scope_id,
-       (SELECT id FROM worklist.selector
-         WHERE tenant_id = :tenant_id AND scope_id = :scope_id
-           AND token = 'milestone'),
-       ws.id, 0, now(), now()
-  FROM worklist.workstream ws
- WHERE ws.tenant_id = :tenant_id AND ws.scope_id = :scope_id
-   AND ws.token IN ('architektur', 'agenten-entwicklung', 'betrieb', 'gtm');
+UPDATE worklist.number_space
+   SET high_water_mark = GREATEST(
+           high_water_mark,
+           COALESCE((SELECT MAX(number) FROM worklist.milestone
+                      WHERE tenant_id = :tenant_id
+                        AND scope_id = :scope_id),
+                    0)
+       )
+ WHERE tenant_id = :tenant_id
+   AND scope_id = :scope_id
+   AND workstream_id IS NULL
+   AND selector_id = (SELECT id FROM worklist.selector
+                       WHERE tenant_id = :tenant_id
+                         AND scope_id = :scope_id
+                         AND token = 'milestone');
 
--- Produktlinie erbt die bestehenden Milestones und braucht deshalb einen
--- Zaehler auf der hoechsten vergebenen Nummer. Der Import (nicht dieses
--- Skript) verschiebt existierende Milestones per UPDATE workstream_id
--- auf 'produktlinie'; der Zaehler folgt dieser Verschiebung.
-INSERT INTO worklist.number_space
-    (id, tenant_id, scope_id, selector_id, workstream_id, high_water_mark,
-     created_at, updated_at)
-SELECT gen_random_uuid(), :tenant_id, :scope_id,
-       (SELECT id FROM worklist.selector
-         WHERE tenant_id = :tenant_id AND scope_id = :scope_id
-           AND token = 'milestone'),
-       ws.id,
-       COALESCE((SELECT MAX(number) FROM worklist.milestone
-                  WHERE tenant_id = :tenant_id AND scope_id = :scope_id),
-                0),
-       now(), now()
-  FROM worklist.workstream ws
- WHERE ws.tenant_id = :tenant_id AND ws.scope_id = :scope_id
-   AND ws.token = 'produktlinie';
-
--- Zaehlerprobe: nach der Saat existieren fuer jeden nicht-default-Strang
--- genau eine milestone-number_space-Zeile. Fehlt eine, waere die naechste
--- Milestone-Nummer eine schon belegte.
+-- Zaehlerprobe: nach der Saat existiert eine scope-weite
+-- milestone-number_space-Zeile (workstream_id IS NULL) und ihre Hoehe
+-- entspricht mindestens dem MAX(number) auf worklist.milestone.
 DO $$
 DECLARE
-    expected int := 5;  -- produktlinie, architektur, agenten-entwicklung, betrieb, gtm
-    actual int;
+    actual_count int;
+    actual_hwm bigint;
+    expected_hwm bigint;
 BEGIN
     PERFORM set_config('app.tenant_id', :tenant_id, true);
-    SELECT count(*) INTO actual
+    SELECT count(*), COALESCE(MAX(high_water_mark), -1)
+      INTO actual_count, actual_hwm
       FROM worklist.number_space ns
       JOIN worklist.selector s ON s.id = ns.selector_id
      WHERE ns.tenant_id = :tenant_id AND ns.scope_id = :scope_id
        AND s.token = 'milestone'
-       AND ns.workstream_id IN (
-           SELECT id FROM worklist.workstream
-            WHERE tenant_id = :tenant_id AND scope_id = :scope_id
-              AND token IN ('produktlinie', 'architektur',
-                            'agenten-entwicklung', 'betrieb', 'gtm')
-       );
-    IF actual <> expected THEN
-        RAISE EXCEPTION 'milestone number_space seed drift: expected %, got %',
-                        expected, actual;
+       AND ns.workstream_id IS NULL;
+    IF actual_count <> 1 THEN
+        RAISE EXCEPTION 'milestone number_space seed drift: expected 1 scope-wide row, got %',
+                        actual_count;
+    END IF;
+    SELECT COALESCE(MAX(number), 0) INTO expected_hwm
+      FROM worklist.milestone
+     WHERE tenant_id = :tenant_id AND scope_id = :scope_id;
+    IF actual_hwm < expected_hwm THEN
+        RAISE EXCEPTION 'milestone counter drift: expected >= %, got %',
+                        expected_hwm, actual_hwm;
     END IF;
 END $$;
 

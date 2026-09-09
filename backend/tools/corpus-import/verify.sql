@@ -1,10 +1,16 @@
 -- verify.sql
 --
--- Verifikationsabfragen fuer den Steuerungskorpus-Import (Sprint 177.5).
+-- Verifikationsabfragen fuer den Steuerungskorpus-Import (Sprint 177.5,
+-- 177.6, 177.7).
 --
 -- Jede Abfrage prueft eine Nachbedingung aus dispatch 177.5 / REA-0007. Die
 -- erwartete Zeilenzahl steht im Kommentar direkt darueber; eine Abweichung
 -- ist ein Fehler, keine Warnung.
+--
+-- V12 (Sprint 177.7) rueckt die Meilenstein-Workstream-Kante zurueck. Die
+-- vormalige V3-Abfrage (cross-workstream milestones) faellt ersatzlos, weil
+-- die Invariante nicht mehr existiert (TAR-0002 §4 nennt 5 Pruefungen, nicht
+-- mehr 6). Fuenf Nachbedingungen bleiben.
 --
 -- Aufruf im Migrator-Rollenkontext:
 --   psql -v ON_ERROR_STOP=on \
@@ -43,44 +49,29 @@ SELECT ws.token AS workstream, count(i.*) AS items
  ORDER BY items DESC;
 
 -- ---------------------------------------------------------------------------
--- V3. Milestone-Invariante: jeder Item.milestone_id liegt in Item.workstream_id.
--- Nachbedingung: 0 Zeilen. Diese Invariante lebt in ItemService.java
--- (refuseCrossWorkstreamMilestone, Zeile 844-867) und ist in der Datenbank
--- NICHT durchgesetzt. Der SQL-Import kann sie deshalb durch einen Fehler
--- brechen; die Abfrage findet den Bruch.
--- ---------------------------------------------------------------------------
-\echo 'V3: cross-workstream milestones (erwartet 0):'
-SELECT count(*) AS cross_workstream_milestones
-  FROM worklist.item i
-  JOIN worklist.milestone m ON m.id = i.milestone_id
- WHERE i.tenant_id = :tenant_id AND i.scope_id = :scope_id
-   AND i.workstream_id <> m.workstream_id;
-
--- ---------------------------------------------------------------------------
--- V4. Zaehlerstaende: je Strang und Selektor steht der Zaehler auf der
--- hoechsten vergebenen Nummer.
+-- V3. Zaehlerstaende: je Selektor steht der Zaehler auf der hoechsten
+-- vergebenen Nummer. Nach V12 sind item, iteration und milestone alle
+-- scope-weit (workstream_id IS NULL im number_space).
 -- Nachbedingung: kein Zaehler liegt unter seinem Maximum.
 -- Probe im Anschluss: ein create ueber die Domaenenverbe vergibt N+1.
 -- ---------------------------------------------------------------------------
-\echo 'V4: number_space vs. tatsaechliches Maximum:'
+\echo 'V3: number_space vs. tatsaechliches Maximum:'
 WITH observed AS (
-    SELECT 'item' AS sel, workstream_id, MAX(number) AS max_num
+    SELECT 'item' AS sel, MAX(number) AS max_num
       FROM worklist.item
      WHERE tenant_id = :tenant_id AND scope_id = :scope_id
-     GROUP BY workstream_id
     UNION ALL
-    SELECT 'milestone', workstream_id, MAX(number)
+    SELECT 'milestone', MAX(number)
       FROM worklist.milestone
      WHERE tenant_id = :tenant_id AND scope_id = :scope_id
-     GROUP BY workstream_id
 ), spaces AS (
-    SELECT s.token AS sel, ns.workstream_id, ns.high_water_mark
+    SELECT s.token AS sel, ns.high_water_mark
       FROM worklist.number_space ns
       JOIN worklist.selector s ON s.id = ns.selector_id
      WHERE ns.tenant_id = :tenant_id AND ns.scope_id = :scope_id
+       AND ns.workstream_id IS NULL
 )
 SELECT COALESCE(sp.sel, o.sel) AS selector,
-       ws.token AS workstream,
        sp.high_water_mark AS counter,
        o.max_num AS observed_max,
        CASE
@@ -89,27 +80,25 @@ SELECT COALESCE(sp.sel, o.sel) AS selector,
            ELSE 'OK'
        END AS diagnose
   FROM observed o
-  FULL JOIN spaces sp ON sp.sel = o.sel AND sp.workstream_id = o.workstream_id
-  LEFT JOIN worklist.workstream ws ON ws.id = COALESCE(sp.workstream_id,
-                                                        o.workstream_id)
- ORDER BY selector, workstream;
+  FULL JOIN spaces sp ON sp.sel = o.sel
+ ORDER BY selector;
 
 -- ---------------------------------------------------------------------------
--- V5. Kein Item ohne Workstream (V10 hat NOT NULL gesetzt, sollte durch das
+-- V4. Kein Item ohne Workstream (V10 hat NOT NULL gesetzt, sollte durch das
 -- Schema fallen; hier trotzdem geprueft, weil die Zusicherung im Kern der
 -- Zielsemantik liegt).
 -- ---------------------------------------------------------------------------
-\echo 'V5: items ohne workstream (erwartet 0):'
+\echo 'V4: items ohne workstream (erwartet 0):'
 SELECT count(*) AS items_ohne_workstream
   FROM worklist.item
  WHERE tenant_id = :tenant_id AND scope_id = :scope_id
    AND workstream_id IS NULL;
 
 -- ---------------------------------------------------------------------------
--- V6. Straenge-Saat: die fuenf erwarteten Straenge existieren mit ihrer
+-- V5. Straenge-Saat: die fuenf erwarteten Straenge existieren mit ihrer
 -- Pflichtbeschreibung.
 -- ---------------------------------------------------------------------------
-\echo 'V6: Straenge im scope kumbuka:'
+\echo 'V5: Straenge im scope kumbuka:'
 SELECT ws.token, ws.is_default,
        CASE WHEN ws.description IS NULL OR btrim(ws.description) = ''
             THEN 'FEHLT' ELSE 'OK' END AS description

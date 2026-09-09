@@ -15,24 +15,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
- * The invariant that binds the fourth axis to the goal axis, and the
- * item's own workstream field around it.
+ * The invariant that keeps the item on its workstream — an obligatory
+ * carrier, resolved at create.
  *
  * <h2>What is defended</h2>
  *
  * <p><strong>An item carries a workstream — obligatorily.</strong> Create
  * without a workstream falls to the scope's default; create with a
- * caller-named workstream uses it. Withdrawn is refused.
+ * caller-named workstream uses it. Withdrawn is refused. Clearing on
+ * update is refused.
  *
- * <p><strong>An item with a milestone shares its workstream.</strong>
- * Assigning a milestone whose workstream is not the item's is refused
- * with {@code WORKSTREAM_MILESTONE_MISMATCH}. Moving the item to a
- * different workstream while it carries a milestone in the current one
- * is refused for the same reason.
- *
- * <p>The red state for each check is the removal of the corresponding
- * refuse-* method from {@link ItemService}, with the probe here observed
- * turning from a typed refusal into a silent write.
+ * <p><strong>An item's milestone is no longer bound to its workstream.</strong>
+ * V12 (2026-09-09) retracts the edge — several workstreams reach one
+ * milestone together (TAR-0002 section 4, REQ-0148 obsolete). The
+ * decoupling probe is in {@link MilestoneWorkstreamDecouplingIT}.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -107,27 +103,13 @@ class ItemWorkstreamInvariantIT {
     }
 
     // ==================================================================
-    // Class 2 — item with milestone shares its workstream
+    // Class 2 — item milestone assignments (cross-workstream now passes)
+    //
+    // The two "refused"-shape tests that used to live here are gone with
+    // V12: MilestoneWorkstreamDecouplingIT now asserts the opposite —
+    // that a cross-workstream assignment passes. The one test that stays
+    // here is the SAME-workstream shape, because it is unchanged.
     // ==================================================================
-
-    @Test
-    void assigning_a_milestone_from_another_workstream_is_refused() {
-        selectors.declare(scope, Selector.ITEM);
-        selectors.declare(scope, Selector.MILESTONE);
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Workstream backend = workstreams.declare(scope, "backend", "backend stream");
-
-        // Item lands in `mobile`; milestone lives in `backend`.
-        UUID itemId = createItem("cross-ws item", mobile.id);
-        UUID milestoneInBackend = createMilestone("backend goal", backend.id);
-
-        WorklistException refusal = refusalFrom(() ->
-            items.update(scope, itemId, Map.of(
-                Field.MILESTONE_ID.canonicalName(), milestoneInBackend.toString(),
-                Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
-        assertThat(refusal.reason())
-            .isEqualTo(WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH);
-    }
 
     @Test
     void assigning_a_milestone_from_the_same_workstream_passes() {
@@ -142,29 +124,6 @@ class ItemWorkstreamInvariantIT {
             Field.MILESTONE_ID.canonicalName(), milestoneInMobile.toString(),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
         assertThat(updated.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(milestoneInMobile);
-    }
-
-    @Test
-    void moving_the_item_to_a_workstream_the_milestone_is_not_in_is_refused() {
-        selectors.declare(scope, Selector.ITEM);
-        selectors.declare(scope, Selector.MILESTONE);
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Workstream backend = workstreams.declare(scope, "backend", "backend stream");
-
-        // Item in `mobile`, with a milestone in `mobile` — the pair is
-        // consistent — then a rename to `backend` would break the invariant.
-        UUID itemId = createItem("consistent then moved", mobile.id);
-        UUID milestoneInMobile = createMilestone("mobile goal", mobile.id);
-        items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), milestoneInMobile.toString(),
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
-
-        WorklistException refusal = refusalFrom(() ->
-            items.update(scope, itemId, Map.of(
-                Field.WORKSTREAM_ID.canonicalName(), backend.id.toString(),
-                Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
-        assertThat(refusal.reason())
-            .isEqualTo(WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH);
     }
 
     @Test

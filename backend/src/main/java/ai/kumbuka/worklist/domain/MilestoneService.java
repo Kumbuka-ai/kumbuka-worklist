@@ -96,11 +96,13 @@ public class MilestoneService extends PlanningService {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         refuseUnsettableChanges(Addressed.MILESTONE, Map.of(), given);
 
-        // The workstream is mandatory on a milestone. Named → require +
-        // refuse-withdrawn; absent → the scope's default. This runs BEFORE
-        // the number is allocated, because the counter itself is
-        // per-workstream now and the allocator needs the workstream to
-        // know which counter to advance.
+        // V12 (2026-09-09): the milestone-workstream edge is retracted
+        // (TAR-0002 section 4, REQ-0148 obsolete). The `workstream_id`
+        // column on `milestone` stays for one image cycle and is
+        // populated from the caller's argument or from the scope's
+        // default for symmetry with the old shape, but no invariant
+        // reads it. The number is allocated from the scope-wide
+        // milestone counter.
         Workstream workstream = resolveWorkstream(scopeId, given.get(Field.WORKSTREAM_ID));
 
         Milestone milestone = new Milestone();
@@ -109,7 +111,7 @@ public class MilestoneService extends PlanningService {
         milestone.title = required(Field.TITLE, given.get(Field.TITLE),
             "a milestone carries a title. It is the axis position's handle in every "
                 + "listing, and the one field a marker needs as much as a goal does");
-        milestone.number = allocateNumber(scopeId, workstream.id);
+        milestone.number = allocateNumber(scopeId);
 
         Map<Field, Object> settable = settableOnly(Addressed.MILESTONE, given);
         settable.remove(Field.TITLE);
@@ -206,10 +208,10 @@ public class MilestoneService extends PlanningService {
      * per view. The goal axis is a class of its own, so the selector-keyed
      * counter is where its next number belongs.
      */
-    private long allocateNumber(UUID scopeId, UUID workstreamId) {
+    private long allocateNumber(UUID scopeId) {
         requireSetting(scopeId);
         Selector milestoneSelector = selectors.require(scopeId, Selector.MILESTONE);
-        return selectors.allocateInWorkstream(scopeId, milestoneSelector, workstreamId);
+        return selectors.allocate(scopeId, milestoneSelector);
     }
 
     /**
@@ -279,25 +281,17 @@ public class MilestoneService extends PlanningService {
                 return rank != null && moved(held, rank, () -> milestone.rank = rank);
             }
             case WORKSTREAM_ID -> {
-                // A milestone's workstream is set at create (from an argument
-                // or from the scope's default) and is not moved after: the
-                // milestone's number was allocated from THIS workstream's
-                // counter, and moving the row would break the invariant that
-                // its number belongs to its workstream. A caller wanting to
-                // move a goal creates a new milestone in the other workstream
-                // and closes this one — which is the shape the reasoning has
-                // wherever a number binds to an axis.
+                // V12 (2026-09-09): the milestone-workstream edge is
+                // retracted (TAR-0002 section 4, REQ-0148 obsolete), and
+                // the milestone's number space returned to scope-wide.
+                // The column `milestone.workstream_id` stays for one image
+                // cycle but carries no invariant; an update is accepted
+                // (or echoed) and no cross-workstream refuse-* fires.
                 UUID given = ItemFields.id(field, value);
                 if (ItemFields.unchangedAsText(held, given)) {
                     return false;
                 }
-                throw new WorklistException(
-                    WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH,
-                    "a milestone's workstream is set at create and is not moved after. "
-                        + "The number was allocated from this workstream's counter and "
-                        + "belongs to it; declare a new milestone in the other workstream "
-                        + "and close this one",
-                    List.of(field.canonicalName()));
+                return moved(held, given, () -> milestone.workstreamId = given);
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable on a milestone and has no application");
