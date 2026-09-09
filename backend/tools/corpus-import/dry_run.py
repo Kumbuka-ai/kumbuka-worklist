@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Trockenlauf des Steuerungskorpus-Imports (Sprint 177.5).
+"""Trockenlauf des Steuerungskorpus-Imports (Sprint 177.5 + 177.6).
 
 Reads the frozen source (WORKLIST.md + REGISTRY.md at the pinned steering
-commit), applies the REA-0007 assignment rule, and writes the assignment
-report plus the two lists (zurueckgestellt, nicht zuordenbar). Writes
-nothing to any database.
+commit), applies the REA-0007 assignment rule, and writes the report
+plus the three disjoint output lists (assigned, deferred, refused).
+Writes nothing to any database.
+
+Reading is via `git -C <steering> show <SHA>:<file>`, so the checkout's
+HEAD is irrelevant — only the object needs to be present. The pin's
+sha256 is verified against the actual byte content of that object before
+parsing.
 
 Invocation:
     python3 dry_run.py \\
@@ -12,21 +17,23 @@ Invocation:
         --snapshot /path/to/snapshot.env \\
         --out-dir  /path/to/output
 
-The script refuses to proceed if the steering checkout does not match the
-snapshot pin. That is not overridable: an import that ran against "the
-current file" is not repeatable, and repeatability is the primary reason
-this run pins.
+Optional:
+    --red-probe   run the self-check red probe and exit (no output files).
+
+The script refuses to proceed if the steering object store does not
+carry a WORKLIST.md/REGISTRY.md whose bytes match the pin. That is not
+overridable: an import that ran against "the current file" is not
+repeatable.
 """
 from __future__ import annotations
 
 import argparse
 import dataclasses
 import hashlib
-import os
 import re
 import subprocess
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -34,10 +41,6 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 # REA-0007 assignment rule
 # ---------------------------------------------------------------------------
-#
-# The five bodies of work in scope kumbuka are Architektur, Produktlinie,
-# Agenten-Entwicklung, Betrieb, GTM. Plus default (which must stay empty).
-# The rule uses the predecessor's cluster column and named exceptions.
 
 PRODUKTLINIE_CLUSTERS = {"CORE", "SEC", "CONN", "EE", "BETA"}
 BETRIEB_CLUSTERS = {"DEPLOY"}
@@ -45,12 +48,6 @@ GTM_CLUSTERS = {"GTM"}
 
 MILESTONE_MARKERS_NO_MILESTONE = {"", "M?", "Mx", "M0"}
 
-# HK splits three ways, and the split is semantic (not a mechanical
-# derivation from any single column). This script applies a keyword
-# heuristic to produce a first-pass classification and flags every HK
-# assignment as heuristic in the report. Concept ratifies or overrides.
-#
-# Method / apparatus / skills / working discipline go to scope jbaconsult.
 HK_JBA_KEYWORDS = [
     "apparat", "apparatus",
     "method.md", "methode", "methodik",
@@ -64,8 +61,6 @@ HK_JBA_KEYWORDS = [
     "session-start", "session-closure",
 ]
 
-# Corpus work (guardrail quality, index generation, edge backfill) goes
-# to Architektur.
 HK_ARCH_KEYWORDS = [
     "guardrail", "leitplanke", "leitplanken",
     "corpus", "korpus",
@@ -80,13 +75,11 @@ HK_ARCH_KEYWORDS = [
 
 @dataclasses.dataclass
 class Row:
-    """One data row from the WORKLIST.md backlog table."""
     nr: str
     ident: str
     cluster: str
     title: str
-    scope: str  # this is the source's internal "scope" column, NOT the
-                # target scope (kumbuka/jbaconsult)
+    scope: str
     typ: str
     prio: str
     milestone: str
@@ -104,15 +97,17 @@ class Row:
 @dataclasses.dataclass
 class Assignment:
     row: Row
-    target_scope: str          # kumbuka | jbaconsult | REFUSED
-    workstream: Optional[str]  # e.g. Produktlinie | Architektur | ...
-    milestone: Optional[int]   # 1..7 or None
-    rule: str                  # which branch of REA-0007 placed this
+    bucket: str                # "assigned" | "deferred" | "refused"
+    target_scope: str          # "kumbuka" | "jbaconsult" | "-"
+    workstream: Optional[str]
+    milestone: Optional[int]
+    rule: str                  # which branch placed this (or refused it)
     heuristic: bool            # HK assignments are heuristic
+    conflict_reason: str = ""  # non-empty when refused
 
 
 # ---------------------------------------------------------------------------
-# Source loading and integrity check
+# Snapshot pin
 # ---------------------------------------------------------------------------
 
 def load_snapshot_env(path: Path) -> dict[str, str]:
@@ -126,34 +121,44 @@ def load_snapshot_env(path: Path) -> dict[str, str]:
     return env
 
 
+def git_show_bytes(steering: Path, sha: str, path: str) -> bytes:
+    """Read one file at one commit from the steering object store."""
+    return subprocess.check_output(
+        ["git", "-C", str(steering), "show", f"{sha}:{path}"]
+    )
+
+
 def verify_snapshot(steering: Path, snap: dict[str, str]) -> str:
-    """Verify the steering checkout matches the pin. Returns the SHA."""
-    got_sha = subprocess.check_output(
-        ["git", "-C", str(steering), "rev-parse", "HEAD"], text=True
-    ).strip()
-    if got_sha != snap["STEERING_COMMIT_SHA"]:
+    """Verify the pinned files exist and match. Returns the SHA."""
+    sha = snap["STEERING_COMMIT_SHA"]
+    # Confirm the commit is reachable (fetched).
+    try:
+        subprocess.check_output(
+            ["git", "-C", str(steering), "cat-file", "-e", f"{sha}^{{commit}}"],
+            stderr=subprocess.STDOUT,
+        )
+    except subprocess.CalledProcessError:
         raise SystemExit(
-            f"steering commit drift: pinned {snap['STEERING_COMMIT_SHA']}, "
-            f"found {got_sha}. The source moved. Update the pin or check "
-            f"out the pinned commit; a run against a different tree is not "
-            f"the same run."
+            f"pinned commit {sha} not reachable in {steering}. Run "
+            f"`git -C {steering} fetch origin main` and retry."
         )
     for fname, byte_key, sha_key in [
         ("WORKLIST.md", "WORKLIST_MD_BYTES", "WORKLIST_MD_SHA256"),
         ("REGISTRY.md", "REGISTRY_MD_BYTES", "REGISTRY_MD_SHA256"),
     ]:
-        p = steering / fname
-        raw = p.read_bytes()
+        raw = git_show_bytes(steering, sha, fname)
         if len(raw) != int(snap[byte_key]):
             raise SystemExit(
-                f"{fname} byte drift: pinned {snap[byte_key]}, found {len(raw)}"
+                f"{fname}@{sha[:12]} byte drift: pinned {snap[byte_key]}, "
+                f"found {len(raw)}"
             )
         got_hash = hashlib.sha256(raw).hexdigest()
         if got_hash != snap[sha_key]:
             raise SystemExit(
-                f"{fname} sha256 drift: pinned {snap[sha_key]}, found {got_hash}"
+                f"{fname}@{sha[:12]} sha256 drift: pinned {snap[sha_key]}, "
+                f"found {got_hash}"
             )
-    return got_sha
+    return sha
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +170,11 @@ HEADER_RE = re.compile(r"^\| Nr \|")
 SEPARATOR_RE = re.compile(r"^\|[- |]+\|$")
 
 
-def parse_worklist(path: Path) -> list[Row]:
-    """Extract data rows from the ## Worklist table under wlm:backlog."""
-    text = path.read_text()
+def parse_worklist_bytes(raw: bytes) -> list[Row]:
+    text = raw.decode("utf-8")
     idx = text.find(BACKLOG_MARKER)
     if idx < 0:
-        raise SystemExit(f"marker {BACKLOG_MARKER!r} not found in {path}")
+        raise SystemExit(f"marker {BACKLOG_MARKER!r} not found in WORKLIST.md")
     tail = text[idx:]
     rows: list[Row] = []
     for line in tail.splitlines():
@@ -180,24 +184,15 @@ def parse_worklist(path: Path) -> list[Row]:
             continue
         if SEPARATOR_RE.match(line):
             continue
-        # Split; the table has 16 data columns, so 18 parts after the
-        # leading and trailing "|". If a cell contains a "|", the split
-        # produces more parts; the Ref column at the end catches the
-        # overflow and we rejoin it.
         parts = line.split("|")
-        # parts[0] is empty (before leading |), parts[-1] is empty (after
-        # trailing |). Remove them.
         if parts and parts[0] == "":
             parts = parts[1:]
         if parts and parts[-1] == "":
             parts = parts[:-1]
-        # Trim each cell of surrounding whitespace.
         parts = [p.strip() for p in parts]
         if len(parts) < 16:
-            # Not a full data row - defensively skip.
             continue
         if len(parts) > 16:
-            # The Ref column has extra "|" - rejoin the tail.
             parts = parts[:15] + [" | ".join(parts[15:])]
         rows.append(Row(
             nr=parts[0], ident=parts[1], cluster=parts[2], title=parts[3],
@@ -214,12 +209,6 @@ def parse_worklist(path: Path) -> list[Row]:
 # ---------------------------------------------------------------------------
 
 def map_milestone(marker: str) -> Optional[int]:
-    """Translate the source's milestone marker to an integer or None.
-
-    The three (or four) markers that stand for "no milestone" all resolve
-    to None. Real milestones M1..M7 keep their numbers as milestones of
-    Produktlinie.
-    """
     m = marker.strip()
     if m in MILESTONE_MARKERS_NO_MILESTONE:
         return None
@@ -228,13 +217,10 @@ def map_milestone(marker: str) -> Optional[int]:
         n = int(match.group(1))
         if 1 <= n <= 7:
             return n
-    # Unknown marker - refuse implicitly by returning None but the report
-    # will flag it separately.
     return None
 
 
 def classify_hk(row: Row) -> tuple[str, str, str]:
-    """Apply the HK split heuristic. Returns (target_scope, workstream, rule)."""
     text = " ".join([row.ident, row.scope, row.title, row.ref]).lower()
     if any(kw in text for kw in HK_JBA_KEYWORDS):
         return ("jbaconsult", "n/a", "hk-heuristic:jba-keyword")
@@ -244,8 +230,6 @@ def classify_hk(row: Row) -> tuple[str, str, str]:
 
 
 def is_named_exception_architektur(row: Row) -> bool:
-    """Named exception: target architectures, guardrail consolidation,
-    edge backfill - override cluster and go to Architektur."""
     text = " ".join([row.title, row.ref]).lower()
     return any(kw in text for kw in [
         "target architecture", "zielarchitektur",
@@ -255,7 +239,6 @@ def is_named_exception_architektur(row: Row) -> bool:
 
 
 def is_named_exception_agenten(row: Row) -> bool:
-    """Named exception: agent commissioning work under HK cluster."""
     text = " ".join([row.title, row.ref]).lower()
     return any(kw in text for kw in [
         "agent commissioning", "agentenapparat",
@@ -264,8 +247,6 @@ def is_named_exception_agenten(row: Row) -> bool:
 
 
 def is_named_exception_produkt(row: Row) -> bool:
-    """Named exception: data protection subject access + export work
-    under a market-facing cluster - a product capability."""
     text = " ".join([row.title, row.ref]).lower()
     return any(kw in text for kw in [
         "subject access", "auskunftsanspruch", "datenschutz-export",
@@ -273,86 +254,224 @@ def is_named_exception_produkt(row: Row) -> bool:
     ])
 
 
-def assign(row: Row) -> Assignment:
+def initial_assign(row: Row) -> Assignment:
+    """First-pass placement by cluster + named exceptions.
+
+    Milestone/workstream compatibility is checked in a second pass, and
+    a row that fails it is refused (not silently downgraded).
+    """
     milestone = map_milestone(row.milestone)
     cluster = row.cluster.strip()
 
-    # Named exceptions first. They override the cluster.
     if is_named_exception_architektur(row):
-        return Assignment(row, "kumbuka", "Architektur", milestone,
-                          "named-exception:architektur", heuristic=False)
+        return _assigned(row, "Architektur", milestone,
+                         "named-exception:architektur", heuristic=False)
     if is_named_exception_agenten(row):
-        return Assignment(row, "kumbuka", "Agenten-Entwicklung", milestone,
-                          "named-exception:agenten", heuristic=False)
+        return _assigned(row, "Agenten-Entwicklung", milestone,
+                         "named-exception:agenten", heuristic=False)
     if is_named_exception_produkt(row):
-        return Assignment(row, "kumbuka", "Produktlinie", milestone,
-                          "named-exception:produkt", heuristic=False)
+        return _assigned(row, "Produktlinie", milestone,
+                         "named-exception:produkt", heuristic=False)
 
     if cluster in PRODUKTLINIE_CLUSTERS:
-        return Assignment(row, "kumbuka", "Produktlinie", milestone,
-                          f"cluster:{cluster}", heuristic=False)
+        return _assigned(row, "Produktlinie", milestone,
+                         f"cluster:{cluster}", heuristic=False)
     if cluster in BETRIEB_CLUSTERS:
-        return Assignment(row, "kumbuka", "Betrieb", milestone,
-                          f"cluster:{cluster}", heuristic=False)
+        return _assigned(row, "Betrieb", milestone,
+                         f"cluster:{cluster}", heuristic=False)
     if cluster in GTM_CLUSTERS:
-        return Assignment(row, "kumbuka", "GTM", milestone,
-                          f"cluster:{cluster}", heuristic=False)
+        return _assigned(row, "GTM", milestone,
+                         f"cluster:{cluster}", heuristic=False)
     if cluster == "HK":
         target, ws, rule = classify_hk(row)
-        return Assignment(row, target, ws if target == "kumbuka" else None,
-                          milestone if target == "kumbuka" else None,
-                          rule, heuristic=True)
+        if target == "jbaconsult":
+            return Assignment(row, bucket="deferred", target_scope="jbaconsult",
+                              workstream=None, milestone=None,
+                              rule=rule, heuristic=True)
+        return _assigned(row, ws, milestone, rule, heuristic=True)
     if cluster == "":
-        # Empty cluster - the rule cannot place. Refused, not absorbed.
-        return Assignment(row, "REFUSED", None, None,
-                          "empty-cluster", heuristic=False)
-    # Unknown cluster - refused.
-    return Assignment(row, "REFUSED", None, None,
-                      f"unknown-cluster:{cluster}", heuristic=False)
+        return _refused(row, "empty-cluster")
+    return _refused(row, f"unknown-cluster:{cluster}")
 
 
-# ---------------------------------------------------------------------------
-# Milestone/workstream compatibility check
-# ---------------------------------------------------------------------------
+def _assigned(row: Row, workstream: str, milestone: Optional[int],
+              rule: str, heuristic: bool) -> Assignment:
+    return Assignment(row, bucket="assigned", target_scope="kumbuka",
+                      workstream=workstream, milestone=milestone,
+                      rule=rule, heuristic=heuristic)
 
-def milestone_workstream_conflict(a: Assignment) -> bool:
-    """A row's milestone must lie in the row's workstream.
 
-    REA-0007 puts M1..M7 in Produktlinie. If the assignment lands in a
-    non-Produktlinie workstream but carries a milestone, the milestone
-    would live in the wrong workstream. That is the invariant refuseCross-
-    WorkstreamMilestone (ItemService.java:844) enforces in Java. On the
-    SQL import path we detect it here and refuse the row rather than
-    dropping the milestone silently.
-    """
+def _refused(row: Row, reason: str,
+             prev_workstream: Optional[str] = None,
+             prev_milestone: Optional[int] = None) -> Assignment:
+    return Assignment(row, bucket="refused", target_scope="-",
+                      workstream=None, milestone=None,
+                      rule=reason, heuristic=False,
+                      conflict_reason=reason
+                      + (f" (would-have-been:{prev_workstream}, M{prev_milestone})"
+                         if prev_workstream else ""))
+
+
+def apply_milestone_invariant(a: Assignment) -> Assignment:
+    """REA-0007: milestones live in Produktlinie only. An item whose
+    workstream is not Produktlinie but which carries a real milestone
+    is refused (would break refuseCrossWorkstreamMilestone)."""
+    if a.bucket != "assigned":
+        return a
     if a.milestone is None:
-        return False
-    return a.workstream != "Produktlinie"
+        return a
+    if a.workstream == "Produktlinie":
+        return a
+    return _refused(a.row, "milestone-workstream-conflict",
+                    prev_workstream=a.workstream,
+                    prev_milestone=a.milestone)
+
+
+def assign_all(rows: list[Row]) -> list[Assignment]:
+    return [apply_milestone_invariant(initial_assign(r)) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Self-check: disjoint set logic
+# ---------------------------------------------------------------------------
+
+class SelfCheckFailed(Exception):
+    """Raised when the disjoint/complete invariants of the output are
+    violated. Message carries the offending nrs."""
+
+
+def self_check(rows: list[Row], assignments: list[Assignment]) -> None:
+    """Assert the three output buckets are disjoint and cover the source.
+
+    A ZeileNr may appear in EXACTLY ONE of assigned/deferred/refused.
+    The union must equal the set of source nrs. Any violation raises
+    SelfCheckFailed with the offending nrs. No text-only assertion:
+    this is the mechanism the report describes.
+    """
+    a = {x.row.nr for x in assignments if x.bucket == "assigned"}
+    d = {x.row.nr for x in assignments if x.bucket == "deferred"}
+    r = {x.row.nr for x in assignments if x.bucket == "refused"}
+    if a & d:
+        raise SelfCheckFailed(
+            f"assigned ∩ deferred nicht leer: {sorted(a & d)[:20]}"
+        )
+    if a & r:
+        raise SelfCheckFailed(
+            f"assigned ∩ refused nicht leer: {sorted(a & r)[:20]}"
+        )
+    if d & r:
+        raise SelfCheckFailed(
+            f"deferred ∩ refused nicht leer: {sorted(d & r)[:20]}"
+        )
+    all_nr = {row.nr for row in rows}
+    total = len(a) + len(d) + len(r)
+    if total != len(all_nr):
+        raise SelfCheckFailed(
+            f"Summe |assigned|+|deferred|+|refused| = {total} != Quellzeilen "
+            f"{len(all_nr)}. Doppelvorkommen oder Bucket-Fehler."
+        )
+    missing = all_nr - (a | d | r)
+    extra = (a | d | r) - all_nr
+    if missing:
+        raise SelfCheckFailed(f"nicht abgedeckt: {sorted(missing)[:20]}")
+    if extra:
+        raise SelfCheckFailed(f"nicht in Quelle: {sorted(extra)[:20]}")
+
+
+# ---------------------------------------------------------------------------
+# Red probe of the self-check
+# ---------------------------------------------------------------------------
+
+def red_probe(rows: list[Row], assignments: list[Assignment]) -> str:
+    """Kontrolllauf → Verletzung → Kontrolllauf. Returns a report."""
+    log: list[str] = []
+    log.append("# Roter Probelauf der Selbstpruefung")
+    log.append("")
+
+    # 1. Kontrolllauf davor: die echten Zuweisungen laufen gruen.
+    try:
+        self_check(rows, assignments)
+    except SelfCheckFailed as e:
+        log.append(f"KONTROLLLAUF DAVOR: ROT ({e}) — der Ist-Zustand ist "
+                   f"bereits verletzt, Probelauf ist nicht aussagekraeftig.")
+        return "\n".join(log)
+    log.append("1. Kontrolllauf davor: **gruen** (drei Mengen disjunkt, "
+               "Summe = Quellzeilen).")
+
+    # 2. Verletzung einbauen: eine refused-Zeile ADDITIONALLY als assigned
+    # duplizieren. Diese Zeile ist dann in zwei Buckets.
+    refused_examples = [a for a in assignments if a.bucket == "refused"]
+    if not refused_examples:
+        log.append("2. VERLETZUNG NICHT EINBAUBAR: keine refused-Zeile "
+                   "vorhanden. Probelauf abgebrochen.")
+        return "\n".join(log)
+    victim = refused_examples[0]
+    poisoned = list(assignments) + [Assignment(
+        row=victim.row, bucket="assigned", target_scope="kumbuka",
+        workstream="Produktlinie", milestone=None,
+        rule="red-probe:injected-duplicate", heuristic=False,
+    )]
+    log.append(f"2. Verletzung eingebaut: Nr {victim.row.nr} zusaetzlich "
+               f"als assigned dupliziert (steht damit in refused UND "
+               f"assigned).")
+
+    # 3. Pruefung erwartet rot.
+    try:
+        self_check(rows, poisoned)
+    except SelfCheckFailed as e:
+        log.append(f"3. Selbstpruefung: **rot** — Wortlaut: `{e}`.")
+    else:
+        log.append("3. Selbstpruefung: **GRUEN — DEFEKT**. Die Pruefung "
+                   "hat die absichtliche Doppelzuordnung nicht gefunden. "
+                   "Sie ist unwirksam.")
+        return "\n".join(log)
+
+    # 4. Kontrolllauf danach: das echte Ergebnis ist unangetastet, laeuft
+    # gruen. Das beweist, dass die Injection lokal war und nicht den
+    # produktiven Bestand befleckt hat.
+    try:
+        self_check(rows, assignments)
+    except SelfCheckFailed as e:
+        log.append(f"4. Kontrolllauf danach: ROT ({e}) — der Ist-Zustand "
+                   f"wurde durch die Injection verunreinigt. Das ist ein "
+                   f"Bug im Probelauf, nicht in der Pruefung.")
+        return "\n".join(log)
+    log.append("4. Kontrolllauf danach: **gruen** (Injection war lokal, "
+               "produktive Zuweisung unverunreinigt).")
+    log.append("")
+    log.append("**Ergebnis:** die Selbstpruefung ist rot beobachtet und "
+               "wieder gruen. Sie ist damit ein Gate im Wortsinn — nicht "
+               "nur ein grundgruener Textbaustein.")
+    return "\n".join(log)
 
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
 
-def write_report(assignments: list[Assignment], out_dir: Path,
-                 steering_sha: str) -> None:
+def write_report(rows: list[Row], assignments: list[Assignment],
+                 out_dir: Path, steering_sha: str, probe_report: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    assigned = [a for a in assignments if a.bucket == "assigned"]
+    deferred = [a for a in assignments if a.bucket == "deferred"]
+    refused = [a for a in assignments if a.bucket == "refused"]
 
     # 1. Assignment TSV: one row per source row.
     tsv = out_dir / "assignment.tsv"
     with tsv.open("w") as f:
-        f.write("nr\tid\tcluster\tstatus\ttarget_scope\tworkstream\t"
+        f.write("nr\tid\tcluster\tstatus\tbucket\ttarget_scope\tworkstream\t"
                 "milestone\trule\theuristic\ttitle_head\n")
         for a in assignments:
             title_head = a.row.title[:80].replace("\t", " ")
             f.write("\t".join([
                 a.row.nr, a.row.ident, a.row.cluster, a.row.status,
-                a.target_scope, a.workstream or "", str(a.milestone or ""),
-                a.rule, "yes" if a.heuristic else "no", title_head,
+                a.bucket, a.target_scope, a.workstream or "",
+                str(a.milestone or ""), a.rule,
+                "yes" if a.heuristic else "no", title_head,
             ]) + "\n")
 
     # 2. Deferred list (jbaconsult).
-    deferred = [a for a in assignments if a.target_scope == "jbaconsult"]
     with (out_dir / "deferred.txt").open("w") as f:
         f.write(f"# Zurueckgestellt fuer scope jbaconsult ({len(deferred)} Zeilen)\n")
         f.write(f"# HK-Split: method/apparatus/skills/working-discipline gehen "
@@ -363,78 +482,85 @@ def write_report(assignments: list[Assignment], out_dir: Path,
             f.write(f"{a.row.nr}\t{a.row.ident}\t{a.row.status}\t"
                     f"{a.rule}\t{a.row.title[:100]}\n")
 
-    # 3. Refusal list (empty cluster + unknown cluster + milestone conflicts).
-    conflicts = [a for a in assignments if milestone_workstream_conflict(a)]
-    refused = [a for a in assignments if a.target_scope == "REFUSED"]
+    # 3. Refusal list.
     with (out_dir / "refusal.txt").open("w") as f:
-        f.write(f"# Nicht zuordenbar ({len(refused) + len(conflicts)} Zeilen)\n")
-        f.write(f"# {len(refused)} durch Cluster-Regel refused, "
-                f"{len(conflicts)} durch Milestone/Workstream-Konflikt.\n")
+        f.write(f"# Nicht zuordenbar ({len(refused)} Zeilen)\n")
         f.write(f"# Eine nicht platzierbare Zeile bricht den Echtlauf ab "
                 f"(REA-0007 Abschnitt 3).\n#\n")
-        f.write("# Cluster-Refusals\n")
-        for a in refused:
-            f.write(f"{a.row.nr}\t{a.row.ident or '(no-id)'}\t"
-                    f"{a.row.status}\t{a.rule}\t{a.row.title[:100]}\n")
-        f.write("\n# Milestone/Workstream-Konflikte\n")
-        for a in conflicts:
-            f.write(f"{a.row.nr}\t{a.row.ident}\t{a.row.cluster}\t"
-                    f"M{a.milestone}->{a.workstream}\t{a.row.title[:100]}\n")
+        by_reason = Counter(a.rule for a in refused)
+        for reason, n in by_reason.most_common():
+            f.write(f"# {reason}: {n}\n")
+        f.write("#\n")
+        for reason, _ in by_reason.most_common():
+            f.write(f"\n## {reason}\n")
+            for a in refused:
+                if a.rule != reason:
+                    continue
+                f.write(f"{a.row.nr}\t{a.row.ident or '(no-id)'}\t"
+                        f"{a.row.cluster}\t{a.row.status}\t"
+                        f"{a.conflict_reason}\t{a.row.title[:100]}\n")
 
     # 4. Human-readable report.
     stats_by_ws = Counter()
-    stats_by_scope = Counter()
-    stats_heuristic = Counter()
     stats_by_rule = Counter()
+    stats_heuristic = Counter()
+    for a in assigned:
+        stats_by_ws[a.workstream or "(none)"] += 1
     for a in assignments:
-        stats_by_scope[a.target_scope] += 1
-        if a.target_scope == "kumbuka":
-            stats_by_ws[a.workstream or "(none)"] += 1
+        stats_by_rule[a.rule] += 1
         if a.heuristic:
             stats_heuristic[a.rule] += 1
-        stats_by_rule[a.rule] += 1
 
     with (out_dir / "report.md").open("w") as f:
-        f.write("# Trockenlauf-Bericht (Sprint 177.5)\n\n")
+        f.write("# Trockenlauf-Bericht (Sprint 177.6)\n\n")
         f.write(f"steering commit: `{steering_sha}`\n\n")
-        f.write(f"Quellzeilen im Backlog: **{len(assignments)}**\n\n")
-        f.write("## Verteilung auf Zielscope\n\n")
-        for scope, n in stats_by_scope.most_common():
-            f.write(f"- {scope}: {n}\n")
-        f.write("\n## Verteilung auf kumbuka-Straenge\n\n")
+        f.write(f"Quellzeilen im Backlog: **{len(rows)}**\n\n")
+        f.write("## Die drei disjunkten Ausgabemengen\n\n")
+        f.write(f"- **assigned** (kumbuka): {len(assigned)}\n")
+        f.write(f"- **deferred** (jbaconsult): {len(deferred)}\n")
+        f.write(f"- **refused**: {len(refused)}\n")
+        f.write(f"\nSumme: {len(assigned) + len(deferred) + len(refused)} — "
+                f"muss {len(rows)} sein.\n\n")
+        f.write("Die Disjunktheit dieser drei Mengen und die Gleichheit der "
+                "Summe zur Quellzeilenzahl werden **maschinell** von "
+                "`self_check` gepruft und der Lauf bricht bei jeder Verletzung "
+                "sofort ab. Diese Zeile im Bericht ist keine Zusicherung, "
+                "sondern der Verweis auf die Pruefung.\n\n")
+        f.write("## Verteilung der assigned-Zeilen auf kumbuka-Straenge\n\n")
         for ws, n in stats_by_ws.most_common():
             f.write(f"- {ws}: {n}\n")
-        f.write(f"\ndefault: 0 (Nachbedingung, muss so bleiben)\n")
-        f.write("\n## Zuordnung nach Regel-Zweig\n\n")
+        f.write(f"\ndefault: 0 (Nachbedingung; die Straenge-Saat legt keine "
+                f"Items an, deshalb konstruktiv).\n")
+        f.write("\n## Zuordnung/Verweigerung nach Regel-Zweig\n\n")
         for rule, n in stats_by_rule.most_common():
             f.write(f"- {rule}: {n}\n")
         f.write(f"\n## Heuristische Zuordnungen: {sum(stats_heuristic.values())}\n\n")
-        f.write("Diese Zuordnungen sind aus Titeltext/Ref abgeleitet und "
-                "nicht mechanisch aus einer Spalte. Sie brauchen "
-                "Concept-Ratifikation vor dem Echtlauf.\n\n")
+        f.write("Aus Titeltext/Ref abgeleitet, nicht mechanisch aus einer "
+                "Spalte. Brauchen Concept-Ratifikation.\n\n")
         for rule, n in stats_heuristic.most_common():
             f.write(f"- {rule}: {n}\n")
         f.write("\n## Refusal-Bilanz\n\n")
-        refused_by_status = Counter(a.row.status for a in refused)
-        f.write(f"Cluster-Refusal (leerer/unbekannter Cluster): "
-                f"**{len(refused)}**\n\n")
-        for s, n in refused_by_status.most_common():
-            f.write(f"- status={s or '(leer)'}: {n}\n")
-        f.write(f"\nMilestone/Workstream-Konflikte (M1..M7 in Nicht-Produktlinie-"
-                f"Strang): **{len(conflicts)}**\n\n")
-        if conflicts:
-            for a in conflicts[:20]:
-                f.write(f"- Nr {a.row.nr} [{a.row.cluster}]: M{a.milestone} "
-                        f"->{a.workstream}: {a.row.title[:80]}\n")
-        f.write(f"\n## Nachbedingung Echtlauf\n\n")
-        blockers = len(refused) + len(conflicts)
-        if blockers == 0:
+        f.write(f"Insgesamt refused: **{len(refused)}**\n\n")
+        by_reason = Counter(a.rule for a in refused)
+        for reason, n in by_reason.most_common():
+            f.write(f"- {reason}: {n}\n")
+        refused_status = Counter(a.row.status for a in refused
+                                 if a.rule == "empty-cluster")
+        if refused_status:
+            f.write(f"\n### empty-cluster nach status\n\n")
+            for s, n in refused_status.most_common():
+                f.write(f"- {s or '(leer)'}: {n}\n")
+        f.write("\n## Nachbedingung Echtlauf\n\n")
+        if len(refused) == 0:
             f.write("**Echtlauf zulaessig.** Refusal-Liste ist leer.\n")
         else:
-            f.write(f"**Echtlauf NICHT zulaessig.** {blockers} Zeilen sind "
-                    f"nicht platzierbar. Der Echtlauf bricht per Design ab, "
-                    f"wenn die Refusal-Liste nicht leer ist (REA-0007 "
-                    f"Abschnitt 3, dispatch 177.5 Abschnitt 'Ablauf').\n")
+            f.write(f"**Echtlauf NICHT zulaessig.** {len(refused)} Zeilen "
+                    f"sind refused. Der Echtlauf bricht per Design ab, wenn "
+                    f"die Refusal-Liste nicht leer ist (REA-0007 Abschnitt 3, "
+                    f"dispatch 177.5 Ablauf).\n")
+        f.write("\n---\n\n")
+        f.write(probe_report)
+        f.write("\n")
 
 
 def main() -> None:
@@ -445,19 +571,36 @@ def main() -> None:
                     help="path to snapshot.env (the pin)")
     ap.add_argument("--out-dir", required=True, type=Path,
                     help="directory to write the report and lists into")
+    ap.add_argument("--red-probe", action="store_true",
+                    help="run only the self-check red probe and print it")
     args = ap.parse_args()
 
     snap = load_snapshot_env(args.snapshot)
     sha = verify_snapshot(args.steering, snap)
     print(f"snapshot verified: steering@{sha[:12]}", file=sys.stderr)
 
-    worklist_md = args.steering / "WORKLIST.md"
-    rows = parse_worklist(worklist_md)
+    worklist_bytes = git_show_bytes(args.steering, sha, "WORKLIST.md")
+    rows = parse_worklist_bytes(worklist_bytes)
     print(f"parsed {len(rows)} backlog rows", file=sys.stderr)
 
-    assignments = [assign(r) for r in rows]
+    assignments = assign_all(rows)
 
-    write_report(assignments, args.out_dir, sha)
+    if args.red_probe:
+        print(red_probe(rows, assignments))
+        return
+
+    # Hard invariant: the disjoint/complete self-check must pass. Every
+    # normal run rides on this gate; a failure aborts before any file is
+    # written.
+    try:
+        self_check(rows, assignments)
+    except SelfCheckFailed as e:
+        raise SystemExit(f"SELF CHECK FAILED: {e}")
+    print("self-check green", file=sys.stderr)
+
+    probe_report = red_probe(rows, assignments)
+
+    write_report(rows, assignments, args.out_dir, sha, probe_report)
     print(f"wrote report to {args.out_dir}", file=sys.stderr)
 
 

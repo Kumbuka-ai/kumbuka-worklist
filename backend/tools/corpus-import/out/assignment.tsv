@@ -1,506 +1,508 @@
-nr	id	cluster	status	target_scope	workstream	milestone	rule	heuristic	title_head
-508	CHORE-357	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Steuerungskorpus nachtragen: Sprints 173 und 174 sowie Satelliten 15 bis 17 fehl
-507	BUG-52	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienst: Metadaten-Lesemodell ist Map<String,String> und scheitert an de
-506	BUG-51	CONN	open	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy weist normalisierte resource-URI ab: Abgleich gegen die Ressourcentab
-505	CHORE-356	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	SQL-Importskript: den Steuerungskorpus aus dem Dateispeicher des Vorgaengers in 
-504	CHORE-355	DEPLOY	open	kumbuka	Betrieb	5	cluster:DEPLOY	no	Steuerungskorpus aus dem Python-Logbuch in das Schema dispatch migrieren: SQL-Im
-503	FEAT-95	CONN	open	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy v0.2.0: scopes_supported, offline_access als Vorgabe, und DCR neben C
-502	FEAT-94	CONN	done	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy: MCP-Autorisierungsproxy vor Keycloak, CIMD nach aussen, OIDC nach hi
-501	CHORE-354	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Kennungsfrage bei accept entscheiden: Adresse und Geschaeftskennung sind unter d
-500	FEAT-93	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst benutzbar machen: die sechs ungebauten Domaenenverben, Inbetrieb
-499	CHORE-353	HK	open	kumbuka	Architektur		named-exception:architektur	no	Qualitaet der Leitplankenknoten: Problem und Dringlichkeit als Pflichtteil, und 
-498	CHORE-352	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Code-Review-Methodik: ein zweiter unabhaengiger Pruefapparat am Dispatch, mit Em
-497	CHORE-351	DEPLOY	planned	kumbuka	Betrieb	5	cluster:DEPLOY	no	Worklist-Dienst, Betriebsstrang: Matrixzeile, Compose-Dienst, Rollen und Schlues
-496	FEAT-92	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst, Speicherhaelfte neu: V4 gegen das Zielschema ersetzen, samt Pol
-495	FEAT-91	CORE	planned	kumbuka	Produktlinie	5	cluster:CORE	no	Planungsschicht der Worklist: die Verben, die Ableitung von planned und das Opti
-494	CHORE-350	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Fassade in Plattform-Router umbenennen: Zielbild, abgeleitete Knoten und Zeilen,
-493	CHORE-349	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Die vier grandfathered Ablehnungsgruende entscheiden: Vertrag anfassen oder Ausn
-492	FEAT-90	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch und Worklist auf das ratifizierte Schichten- und Benennungsnormativ ang
-491	BUG-50	CORE	open	kumbuka	Produktlinie	1	cluster:CORE	no	System-Guidance-Overlay unter Scope-Pinning unerreichbar: memory_load_context ha
-490	BUG-49	CORE	open	kumbuka	Produktlinie	1	cluster:CORE	no	memory_load_context kappt still auf 20 Eintraege pro Typ und nennt weder Gesamtz
-489	CHORE-348	CORE	planned	kumbuka	Produktlinie	5	cluster:CORE	no	Bauplan-Normativ der Plattformdienste: Inventur von Dispatch und Worklist, Entsc
-488	FEAT-89	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Domaene: query, claim_next und withdraw bauen -- drei Plattformverben o
-487	CHORE-347	CORE	done	kumbuka	Architektur	5	named-exception:architektur	no	Innenansicht der Plattform-Komponente festhalten: Revision 2 von platform-layer.
-486	CHORE-346	HK	open	kumbuka	Architektur		named-exception:architektur	no	Extraktionsvollstaendigkeit von spec/docs/working/ pruefen, bevor der Ordner abg
-485	CHORE-345	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Methodikschicht neu schneiden: Entscheidungsverfahren, Doktrin-Zustaendigkeit, K
-483	FEAT-88	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Die beiden fehlenden Modi des Graph-Validators: templates und der Index unter ge
-482	CHORE-344	CORE	open	kumbuka	Architektur		named-exception:architektur	no	Kantennachzug: serves ueber die siebzig Leitplanken
-481	CHORE-343	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Die fuenf verbleibenden Zielbilder schreiben: Memory, Dispatch, Worklist, Verzei
-480	CHORE-342	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Document-Service: Zielbild, Adressraum, deklarierte Metadaten und Kanten -- Konz
-479	BUG-48	CORE	open	kumbuka	Produktlinie	1	cluster:CORE	no	create ueberschreibt ein gesendetes Logbuch-Objekt still statt einen Konflikt zu
-478	CHORE-341	HK	open	kumbuka	Architektur	1	hk-heuristic:arch-keyword	yes	Graph-Validator fuer den Architektur-Knotenkorpus bauen — das in Schritt 5 vorge
-477	CHORE-340	CORE	done	kumbuka	Architektur		named-exception:architektur	no	Zweite Runde der Korpusmigration: CON- und Leitplankenknoten, TAR/REA-Spaltung, 
-476	CHORE-339	CORE	done	kumbuka	Architektur		named-exception:architektur	no	Erste Runde der Korpusmigration: VIS-Setzung, Nordstern-Invarianten als REQ, CON
-475			new	REFUSED			empty-cluster	no	ADR fuer den Verbprozess: wie neue Verben und neue Schemata hinzukommen
-474			new	REFUSED			empty-cluster	no	Plattform-Datenschicht und der Schnitt Team gegen Mandant
-473			new	REFUSED			empty-cluster	no	ee-Topologie schneiden: ee-server nach Platform umbenennen, Importer nach ee-mem
-472			new	REFUSED			empty-cluster	no	ADR-0041 Schema-Menge gegen ADR-0043 in Deckung bringen: audit und event sind do
-471			new	REFUSED			empty-cluster	no	Fehler der Gedaechtnis-Maschine hinterlassen keine Spur im Log; Fehlerprotokolli
-470			new	REFUSED			empty-cluster	no	Falscher Kopfkommentar in ee-server zur Konfigurationszusammenfuehrung und die d
-469	CHORE-338	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Rueckbau des Gedaechtniscodes aus kumbuka-server samt Abschaltung der alten Tabe
-468	FEAT-87	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Umschaltung auf den Gedaechtnisdienst: Schreibstopp auf dem Altspeicher, Kopie d
-467	FEAT-86	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	MCP- und REST-Oberflaeche des Gedaechtnisdienstes samt Authentifizierung und dem
-466	CHORE-337	CORE	planned	kumbuka	Produktlinie	5	cluster:CORE	no	Drei Reparaturen aus Sprint 154: WITH-CHECK-Begruendung, Hygiene-Gate ohne Satel
-465	BUG-47	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Migrations-Callback in kumbuka-server ist nicht registriert und hat keinen Zeuge
-464	CHORE-336	CORE	open	kumbuka	Architektur	5	named-exception:architektur	no	Restarbeit der Extraktion: Artefaktveroeffentlichung von kumbuka-memory und Zuor
-463	FEAT-85	DEPLOY	done	kumbuka	Betrieb	5	cluster:DEPLOY	no	Deployment des leeren Gedaechtnisdienstes: Container-Image, Health-Endpunkt, Gra
-462	CHORE-335	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Zielbild der Datenschicht: public auftrennen, Rollen und Eigentum je Schema, Rec
-461	BUG-46	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Reichweite des Log-Waechters: nur LOG in Grossbuchstaben wird gesehen, Argumente
-460	BUG-45	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	Reichweite des Log-Waechters: erzwungenes LOG in Grossbuchstaben und Argumentsch
-459	CHORE-334	DEPLOY	open	kumbuka	Betrieb	1	cluster:DEPLOY	no	release.sh haertet: Umgebungs-Waechter vor dem Rendern, Gesundheit im Effect Gua
-458	CHORE-333	CORE	open	kumbuka	Produktlinie	5	cluster:CORE	no	V22 sammelt die drei Produktions-Handgriffe ein: View-Eigentuemer, Dispatch-Migr
-457	BUG-44	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Der Dispatch-Dienst haelt TRUNCATE und TRIGGER auf dem eigenen Schema: TRUNCATE 
-456	FEAT-84	CORE	planned	kumbuka	Produktlinie	5	cluster:CORE	no	Plattform-Fassade als eigener Dienst: Schema-Routing ohne eigene Autoritaet, pri
-455	BUG-43	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Memory-Dienst antwortet auf den ersten Aufruf mit nacktem Fehler ohne Grund, der
-454	CHORE-332	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Zielbild fuer die Plattformschicht: der Lesevertrag, die Fassade, das Audit-Log 
-453	BUG-42	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Log-Waechter faengt das erlaubte Wort selector, weil ctor als Substring darin st
-452	CHORE-331	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	spec/design/ neu strukturieren: Artefaktklasse statt Zielsystem, eine Handover-F
-451	FEAT-83	CORE	planned	kumbuka	Produktlinie		cluster:CORE	no	Navigationskonzept der Konsole und Scope-Dashboard als Einstieg: erweiterbar um 
-450	FEAT-82	CORE	planned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst, Verbflaeche: REST gegen den Verbkatalog und MCP-Adapter als Pro
-449	CHORE-330	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Logging-Konvention der Plattformdienste: Ebenen, was eine Zeile tragen darf, und
-448			new	REFUSED			empty-cluster	no	Generierter Index ueber docs/adr/ und docs/decisions/: welches Papier existiert,
-447	CHORE-329	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Post-Mortem des M5-Umbaus: warum der Bestand bei jeder Sitzung Diskrepanzen prod
-446	CHORE-328	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	M5-Umsetzungsplan als Dokument: Bauordnung, Lueckenliste des Gatters, rote Probe
-445	FEAT-81	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienst, Oberflaechenhaelfte: REST-Flaeche gegen den ratifizierten Verbk
-444	CHORE-327	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Fassade und einheitliches URI-adressiertes Verbvokabular: Harmonisierung auf ein
-443			new	REFUSED			empty-cluster	no	Index ueber ADRs und Entscheidungs-Ledger mechanisch generieren statt von Hand p
-442	CHORE-326	HK	open	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Zielbild der Worklist pflegen und in einen ADR zurueckspiegeln
-441		CORE	new	kumbuka	Produktlinie		cluster:CORE	no	Kontextkosten der MCP-Verbflaeche gegen die API messen statt schaetzen
-440	CHORE-324	HK	open	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Zielbild des Dispatch-Dienstes pflegen und in ADR-0042 und ADR-0038 zurueckspieg
-439	CHORE-325	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	ADR-Bestand auf hoechstens 30 konsolidieren: neue Nomenklatur, Zuordnungstabelle
-438	CHORE-323	HK	done	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	M5-Gatter: Architekturreview und Gap-Analyse nach beiden Dienstspezifikationen, 
-437	FEAT-80	CORE	planned	kumbuka	Produktlinie	5	cluster:CORE	no	Ereignis-Log der Steuerungsdienste: Nachweispfad als Ersatz fuer die verschwinde
-436	CHORE-322	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	kumbuka-server nach kumbuka-memory umbenennen: Submodulpfade, Imagenamen, Matrix
-435	CHORE-321	GTM	open	kumbuka	GTM		cluster:GTM	no	Aussagenschaerfe durchziehen: Formulierung zum Betreiber-Lesezugriff in Position
-434	CHORE-320	DEPLOY	open	kumbuka	Betrieb	5	cluster:DEPLOY	no	Abschaltung des Vorgaengers: REGISTRY.md, state/, alter Dienststapel und Steueru
-433	CHORE-319	DEPLOY	open	kumbuka	Betrieb	5	cluster:DEPLOY	no	Umzug des Bestands: Git-Korpus, Agent-Run-SQLite und die unversionierten Zustand
-432	FEAT-79	EE	open	kumbuka	Produktlinie	5	cluster:EE	no	Worklist Enterprise: Versionierung veraenderlicher Zeilen als Append-on-Write, m
-431	FEAT-78	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Domaene und Store auf SQL: Zeilen, Nummernraeume pro Scope, Ruecknahme 
-430	FEAT-77	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienstgeruest, Substrathaelfte: eigenes Repository, Quarkus, Schema mit
-429	FEAT-76	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Domaene und Store auf SQL: Objektmodell, neun Statuswerte mit einem Ver
-428	FEAT-75	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienstgeruest, Substrathaelfte: Repository, Quarkus, Schema mit eigener
-427	CHORE-318	HK	done	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Spezifikation Worklist Manager (Stufe 2): 25 Verbenvertraege, veraenderliche Zei
-426	CHORE-317	HK	done	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Spezifikation Logbuch (Stufe 2): 20 Verbenvertraege, Statusmaschine, Invarianten
-425	FEAT-74	CORE	done	kumbuka	Produktlinie	5	cluster:CORE	no	Mandantenverzeichnis Stufe 1: Sicht platform.scope_access, lesend fuer die beide
-424	CHORE-316	HK	open	kumbuka	Architektur	2	hk-heuristic:arch-keyword	yes	INDEX-Dateien auf Zeigergroesse zuruecknehmen: Prosa gehoert in das Dokument, de
-423	CHORE-315	HK	done	jbaconsult			hk-heuristic:jba-keyword	yes	M5 planen: Spezifikation als erste Etappe der Neuimplementierung, Meilensteinzer
-422	BUG-41	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Logbuch: Paar-Invariante am Uebergang statt am Gate pruefen, terminale Sackgasse
-421	CHORE-314	CORE	open	kumbuka	Produktlinie	2	cluster:CORE	no	Projektanweisung auf den Bootstrap-Kern reduzieren, den Rest als Kontext-Dokumen
-420	CHORE-313	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Worklist Manager: enumerierte Spaltenvokabulare aus dem Code in eine externe Kon
-419	CHORE-312	HK	done	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Kumbuka als Plattform definieren: ein Produkt aus drei Diensten, Meilensteinachs
-418	FEAT-73	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Logbook: Agentenlog als zweite Datenquelle (SQLite), drei MCP-Verben und Viewer-
-417	BUG-40	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Worklist-Store: Schreib-/Commit-Paar auf dieselbe Teilwirksamkeit pruefen wie BU
-416	BUG-39	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Logbook: Sparsity eines bestehenden Clones driftet gegen roots, und ein Schreibv
-415	CHORE-310	HK	open	kumbuka	Agenten-Entwicklung		named-exception:agenten	no	Product-Owner-Agent: Auftragslage der vier Agenten (Visions-, Planungs-, Backlog
-414	F-0244	HK	observing	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	In der Ref-Spalte lebt eine ältere Meilenstein-Nummerierung weiter und kollidier
-413	F-0243	HK	observing	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Der Task-Anker eines Dispatch wird auf Anwesenheit geprüft, nicht auf Auflösbark
-412	F-0242	HK	observing	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Logbuch und Worklist teilen sich einen HEAD: ein Logbuch-Schreibvorgang invalidi
-411	BUG-38	HK	open	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	Doppelt belegte Entscheidungs-ID: Positionspapier schlaegt team_id-Seam als prop
-410	BUG-37	CORE	open	kumbuka	Produktlinie	1	cluster:CORE	no	Werkzeugbeschreibung von memory_recall widerspricht D-CORE-5.1: verschweigt die 
-409		HK	new	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Steuerungsarbeit in ein eigenes Korpus trennen: Multi-Corpus statt handgepflegte
-408		CORE	new	kumbuka	Produktlinie		cluster:CORE	no	Angenommene und still verworfene Parameter an den Steuerungsdiensten: entweder w
-407		CORE	new	kumbuka	Produktlinie		cluster:CORE	no	Schreibzeit im Logbuch-Viewer zeigt den ersten statt den letzten Commit und vers
-406		CORE	new	kumbuka	Produktlinie		cluster:CORE	no	amend-Verb fuer Returns mit sichtbarer Naht: Koerper ersetzbar, Reparatur im Obj
-405		HK	new	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Archiv als Senke wiederaufbauen: erledigte Zeilen bei 1 MB Dateigroesse per Verb
-404		HK	new	jbaconsult			hk-heuristic:jba-keyword	yes	Terminierungsstufe in session-closure: Merge pruefen, Worklist-Zeilen schliessen
-403		HK	new	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Migrationslauf absichern: stdout ist der Datenkanal, Diagnose gehoert auf stderr
-402		HK	new	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	v2-nach-v3-Migration retiren: toter Pfad, der bei jeder Schema-Aenderung Arbeit 
-401		SEC	new	kumbuka	Produktlinie		cluster:SEC	no	Messen, ob vor dem Schreib-Endpunkt des Worklist-Viewers eine Authentifizierung 
-400	CHORE-311	CORE	dropped	kumbuka	Produktlinie		cluster:CORE	no	Provenance in der Commit-Nachricht: welcher Kanal und welcher Akteur die Zeile g
-399		CORE	new	kumbuka	Produktlinie		cluster:CORE	no	Meilenstein im Viewer anlegen und pflegen: Formular mit Vision und Mission
-398		CORE	new	kumbuka	Produktlinie		cluster:CORE	no	Reihenfolge als Ganzes speichern: ein Verb, ein Commit, Konflikt-Token gegen Fre
-395	CHORE-309	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Worklist-Viewer auf drei Seiten: Iterationen als Startseite, Meilensteine und Ba
-394	CHORE-308	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer Suchleiste: Platzhalter wird abgeschnitten, Hilfszeile doppelt ih
-393	CHORE-307	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer mobil verdichten: Kopfzeile auf Icons, Detailansicht nutzt die vo
-392	CHORE-306	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer: neueste Objekte oben, Schreibzeit aus Git an jedem Element, Spri
-391	BUG-36	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer mobil unbenutzbar: Detail-Dialog nicht schliessbar, Zurueck-Butto
-390	CHORE-305	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Rolle im Objektmodell wirksam machen: adressierte Aktivierung, rollenabhaengige 
-389	FEAT-72	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Planungsebene oberhalb des Sprints: Tasks kuratiert auf Themen mappen, Backlog b
-388	FEAT-71	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Reihenfolge-Transparenz: berechneter Rang vs. explizite Position, Re-Sortierverb
-387	BUG-35	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Host-Checkout wird nicht mit dem SOLL materialisiert — Topologie und Versionsmat
-386	FEAT-70	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Import des Altbestands: Findings ja, Sprint-Records nein — Nomenklatur-U
-385	CHORE-304	HK	done	jbaconsult			hk-heuristic:jba-keyword	yes	session-closure und code-handover auf die Steering-Dienste umstellen (Logbuch-Ob
-384	BUG-34	CORE	done	kumbuka	Produktlinie		cluster:CORE	no	Validierungs-Reichweite: Ganzbestand-Vorabpruefung sperrt den Schreibpfad — auf 
-383		HK	dropped	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	closure.py entfernen, sobald das Logbuch deployed ist und die Worklist-Haelfte d
-382	CHORE-303	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Next-Version zwischen package.json, Lockfile und CI abgleichen: lokaler Dev-Serv
-381	CHORE-302	HK	done	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Sammeldateien fuer Chores und Bugs aufloesen: eine Datei pro Task, Name mechanis
-380	CHORE-301	HK	done	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Titelgrenze im Schema von 150 auf 300 Zeichen anheben, im gemeinsamen Kern veror
-379	CHORE-300	HK	done	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Worklist-Haelfte von D-STEER-9: duenne F-Zeile mit Vokabular observing/dissolved
-378	CHORE-299	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Abbruchregel fuer den Investitionsanteil der Steuerungsschicht festlegen: messba
-377	CHORE-298	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Disposition der 19 Zeilen auf active: Statuswert bereinigen, nachdem er seinen R
-376	CHORE-297	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Skill-Drift-Waechter fuer session-start: die fixen Sektionen wandern ins Skill, 
-375	CHORE-296	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Transaktionalitaet des halben Closure als ratifizierte Klausel in D-STEER-4 nach
-374	CHORE-295	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Runbook-Konventionen: kein set -e in eingefuegten Bloecken, kein grep -c mit Fal
-373	CHORE-294	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	fs-write-Disziplin: Schreibvorgaenge in Submodule brauchen eine externe Pruefung
-372	CHORE-293	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Infra-Strang fuer das Logbuch: Matrixzeile, Compose-Dienst, Caddy-Snippet in sit
-371	CHORE-292	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Sparse-Checkout auf Inklusionswurzeln umstellen: Logbuch-Klon sprints/ und findi
-370	CHORE-291	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Sortierordnung nach D-STEER-6: active aus dem Sortierschluessel, (not-P1, Cluste
-369	CHORE-290	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	BFF und Web-UI haben keinen ratify-Pfad: eine Zeile kommt in der Oberflaeche nic
-368	FEAT-69	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Worklist-Manager Webinterface und JSON-BFF gebaut, als v0.2.0 released und auf w
-367			new	REFUSED			empty-cluster	no	Skills liegen ausserhalb jeder Ground-Truth-Messung: nicht im Steering-Repo, nic
-366			new	REFUSED			empty-cluster	no	Vier Skills sind nach dem Umbau von Sprint 132 sachlich falsch: session-closure 
-365			new	REFUSED			empty-cluster	no	Kein CI-Job uebt die Realm-Import-Skip-Bedingung: docker build smoke baut nur da
-364			new	REFUSED			empty-cluster	no	code-handover-Skill nachschaerfen: SonarQube wird pauschal fuer jeden Code-PR un
-363	CHORE-289	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	CLI hat keinen Push-Pfad: --commit schreibt nur lokal, ohne Push laeuft der Klon
-362			new	REFUSED			empty-cluster	no	Redirect-URI des wlm-mcp-Clients traegt einen Wildcard-Stern (claude.ai/api/mcp/
-361	CHORE-288	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Dienst-Zustand state/ neben den Steering-Klon legen: eigener state_dir-Parameter
-360	CHORE-287	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Stale Kommentarkopf in deploy/compose.yml: behauptet eigenen Stack, Dienst laeuf
-359	CHORE-286	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	ratify-Sperre im Dienstmodus aufgehoben: gebaut in PR #8, deployed mit v0.2.0, L
-358	CHORE-285	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	MCP-Oberflaeche vervollstaendigen: pull, delete und ratify mit Schema-Feldern du
-357	CHORE-233	SEC	open	kumbuka	Produktlinie	1	cluster:SEC	no	Harness und CI-Gate scharfschalten: vier test.skip-Guards, CI ruft nur --grep @g
-356	CHORE-234	SEC	open	kumbuka	Produktlinie	1	cluster:SEC	no	Raw-SQL-Tripwire auf die angewandte Annotation prüfen statt auf Dateitext: Subst
-355	CHORE-235	SEC	open	kumbuka	Produktlinie	1	cluster:SEC	no	Wächter für die BDSG-Randbedingung: die Abwesenheit von Throttle-Event-Tabelle u
-354	BUG-28	SEC	open	kumbuka	Produktlinie	1	cluster:SEC	no	Tenant-Purge verschluckt SQLException: vier DELETE im catch(ignored), ohne Zeile
-353	BUG-29	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Operator-Löschung schreibt zwei member.erase-Auditzeilen mit verschiedenen Paylo
-352	BUG-30	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	changeTier lässt status beim Upsert unangetastet: status wird nur beim ersten In
-351	BUG-31	BETA	open	kumbuka	Produktlinie		cluster:BETA	no	Onboarding-Write ist serverseitig ein No-op, der Wizard öffnet nach jedem Login 
-350	CHORE-238	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Provider-Backend-Reste: gemountete Connector-create-Route wirft bedingungslos; O
-349	CHORE-239	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Konsolen-Hygiene: Dockerfile-Fallback entwertet --frozen-lockfile, Design-Tokens
-348	CHORE-240	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Doku- und Metadaten-Drift Runde zwei: keycloakVersion-Pin, inerte CONNECTOR_CLIE
-347	CHORE-241	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Wildcard-TLS-Phantom: die deSEC-Maschinerie zeigt auf caddy/sites/wildcard.caddy
-346	CHORE-248	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	closure.py: Queue-nach-Backlog-Demote als Manifest-Operation, plus harte fail-cl
-345	CHORE-246	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Dispatch-Vertrag korrigieren: Sonar gilt nur für provisionierte Submodule, und d
-344	CHORE-247	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Worktree-Isolation paralleler Code-Sub-Sprints: Submodul-Disjunktheit ist notwen
-343	CHORE-244	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	MemoryKeyValidator Javadoc zitiert den memory_key_format-CHECK als V14, real ist
-342	CHORE-245	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	ee-server sonar-project.properties führt das importer-Modul nicht in sources/tes
-341	FEAT-50	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Mnemonic-Importer (Server-LLM-Extraktion, D-CORE-19): Steuerungs-Doc → typisiert
-340	FEAT-59	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Import-Wizard Frontend (ee-console): 3-Schritt-Wizard Upload+Consent -> Process 
-339	CHORE-214	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Characterise the importer commit path: N console writes vs batch endpoint, and t
-338	CHORE-213	EE	open	kumbuka	Produktlinie		cluster:EE	no	Make the tenant-rejection log diagnosable: carry host, path and method in Tenant
-337	CHORE-211	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Nebenstrang-Kuratierung Phase A: D-ARCH-1/-2 persistieren, Familie D-ARCH anlege
-336	FEAT-63	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	memory_update Stufe 2: keyed-upsert aus memory_remember entfernen, typisierter K
-335	CHORE-81	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Edge-DoS-Härtung (Caddy rate_limit + Connection-Limit); umfasst Marketing-Host P
-334	FEAT-29	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Tenant-Ressourcen-Quota (Einträge/Scope, Scopes/Tenant)
-333	FEAT-30	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Circuit-Breaker im MCP-Adapter (global + per-Tenant-Bulkhead)
-332	CHORE-192	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	E2E-Script Write-Rate-Limiter: limits-endpoint 200/503 + per-tenant-Override + 4
-331	CHORE-120	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 0: Sonar-Provisioning ee-server/keycloak (SonarCloud-UI); Mcp-IT-
-330	CHORE-200	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Cluster OPS einführen: Marker + Abgrenzung zu DEPLOY, closure.py-Vokabular, WORK
-329	FEAT-66	EE	open	kumbuka	Produktlinie		cluster:EE	no	EE-side scope_stats refresher that iterates every tenant via TenantContext.bind(
-328	CHORE-165	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 1: Deploy-Engine als versioniertes Artefakt (deploy.cfg-Key INFRA
-327	CHORE-166	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 2a: Trigger-Umbau — Merge deployt nicht mehr, workflow_dispatch a
-326	CHORE-167	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 2b: Bump-Automatik — Quell-Repo-CI baut/taggt/pusht + öffnet Auto
-325	CHORE-168	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 3: Gate-Ausbau — e2e-Invarianten ins Deploy-Gate + Post-Deploy-Wa
-324	CHORE-169	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 4: N-1-Kompat-Gate — altes Image gegen neues Schema + Suite (auf 
-323	CHORE-163	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Host-Hygiene srv1730699: /root aufräumen (a) + Secret-Altkopien in /etc/kumbuka 
-322	CHORE-181	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	deploy.sh keep-5 Backup-Prune (F-0159): deploy.env.bak-deploy-* analog zum Pre-D
-321	CHORE-182	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Post-Fold-Cleanup (ADR-0035-Erbe): tote Deploy-Zeiger, RETIRED-Fossile, Dead-Key
-320	CHORE-161	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Host-gh-Token read-only: erledigt bis auf serverseitigen OAuth-Widerruf der drei
-319	CHORE-173	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	GitHub-Credential-Neuaufbau: vollständiges PAT-Inventar + Migration auf fine-gra
-318	CHORE-185	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Limiter-Store In-Memory→shared swappen vor Multi-Host-Cutover; Scale-Gate verwei
-317	CHORE-156	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Toter-Zeiger-Check-Skript: jede Mnemonic-ID muss in INDEX/REGISTRY auffindbar se
-316	CHORE-157	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	Connect-Zellen-Maintainer-Doku (öffentliches console-Repo): Manifest, Zellen-For
-315	CHORE-158	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Content-Release-Kette verkürzen: n8n-Workflow bereitet auf einen console-Tag die
-314	FEAT-56	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Suche + Staleness-Signal (absorbiert FEAT-49): tsvector-FTS, Scope-Modus (cross-
-313	FEAT-55	CORE	dropped	kumbuka	Produktlinie		cluster:CORE	no	memory_supersede: serverseitige atomare Revision statt forget+remember — PRÜFPOS
-312	CHORE-145	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	CIMD-Drift-Watch (n8n, täglich) gebaut+aktiv; REST: Grok-CIMD-URL nachtragen, F-
-311	CHORE-146	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	MCP-Kompatibilität Gemini + Copilot gegen den Kumbuka-Realm messen (CIMD/DCR, Ak
-310	CHORE-195	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	MCP-Spec 2026-07-28 Auth-Hardening charakterisieren: iss/SEP-2468, application_t
-309	CHORE-196	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	MCP-Spec 2026-07-28 Stateless/Version-Kassensturz: quarkus-mcp-Version + 2.0.x-P
-308	FEAT-54	BETA	open	kumbuka	Produktlinie		cluster:BETA	no	Console Hilfe-Bereich: sechs Bereiche DE+EN vollwertig schreiben, Typ-Manifest =
-307	CHORE-142	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	Upstream-Keycloak-Issue F-0134 einreichen (+ ggf. F-0132/F-0131 Welle 2); Reprod
-306	CHORE-139	GTM	open	kumbuka	GTM		cluster:GTM	no	How-to-mcp-keycloak-Wissensdoc + Blog (Claude/ChatGPT/Grok über einen Multi-Tena
-305	CHORE-140	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	Normalizer-Modul (cimd-grant-normalizer) als OSS: Extraktion aus keycloak-Repo +
-304	CHORE-152	EE	open	kumbuka	Produktlinie		cluster:EE	no	ee-console-CI next/image-Guard: der sharp-pnpm-Override entwaffnet das Lizenz-Ga
-303	CHORE-153	EE	open	kumbuka	Produktlinie		cluster:EE	no	Route-Manifest deckt keine App-Router-Convention-Files (Root/(app)-Layout, error
-302	CHORE-151	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Testhärtung F-0149: layout.test.ts flakt lastabhängig (import() reißt 5s-Timeout
-301	CHORE-149	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Public-Repo-Doku-Hygiene: ADRs und interne Kennungen raus aus console und server
-300	FEAT-52	GTM	open	kumbuka	GTM		cluster:GTM	no	UTM-Visibility 1b: Variant-C-Attribution in ops-console AnalyticsResource (Detai
-299	CHORE-136	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	GoAccess-kumbuka.css-Selektoren auf v1.8.1 nachschärfen (greift, aber Panels/Tit
-298	CHORE-137	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	Login-Theme-Polish-Paket: F-0096-Fix (natives Passkey-Label-prompt() trotz Theme
-297	CHORE-129	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	F-0123-Verify: braucht der Public-Intake SELECT auf ops.waitlist_entry? sonst Gr
-296	CHORE-130	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	server.json-Registry-1.0.1-WIP aus git-stash → server main (Hygiene-Commit; Trig
-295	CHORE-131	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Deploy-Skill für Code (Komponenten-Abfrage → Tags hochziehen → Deploy fahren) — 
-294	CHORE-132	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Deploy-Receiver an interne/loopback-Adresse binden (statt 0.0.0.0:8889); Bahn-1 
-293	CHORE-106	GTM	open	kumbuka	GTM		cluster:GTM	no	Marketing-Track (parallele Session): Kanal-Matrix, Account-Inventar, Posting-Kon
-292	CHORE-118	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Projekt-Datei-Housekeeping (Satellit): Knowledge-Files inventarisieren/prüfen, s
-291	FEAT-10	GTM	open	kumbuka	GTM		cluster:GTM	no	CSV-Export vor dem ersten echten Beta-Tenant (D-GTM-10-Versprechen: Export-Angeb
-290	FEAT-47	GTM	open	kumbuka	GTM		cluster:GTM	no	DSGVO-Art.-15/20-Datenauskunft/-export: Tenant-Self-Service + Provider-Plane-Run
-289	CHORE-174	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Private-Repo-READMEs aktualisieren (ee-server, ee-console, ops-console): Edition
-288	CHORE-175	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	ops-frontend BFF/UI-Härtung (BUG-24): Leerbody-Sweep über 8 optional-body Provid
-287	CHORE-74	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	local-dev-Fullstack fertigstellen (Makefile, DEVELOPMENT.md); auf ee-console umg
-286	CHORE-61	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Reproduzierbarkeits-Track Teil 3 (Host, deploy.cfg SOLL==IST)
-285	FEAT-01	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Live-Test-Layer — Rollback-Mechanismus + Smoke-Tenants offen
-284	FEAT-11	BETA	open	kumbuka	Produktlinie		cluster:BETA	no	Support-/Feedback-Formular — Prod-Caddy-Fix + Webhook-Env offen
-283	CHORE-05	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Spec-Corpus-Cleanup (D-Ledger-Dateinamen + Header-Schema)
-282	CHORE-17	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Hygiene: totes KEYCLOAK_REALM + stale .env.example-OIDC-Realm
-281	CHORE-20	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Konsolidierung P1 — bare-image-CI-Gate + L177-Retire offen
-280	CHORE-25	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	KC-Overlay-Skripte 04/05 mit E2E-04/05 abgleichen
-279	CHORE-26	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	P1-Follow-up: bare-image-CI-Gate → baked deploy → compose retiren
-278	CHORE-47	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	restore.sh/_lib.sh-Härtung (Bahn-2, bündelt F-0047)
-277	CHORE-75	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Prod-Caddy /api/feedback→console-Ausnahme
-276	CHORE-04	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-PR mergen (chore/refresh-pins-sharpen-gating)
-275	CHORE-116	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	A2-Concept-Queue Rest: PV-02/ADR-0012-Am.-3-Flag-Kontrakt (KC-DB-Migration-Recov
-274	CHORE-112	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	web/-n8n-Intake-Webhook-URL rotieren (unrotiert in Git-History seit Entfernung, 
-273	CHORE-114	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	A2-Fix-Welle: PV-05/06/07/09/19 (swallow, change-me-Cookie, skipTests) + console
-272	CHORE-113	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	README-Refresh-Welle: 7 stale READMEs aus beiden A2-Audits als ein docs-only-Sam
-271	CHORE-111	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Security-Review-GitHub-Action als PR-Advisory für private Repos evaluieren gegen
-270	CHORE-115	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Dependabot-Triage ops-console: 59 Alerts (6 critical) sichten, Erreichbarkeit + 
-269	CHORE-107	CONN	open	kumbuka	Produktlinie		cluster:CONN	no	Caddy-Netzwerk-Alias n8n.jbaconsult.com (durabler Hairpin-Fix, CHORE-34-Muster; 
-268	CHORE-103	EE	open	kumbuka	Produktlinie		cluster:EE	no	EE-Spec-Intake Phase 1: EE-Design-Handover → Ratifizierungs-Backlog (vs. ADR-002
-267	CHORE-95	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Playwright-Happy-Path-Suite lokal (headful/headless-Switch, Operator will zuscha
-266	FEAT-43	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Tenant-Ansprechpartner (ops.tenant_contact: Struktur, PII, Pflichtfeld-Politik)
-265	FEAT-48	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Typ-Immutabilität: type identitätsfest — Console-PATCH-Kontrakt + Upsert-Typ-Mis
-264	CHORE-102	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Pending-Lifecycle-Entscheidung: D-CORE-4-Schärfungen 1-3 + Index-Seam-Prüfung ge
-263	FEAT-21	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Detective-corrective Validation-Job für locked entries (Wiedereintrag — war seit
-262	BUG-15	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Sessions-BFF-Lag: Console-BFF-Cookie überlebt KC-Session-Revokation bis Token-Re
-261	CHORE-86	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	F-0070-Fix: ops-console KC-Overlay-Orchestratoren
-260	CHORE-64	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Visuelle Abnahme ops-console-Redesign (Design→Code verkettet)
-259	FEAT-27	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	ops-console Account/Settings-Parität
-258	CHORE-09	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	AI-slop-sweep-CI-Gate Phase 2 (changed-code-Ratchet 70/50/30)
-257	FEAT-03	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	App-Layer-UPDATE-Guard e2e-covered (gated auf FEAT-05)
-256	FEAT-05	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	BFF-Login-Helper — Browser-treibende Schicht (Core in FEAT-01)
-255	FEAT-04	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Browser-E2E ≥2 Tenants = T-L2-ACC
-254	CHORE-33	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	open_question-Reconciliation nach ADR-0024
-253	CHORE-48	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Berechtigungs-/Lifecycle-Matrix konsolidieren
-252	FEAT-15	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	valid-from/valid-until-Enforcement
-251	FEAT-13	GTM	open	kumbuka	GTM		cluster:GTM	no	Beta-Nutzungsanalyse (ops-console, Aggregat-Dashboard)
-250	FEAT-25	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	B1 ContentStats real adapter (RLS-IT + Mock-Ablösung); ContentStatsPort ABLÖSEN 
-249	FEAT-26	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	ops-console-Redesign Block B2–B6 + G7 (reale Port-Adapter)
-248	CHORE-94	GTM	open	kumbuka	GTM		cluster:GTM	no	Paddle-Sandbox-Account + API-Exploration (Transactions/Invoices, Adjustments, Di
-247	CHORE-98	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	n8n deploy-dispatch-v4 'Deployment started'-Mail-Node: uninterpolierte Expressio
-246	CHORE-101	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	KC-Master-Admin-Passwort in 1Password (Griza-Vault) nachführen — Bootstrap-Env s
-245	CHORE-100	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Suchdisziplin aus F-0094 in docs/TOOLING.md + fs-write-Skill dokumentieren
-244	FEAT-45	GTM	open	kumbuka	GTM		cluster:GTM	no	MoRPort-Real-Adapter als Code-Dispatch (Trust-Boundary-IT gegen Paddle-Sandbox, 
-243	CHORE-66	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	09-waitlist-grants in apply.sh wiren
-242	CHORE-84	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-Deploy-Asset-Entvendorung (Working-Tree-Asset-Doktrin)
-241	CHORE-38	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Rebuild-Soak + Step-8-Volume-Shred
-240	CHORE-37	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	REBUILD-FHS-RUNBOOK.md ehrlich überarbeiten (W5)
-239	CHORE-40	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Repo-systemd-Units FHS-pathen
-238	CHORE-41	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Bundle-Pull/-Auth im Deploy-Pfad — ggf. stale, verifizieren
-237	CHORE-42	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	RUNBOOK Step 5 ausbuchstabieren + BACKUP-RESTORE.md schreiben
-236	CHORE-58	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	F-0049-Fix (repo-unit-ExecStart) + F-0051-verify_dump; F-0160: alle DREI Repo-Un
-235	CHORE-71	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	e2etests DB-Bootstrap nicht in Makefile-Kette verdrahtet
-234	CHORE-73	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	getenv()-Pipefail-Fix (release.sh + deploy.sh), Folge-Fix zu CHORE-72
-233	CHORE-76	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-Harness von kumbuka-saas auf kumbuka-ee migrieren
-232	FEAT-06	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Team-Console: Re-Invite-/Cancel-Pending-UI
-231	FEAT-07	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	ops-console: User-Actions nach Cross-Tenant-Lookup
-230	FEAT-08	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	ops-console: Operator-Log-Zugriff
-229	FEAT-12	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Changelog / 'What's new'-In-Product-Surface
-228	CHORE-10	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Digest-Hygiene in how-to-kumbuka.writing seeden
-227	CHORE-11	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	docs.kumbuka.ai-'Working with Kumbuka'-Guide
-226	CHORE-18	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	WORKING_CONCEPT.md aufräumen (stale vs. gelebte Praxis)
-225	CHORE-78	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	local-dev README erstellen
-224	CHORE-12	GTM	open	kumbuka	GTM		cluster:GTM	no	AGB / SLAs / Legal-Pages + Terms-Legal-Review; danach Wizard-Accept-Step mit per
-223	FEAT-20	EE	open	kumbuka	Produktlinie		cluster:EE	no	EE-Aufbau (Keystone Schritt 2)
-222	BUG-06	CORE	open	kumbuka	Produktlinie	2	cluster:CORE	no	Onboarding-Wizard ploppt bei Scope-Switch wieder auf
-221	FEAT-33	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	ops-console Tenant-Pinning (pinned-Feld, Toggle-Endpoint, Audit-Event)
-220	FEAT-34	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Trial-Lifecycle (Status trial/trialing, Create-Flow→Trial, Slug-Live-Check)
-219	FEAT-35	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Purpose-bound Session-Fakten (Sessions-Count, lastLogin/Gerät/IP je Member; Quel
-218	FEAT-36	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	MCP-Verbindungsstatus im ops-Backend exponieren (per-Member + Quote, auf FEAT-13
-217	FEAT-37	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Tenant-Notizen-Vollausbau (Edit/Delete, System-Notes bei Aktionen, Suspend-mit-G
-216	FEAT-38	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Plattform-Health-Detail-Endpoint (Komponenten-Ampeln, Latenz/Uptime, n8n-Lauf)
-215	FEAT-39	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Dashboard-/Analytics-Aggregat-Parität (KPI-Splits, Summen, Scope-Inventar nach T
-214	FEAT-40	SEC	open	kumbuka	Produktlinie	3	cluster:SEC	no	Recovery-Code-Login-Pfad (Realm-Flow + Login-Theme) — tief zurückgestellt zuguns
-213	FEAT-41	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	MFA-Enforcement + Email-OTP-Fallback (bedingte 2FA-Stufe; F-0089-Recovery-Sichtp
-212	FEAT-46	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Console administrativer Account-Recovery (Reset MFA/Password/Force MFA) — Enable
-211	FEAT-51	CONN	open	kumbuka	Produktlinie	3	cluster:CONN	no	Connector-Auth Mistral-Rest: post-beta zurückgestellt (D-GTM-13; Aktivierungsfeh
-210	CHORE-97	HK	planned	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	Realm-Template-Kuratierung: roher Export → minimales Template, Realm-Quellen-Ver
-209	CHORE-67	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Writer-Agroal-Pool-Collapse (redundanter zweiter Pool)
-208	CHORE-24	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Konsolidierung P5 — Cleanup (bak-Müll, Volume-Shred)
-207	CHORE-29	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-Sonar-advisory re-provisionieren
-206	CHORE-55	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	ADR-0019-Renumber-Amendment (Operator-Modell L0-L3)
-205	CHORE-59	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	IT bildet prod-Owner-Modell ab? (Concept-Entscheidung)
-204	CHORE-70	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0019 Test-Amendment (EE-eigene Suite + Staging)
-203	CHORE-87	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	F-0072-Decision: TenantOrganizationService kein tenant_id-Attribut
-202	BUG-10	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	FEAT-19: aktiver 'Löschen'-Eintrag im Kontextmenü eines gesperrten Scopes
-201	BUG-11	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Console: Eintrags-Hamburger-Menü nur bei Hover sichtbar
-200	FEAT-09	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	ops-console: UX-/Mobile-Überarbeitung
-199	CHORE-77	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	KI-Agenten für Kumbuka-Operations (Ops-Automation, Mid-Beta)
-198	CHORE-79	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	platform-dev Root-README um local-dev ergänzen
-197	FEAT-31	EE	open	kumbuka	Produktlinie		cluster:EE	no	Scope-Marktplatz (Copy-on-Import)
-196	FEAT-22	EE	open	kumbuka	Produktlinie		cluster:EE	no	Context-Doc-Navigationsschicht (EE)
-195	FEAT-23	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Lokaler MCP-Krypto-Proxy (Zero-Knowledge, EE)
-194	FEAT-14	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Per-Tenant-DB-Verschlüsselung (at-rest, EE)
-193	FEAT-44	EE	open	kumbuka	Produktlinie		cluster:EE	no	Team-Admin-Audit-Log in der Console (Shared-CRUD + Login-Events, EE)
-192	CHORE-14	GTM	open	kumbuka	GTM		cluster:GTM	no	Marketing-Copy / Positionierungs-Feinschliff + Mobile-QA (FAQ in #72 erledigt; D
-191	CHORE-15	GTM	open	kumbuka	GTM		cluster:GTM	no	Audit-Retention-Period (Legal-Sign-off)
-190	CHORE-16	GTM	open	kumbuka	GTM		cluster:GTM	no	Preis-Level mit 5–10 Prospects validieren
-189	CHORE-46	GTM	open	kumbuka	GTM		cluster:GTM	no	Whitepaper (post-beta)
-188	CHORE-184	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Drive-Log-Aktivierung: n8n-Workflow auf Get-by-ID (log_file_id) umstellen + Host
-187	BUG-25	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Real-smoke.sh-Versions-Assertion hermetisch testen (curl/docker-exec-Stub): Asse
-186	CHORE-186	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Single-source kumbuka-server.version pin in ee-server (parent property, one bump
-185	CHORE-187	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Q4 store-down alert: n8n platform-health mail on limiter fail-open (real only wi
-184	CHORE-188	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	purge-tenant deletes tenant_limits rows (orphan config, Art.17-neutral) — fold i
-183	CHORE-193	SEC	open	kumbuka	Produktlinie	1	cluster:SEC	no	user_account-Operator-Grants in Bootstrap-SQL fail-closed nachziehen: SELECT-All
-182	CHORE-251	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Rosterlese-Wächter nach ADR-0032 neu zuschneiden: Ziel-Host und Auth-Bahn hängen
-181	CHORE-197	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Importer §5-Prompt-Granularität: getunte Distill-Direktive + gepackte Baseline z
-180	FEAT-60	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Ops-Console Tenant-Tagging: freie Tags pro Tenant (ops.tenant_tag), filterbare T
-179	FEAT-61	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Per-Scope-Typ-Konfiguration für load_context/recall (CE): je Scope wählbar, welc
-178	CHORE-201	HK	planned	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	arch-Modell-Inventur (arc42 3/5/7 + Modell-Fill): building-blocks + L4-Diagramme
-177	CHORE-202	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	console: EntryView.readOnly rendern (Edit/Delete-Controls auf Overlay-Eintraegen
-176	CHORE-203	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	closure.sh argloser Smoke-Pfad, damit qs_test es nicht mehr ueberspringt (Covera
-175	CHORE-204	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	scripts/README.md: Tool-Script-Konvention dokumentieren (unbekannte Tokens toler
-174	CHORE-205	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	die 4 variableninterpolierten Container-Kanten (deploy.env-indirekt) als exempte
-173	CHORE-206	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	WORKING_CONCEPT 16 (Analysepflicht): nach dem ersten echten Skill-Lauf schreiben
-172	CHORE-207	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Doku-Fixes: WORKING_CONCEPT 14 Querverweis zeigt auf nicht-existentes 17; fs-wri
-171	CHORE-215	SEC	open	kumbuka	Produktlinie	1	cluster:SEC	no	Gate-Haertung Memory-Mauer: has_any_column_privilege plus TRUNCATE statt vier ha
-170	CHORE-216	SEC	open	kumbuka	Produktlinie	1	cluster:SEC	no	Gate-Haertung FORCE RLS: Assertion auf pg_class.relforcerowsecurity fuer jede RL
-169	CHORE-217	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Owner-Drift der EE-Tabellen dauerhaft loesen: Owner-Sweep in den Deploy-Pfad ODE
-168	CHORE-218	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Fehlerrichtung des import_credits-Credit-Checks messen: faellt er bei unlesbarer
-167	CHORE-219	HK	open	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	Wirkungsaussagen in Phase B regeln: gezielte Code-Lesung als benannte Ausnahme d
-166	CHORE-220	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Selbstauskunft des Limiters ohne Aktivitaetsdaten: Startup- oder Health-Aussage 
-165	CHORE-221	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Doku-Korrekturpaket Operator-Rolle: Defence-in-Depth-Javadoc, zwei kumbuka-ist-B
-164	CHORE-222	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Config/Secret-Trennung von deploy.env: die Datei traegt beides, deshalb sind vie
-163	CHORE-223	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Rueckwaertspruefung nach arc42-Abschnitt 02: welche ratifizierte Randbedingung f
-162	CHORE-224	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Generator-Priorisierung nach der mech-Statistik aus archroll; der DB-Introspekti
-161	CHORE-225	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Produktfrage: ist das version-Feld in console/package.json bewusst stillgelegt? 
-160	CHORE-226	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Offenheits-Verifikation der WORKLIST (Satellit, Urteilshaelfte): ist jede Zeile 
-159	CHORE-227	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	worklist.py nach dem closure.py-Muster: manifest-getriebene Bestandsaenderung (n
-158	CHORE-228	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	nextid plus worklist-Query als scripts-kumbuka-Tools: atomare ID-Reservierung un
-157	CHORE-229	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Konvention Satellit produziert Vorschlaege, Kanon appliziert plus Aufnahmequote 
-156	CHORE-230	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Priorisierungsschema v2 doppelt verankern: WORKING_CONCEPT als massgeblich und w
-155	BUG-27	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	EE-Migrationen legen Tabellen ohne Owner-Sweep und ohne GRANT an; App-Rolle hiel
-154	CHORE-232	HK	done	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Meilenstein-Planung der Features: M1 erster Fremd-Tenant produktiv, M2 Public Be
-153	CHORE-109	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	SEC-12-Runtime-Isolation am generischen Endpoint (ADR-0032): Positiv-Isolation +
-152	BUG-04	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	SEV-1-Regression-Lock-IT (Cross-Tenant-KC-User-Listing)
-151	CHORE-242	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Operator-Messcheckliste M3 bis M7: Directory-subject, Vendorung, npm-Publish, Ho
-150	FEAT-67	SEC	planned	kumbuka	Produktlinie	1	cluster:SEC	no	Operator-erzwungener Purge-Abschluss mit auditiertem Rest: eigenes Audit-Verb, p
-149	FEAT-68	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Tenant-Ebenen-Abgleich Keycloak gegen Kumbuka als reiner Bericht, plus ops-Backe
-148	CHORE-252	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Frontend-Konsumenten der Revoke-Statuscodes pruefen: revokeConnector liefert bei
-147	CHORE-256	CORE	open	kumbuka	Produktlinie		cluster:CORE	no	Entscheiden, ob die drei im Code referenzierten, nicht mitgelieferten ADRs publi
-146	CHORE-258	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	NODE_ENV=production explizit in die ops-frontend-Compose-Umgebung schreiben; Akt
-145	CHORE-259	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Zaehlkorrektur in der Architektur-Inventur: 17 Provider-Resource-Klassen statt 1
-144	CHORE-260	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Lokalen Branch feature/provider-route-gating samt Claude-Code-Worktree in ops-co
-143	CHORE-265	SEC	open	kumbuka	Produktlinie		cluster:SEC	no	Referenz-Waechter darf Migrationen nicht pauschal ausschliessen: nur die beim le
-142	CHORE-266	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Praefix-Drift aufloesen: FEAT-01 und FEAT-04 tragen eine FEAT-Nummer bei typ tes
-141	CHORE-267	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Entscheiden, ob TECH-DEBT.md nach dem Umbau als eigener Pool bestehen bleibt ode
-140	CHORE-270	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Umzug des Worklist-Managers nach jbaconsult unter MIT: Vokabular-Generalisierung
-139	CHORE-272	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	deploy.env.example um WLM_VERSION ergaenzen und den Matrix-Kopfkommentar um die 
-138	CHORE-273	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Deploy-Stub tag-bewusst machen (STUB_IMAGE_TAGS) damit die v-Praefix-Falle als G
-137	CHORE-275	HK	open	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Worklist-Manager: MCP-Anwendung auf /mcp auflegen statt 307-Umleitung, mit Rot-P
-136	CHORE-276	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Keycloak-Clients des Worklist-Managers ins Realm-Template und clients.json nachz
-135	CHORE-277	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	MCP-Oberflaeche des Worklist-Managers: Well-known-Pfad nach RFC 9728 angehaengt 
-134	CHORE-278	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Ruecknahmeverb fuer Zurufe im Worklist-Manager: eine irrtuemlich angelegte Zeile
-133	CHORE-279	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Zugriffsprotokoll fuer wlm.jbaconsult.com an der Kante ergaenzen - der Host ist 
-132	CHORE-282	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Rot-Probe fuer CI-Gates laeuft auf einem Wegwerf-PR, nie auf dem Lieferbranch: K
-131	CHORE-283	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Sonar-Standard vereinheitlichen: qualitygate.wait und agentisches Profile auf di
-130	CHORE-271	HK	open	jbaconsult			hk-heuristic:jba-keyword	yes	Umschalten der Steuerungslinie auf den Worklist-Manager: REGISTRY-Umzug, closure
-129	CHORE-264	HK	open	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Umschalten auf Schema v3: v3-Datei wird kanonisch, ARCHIVE und New-Tasks entfall
-128	CHORE-284	HK	done	jbaconsult			hk-heuristic:jba-keyword	yes	Finale Spec der Steuerungsschicht aus dem Zielbild: Dienstgrenzen, Dispatch-Obje
-127	CHORE-269	HK	done	jbaconsult			hk-heuristic:jba-keyword	yes	Logbuch als zweiter Steuerungsdienst: Sprint- und Finding-Records hinter MCP, Br
-126	CHORE-263	DEPLOY	open	kumbuka	Betrieb		cluster:DEPLOY	no	Schema-Deploy server und ee-server mit V20 (Drop des Delete-Block-Triggers): Cor
-125	CHORE-262		done	REFUSED			empty-cluster	no	Analyse geschrieben: fuenf Achsen werden deployt, eine ist versioniert. IST-Anke
-124	CHORE-274		done	REFUSED			empty-cluster	no	MCP-Client wlm-mcp angelegt und Connector verbunden; elf Werkzeuge nachgewiesen 
-123	CHORE-268		done	REFUSED			empty-cluster	no	Worklist-Manager als Dienst gebaut und live: Web plus MCP auf wlm.jbaconsult.com
-122	CHORE-261		done	REFUSED			empty-cluster	no	Immutability-Gate textgleich in server, ee-server und ops-console; nur neue Migr
-121	CHORE-249		done	REFUSED			empty-cluster	no	Provider-Oberflaeche mit zwei nicht-veraltbaren Waechtern gegatet (Backend-Refle
-120	CHORE-257		done	REFUSED			empty-cluster	no	Guidance-Keys produktiv auf den reservierten Namespace umgezogen; Host-Pull plus
-119	CHORE-254		done	REFUSED			empty-cluster	no	Trigger-Aera abgeraeumt: DELETE_BLOCKED weg, tote SYSTEM-Zweige in eine fail-lou
-118	CHORE-253		done	REFUSED			empty-cluster	no	Loeschpfad lehnt reservierte Keys jetzt typisiert ab, ueber alle drei Adresswege
-117	CHORE-250		done	REFUSED			empty-cluster	no	Cold-Start-Replay laeuft als CI-Job, der immer eine Conclusion meldet (Variante 
-116	BUG-33		done	REFUSED			empty-cluster	no	Connector-Delete liefert NOTHING_TO_DO, REMOVED oder FAILED; der Lifecycle-Drop 
-115	CHORE-208		done	REFUSED			empty-cluster	no	Stage E vollstaendig: Seeder ueber drei Repos abgebaut, Trigger und Funktion per
-114	CHORE-243		done	REFUSED			empty-cluster	no	Beantwortet mit negativem Ergebnis: kein Relay ist gangbar; Nachfolger ist CHORE
-113	CHORE-237		done	REFUSED			empty-cluster	no	Waitlist-Grant ist im Cold-Start-Grantshape verdrahtet; apply.sh und Replay-Gate
-112	CHORE-236		done	REFUSED			empty-cluster	no	Provider-Frontend-Secrets haben eine fail-loud Startup-Assertion unter NODE_ENV=
-111	BUG-32		done	REFUSED			empty-cluster	no	Ops-Surface-DELETE-Fehler gated jetzt den Lifecycle-Drop; Tenant bleibt Kandidat
-110	CHORE-231		done	REFUSED			empty-cluster	no	Produktebene gemessen: Server-Schnittstellen und Konsole sind S1 (Gate mit Test)
-109	CHORE-210		done	REFUSED			empty-cluster	no	v0.8.3 released; ee-server v0.1.10 live; V19+V10001 applied out-of-order (rank 1
-108	CHORE-199		done	REFUSED			empty-cluster	no	Additiver Overlay A-D,F gemerged (PR #88, 91.3%): Guidance aus Resource; Merge i
-107	FEAT-62		done	REFUSED			empty-cluster	no	Stufe 1 gemerged (PR #87, 86.6%): memory_update non-creating verb + reservierter
-106	CHORE-198		done	REFUSED			empty-cluster	no	ADR-0024 Am6 im OSS-Kern: ContentUnit als @MappedSuperclass, Kanalwert import, e
-105	CHORE-147		done	REFUSED			empty-cluster	no	ops-no-content-Log-Gate geschlossen: ai.kumbuka + io.quarkiverse.mcp gemessen IN
-104	CHORE-162		done	REFUSED			empty-cluster	no	user_account-Betreiber-Reads fail-closed (Prod live): table-SELECT REVOKE + colu
-103	CHORE-191		done	REFUSED			empty-cluster	no	DB_MIGRATION true->false Revert (CHORE-189-Schluss); infra 459f6f7 auf main; Web
-102	CHORE-189		done	REFUSED			empty-cluster	no	FEAT-28 limiter live: ee v0.1.9 (BUG-26) + ops v0.13.4 via infra PR #50; V10000 
-101	FEAT-28		done	REFUSED			empty-cluster	no	Layer-2 write-rate limiter: built (SPRINT_112.1) then relocated CE→EE (SPRINT_11
-100	CHORE-82		done	REFUSED			empty-cluster	no	Abuse/DoS threat model as design raster: 9 AB-cases x 4 surfaces, ratified-vs-op
-99	CHORE-99		done	REFUSED			empty-cluster	no	Receiver liefert log_file_id (rclone lsjson) in allen Response-Pfaden; hermetisc
-98	CHORE-172		done	REFUSED			empty-cluster	no	Laufzeit-Identitaets-Gate scharf: deploy.sh reicht EXPECT_VERSION (KUMBUKA_EE_VE
-97	CHORE-138		done	REFUSED			empty-cluster	no	rollback.sh + ROLLBACK-DRILL.md retired (PV-15); out-of-band rollback = declarat
-96	CHORE-178		done	REFUSED			empty-cluster	no	Welle #103 komplett: EE-server v0.1.7 (core 0.8.2) nach 4 gruenen Gates deployt 
-95	CHORE-171		done	REFUSED			empty-cluster	no	ADR-0035 Faltung Host-Hälfte LIVE: additiver 27-Key-Merge (jeder ×1, kein Split-
-94	CHORE-170		done	REFUSED			empty-cluster	no	ADR-0035 Faltung Repo-Hälfte: ops-backend/-frontend als 2 Services in infra/comp
-93	FEAT-58		done	REFUSED			empty-cluster	no	Lokalisierte Enrolment-Mail (messages_de) + Registrierungssprache web→ops→KC-loc
-92	CHORE-177		done	REFUSED			empty-cluster	no	Slug-Grammatik kanonisiert (ADR-0036: 2 Pattern, SSoT-Pin-Tests, scope-create 40
-91	CHORE-105		done	REFUSED			empty-cluster	no	Enrolment-Leg-Fix 4/4: termsText v0.9.6 live + ops-console v0.13.2 (F-0172-Redir
-90	BUG-24		done	REFUSED			empty-cluster	no	ops-console Waitlist-Approve 400: der ops-frontend BFF-Handler rief req.json() b
-89	CHORE-117		done	REFUSED			empty-cluster	no	Doku-Vollpruefung PUBLIC (SPRINT_100.1): docs.kumbuka.ai DE+EN + server/console 
-88	BUG-23		done	REFUSED			empty-cluster	no	ee-server-Release stempelte die pom.xml-Version nie -> jedes Image meldete `0.1.
-87	BUG-19		done	REFUSED			empty-cluster	no	ops-console Version-Anzeige zeigte Dev-Default statt Release-Tag; PR #127 war se
-86	CHORE-164		done	REFUSED			empty-cluster	no	Wirkungs-Guard + Matrix LIVE (infra PR #42, 8519812): die Mapping-Tabelle ist EI
-85	CHORE-160		done	REFUSED			empty-cluster	no	Eigentumsfrage der Provider-Deploy-Assets -- durch ADR-0035 mit einer GROESSEREN
-84	FEAT-53		done	REFUSED			empty-cluster	no	Console Connect-Wizard: lief laengst LIVE, wurde aber als "PR #69 offen" gefuehr
-83	BUG-22		done	REFUSED			empty-cluster	no	ee-console rendert kein Markdown: Fix nachweislich im ee-console-Dockerfile (/md
-82	FEAT-57		done	REFUSED			empty-cluster	no	user.settings-JSON LIVE: Flyway V18 (user_account.settings JSONB), typisiert an 
-81	CHORE-155		done	REFUSED			empty-cluster	no	Oeffentlicher n8n-Support-Webhook gesperrt: pfadgenauer `respond 404` (KEIN Prae
-80	CHORE-135		done	REFUSED			empty-cluster	no	D-OPS-34-Monitoring-Mounts in die kanonische ops-console/deploy/compose.prod.yml
-79	CHORE-121		done	REFUSED			empty-cluster	no	Wildcard-Removal *.kumbuka.ai: caddy/sites/wildcard.caddy per `git rm` retired (
-78	CHORE-150		done	REFUSED			empty-cluster	no	Versions-Provenienz Backend-Haelfte: /api/version liefert {name, version, core},
-77	CHORE-154		done	REFUSED			empty-cluster	no	ee-console-Cutover live: deploy.cfg + compose.prod.yml auf ghcr.io/kumbuka-ai/ku
-76	BUG-21		done	REFUSED			empty-cluster	no	CIMD-Fetch brach bei unbekannten Client-Metadata-Feldern hart ab (Upstream-KC, R
-75	FEAT-49		done	REFUSED			empty-cluster	no	FTS fuer memory_recall (substring -> tsvector, DE/EN-Stemming). ABSORBIERT von F
-74	CHORE-148		done	REFUSED			empty-cluster	no	Console-EE-Seam GEBAUT: console v0.5.1 als Source-Package + Slots mit typ-erzwun
-73	CHORE-144		done	REFUSED			empty-cluster	no	F-0140-Header durabel: `header_down` mit RFC-9728-`resource_metadata` aus host-d
-72	CHORE-143		done	REFUSED			empty-cluster	no	RFC-9728-Fix: /mcp WWW-Authenticate liefert jetzt resource_metadata-Parameter (F
-71	CHORE-141		done	REFUSED			empty-cluster	no	Policy-Wiring scope-attach-Executor live: Template-Diff fresh-import-verifiziert
-70	BUG-20		done	REFUSED			empty-cluster	no	KC-info.ftl-Konto-Sackgasse: bereits im Code gefixt (F-0104-Nachbarschaft), Oper
-69	CHORE-128		done	REFUSED			empty-cluster	no	Server-Metriken-Dashboard live (v0.12.6, PR #125 gruen inkl. Sonar): Host-Sample
-68	CHORE-123		done	REFUSED			empty-cluster	no	ChatGPT-Onboarding-Anleitung (Fake-Secret-Tanz) obsolet: ChatGPT verbindet seit 
-67	CHORE-125		done	REFUSED			empty-cluster	no	F-0121-Review erledigt durch T4-Messung: Mistral-DCR-Blockade war Trusted-Hosts-
-66	CHORE-133		done	REFUSED			empty-cluster	no	GoAccess-iframe in /caddy live (v0.12.7, PR #126): BFF-Route-Handler serviert Fr
-65	CHORE-134		done	REFUSED			empty-cluster	no	Version-Footer ops-console (v0.12.7, PR #126); Quelle-Fix -> BUG-19 (CI-Stamp), 
-64	CHORE-127		done	REFUSED			empty-cluster	no	GoAccess-Edge-Analytics live (Variant 2 Host-Binary): 3 statische Reports www/co
-63	CHORE-126		done	REFUSED			empty-cluster	no	Caddy-JSON-Access-Logs live auf 3 Hosts (www/console/mcp): REAL IP + Authorizati
-62	CHORE-124		done	REFUSED			empty-cluster	no	MCP-Registry-Listing gemintet: ai.kumbuka/kumbuka-server v1.0.1 latest in offizi
-61	CHORE-122		done	REFUSED			empty-cluster	no	Realm-Template kumbuka-connector durabel auf public + Vendor-Origins (SPRINT_79.
-60	FEAT-18		done	REFUSED			empty-cluster	no	MCP-Adress-Umbau auf mcp.kumbuka.ai LIVE: Cutover Phase 0-2 (Deploy-Welle ee v0.
-59	CHORE-119		done	REFUSED			empty-cluster	no	audience=kumbuka-connector auf /mcp erzwungen + Boot-Guard (fail-loud), in #77-D
-58	BUG-18		done	REFUSED			empty-cluster	no	server resolveClientId: per-tenant-Connector-Addressing (B2) entfernt, AdminConn
-57	CHORE-110		done	REFUSED			empty-cluster	no	SEC-08 re-geratet auf Low (interner Kanal via compose-Alias gegen LE-Cert) + Fix
-56	BUG-17		done	REFUSED			empty-cluster	no	CSV-Formula-Injection im ops-console Audit-Export gefixt (SPRINT_74.2): AuditCsv
-55	CHORE-108		done	REFUSED			empty-cluster	no	Beta-Gate A2 komplett: drei read-only-Detektoren (Provider-Full-Pass, Produkt-De
-54	CHORE-104		done	REFUSED			empty-cluster	no	Closed-Beta-Ankuendigungs-Paket #72: Waitlist-Betriebsstrecke prod-grün (v0.12.3
-53	BUG-16		done	REFUSED			empty-cluster	no	Waitlist-Filter (F-0043-Promotion): Status-Filter in #117 gefixt/restauriert, mi
-52	CHORE-07		done	REFUSED			empty-cluster	no	Reject-Email-Code-Return: durch F-0106 konkretisiert und miterledigt (PR #117 fa
-51	BUG-05		done	REFUSED			empty-cluster	no	KC-Post-Password-Set-Sackgasse: beide Reset-Endpfade auf Prod v0.8.0 gemessen (2
-50	CHORE-96		done	REFUSED			empty-cluster	no	KC-Basis-Upgrade 26.0->26.6.4 (v0.8.0 live): F-0101-NPE-Fix, CVE-2026-37982, Rec
-49	BUG-14		done	REFUSED			empty-cluster	no	Passkey-Fallback "Invalid Request" (F-0081): Theme-`?`->`&` (PR #12) + KC-26.6.4
-48	CHORE-93		done	REFUSED			empty-cluster	no	Tag-&-Deploy-Welle #69: 5 Tags, ee-CE-Bump (69.1), Recovery-Hide v0.4.18 (69.2),
-47	FEAT-42		done	REFUSED			empty-cluster	no	Notfall-Hard-Delete live: Purge-Endpoint (server 0.7.3) + ops-console-Strecke (v
-46	FEAT-32		done	REFUSED			empty-cluster	no	Account-Security-Surface e2e: TOTP/Passkey-Listen+Remove (F-0075 zu), Recovery-K
-45	CHORE-91		done	REFUSED			empty-cluster	no	Nachdoku #67: F-0087 (JDK-26-Toolchain), F-0088 (Lock-Trigger-Purge-Blockade), F
-44	CHORE-92		done	REFUSED			empty-cluster	no	Merge-Welle #68: server#72 (erasure-Isolation via Worktree), ops-console#116, FE
-43	CHORE-72		done	REFUSED			empty-cluster	no	`getcfg()`-Pipefail-Fix (release.sh, T17-Regressionstest) — infra#20 gemergt 202
-42	CHORE-88		done	REFUSED			empty-cluster	no	D-OPS-31 (Backend-Scaling + Abuse-Control) persistiert: Ledger+INDEX (#66) + Mne
-41	CHORE-89		done	REFUSED			empty-cluster	no	ops-console-UI lokal auf ops.kumbuka.dev angebunden (OPS_OIDC_ISSUER-Fix, dev-Op
-40	CHORE-90		done	REFUSED			empty-cluster	no	ops-console Audit-Log-Batch (Filter/Sort/CSV-Export, Tenant-Name global, Tabelle
-39	CHORE-80		done	REFUSED			empty-cluster	no	WORKLIST auf schlanke Steuerungs-Tabelle reduziert, F-ID-Kollision behoben, STAR
-38	CHORE-23		done	REFUSED			empty-cluster	no	Stehendes off-host DR-Backup (age-Blob), Restore-Round-Trip data-perfect n=2
-37	CHORE-03		done	REFUSED			empty-cluster	no	Keycloak-v0.7.0-Cutover faktisch erledigt, prod lief bereits v0.7.6
-36	FEAT-02		done	REFUSED			empty-cluster	no	Onboarding-Server-Feld `user_account.onboarding` — resolved-by-prior-work (V15/P
-35	BUG-03		done	REFUSED			empty-cluster	no	Console-Crash write-policy "active project scope" + global fallback
-34	CHORE-22		done	REFUSED			empty-cluster	no	n8n-DB-Fold + Edge-Fold, n8n-Rolle auf eigene DB confined
-33	CHORE-21		done	REFUSED			empty-cluster	no	FHS-Umzug + non-root (Variante 2), konsolidierter Stack live
-32	CHORE-13		done	REFUSED			empty-cluster	no	Keystone-Migration-Shape ratifiziert — erfüllt durch ADR-0024
-31	FEAT-19		done	REFUSED			empty-cluster	no	Scope-Content-Lock CE end-to-end (Server+Console+e2e-V16)
-30	CHORE-56		done	REFUSED			empty-cluster	no	ADR-0018 revidiert+re-ratifiziert: Variant A2, Zwei-Produkt-Topologie
-29	CHORE-57		done	REFUSED			empty-cluster	no	FEAT-19-Scope-Lock-Gating-Specs gelandet (e2e-Welle)
-28	BUG-08		done	REFUSED			empty-cluster	no	Wurzel `permission denied for table governance_audit` — Flyway-Superuser-Ownersh
-27	BUG-09		done	REFUSED			empty-cluster	no	v4-Deploy-Verify-Email fehlte — n8n-Workflow-Fix (alwaysOutputData/Retry)
-26	CHORE-30		done	REFUSED			empty-cluster	no	Slop-Detektor-Configs gelandet (4 PRs, PIT+Stryker)
-25	CHORE-32		done	REFUSED			empty-cluster	no	Dependabot-CI entsperrt, alle Bot-PRs grün
-24	CHORE-28		done	REFUSED			empty-cluster	no	SonarCloud-Gate-Schärfung: PR-Check required (3 Repos)
-23	BUG-07		done	REFUSED			empty-cluster	no	scope-remap Mnemonik-Verschieben-Fehler — remap guard gemergt
-22	CHORE-34		done	REFUSED			empty-cluster	no	Compose-Repo-Konvergenz: caddy-Alias + n8n-CVE-Pin 2.27.3
-21	CHORE-35		done	REFUSED			empty-cluster	no	Idempotenter CONNECT-Grant-Sweep (11-ops-connect-grants.sql)
-20	CHORE-36		done	REFUSED			empty-cluster	no	Edge-IP stabilisiert (statische caddy-IP, reboot-bewiesen)
-19	CHORE-49		done	REFUSED			empty-cluster	no	Host-Aktivierung deklarative Deploy-Steuerung (deploy.cfg-SSoT)
-18	CHORE-52		done	REFUSED			empty-cluster	no	Erster echter vollautomatischer v4-Webhook-Deploy grün
-17	CHORE-53		done	REFUSED			empty-cluster	no	V16-Schema-Adaption gemergt, `gating` grün
-16	CHORE-60		done	REFUSED			empty-cluster	no	ADR-0014 revidiert (Variante 3): eine breite kumbuka_operator-Rolle
-15	CHORE-62		done	REFUSED			empty-cluster	no	G9-Operator-Rollen-Cutover live, Memory-Wand am Live-System bewiesen
-14	CHORE-63		done	REFUSED			empty-cluster	no	ops-console v0.12.0 getaggt + deployt (manuell, F-0062b)
-13	CHORE-65		done	REFUSED			empty-cluster	no	ops-console Auth/Session-Hardening (Gating+Refresh) live verifiziert
-12	CHORE-68		done	REFUSED			empty-cluster	no	saas-runtime → ee-server Migration (ADR-0018 Teil 1)
-11	CHORE-69		done	REFUSED			empty-cluster	no	Private-Repo-Renames (infra/web/keycloak)
-10	BUG-12		done	REFUSED			empty-cluster	no	ops-console `/tenants` down — CONNECT-Grant fehlte den ops-Rollen
-9	CHORE-83		done	REFUSED			empty-cluster	no	local-dev KC-Org-Bootstrap, Directory-500 über vier Bausteine geschlossen
-8	CHORE-43		done	REFUSED			empty-cluster	no	resolve_blob/ensure_op_session-Fixes — superseded, gebündelt in CHORE-47
-7	CHORE-44		done	REFUSED			empty-cluster	no	Verify-Härtung (externer Ingress+Cert-Trust) — superseded, gebündelt in CHORE-47
-6	CHORE-02		done	REFUSED			empty-cluster	no	no-mock-at-trust-boundary ratifizieren — durch ADR-0019 gedeckt
-5	CHORE-08		done	REFUSED			empty-cluster	no	Read-only-Full-Repo-Audit — P1/Tenant-Isolation halten strukturell
-4	F-0076		dissolved	REFUSED			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
-3	F-0077		dissolved	REFUSED			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
-2	F-0078		dissolved	REFUSED			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
-1	F-0079		dissolved	REFUSED			empty-cluster	no	Record-Drift FEAT-02/BUG-06 als offen geführt trotz gelandeter Impl
+nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	title_head
+510	BUG-53	CONN	open	assigned	kumbuka	Produktlinie	5	cluster:CONN	no	Discovery-Schicht von log.jbaconsult.com reparieren: beide Well-Known-Pfade, kei
+509	CHORE-358	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Planungsschicht der Worklist: Arbeitsstrang als vierte Adressklasse, Meilenstein
+508	CHORE-357	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Steuerungskorpus nachtragen: Sprints 173 und 174 sowie Satelliten 15 bis 17 fehl
+507	BUG-52	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienst: Metadaten-Lesemodell ist Map<String,String> und scheitert an de
+506	BUG-51	CONN	open	assigned	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy weist normalisierte resource-URI ab: Abgleich gegen die Ressourcentab
+505	CHORE-356	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	SQL-Importskript: den Steuerungskorpus aus dem Dateispeicher des Vorgaengers in 
+504	CHORE-355	DEPLOY	open	refused	-			milestone-workstream-conflict	no	Steuerungskorpus aus dem Python-Logbuch in das Schema dispatch migrieren: SQL-Im
+503	FEAT-95	CONN	open	assigned	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy v0.2.0: scopes_supported, offline_access als Vorgabe, und DCR neben C
+502	FEAT-94	CONN	done	assigned	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy: MCP-Autorisierungsproxy vor Keycloak, CIMD nach aussen, OIDC nach hi
+501	CHORE-354	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Kennungsfrage bei accept entscheiden: Adresse und Geschaeftskennung sind unter d
+500	FEAT-93	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst benutzbar machen: die sechs ungebauten Domaenenverben, Inbetrieb
+499	CHORE-353	HK	open	assigned	kumbuka	Architektur		named-exception:architektur	no	Qualitaet der Leitplankenknoten: Problem und Dringlichkeit als Pflichtteil, und 
+498	CHORE-352	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Code-Review-Methodik: ein zweiter unabhaengiger Pruefapparat am Dispatch, mit Em
+497	CHORE-351	DEPLOY	planned	refused	-			milestone-workstream-conflict	no	Worklist-Dienst, Betriebsstrang: Matrixzeile, Compose-Dienst, Rollen und Schlues
+496	FEAT-92	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst, Speicherhaelfte neu: V4 gegen das Zielschema ersetzen, samt Pol
+495	FEAT-91	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Planungsschicht der Worklist: die Verben, die Ableitung von planned und das Opti
+494	CHORE-350	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Fassade in Plattform-Router umbenennen: Zielbild, abgeleitete Knoten und Zeilen,
+493	CHORE-349	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Die vier grandfathered Ablehnungsgruende entscheiden: Vertrag anfassen oder Ausn
+492	FEAT-90	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch und Worklist auf das ratifizierte Schichten- und Benennungsnormativ ang
+491	BUG-50	CORE	open	assigned	kumbuka	Produktlinie	1	cluster:CORE	no	System-Guidance-Overlay unter Scope-Pinning unerreichbar: memory_load_context ha
+490	BUG-49	CORE	open	assigned	kumbuka	Produktlinie	1	cluster:CORE	no	memory_load_context kappt still auf 20 Eintraege pro Typ und nennt weder Gesamtz
+489	CHORE-348	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Bauplan-Normativ der Plattformdienste: Inventur von Dispatch und Worklist, Entsc
+488	FEAT-89	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Domaene: query, claim_next und withdraw bauen -- drei Plattformverben o
+487	CHORE-347	CORE	done	refused	-			milestone-workstream-conflict	no	Innenansicht der Plattform-Komponente festhalten: Revision 2 von platform-layer.
+486	CHORE-346	HK	open	assigned	kumbuka	Architektur		named-exception:architektur	no	Extraktionsvollstaendigkeit von spec/docs/working/ pruefen, bevor der Ordner abg
+485	CHORE-345	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Methodikschicht neu schneiden: Entscheidungsverfahren, Doktrin-Zustaendigkeit, K
+483	FEAT-88	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Die beiden fehlenden Modi des Graph-Validators: templates und der Index unter ge
+482	CHORE-344	CORE	open	assigned	kumbuka	Architektur		named-exception:architektur	no	Kantennachzug: serves ueber die siebzig Leitplanken
+481	CHORE-343	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Die fuenf verbleibenden Zielbilder schreiben: Memory, Dispatch, Worklist, Verzei
+480	CHORE-342	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Document-Service: Zielbild, Adressraum, deklarierte Metadaten und Kanten -- Konz
+479	BUG-48	CORE	open	assigned	kumbuka	Produktlinie	1	cluster:CORE	no	create ueberschreibt ein gesendetes Logbuch-Objekt still statt einen Konflikt zu
+478	CHORE-341	HK	open	refused	-			milestone-workstream-conflict	no	Graph-Validator fuer den Architektur-Knotenkorpus bauen — das in Schritt 5 vorge
+477	CHORE-340	CORE	done	assigned	kumbuka	Architektur		named-exception:architektur	no	Zweite Runde der Korpusmigration: CON- und Leitplankenknoten, TAR/REA-Spaltung, 
+476	CHORE-339	CORE	done	assigned	kumbuka	Architektur		named-exception:architektur	no	Erste Runde der Korpusmigration: VIS-Setzung, Nordstern-Invarianten als REQ, CON
+475			new	refused	-			empty-cluster	no	ADR fuer den Verbprozess: wie neue Verben und neue Schemata hinzukommen
+474			new	refused	-			empty-cluster	no	Plattform-Datenschicht und der Schnitt Team gegen Mandant
+473			new	refused	-			empty-cluster	no	ee-Topologie schneiden: ee-server nach Platform umbenennen, Importer nach ee-mem
+472			new	refused	-			empty-cluster	no	ADR-0041 Schema-Menge gegen ADR-0043 in Deckung bringen: audit und event sind do
+471			new	refused	-			empty-cluster	no	Fehler der Gedaechtnis-Maschine hinterlassen keine Spur im Log; Fehlerprotokolli
+470			new	refused	-			empty-cluster	no	Falscher Kopfkommentar in ee-server zur Konfigurationszusammenfuehrung und die d
+469	CHORE-338	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Rueckbau des Gedaechtniscodes aus kumbuka-server samt Abschaltung der alten Tabe
+468	FEAT-87	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Umschaltung auf den Gedaechtnisdienst: Schreibstopp auf dem Altspeicher, Kopie d
+467	FEAT-86	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	MCP- und REST-Oberflaeche des Gedaechtnisdienstes samt Authentifizierung und dem
+466	CHORE-337	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Drei Reparaturen aus Sprint 154: WITH-CHECK-Begruendung, Hygiene-Gate ohne Satel
+465	BUG-47	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Migrations-Callback in kumbuka-server ist nicht registriert und hat keinen Zeuge
+464	CHORE-336	CORE	open	refused	-			milestone-workstream-conflict	no	Restarbeit der Extraktion: Artefaktveroeffentlichung von kumbuka-memory und Zuor
+463	FEAT-85	DEPLOY	done	refused	-			milestone-workstream-conflict	no	Deployment des leeren Gedaechtnisdienstes: Container-Image, Health-Endpunkt, Gra
+462	CHORE-335	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Zielbild der Datenschicht: public auftrennen, Rollen und Eigentum je Schema, Rec
+461	BUG-46	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Reichweite des Log-Waechters: nur LOG in Grossbuchstaben wird gesehen, Argumente
+460	BUG-45	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Reichweite des Log-Waechters: erzwungenes LOG in Grossbuchstaben und Argumentsch
+459	CHORE-334	DEPLOY	open	refused	-			milestone-workstream-conflict	no	release.sh haertet: Umgebungs-Waechter vor dem Rendern, Gesundheit im Effect Gua
+458	CHORE-333	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	V22 sammelt die drei Produktions-Handgriffe ein: View-Eigentuemer, Dispatch-Migr
+457	BUG-44	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Der Dispatch-Dienst haelt TRUNCATE und TRIGGER auf dem eigenen Schema: TRUNCATE 
+456	FEAT-84	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Plattform-Fassade als eigener Dienst: Schema-Routing ohne eigene Autoritaet, pri
+455	BUG-43	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Memory-Dienst antwortet auf den ersten Aufruf mit nacktem Fehler ohne Grund, der
+454	CHORE-332	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Zielbild fuer die Plattformschicht: der Lesevertrag, die Fassade, das Audit-Log 
+453	BUG-42	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Log-Waechter faengt das erlaubte Wort selector, weil ctor als Substring darin st
+452	CHORE-331	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	spec/design/ neu strukturieren: Artefaktklasse statt Zielsystem, eine Handover-F
+451	FEAT-83	CORE	planned	assigned	kumbuka	Produktlinie		cluster:CORE	no	Navigationskonzept der Konsole und Scope-Dashboard als Einstieg: erweiterbar um 
+450	FEAT-82	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst, Verbflaeche: REST gegen den Verbkatalog und MCP-Adapter als Pro
+449	CHORE-330	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Logging-Konvention der Plattformdienste: Ebenen, was eine Zeile tragen darf, und
+448			new	refused	-			empty-cluster	no	Generierter Index ueber docs/adr/ und docs/decisions/: welches Papier existiert,
+447	CHORE-329	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Post-Mortem des M5-Umbaus: warum der Bestand bei jeder Sitzung Diskrepanzen prod
+446	CHORE-328	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	M5-Umsetzungsplan als Dokument: Bauordnung, Lueckenliste des Gatters, rote Probe
+445	FEAT-81	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienst, Oberflaechenhaelfte: REST-Flaeche gegen den ratifizierten Verbk
+444	CHORE-327	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Fassade und einheitliches URI-adressiertes Verbvokabular: Harmonisierung auf ein
+443			new	refused	-			empty-cluster	no	Index ueber ADRs und Entscheidungs-Ledger mechanisch generieren statt von Hand p
+442	CHORE-326	HK	open	refused	-			milestone-workstream-conflict	no	Zielbild der Worklist pflegen und in einen ADR zurueckspiegeln
+441		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	Kontextkosten der MCP-Verbflaeche gegen die API messen statt schaetzen
+440	CHORE-324	HK	open	refused	-			milestone-workstream-conflict	no	Zielbild des Dispatch-Dienstes pflegen und in ADR-0042 und ADR-0038 zurueckspieg
+439	CHORE-325	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	ADR-Bestand auf hoechstens 30 konsolidieren: neue Nomenklatur, Zuordnungstabelle
+438	CHORE-323	HK	done	refused	-			milestone-workstream-conflict	no	M5-Gatter: Architekturreview und Gap-Analyse nach beiden Dienstspezifikationen, 
+437	FEAT-80	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Ereignis-Log der Steuerungsdienste: Nachweispfad als Ersatz fuer die verschwinde
+436	CHORE-322	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	kumbuka-server nach kumbuka-memory umbenennen: Submodulpfade, Imagenamen, Matrix
+435	CHORE-321	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Aussagenschaerfe durchziehen: Formulierung zum Betreiber-Lesezugriff in Position
+434	CHORE-320	DEPLOY	open	refused	-			milestone-workstream-conflict	no	Abschaltung des Vorgaengers: REGISTRY.md, state/, alter Dienststapel und Steueru
+433	CHORE-319	DEPLOY	open	refused	-			milestone-workstream-conflict	no	Umzug des Bestands: Git-Korpus, Agent-Run-SQLite und die unversionierten Zustand
+432	FEAT-79	EE	open	assigned	kumbuka	Produktlinie	5	cluster:EE	no	Worklist Enterprise: Versionierung veraenderlicher Zeilen als Append-on-Write, m
+431	FEAT-78	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Domaene und Store auf SQL: Zeilen, Nummernraeume pro Scope, Ruecknahme 
+430	FEAT-77	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienstgeruest, Substrathaelfte: eigenes Repository, Quarkus, Schema mit
+429	FEAT-76	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Domaene und Store auf SQL: Objektmodell, neun Statuswerte mit einem Ver
+428	FEAT-75	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienstgeruest, Substrathaelfte: Repository, Quarkus, Schema mit eigener
+427	CHORE-318	HK	done	refused	-			milestone-workstream-conflict	no	Spezifikation Worklist Manager (Stufe 2): 25 Verbenvertraege, veraenderliche Zei
+426	CHORE-317	HK	done	refused	-			milestone-workstream-conflict	no	Spezifikation Logbuch (Stufe 2): 20 Verbenvertraege, Statusmaschine, Invarianten
+425	FEAT-74	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Mandantenverzeichnis Stufe 1: Sicht platform.scope_access, lesend fuer die beide
+424	CHORE-316	HK	open	refused	-			milestone-workstream-conflict	no	INDEX-Dateien auf Zeigergroesse zuruecknehmen: Prosa gehoert in das Dokument, de
+423	CHORE-315	HK	done	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	M5 planen: Spezifikation als erste Etappe der Neuimplementierung, Meilensteinzer
+422	BUG-41	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbuch: Paar-Invariante am Uebergang statt am Gate pruefen, terminale Sackgasse
+421	CHORE-314	CORE	open	assigned	kumbuka	Produktlinie	2	cluster:CORE	no	Projektanweisung auf den Bootstrap-Kern reduzieren, den Rest als Kontext-Dokumen
+420	CHORE-313	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Worklist Manager: enumerierte Spaltenvokabulare aus dem Code in eine externe Kon
+419	CHORE-312	HK	done	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Kumbuka als Plattform definieren: ein Produkt aus drei Diensten, Meilensteinachs
+418	FEAT-73	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbook: Agentenlog als zweite Datenquelle (SQLite), drei MCP-Verben und Viewer-
+417	BUG-40	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Worklist-Store: Schreib-/Commit-Paar auf dieselbe Teilwirksamkeit pruefen wie BU
+416	BUG-39	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbook: Sparsity eines bestehenden Clones driftet gegen roots, und ein Schreibv
+415	CHORE-310	HK	open	assigned	kumbuka	Agenten-Entwicklung		named-exception:agenten	no	Product-Owner-Agent: Auftragslage der vier Agenten (Visions-, Planungs-, Backlog
+414	F-0244	HK	observing	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	In der Ref-Spalte lebt eine ältere Meilenstein-Nummerierung weiter und kollidier
+413	F-0243	HK	observing	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Der Task-Anker eines Dispatch wird auf Anwesenheit geprüft, nicht auf Auflösbark
+412	F-0242	HK	observing	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Logbuch und Worklist teilen sich einen HEAD: ein Logbuch-Schreibvorgang invalidi
+411	BUG-38	HK	open	assigned	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	Doppelt belegte Entscheidungs-ID: Positionspapier schlaegt team_id-Seam als prop
+410	BUG-37	CORE	open	assigned	kumbuka	Produktlinie	1	cluster:CORE	no	Werkzeugbeschreibung von memory_recall widerspricht D-CORE-5.1: verschweigt die 
+409		HK	new	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Steuerungsarbeit in ein eigenes Korpus trennen: Multi-Corpus statt handgepflegte
+408		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	Angenommene und still verworfene Parameter an den Steuerungsdiensten: entweder w
+407		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	Schreibzeit im Logbuch-Viewer zeigt den ersten statt den letzten Commit und vers
+406		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	amend-Verb fuer Returns mit sichtbarer Naht: Koerper ersetzbar, Reparatur im Obj
+405		HK	new	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Archiv als Senke wiederaufbauen: erledigte Zeilen bei 1 MB Dateigroesse per Verb
+404		HK	new	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Terminierungsstufe in session-closure: Merge pruefen, Worklist-Zeilen schliessen
+403		HK	new	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Migrationslauf absichern: stdout ist der Datenkanal, Diagnose gehoert auf stderr
+402		HK	new	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	v2-nach-v3-Migration retiren: toter Pfad, der bei jeder Schema-Aenderung Arbeit 
+401		SEC	new	assigned	kumbuka	Produktlinie		cluster:SEC	no	Messen, ob vor dem Schreib-Endpunkt des Worklist-Viewers eine Authentifizierung 
+400	CHORE-311	CORE	dropped	assigned	kumbuka	Produktlinie		cluster:CORE	no	Provenance in der Commit-Nachricht: welcher Kanal und welcher Akteur die Zeile g
+399		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	Meilenstein im Viewer anlegen und pflegen: Formular mit Vision und Mission
+398		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	Reihenfolge als Ganzes speichern: ein Verb, ein Commit, Konflikt-Token gegen Fre
+395	CHORE-309	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Worklist-Viewer auf drei Seiten: Iterationen als Startseite, Meilensteine und Ba
+394	CHORE-308	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer Suchleiste: Platzhalter wird abgeschnitten, Hilfszeile doppelt ih
+393	CHORE-307	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer mobil verdichten: Kopfzeile auf Icons, Detailansicht nutzt die vo
+392	CHORE-306	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer: neueste Objekte oben, Schreibzeit aus Git an jedem Element, Spri
+391	BUG-36	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Viewer mobil unbenutzbar: Detail-Dialog nicht schliessbar, Zurueck-Butto
+390	CHORE-305	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Rolle im Objektmodell wirksam machen: adressierte Aktivierung, rollenabhaengige 
+389	FEAT-72	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Planungsebene oberhalb des Sprints: Tasks kuratiert auf Themen mappen, Backlog b
+388	FEAT-71	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Reihenfolge-Transparenz: berechneter Rang vs. explizite Position, Re-Sortierverb
+387	BUG-35	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Host-Checkout wird nicht mit dem SOLL materialisiert — Topologie und Versionsmat
+386	FEAT-70	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbuch-Import des Altbestands: Findings ja, Sprint-Records nein — Nomenklatur-U
+385	CHORE-304	HK	done	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	session-closure und code-handover auf die Steering-Dienste umstellen (Logbuch-Ob
+384	BUG-34	CORE	done	assigned	kumbuka	Produktlinie		cluster:CORE	no	Validierungs-Reichweite: Ganzbestand-Vorabpruefung sperrt den Schreibpfad — auf 
+383		HK	dropped	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	closure.py entfernen, sobald das Logbuch deployed ist und die Worklist-Haelfte d
+382	CHORE-303	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Next-Version zwischen package.json, Lockfile und CI abgleichen: lokaler Dev-Serv
+381	CHORE-302	HK	done	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Sammeldateien fuer Chores und Bugs aufloesen: eine Datei pro Task, Name mechanis
+380	CHORE-301	HK	done	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Titelgrenze im Schema von 150 auf 300 Zeichen anheben, im gemeinsamen Kern veror
+379	CHORE-300	HK	done	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Worklist-Haelfte von D-STEER-9: duenne F-Zeile mit Vokabular observing/dissolved
+378	CHORE-299	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Abbruchregel fuer den Investitionsanteil der Steuerungsschicht festlegen: messba
+377	CHORE-298	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Disposition der 19 Zeilen auf active: Statuswert bereinigen, nachdem er seinen R
+376	CHORE-297	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Skill-Drift-Waechter fuer session-start: die fixen Sektionen wandern ins Skill, 
+375	CHORE-296	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Transaktionalitaet des halben Closure als ratifizierte Klausel in D-STEER-4 nach
+374	CHORE-295	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Runbook-Konventionen: kein set -e in eingefuegten Bloecken, kein grep -c mit Fal
+373	CHORE-294	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	fs-write-Disziplin: Schreibvorgaenge in Submodule brauchen eine externe Pruefung
+372	CHORE-293	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Infra-Strang fuer das Logbuch: Matrixzeile, Compose-Dienst, Caddy-Snippet in sit
+371	CHORE-292	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Sparse-Checkout auf Inklusionswurzeln umstellen: Logbuch-Klon sprints/ und findi
+370	CHORE-291	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Sortierordnung nach D-STEER-6: active aus dem Sortierschluessel, (not-P1, Cluste
+369	CHORE-290	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	BFF und Web-UI haben keinen ratify-Pfad: eine Zeile kommt in der Oberflaeche nic
+368	FEAT-69	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Worklist-Manager Webinterface und JSON-BFF gebaut, als v0.2.0 released und auf w
+367			new	refused	-			empty-cluster	no	Skills liegen ausserhalb jeder Ground-Truth-Messung: nicht im Steering-Repo, nic
+366			new	refused	-			empty-cluster	no	Vier Skills sind nach dem Umbau von Sprint 132 sachlich falsch: session-closure 
+365			new	refused	-			empty-cluster	no	Kein CI-Job uebt die Realm-Import-Skip-Bedingung: docker build smoke baut nur da
+364			new	refused	-			empty-cluster	no	code-handover-Skill nachschaerfen: SonarQube wird pauschal fuer jeden Code-PR un
+363	CHORE-289	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	CLI hat keinen Push-Pfad: --commit schreibt nur lokal, ohne Push laeuft der Klon
+362			new	refused	-			empty-cluster	no	Redirect-URI des wlm-mcp-Clients traegt einen Wildcard-Stern (claude.ai/api/mcp/
+361	CHORE-288	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Dienst-Zustand state/ neben den Steering-Klon legen: eigener state_dir-Parameter
+360	CHORE-287	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Stale Kommentarkopf in deploy/compose.yml: behauptet eigenen Stack, Dienst laeuf
+359	CHORE-286	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	ratify-Sperre im Dienstmodus aufgehoben: gebaut in PR #8, deployed mit v0.2.0, L
+358	CHORE-285	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	MCP-Oberflaeche vervollstaendigen: pull, delete und ratify mit Schema-Feldern du
+357	CHORE-233	SEC	open	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Harness und CI-Gate scharfschalten: vier test.skip-Guards, CI ruft nur --grep @g
+356	CHORE-234	SEC	open	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Raw-SQL-Tripwire auf die angewandte Annotation prüfen statt auf Dateitext: Subst
+355	CHORE-235	SEC	open	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Wächter für die BDSG-Randbedingung: die Abwesenheit von Throttle-Event-Tabelle u
+354	BUG-28	SEC	open	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Tenant-Purge verschluckt SQLException: vier DELETE im catch(ignored), ohne Zeile
+353	BUG-29	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Operator-Löschung schreibt zwei member.erase-Auditzeilen mit verschiedenen Paylo
+352	BUG-30	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	changeTier lässt status beim Upsert unangetastet: status wird nur beim ersten In
+351	BUG-31	BETA	open	assigned	kumbuka	Produktlinie		cluster:BETA	no	Onboarding-Write ist serverseitig ein No-op, der Wizard öffnet nach jedem Login 
+350	CHORE-238	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Provider-Backend-Reste: gemountete Connector-create-Route wirft bedingungslos; O
+349	CHORE-239	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Konsolen-Hygiene: Dockerfile-Fallback entwertet --frozen-lockfile, Design-Tokens
+348	CHORE-240	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Doku- und Metadaten-Drift Runde zwei: keycloakVersion-Pin, inerte CONNECTOR_CLIE
+347	CHORE-241	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Wildcard-TLS-Phantom: die deSEC-Maschinerie zeigt auf caddy/sites/wildcard.caddy
+346	CHORE-248	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	closure.py: Queue-nach-Backlog-Demote als Manifest-Operation, plus harte fail-cl
+345	CHORE-246	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Dispatch-Vertrag korrigieren: Sonar gilt nur für provisionierte Submodule, und d
+344	CHORE-247	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Worktree-Isolation paralleler Code-Sub-Sprints: Submodul-Disjunktheit ist notwen
+343	CHORE-244	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	MemoryKeyValidator Javadoc zitiert den memory_key_format-CHECK als V14, real ist
+342	CHORE-245	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	ee-server sonar-project.properties führt das importer-Modul nicht in sources/tes
+341	FEAT-50	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Mnemonic-Importer (Server-LLM-Extraktion, D-CORE-19): Steuerungs-Doc → typisiert
+340	FEAT-59	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Import-Wizard Frontend (ee-console): 3-Schritt-Wizard Upload+Consent -> Process 
+339	CHORE-214	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Characterise the importer commit path: N console writes vs batch endpoint, and t
+338	CHORE-213	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	Make the tenant-rejection log diagnosable: carry host, path and method in Tenant
+337	CHORE-211	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Nebenstrang-Kuratierung Phase A: D-ARCH-1/-2 persistieren, Familie D-ARCH anlege
+336	FEAT-63	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	memory_update Stufe 2: keyed-upsert aus memory_remember entfernen, typisierter K
+335	CHORE-81	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Edge-DoS-Härtung (Caddy rate_limit + Connection-Limit); umfasst Marketing-Host P
+334	FEAT-29	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Tenant-Ressourcen-Quota (Einträge/Scope, Scopes/Tenant)
+333	FEAT-30	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Circuit-Breaker im MCP-Adapter (global + per-Tenant-Bulkhead)
+332	CHORE-192	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	E2E-Script Write-Rate-Limiter: limits-endpoint 200/503 + per-tenant-Override + 4
+331	CHORE-120	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 0: Sonar-Provisioning ee-server/keycloak (SonarCloud-UI); Mcp-IT-
+330	CHORE-200	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Cluster OPS einführen: Marker + Abgrenzung zu DEPLOY, closure.py-Vokabular, WORK
+329	FEAT-66	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	EE-side scope_stats refresher that iterates every tenant via TenantContext.bind(
+328	CHORE-165	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 1: Deploy-Engine als versioniertes Artefakt (deploy.cfg-Key INFRA
+327	CHORE-166	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 2a: Trigger-Umbau — Merge deployt nicht mehr, workflow_dispatch a
+326	CHORE-167	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 2b: Bump-Automatik — Quell-Repo-CI baut/taggt/pusht + öffnet Auto
+325	CHORE-168	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 3: Gate-Ausbau — e2e-Invarianten ins Deploy-Gate + Post-Deploy-Wa
+324	CHORE-169	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0034 Stufe 4: N-1-Kompat-Gate — altes Image gegen neues Schema + Suite (auf 
+323	CHORE-163	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Host-Hygiene srv1730699: /root aufräumen (a) + Secret-Altkopien in /etc/kumbuka 
+322	CHORE-181	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	deploy.sh keep-5 Backup-Prune (F-0159): deploy.env.bak-deploy-* analog zum Pre-D
+321	CHORE-182	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Post-Fold-Cleanup (ADR-0035-Erbe): tote Deploy-Zeiger, RETIRED-Fossile, Dead-Key
+320	CHORE-161	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Host-gh-Token read-only: erledigt bis auf serverseitigen OAuth-Widerruf der drei
+319	CHORE-173	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	GitHub-Credential-Neuaufbau: vollständiges PAT-Inventar + Migration auf fine-gra
+318	CHORE-185	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Limiter-Store In-Memory→shared swappen vor Multi-Host-Cutover; Scale-Gate verwei
+317	CHORE-156	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Toter-Zeiger-Check-Skript: jede Mnemonic-ID muss in INDEX/REGISTRY auffindbar se
+316	CHORE-157	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	Connect-Zellen-Maintainer-Doku (öffentliches console-Repo): Manifest, Zellen-For
+315	CHORE-158	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Content-Release-Kette verkürzen: n8n-Workflow bereitet auf einen console-Tag die
+314	FEAT-56	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Suche + Staleness-Signal (absorbiert FEAT-49): tsvector-FTS, Scope-Modus (cross-
+313	FEAT-55	CORE	dropped	assigned	kumbuka	Produktlinie		cluster:CORE	no	memory_supersede: serverseitige atomare Revision statt forget+remember — PRÜFPOS
+312	CHORE-145	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	CIMD-Drift-Watch (n8n, täglich) gebaut+aktiv; REST: Grok-CIMD-URL nachtragen, F-
+311	CHORE-146	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	MCP-Kompatibilität Gemini + Copilot gegen den Kumbuka-Realm messen (CIMD/DCR, Ak
+310	CHORE-195	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	MCP-Spec 2026-07-28 Auth-Hardening charakterisieren: iss/SEP-2468, application_t
+309	CHORE-196	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	MCP-Spec 2026-07-28 Stateless/Version-Kassensturz: quarkus-mcp-Version + 2.0.x-P
+308	FEAT-54	BETA	open	assigned	kumbuka	Produktlinie		cluster:BETA	no	Console Hilfe-Bereich: sechs Bereiche DE+EN vollwertig schreiben, Typ-Manifest =
+307	CHORE-142	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	Upstream-Keycloak-Issue F-0134 einreichen (+ ggf. F-0132/F-0131 Welle 2); Reprod
+306	CHORE-139	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	How-to-mcp-keycloak-Wissensdoc + Blog (Claude/ChatGPT/Grok über einen Multi-Tena
+305	CHORE-140	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	Normalizer-Modul (cimd-grant-normalizer) als OSS: Extraktion aus keycloak-Repo +
+304	CHORE-152	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	ee-console-CI next/image-Guard: der sharp-pnpm-Override entwaffnet das Lizenz-Ga
+303	CHORE-153	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	Route-Manifest deckt keine App-Router-Convention-Files (Root/(app)-Layout, error
+302	CHORE-151	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Testhärtung F-0149: layout.test.ts flakt lastabhängig (import() reißt 5s-Timeout
+301	CHORE-149	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Public-Repo-Doku-Hygiene: ADRs und interne Kennungen raus aus console und server
+300	FEAT-52	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	UTM-Visibility 1b: Variant-C-Attribution in ops-console AnalyticsResource (Detai
+299	CHORE-136	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	GoAccess-kumbuka.css-Selektoren auf v1.8.1 nachschärfen (greift, aber Panels/Tit
+298	CHORE-137	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	Login-Theme-Polish-Paket: F-0096-Fix (natives Passkey-Label-prompt() trotz Theme
+297	CHORE-129	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	F-0123-Verify: braucht der Public-Intake SELECT auf ops.waitlist_entry? sonst Gr
+296	CHORE-130	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	server.json-Registry-1.0.1-WIP aus git-stash → server main (Hygiene-Commit; Trig
+295	CHORE-131	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Deploy-Skill für Code (Komponenten-Abfrage → Tags hochziehen → Deploy fahren) — 
+294	CHORE-132	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Deploy-Receiver an interne/loopback-Adresse binden (statt 0.0.0.0:8889); Bahn-1 
+293	CHORE-106	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Marketing-Track (parallele Session): Kanal-Matrix, Account-Inventar, Posting-Kon
+292	CHORE-118	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Projekt-Datei-Housekeeping (Satellit): Knowledge-Files inventarisieren/prüfen, s
+291	FEAT-10	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	CSV-Export vor dem ersten echten Beta-Tenant (D-GTM-10-Versprechen: Export-Angeb
+290	FEAT-47	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	DSGVO-Art.-15/20-Datenauskunft/-export: Tenant-Self-Service + Provider-Plane-Run
+289	CHORE-174	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Private-Repo-READMEs aktualisieren (ee-server, ee-console, ops-console): Edition
+288	CHORE-175	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	ops-frontend BFF/UI-Härtung (BUG-24): Leerbody-Sweep über 8 optional-body Provid
+287	CHORE-74	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	local-dev-Fullstack fertigstellen (Makefile, DEVELOPMENT.md); auf ee-console umg
+286	CHORE-61	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Reproduzierbarkeits-Track Teil 3 (Host, deploy.cfg SOLL==IST)
+285	FEAT-01	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Live-Test-Layer — Rollback-Mechanismus + Smoke-Tenants offen
+284	FEAT-11	BETA	open	assigned	kumbuka	Produktlinie		cluster:BETA	no	Support-/Feedback-Formular — Prod-Caddy-Fix + Webhook-Env offen
+283	CHORE-05	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Spec-Corpus-Cleanup (D-Ledger-Dateinamen + Header-Schema)
+282	CHORE-17	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Hygiene: totes KEYCLOAK_REALM + stale .env.example-OIDC-Realm
+281	CHORE-20	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Konsolidierung P1 — bare-image-CI-Gate + L177-Retire offen
+280	CHORE-25	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	KC-Overlay-Skripte 04/05 mit E2E-04/05 abgleichen
+279	CHORE-26	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	P1-Follow-up: bare-image-CI-Gate → baked deploy → compose retiren
+278	CHORE-47	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	restore.sh/_lib.sh-Härtung (Bahn-2, bündelt F-0047)
+277	CHORE-75	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Prod-Caddy /api/feedback→console-Ausnahme
+276	CHORE-04	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-PR mergen (chore/refresh-pins-sharpen-gating)
+275	CHORE-116	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	A2-Concept-Queue Rest: PV-02/ADR-0012-Am.-3-Flag-Kontrakt (KC-DB-Migration-Recov
+274	CHORE-112	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	web/-n8n-Intake-Webhook-URL rotieren (unrotiert in Git-History seit Entfernung, 
+273	CHORE-114	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	A2-Fix-Welle: PV-05/06/07/09/19 (swallow, change-me-Cookie, skipTests) + console
+272	CHORE-113	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	README-Refresh-Welle: 7 stale READMEs aus beiden A2-Audits als ein docs-only-Sam
+271	CHORE-111	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Security-Review-GitHub-Action als PR-Advisory für private Repos evaluieren gegen
+270	CHORE-115	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Dependabot-Triage ops-console: 59 Alerts (6 critical) sichten, Erreichbarkeit + 
+269	CHORE-107	CONN	open	assigned	kumbuka	Produktlinie		cluster:CONN	no	Caddy-Netzwerk-Alias n8n.jbaconsult.com (durabler Hairpin-Fix, CHORE-34-Muster; 
+268	CHORE-103	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	EE-Spec-Intake Phase 1: EE-Design-Handover → Ratifizierungs-Backlog (vs. ADR-002
+267	CHORE-95	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Playwright-Happy-Path-Suite lokal (headful/headless-Switch, Operator will zuscha
+266	FEAT-43	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Tenant-Ansprechpartner (ops.tenant_contact: Struktur, PII, Pflichtfeld-Politik)
+265	FEAT-48	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Typ-Immutabilität: type identitätsfest — Console-PATCH-Kontrakt + Upsert-Typ-Mis
+264	CHORE-102	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Pending-Lifecycle-Entscheidung: D-CORE-4-Schärfungen 1-3 + Index-Seam-Prüfung ge
+263	FEAT-21	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Detective-corrective Validation-Job für locked entries (Wiedereintrag — war seit
+262	BUG-15	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Sessions-BFF-Lag: Console-BFF-Cookie überlebt KC-Session-Revokation bis Token-Re
+261	CHORE-86	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	F-0070-Fix: ops-console KC-Overlay-Orchestratoren
+260	CHORE-64	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Visuelle Abnahme ops-console-Redesign (Design→Code verkettet)
+259	FEAT-27	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	ops-console Account/Settings-Parität
+258	CHORE-09	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	AI-slop-sweep-CI-Gate Phase 2 (changed-code-Ratchet 70/50/30)
+257	FEAT-03	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	App-Layer-UPDATE-Guard e2e-covered (gated auf FEAT-05)
+256	FEAT-05	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	BFF-Login-Helper — Browser-treibende Schicht (Core in FEAT-01)
+255	FEAT-04	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Browser-E2E ≥2 Tenants = T-L2-ACC
+254	CHORE-33	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	open_question-Reconciliation nach ADR-0024
+253	CHORE-48	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Berechtigungs-/Lifecycle-Matrix konsolidieren
+252	FEAT-15	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	valid-from/valid-until-Enforcement
+251	FEAT-13	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Beta-Nutzungsanalyse (ops-console, Aggregat-Dashboard)
+250	FEAT-25	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	B1 ContentStats real adapter (RLS-IT + Mock-Ablösung); ContentStatsPort ABLÖSEN 
+249	FEAT-26	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	ops-console-Redesign Block B2–B6 + G7 (reale Port-Adapter)
+248	CHORE-94	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Paddle-Sandbox-Account + API-Exploration (Transactions/Invoices, Adjustments, Di
+247	CHORE-98	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	n8n deploy-dispatch-v4 'Deployment started'-Mail-Node: uninterpolierte Expressio
+246	CHORE-101	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	KC-Master-Admin-Passwort in 1Password (Griza-Vault) nachführen — Bootstrap-Env s
+245	CHORE-100	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Suchdisziplin aus F-0094 in docs/TOOLING.md + fs-write-Skill dokumentieren
+244	FEAT-45	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	MoRPort-Real-Adapter als Code-Dispatch (Trust-Boundary-IT gegen Paddle-Sandbox, 
+243	CHORE-66	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	09-waitlist-grants in apply.sh wiren
+242	CHORE-84	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-Deploy-Asset-Entvendorung (Working-Tree-Asset-Doktrin)
+241	CHORE-38	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Rebuild-Soak + Step-8-Volume-Shred
+240	CHORE-37	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	REBUILD-FHS-RUNBOOK.md ehrlich überarbeiten (W5)
+239	CHORE-40	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Repo-systemd-Units FHS-pathen
+238	CHORE-41	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Bundle-Pull/-Auth im Deploy-Pfad — ggf. stale, verifizieren
+237	CHORE-42	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	RUNBOOK Step 5 ausbuchstabieren + BACKUP-RESTORE.md schreiben
+236	CHORE-58	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	F-0049-Fix (repo-unit-ExecStart) + F-0051-verify_dump; F-0160: alle DREI Repo-Un
+235	CHORE-71	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	e2etests DB-Bootstrap nicht in Makefile-Kette verdrahtet
+234	CHORE-73	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	getenv()-Pipefail-Fix (release.sh + deploy.sh), Folge-Fix zu CHORE-72
+233	CHORE-76	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-Harness von kumbuka-saas auf kumbuka-ee migrieren
+232	FEAT-06	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Team-Console: Re-Invite-/Cancel-Pending-UI
+231	FEAT-07	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	ops-console: User-Actions nach Cross-Tenant-Lookup
+230	FEAT-08	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	ops-console: Operator-Log-Zugriff
+229	FEAT-12	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Changelog / 'What's new'-In-Product-Surface
+228	CHORE-10	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Digest-Hygiene in how-to-kumbuka.writing seeden
+227	CHORE-11	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	docs.kumbuka.ai-'Working with Kumbuka'-Guide
+226	CHORE-18	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	WORKING_CONCEPT.md aufräumen (stale vs. gelebte Praxis)
+225	CHORE-78	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	local-dev README erstellen
+224	CHORE-12	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	AGB / SLAs / Legal-Pages + Terms-Legal-Review; danach Wizard-Accept-Step mit per
+223	FEAT-20	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	EE-Aufbau (Keystone Schritt 2)
+222	BUG-06	CORE	open	assigned	kumbuka	Produktlinie	2	cluster:CORE	no	Onboarding-Wizard ploppt bei Scope-Switch wieder auf
+221	FEAT-33	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	ops-console Tenant-Pinning (pinned-Feld, Toggle-Endpoint, Audit-Event)
+220	FEAT-34	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Trial-Lifecycle (Status trial/trialing, Create-Flow→Trial, Slug-Live-Check)
+219	FEAT-35	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Purpose-bound Session-Fakten (Sessions-Count, lastLogin/Gerät/IP je Member; Quel
+218	FEAT-36	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	MCP-Verbindungsstatus im ops-Backend exponieren (per-Member + Quote, auf FEAT-13
+217	FEAT-37	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Tenant-Notizen-Vollausbau (Edit/Delete, System-Notes bei Aktionen, Suspend-mit-G
+216	FEAT-38	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Plattform-Health-Detail-Endpoint (Komponenten-Ampeln, Latenz/Uptime, n8n-Lauf)
+215	FEAT-39	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Dashboard-/Analytics-Aggregat-Parität (KPI-Splits, Summen, Scope-Inventar nach T
+214	FEAT-40	SEC	open	assigned	kumbuka	Produktlinie	3	cluster:SEC	no	Recovery-Code-Login-Pfad (Realm-Flow + Login-Theme) — tief zurückgestellt zuguns
+213	FEAT-41	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	MFA-Enforcement + Email-OTP-Fallback (bedingte 2FA-Stufe; F-0089-Recovery-Sichtp
+212	FEAT-46	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Console administrativer Account-Recovery (Reset MFA/Password/Force MFA) — Enable
+211	FEAT-51	CONN	open	assigned	kumbuka	Produktlinie	3	cluster:CONN	no	Connector-Auth Mistral-Rest: post-beta zurückgestellt (D-GTM-13; Aktivierungsfeh
+210	CHORE-97	HK	planned	assigned	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	Realm-Template-Kuratierung: roher Export → minimales Template, Realm-Quellen-Ver
+209	CHORE-67	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Writer-Agroal-Pool-Collapse (redundanter zweiter Pool)
+208	CHORE-24	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Konsolidierung P5 — Cleanup (bak-Müll, Volume-Shred)
+207	CHORE-29	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	e2e-Sonar-advisory re-provisionieren
+206	CHORE-55	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	ADR-0019-Renumber-Amendment (Operator-Modell L0-L3)
+205	CHORE-59	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	IT bildet prod-Owner-Modell ab? (Concept-Entscheidung)
+204	CHORE-70	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	ADR-0019 Test-Amendment (EE-eigene Suite + Staging)
+203	CHORE-87	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	F-0072-Decision: TenantOrganizationService kein tenant_id-Attribut
+202	BUG-10	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	FEAT-19: aktiver 'Löschen'-Eintrag im Kontextmenü eines gesperrten Scopes
+201	BUG-11	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Console: Eintrags-Hamburger-Menü nur bei Hover sichtbar
+200	FEAT-09	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	ops-console: UX-/Mobile-Überarbeitung
+199	CHORE-77	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	KI-Agenten für Kumbuka-Operations (Ops-Automation, Mid-Beta)
+198	CHORE-79	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	platform-dev Root-README um local-dev ergänzen
+197	FEAT-31	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	Scope-Marktplatz (Copy-on-Import)
+196	FEAT-22	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	Context-Doc-Navigationsschicht (EE)
+195	FEAT-23	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Lokaler MCP-Krypto-Proxy (Zero-Knowledge, EE)
+194	FEAT-14	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Per-Tenant-DB-Verschlüsselung (at-rest, EE)
+193	FEAT-44	EE	open	assigned	kumbuka	Produktlinie		cluster:EE	no	Team-Admin-Audit-Log in der Console (Shared-CRUD + Login-Events, EE)
+192	CHORE-14	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Marketing-Copy / Positionierungs-Feinschliff + Mobile-QA (FAQ in #72 erledigt; D
+191	CHORE-15	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Audit-Retention-Period (Legal-Sign-off)
+190	CHORE-16	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Preis-Level mit 5–10 Prospects validieren
+189	CHORE-46	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Whitepaper (post-beta)
+188	CHORE-184	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Drive-Log-Aktivierung: n8n-Workflow auf Get-by-ID (log_file_id) umstellen + Host
+187	BUG-25	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Real-smoke.sh-Versions-Assertion hermetisch testen (curl/docker-exec-Stub): Asse
+186	CHORE-186	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Single-source kumbuka-server.version pin in ee-server (parent property, one bump
+185	CHORE-187	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Q4 store-down alert: n8n platform-health mail on limiter fail-open (real only wi
+184	CHORE-188	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	purge-tenant deletes tenant_limits rows (orphan config, Art.17-neutral) — fold i
+183	CHORE-193	SEC	open	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	user_account-Operator-Grants in Bootstrap-SQL fail-closed nachziehen: SELECT-All
+182	CHORE-251	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Rosterlese-Wächter nach ADR-0032 neu zuschneiden: Ziel-Host und Auth-Bahn hängen
+181	CHORE-197	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Importer §5-Prompt-Granularität: getunte Distill-Direktive + gepackte Baseline z
+180	FEAT-60	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Ops-Console Tenant-Tagging: freie Tags pro Tenant (ops.tenant_tag), filterbare T
+179	FEAT-61	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Per-Scope-Typ-Konfiguration für load_context/recall (CE): je Scope wählbar, welc
+178	CHORE-201	HK	planned	assigned	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	arch-Modell-Inventur (arc42 3/5/7 + Modell-Fill): building-blocks + L4-Diagramme
+177	CHORE-202	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	console: EntryView.readOnly rendern (Edit/Delete-Controls auf Overlay-Eintraegen
+176	CHORE-203	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	closure.sh argloser Smoke-Pfad, damit qs_test es nicht mehr ueberspringt (Covera
+175	CHORE-204	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	scripts/README.md: Tool-Script-Konvention dokumentieren (unbekannte Tokens toler
+174	CHORE-205	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	die 4 variableninterpolierten Container-Kanten (deploy.env-indirekt) als exempte
+173	CHORE-206	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	WORKING_CONCEPT 16 (Analysepflicht): nach dem ersten echten Skill-Lauf schreiben
+172	CHORE-207	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Doku-Fixes: WORKING_CONCEPT 14 Querverweis zeigt auf nicht-existentes 17; fs-wri
+171	CHORE-215	SEC	open	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Gate-Haertung Memory-Mauer: has_any_column_privilege plus TRUNCATE statt vier ha
+170	CHORE-216	SEC	open	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Gate-Haertung FORCE RLS: Assertion auf pg_class.relforcerowsecurity fuer jede RL
+169	CHORE-217	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Owner-Drift der EE-Tabellen dauerhaft loesen: Owner-Sweep in den Deploy-Pfad ODE
+168	CHORE-218	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Fehlerrichtung des import_credits-Credit-Checks messen: faellt er bei unlesbarer
+167	CHORE-219	HK	open	assigned	kumbuka	Produktlinie	1	hk-heuristic:default-hygiene	yes	Wirkungsaussagen in Phase B regeln: gezielte Code-Lesung als benannte Ausnahme d
+166	CHORE-220	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Selbstauskunft des Limiters ohne Aktivitaetsdaten: Startup- oder Health-Aussage 
+165	CHORE-221	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Doku-Korrekturpaket Operator-Rolle: Defence-in-Depth-Javadoc, zwei kumbuka-ist-B
+164	CHORE-222	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Config/Secret-Trennung von deploy.env: die Datei traegt beides, deshalb sind vie
+163	CHORE-223	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Rueckwaertspruefung nach arc42-Abschnitt 02: welche ratifizierte Randbedingung f
+162	CHORE-224	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Generator-Priorisierung nach der mech-Statistik aus archroll; der DB-Introspekti
+161	CHORE-225	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Produktfrage: ist das version-Feld in console/package.json bewusst stillgelegt? 
+160	CHORE-226	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Offenheits-Verifikation der WORKLIST (Satellit, Urteilshaelfte): ist jede Zeile 
+159	CHORE-227	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	worklist.py nach dem closure.py-Muster: manifest-getriebene Bestandsaenderung (n
+158	CHORE-228	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	nextid plus worklist-Query als scripts-kumbuka-Tools: atomare ID-Reservierung un
+157	CHORE-229	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Konvention Satellit produziert Vorschlaege, Kanon appliziert plus Aufnahmequote 
+156	CHORE-230	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Priorisierungsschema v2 doppelt verankern: WORKING_CONCEPT als massgeblich und w
+155	BUG-27	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	EE-Migrationen legen Tabellen ohne Owner-Sweep und ohne GRANT an; App-Rolle hiel
+154	CHORE-232	HK	done	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Meilenstein-Planung der Features: M1 erster Fremd-Tenant produktiv, M2 Public Be
+153	CHORE-109	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	SEC-12-Runtime-Isolation am generischen Endpoint (ADR-0032): Positiv-Isolation +
+152	BUG-04	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	SEV-1-Regression-Lock-IT (Cross-Tenant-KC-User-Listing)
+151	CHORE-242	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Operator-Messcheckliste M3 bis M7: Directory-subject, Vendorung, npm-Publish, Ho
+150	FEAT-67	SEC	planned	assigned	kumbuka	Produktlinie	1	cluster:SEC	no	Operator-erzwungener Purge-Abschluss mit auditiertem Rest: eigenes Audit-Verb, p
+149	FEAT-68	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Tenant-Ebenen-Abgleich Keycloak gegen Kumbuka als reiner Bericht, plus ops-Backe
+148	CHORE-252	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Frontend-Konsumenten der Revoke-Statuscodes pruefen: revokeConnector liefert bei
+147	CHORE-256	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Entscheiden, ob die drei im Code referenzierten, nicht mitgelieferten ADRs publi
+146	CHORE-258	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	NODE_ENV=production explizit in die ops-frontend-Compose-Umgebung schreiben; Akt
+145	CHORE-259	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Zaehlkorrektur in der Architektur-Inventur: 17 Provider-Resource-Klassen statt 1
+144	CHORE-260	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Lokalen Branch feature/provider-route-gating samt Claude-Code-Worktree in ops-co
+143	CHORE-265	SEC	open	assigned	kumbuka	Produktlinie		cluster:SEC	no	Referenz-Waechter darf Migrationen nicht pauschal ausschliessen: nur die beim le
+142	CHORE-266	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Praefix-Drift aufloesen: FEAT-01 und FEAT-04 tragen eine FEAT-Nummer bei typ tes
+141	CHORE-267	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Entscheiden, ob TECH-DEBT.md nach dem Umbau als eigener Pool bestehen bleibt ode
+140	CHORE-270	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Umzug des Worklist-Managers nach jbaconsult unter MIT: Vokabular-Generalisierung
+139	CHORE-272	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	deploy.env.example um WLM_VERSION ergaenzen und den Matrix-Kopfkommentar um die 
+138	CHORE-273	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Deploy-Stub tag-bewusst machen (STUB_IMAGE_TAGS) damit die v-Praefix-Falle als G
+137	CHORE-275	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	Worklist-Manager: MCP-Anwendung auf /mcp auflegen statt 307-Umleitung, mit Rot-P
+136	CHORE-276	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Keycloak-Clients des Worklist-Managers ins Realm-Template und clients.json nachz
+135	CHORE-277	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	MCP-Oberflaeche des Worklist-Managers: Well-known-Pfad nach RFC 9728 angehaengt 
+134	CHORE-278	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Ruecknahmeverb fuer Zurufe im Worklist-Manager: eine irrtuemlich angelegte Zeile
+133	CHORE-279	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Zugriffsprotokoll fuer wlm.jbaconsult.com an der Kante ergaenzen - der Host ist 
+132	CHORE-282	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Rot-Probe fuer CI-Gates laeuft auf einem Wegwerf-PR, nie auf dem Lieferbranch: K
+131	CHORE-283	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Sonar-Standard vereinheitlichen: qualitygate.wait und agentisches Profile auf di
+130	CHORE-271	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Umschalten der Steuerungslinie auf den Worklist-Manager: REGISTRY-Umzug, closure
+129	CHORE-264	HK	open	assigned	kumbuka	Produktlinie		hk-heuristic:default-hygiene	yes	Umschalten auf Schema v3: v3-Datei wird kanonisch, ARCHIVE und New-Tasks entfall
+128	CHORE-284	HK	done	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Finale Spec der Steuerungsschicht aus dem Zielbild: Dienstgrenzen, Dispatch-Obje
+127	CHORE-269	HK	done	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Logbuch als zweiter Steuerungsdienst: Sprint- und Finding-Records hinter MCP, Br
+126	CHORE-263	DEPLOY	open	assigned	kumbuka	Betrieb		cluster:DEPLOY	no	Schema-Deploy server und ee-server mit V20 (Drop des Delete-Block-Triggers): Cor
+125	CHORE-262		done	refused	-			empty-cluster	no	Analyse geschrieben: fuenf Achsen werden deployt, eine ist versioniert. IST-Anke
+124	CHORE-274		done	refused	-			empty-cluster	no	MCP-Client wlm-mcp angelegt und Connector verbunden; elf Werkzeuge nachgewiesen 
+123	CHORE-268		done	refused	-			empty-cluster	no	Worklist-Manager als Dienst gebaut und live: Web plus MCP auf wlm.jbaconsult.com
+122	CHORE-261		done	refused	-			empty-cluster	no	Immutability-Gate textgleich in server, ee-server und ops-console; nur neue Migr
+121	CHORE-249		done	refused	-			empty-cluster	no	Provider-Oberflaeche mit zwei nicht-veraltbaren Waechtern gegatet (Backend-Refle
+120	CHORE-257		done	refused	-			empty-cluster	no	Guidance-Keys produktiv auf den reservierten Namespace umgezogen; Host-Pull plus
+119	CHORE-254		done	refused	-			empty-cluster	no	Trigger-Aera abgeraeumt: DELETE_BLOCKED weg, tote SYSTEM-Zweige in eine fail-lou
+118	CHORE-253		done	refused	-			empty-cluster	no	Loeschpfad lehnt reservierte Keys jetzt typisiert ab, ueber alle drei Adresswege
+117	CHORE-250		done	refused	-			empty-cluster	no	Cold-Start-Replay laeuft als CI-Job, der immer eine Conclusion meldet (Variante 
+116	BUG-33		done	refused	-			empty-cluster	no	Connector-Delete liefert NOTHING_TO_DO, REMOVED oder FAILED; der Lifecycle-Drop 
+115	CHORE-208		done	refused	-			empty-cluster	no	Stage E vollstaendig: Seeder ueber drei Repos abgebaut, Trigger und Funktion per
+114	CHORE-243		done	refused	-			empty-cluster	no	Beantwortet mit negativem Ergebnis: kein Relay ist gangbar; Nachfolger ist CHORE
+113	CHORE-237		done	refused	-			empty-cluster	no	Waitlist-Grant ist im Cold-Start-Grantshape verdrahtet; apply.sh und Replay-Gate
+112	CHORE-236		done	refused	-			empty-cluster	no	Provider-Frontend-Secrets haben eine fail-loud Startup-Assertion unter NODE_ENV=
+111	BUG-32		done	refused	-			empty-cluster	no	Ops-Surface-DELETE-Fehler gated jetzt den Lifecycle-Drop; Tenant bleibt Kandidat
+110	CHORE-231		done	refused	-			empty-cluster	no	Produktebene gemessen: Server-Schnittstellen und Konsole sind S1 (Gate mit Test)
+109	CHORE-210		done	refused	-			empty-cluster	no	v0.8.3 released; ee-server v0.1.10 live; V19+V10001 applied out-of-order (rank 1
+108	CHORE-199		done	refused	-			empty-cluster	no	Additiver Overlay A-D,F gemerged (PR #88, 91.3%): Guidance aus Resource; Merge i
+107	FEAT-62		done	refused	-			empty-cluster	no	Stufe 1 gemerged (PR #87, 86.6%): memory_update non-creating verb + reservierter
+106	CHORE-198		done	refused	-			empty-cluster	no	ADR-0024 Am6 im OSS-Kern: ContentUnit als @MappedSuperclass, Kanalwert import, e
+105	CHORE-147		done	refused	-			empty-cluster	no	ops-no-content-Log-Gate geschlossen: ai.kumbuka + io.quarkiverse.mcp gemessen IN
+104	CHORE-162		done	refused	-			empty-cluster	no	user_account-Betreiber-Reads fail-closed (Prod live): table-SELECT REVOKE + colu
+103	CHORE-191		done	refused	-			empty-cluster	no	DB_MIGRATION true->false Revert (CHORE-189-Schluss); infra 459f6f7 auf main; Web
+102	CHORE-189		done	refused	-			empty-cluster	no	FEAT-28 limiter live: ee v0.1.9 (BUG-26) + ops v0.13.4 via infra PR #50; V10000 
+101	FEAT-28		done	refused	-			empty-cluster	no	Layer-2 write-rate limiter: built (SPRINT_112.1) then relocated CE→EE (SPRINT_11
+100	CHORE-82		done	refused	-			empty-cluster	no	Abuse/DoS threat model as design raster: 9 AB-cases x 4 surfaces, ratified-vs-op
+99	CHORE-99		done	refused	-			empty-cluster	no	Receiver liefert log_file_id (rclone lsjson) in allen Response-Pfaden; hermetisc
+98	CHORE-172		done	refused	-			empty-cluster	no	Laufzeit-Identitaets-Gate scharf: deploy.sh reicht EXPECT_VERSION (KUMBUKA_EE_VE
+97	CHORE-138		done	refused	-			empty-cluster	no	rollback.sh + ROLLBACK-DRILL.md retired (PV-15); out-of-band rollback = declarat
+96	CHORE-178		done	refused	-			empty-cluster	no	Welle #103 komplett: EE-server v0.1.7 (core 0.8.2) nach 4 gruenen Gates deployt 
+95	CHORE-171		done	refused	-			empty-cluster	no	ADR-0035 Faltung Host-Hälfte LIVE: additiver 27-Key-Merge (jeder ×1, kein Split-
+94	CHORE-170		done	refused	-			empty-cluster	no	ADR-0035 Faltung Repo-Hälfte: ops-backend/-frontend als 2 Services in infra/comp
+93	FEAT-58		done	refused	-			empty-cluster	no	Lokalisierte Enrolment-Mail (messages_de) + Registrierungssprache web→ops→KC-loc
+92	CHORE-177		done	refused	-			empty-cluster	no	Slug-Grammatik kanonisiert (ADR-0036: 2 Pattern, SSoT-Pin-Tests, scope-create 40
+91	CHORE-105		done	refused	-			empty-cluster	no	Enrolment-Leg-Fix 4/4: termsText v0.9.6 live + ops-console v0.13.2 (F-0172-Redir
+90	BUG-24		done	refused	-			empty-cluster	no	ops-console Waitlist-Approve 400: der ops-frontend BFF-Handler rief req.json() b
+89	CHORE-117		done	refused	-			empty-cluster	no	Doku-Vollpruefung PUBLIC (SPRINT_100.1): docs.kumbuka.ai DE+EN + server/console 
+88	BUG-23		done	refused	-			empty-cluster	no	ee-server-Release stempelte die pom.xml-Version nie -> jedes Image meldete `0.1.
+87	BUG-19		done	refused	-			empty-cluster	no	ops-console Version-Anzeige zeigte Dev-Default statt Release-Tag; PR #127 war se
+86	CHORE-164		done	refused	-			empty-cluster	no	Wirkungs-Guard + Matrix LIVE (infra PR #42, 8519812): die Mapping-Tabelle ist EI
+85	CHORE-160		done	refused	-			empty-cluster	no	Eigentumsfrage der Provider-Deploy-Assets -- durch ADR-0035 mit einer GROESSEREN
+84	FEAT-53		done	refused	-			empty-cluster	no	Console Connect-Wizard: lief laengst LIVE, wurde aber als "PR #69 offen" gefuehr
+83	BUG-22		done	refused	-			empty-cluster	no	ee-console rendert kein Markdown: Fix nachweislich im ee-console-Dockerfile (/md
+82	FEAT-57		done	refused	-			empty-cluster	no	user.settings-JSON LIVE: Flyway V18 (user_account.settings JSONB), typisiert an 
+81	CHORE-155		done	refused	-			empty-cluster	no	Oeffentlicher n8n-Support-Webhook gesperrt: pfadgenauer `respond 404` (KEIN Prae
+80	CHORE-135		done	refused	-			empty-cluster	no	D-OPS-34-Monitoring-Mounts in die kanonische ops-console/deploy/compose.prod.yml
+79	CHORE-121		done	refused	-			empty-cluster	no	Wildcard-Removal *.kumbuka.ai: caddy/sites/wildcard.caddy per `git rm` retired (
+78	CHORE-150		done	refused	-			empty-cluster	no	Versions-Provenienz Backend-Haelfte: /api/version liefert {name, version, core},
+77	CHORE-154		done	refused	-			empty-cluster	no	ee-console-Cutover live: deploy.cfg + compose.prod.yml auf ghcr.io/kumbuka-ai/ku
+76	BUG-21		done	refused	-			empty-cluster	no	CIMD-Fetch brach bei unbekannten Client-Metadata-Feldern hart ab (Upstream-KC, R
+75	FEAT-49		done	refused	-			empty-cluster	no	FTS fuer memory_recall (substring -> tsvector, DE/EN-Stemming). ABSORBIERT von F
+74	CHORE-148		done	refused	-			empty-cluster	no	Console-EE-Seam GEBAUT: console v0.5.1 als Source-Package + Slots mit typ-erzwun
+73	CHORE-144		done	refused	-			empty-cluster	no	F-0140-Header durabel: `header_down` mit RFC-9728-`resource_metadata` aus host-d
+72	CHORE-143		done	refused	-			empty-cluster	no	RFC-9728-Fix: /mcp WWW-Authenticate liefert jetzt resource_metadata-Parameter (F
+71	CHORE-141		done	refused	-			empty-cluster	no	Policy-Wiring scope-attach-Executor live: Template-Diff fresh-import-verifiziert
+70	BUG-20		done	refused	-			empty-cluster	no	KC-info.ftl-Konto-Sackgasse: bereits im Code gefixt (F-0104-Nachbarschaft), Oper
+69	CHORE-128		done	refused	-			empty-cluster	no	Server-Metriken-Dashboard live (v0.12.6, PR #125 gruen inkl. Sonar): Host-Sample
+68	CHORE-123		done	refused	-			empty-cluster	no	ChatGPT-Onboarding-Anleitung (Fake-Secret-Tanz) obsolet: ChatGPT verbindet seit 
+67	CHORE-125		done	refused	-			empty-cluster	no	F-0121-Review erledigt durch T4-Messung: Mistral-DCR-Blockade war Trusted-Hosts-
+66	CHORE-133		done	refused	-			empty-cluster	no	GoAccess-iframe in /caddy live (v0.12.7, PR #126): BFF-Route-Handler serviert Fr
+65	CHORE-134		done	refused	-			empty-cluster	no	Version-Footer ops-console (v0.12.7, PR #126); Quelle-Fix -> BUG-19 (CI-Stamp), 
+64	CHORE-127		done	refused	-			empty-cluster	no	GoAccess-Edge-Analytics live (Variant 2 Host-Binary): 3 statische Reports www/co
+63	CHORE-126		done	refused	-			empty-cluster	no	Caddy-JSON-Access-Logs live auf 3 Hosts (www/console/mcp): REAL IP + Authorizati
+62	CHORE-124		done	refused	-			empty-cluster	no	MCP-Registry-Listing gemintet: ai.kumbuka/kumbuka-server v1.0.1 latest in offizi
+61	CHORE-122		done	refused	-			empty-cluster	no	Realm-Template kumbuka-connector durabel auf public + Vendor-Origins (SPRINT_79.
+60	FEAT-18		done	refused	-			empty-cluster	no	MCP-Adress-Umbau auf mcp.kumbuka.ai LIVE: Cutover Phase 0-2 (Deploy-Welle ee v0.
+59	CHORE-119		done	refused	-			empty-cluster	no	audience=kumbuka-connector auf /mcp erzwungen + Boot-Guard (fail-loud), in #77-D
+58	BUG-18		done	refused	-			empty-cluster	no	server resolveClientId: per-tenant-Connector-Addressing (B2) entfernt, AdminConn
+57	CHORE-110		done	refused	-			empty-cluster	no	SEC-08 re-geratet auf Low (interner Kanal via compose-Alias gegen LE-Cert) + Fix
+56	BUG-17		done	refused	-			empty-cluster	no	CSV-Formula-Injection im ops-console Audit-Export gefixt (SPRINT_74.2): AuditCsv
+55	CHORE-108		done	refused	-			empty-cluster	no	Beta-Gate A2 komplett: drei read-only-Detektoren (Provider-Full-Pass, Produkt-De
+54	CHORE-104		done	refused	-			empty-cluster	no	Closed-Beta-Ankuendigungs-Paket #72: Waitlist-Betriebsstrecke prod-grün (v0.12.3
+53	BUG-16		done	refused	-			empty-cluster	no	Waitlist-Filter (F-0043-Promotion): Status-Filter in #117 gefixt/restauriert, mi
+52	CHORE-07		done	refused	-			empty-cluster	no	Reject-Email-Code-Return: durch F-0106 konkretisiert und miterledigt (PR #117 fa
+51	BUG-05		done	refused	-			empty-cluster	no	KC-Post-Password-Set-Sackgasse: beide Reset-Endpfade auf Prod v0.8.0 gemessen (2
+50	CHORE-96		done	refused	-			empty-cluster	no	KC-Basis-Upgrade 26.0->26.6.4 (v0.8.0 live): F-0101-NPE-Fix, CVE-2026-37982, Rec
+49	BUG-14		done	refused	-			empty-cluster	no	Passkey-Fallback "Invalid Request" (F-0081): Theme-`?`->`&` (PR #12) + KC-26.6.4
+48	CHORE-93		done	refused	-			empty-cluster	no	Tag-&-Deploy-Welle #69: 5 Tags, ee-CE-Bump (69.1), Recovery-Hide v0.4.18 (69.2),
+47	FEAT-42		done	refused	-			empty-cluster	no	Notfall-Hard-Delete live: Purge-Endpoint (server 0.7.3) + ops-console-Strecke (v
+46	FEAT-32		done	refused	-			empty-cluster	no	Account-Security-Surface e2e: TOTP/Passkey-Listen+Remove (F-0075 zu), Recovery-K
+45	CHORE-91		done	refused	-			empty-cluster	no	Nachdoku #67: F-0087 (JDK-26-Toolchain), F-0088 (Lock-Trigger-Purge-Blockade), F
+44	CHORE-92		done	refused	-			empty-cluster	no	Merge-Welle #68: server#72 (erasure-Isolation via Worktree), ops-console#116, FE
+43	CHORE-72		done	refused	-			empty-cluster	no	`getcfg()`-Pipefail-Fix (release.sh, T17-Regressionstest) — infra#20 gemergt 202
+42	CHORE-88		done	refused	-			empty-cluster	no	D-OPS-31 (Backend-Scaling + Abuse-Control) persistiert: Ledger+INDEX (#66) + Mne
+41	CHORE-89		done	refused	-			empty-cluster	no	ops-console-UI lokal auf ops.kumbuka.dev angebunden (OPS_OIDC_ISSUER-Fix, dev-Op
+40	CHORE-90		done	refused	-			empty-cluster	no	ops-console Audit-Log-Batch (Filter/Sort/CSV-Export, Tenant-Name global, Tabelle
+39	CHORE-80		done	refused	-			empty-cluster	no	WORKLIST auf schlanke Steuerungs-Tabelle reduziert, F-ID-Kollision behoben, STAR
+38	CHORE-23		done	refused	-			empty-cluster	no	Stehendes off-host DR-Backup (age-Blob), Restore-Round-Trip data-perfect n=2
+37	CHORE-03		done	refused	-			empty-cluster	no	Keycloak-v0.7.0-Cutover faktisch erledigt, prod lief bereits v0.7.6
+36	FEAT-02		done	refused	-			empty-cluster	no	Onboarding-Server-Feld `user_account.onboarding` — resolved-by-prior-work (V15/P
+35	BUG-03		done	refused	-			empty-cluster	no	Console-Crash write-policy "active project scope" + global fallback
+34	CHORE-22		done	refused	-			empty-cluster	no	n8n-DB-Fold + Edge-Fold, n8n-Rolle auf eigene DB confined
+33	CHORE-21		done	refused	-			empty-cluster	no	FHS-Umzug + non-root (Variante 2), konsolidierter Stack live
+32	CHORE-13		done	refused	-			empty-cluster	no	Keystone-Migration-Shape ratifiziert — erfüllt durch ADR-0024
+31	FEAT-19		done	refused	-			empty-cluster	no	Scope-Content-Lock CE end-to-end (Server+Console+e2e-V16)
+30	CHORE-56		done	refused	-			empty-cluster	no	ADR-0018 revidiert+re-ratifiziert: Variant A2, Zwei-Produkt-Topologie
+29	CHORE-57		done	refused	-			empty-cluster	no	FEAT-19-Scope-Lock-Gating-Specs gelandet (e2e-Welle)
+28	BUG-08		done	refused	-			empty-cluster	no	Wurzel `permission denied for table governance_audit` — Flyway-Superuser-Ownersh
+27	BUG-09		done	refused	-			empty-cluster	no	v4-Deploy-Verify-Email fehlte — n8n-Workflow-Fix (alwaysOutputData/Retry)
+26	CHORE-30		done	refused	-			empty-cluster	no	Slop-Detektor-Configs gelandet (4 PRs, PIT+Stryker)
+25	CHORE-32		done	refused	-			empty-cluster	no	Dependabot-CI entsperrt, alle Bot-PRs grün
+24	CHORE-28		done	refused	-			empty-cluster	no	SonarCloud-Gate-Schärfung: PR-Check required (3 Repos)
+23	BUG-07		done	refused	-			empty-cluster	no	scope-remap Mnemonik-Verschieben-Fehler — remap guard gemergt
+22	CHORE-34		done	refused	-			empty-cluster	no	Compose-Repo-Konvergenz: caddy-Alias + n8n-CVE-Pin 2.27.3
+21	CHORE-35		done	refused	-			empty-cluster	no	Idempotenter CONNECT-Grant-Sweep (11-ops-connect-grants.sql)
+20	CHORE-36		done	refused	-			empty-cluster	no	Edge-IP stabilisiert (statische caddy-IP, reboot-bewiesen)
+19	CHORE-49		done	refused	-			empty-cluster	no	Host-Aktivierung deklarative Deploy-Steuerung (deploy.cfg-SSoT)
+18	CHORE-52		done	refused	-			empty-cluster	no	Erster echter vollautomatischer v4-Webhook-Deploy grün
+17	CHORE-53		done	refused	-			empty-cluster	no	V16-Schema-Adaption gemergt, `gating` grün
+16	CHORE-60		done	refused	-			empty-cluster	no	ADR-0014 revidiert (Variante 3): eine breite kumbuka_operator-Rolle
+15	CHORE-62		done	refused	-			empty-cluster	no	G9-Operator-Rollen-Cutover live, Memory-Wand am Live-System bewiesen
+14	CHORE-63		done	refused	-			empty-cluster	no	ops-console v0.12.0 getaggt + deployt (manuell, F-0062b)
+13	CHORE-65		done	refused	-			empty-cluster	no	ops-console Auth/Session-Hardening (Gating+Refresh) live verifiziert
+12	CHORE-68		done	refused	-			empty-cluster	no	saas-runtime → ee-server Migration (ADR-0018 Teil 1)
+11	CHORE-69		done	refused	-			empty-cluster	no	Private-Repo-Renames (infra/web/keycloak)
+10	BUG-12		done	refused	-			empty-cluster	no	ops-console `/tenants` down — CONNECT-Grant fehlte den ops-Rollen
+9	CHORE-83		done	refused	-			empty-cluster	no	local-dev KC-Org-Bootstrap, Directory-500 über vier Bausteine geschlossen
+8	CHORE-43		done	refused	-			empty-cluster	no	resolve_blob/ensure_op_session-Fixes — superseded, gebündelt in CHORE-47
+7	CHORE-44		done	refused	-			empty-cluster	no	Verify-Härtung (externer Ingress+Cert-Trust) — superseded, gebündelt in CHORE-47
+6	CHORE-02		done	refused	-			empty-cluster	no	no-mock-at-trust-boundary ratifizieren — durch ADR-0019 gedeckt
+5	CHORE-08		done	refused	-			empty-cluster	no	Read-only-Full-Repo-Audit — P1/Tenant-Isolation halten strukturell
+4	F-0076		dissolved	refused	-			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+3	F-0077		dissolved	refused	-			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+2	F-0078		dissolved	refused	-			empty-cluster	no	F-ID-Renumber-Kollision (#60.1) + Struktur-Fix (monotone Vergabe)
+1	F-0079		dissolved	refused	-			empty-cluster	no	Record-Drift FEAT-02/BUG-06 als offen geführt trotz gelandeter Impl
