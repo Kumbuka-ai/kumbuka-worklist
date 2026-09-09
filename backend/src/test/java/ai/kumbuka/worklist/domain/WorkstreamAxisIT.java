@@ -17,9 +17,9 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
  * The fourth view — the workstream. This suite covers what the frame
- * ratified on 2026-09-08 and asks the service to enforce in the core.
+ * ratifies and asks the service to enforce in the core.
  *
- * <h2>The red state for each of the three violation classes</h2>
+ * <h2>The red state for each of the two violation classes</h2>
  *
  * <p><strong>Class 1 — an item without a workstream.</strong> The item
  * verb resolves a workstream at create time (from the caller's argument
@@ -29,15 +29,15 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * outer floor. Both are the guard; both were observed rejecting on the
  * dev DB after this suite was written.
  *
- * <p><strong>Class 2 — an item whose milestone lies in another
- * workstream.</strong> Removing {@code refuseCrossWorkstreamMilestone}
- * from {@link ItemService#applyMilestone} lets the assignment through
- * silently. The probe below observes the refusal.
- *
- * <p><strong>Class 3 — an iteration closed without a naming.</strong>
+ * <p><strong>Class 2 — an iteration closed without a naming.</strong>
  * Removing {@code requireNamed} in {@link IterationService#close(UUID, UUID, String, String)}
  * lets the close pass with a null or blank produced-name. The probe
  * observes the refusal.
+ *
+ * <p>The third class that used to sit here — "an item whose milestone
+ * lies in another workstream" — is retracted by V12 (2026-09-09,
+ * TAR-0002 section 4, REQ-0148 obsolete). Its reversal is asserted in
+ * {@link MilestoneWorkstreamDecouplingIT}.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)

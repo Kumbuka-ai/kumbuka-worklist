@@ -15,15 +15,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
- * The milestone counter runs per workstream — two workstreams
- * legitimately share a milestone number, and the address form
- * disambiguates through the scope alone because the workstream is a
- * field at the milestone and never an address component.
+ * The milestone counter runs scope-wide again after V12 (2026-09-09,
+ * TAR-0002 section 4, REQ-0148 obsolete). This suite keeps the checks
+ * that survive the rollback:
  *
- * <p>Also probes that a milestone's workstream is write-once (from
- * create) and refuses a later move — the milestone's number was
- * allocated from THIS workstream's counter, and moving the row would
- * detach the number from its axis.
+ * <ul>
+ *   <li>Two milestones in one scope get consecutive numbers regardless
+ *       of the workstream at either row.
+ *   <li>A create without a workstream still resolves to the scope's
+ *       default (the column is dead but the create path still populates
+ *       it for the image cycle).
+ *   <li>Address resolution through the workstream selector still works.
+ * </ul>
+ *
+ * <p>The "different workstreams share a number" and "update is refused"
+ * shapes are gone; their reversal is asserted in
+ * {@link MilestoneWorkstreamDecouplingIT}.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -44,32 +51,6 @@ class MilestoneWorkstreamNumberingIT {
         settings.create(scope, Map.of(
             "max_planned_iterations", 10, "warn_planned_iterations", 9,
             "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
-    }
-
-    @Test
-    void milestones_in_different_workstreams_share_the_same_number_line() {
-        workstreams.requireDefault(scope);
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Workstream backend = workstreams.declare(scope, "backend", "backend stream");
-
-        Long firstInMobile = (Long) milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "mobile goal 1",
-            Field.VISION.canonicalName(), "first mobile star",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()))
-            .get(Field.NUMBER.canonicalName());
-
-        Long firstInBackend = (Long) milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "backend goal 1",
-            Field.VISION.canonicalName(), "first backend star",
-            Field.WORKSTREAM_ID.canonicalName(), backend.id.toString()))
-            .get(Field.NUMBER.canonicalName());
-
-        assertThat(firstInMobile)
-            .as("mobile's milestone counter opens at 1")
-            .isEqualTo(1L);
-        assertThat(firstInBackend)
-            .as("backend's milestone counter opens at 1 too — the two axes are independent")
-            .isEqualTo(1L);
     }
 
     @Test
@@ -99,26 +80,6 @@ class MilestoneWorkstreamNumberingIT {
             Field.TITLE.canonicalName(), "default-workstream goal",
             Field.VISION.canonicalName(), "vision"));
         assertThat(created.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(defaultWs.id);
-    }
-
-    @Test
-    void milestone_update_with_a_different_workstream_is_refused() {
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Workstream backend = workstreams.declare(scope, "backend", "backend stream");
-
-        Map<String, Object> created = milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "settled milestone",
-            Field.VISION.canonicalName(), "vision",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()));
-        UUID milestoneId = (UUID) created.get(Field.ID.canonicalName());
-        String token = (String) created.get(Field.CONFLICT_TOKEN.canonicalName());
-
-        WorklistException refusal = refusalFrom(() -> milestones.update(scope, milestoneId,
-            Map.of(
-                Field.WORKSTREAM_ID.canonicalName(), backend.id.toString(),
-                Field.CONFLICT_TOKEN.canonicalName(), token)));
-        assertThat(refusal.reason())
-            .isEqualTo(WorklistException.Reason.WORKSTREAM_MILESTONE_MISMATCH);
     }
 
     @Test

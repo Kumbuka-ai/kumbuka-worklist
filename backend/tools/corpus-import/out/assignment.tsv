@@ -5,14 +5,14 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 507	BUG-52	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienst: Metadaten-Lesemodell ist Map<String,String> und scheitert an de
 506	BUG-51	CONN	open	assigned	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy weist normalisierte resource-URI ab: Abgleich gegen die Ressourcentab
 505	CHORE-356	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	SQL-Importskript: den Steuerungskorpus aus dem Dateispeicher des Vorgaengers in 
-504	CHORE-355	DEPLOY	open	refused	-			milestone-workstream-conflict	no	Steuerungskorpus aus dem Python-Logbuch in das Schema dispatch migrieren: SQL-Im
+504	CHORE-355	DEPLOY	open	assigned	kumbuka	Betrieb	5	cluster:DEPLOY	no	Steuerungskorpus aus dem Python-Logbuch in das Schema dispatch migrieren: SQL-Im
 503	FEAT-95	CONN	open	assigned	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy v0.2.0: scopes_supported, offline_access als Vorgabe, und DCR neben C
 502	FEAT-94	CONN	done	assigned	kumbuka	Produktlinie	5	cluster:CONN	no	cimd-proxy: MCP-Autorisierungsproxy vor Keycloak, CIMD nach aussen, OIDC nach hi
 501	CHORE-354	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Kennungsfrage bei accept entscheiden: Adresse und Geschaeftskennung sind unter d
 500	FEAT-93	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst benutzbar machen: die sechs ungebauten Domaenenverben, Inbetrieb
 499	CHORE-353	HK	open	assigned	kumbuka	Architektur		named-exception:architektur	no	Qualitaet der Leitplankenknoten: Problem und Dringlichkeit als Pflichtteil, und 
 498	CHORE-352	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Code-Review-Methodik: ein zweiter unabhaengiger Pruefapparat am Dispatch, mit Em
-497	CHORE-351	DEPLOY	planned	refused	-			milestone-workstream-conflict	no	Worklist-Dienst, Betriebsstrang: Matrixzeile, Compose-Dienst, Rollen und Schlues
+497	CHORE-351	DEPLOY	planned	assigned	kumbuka	Betrieb	5	cluster:DEPLOY	no	Worklist-Dienst, Betriebsstrang: Matrixzeile, Compose-Dienst, Rollen und Schlues
 496	FEAT-92	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienst, Speicherhaelfte neu: V4 gegen das Zielschema ersetzen, samt Pol
 495	FEAT-91	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Planungsschicht der Worklist: die Verben, die Ableitung von planned und das Opti
 494	CHORE-350	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Fassade in Plattform-Router umbenennen: Zielbild, abgeleitete Knoten und Zeilen,
@@ -22,7 +22,7 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 490	BUG-49	CORE	open	assigned	kumbuka	Produktlinie	1	cluster:CORE	no	memory_load_context kappt still auf 20 Eintraege pro Typ und nennt weder Gesamtz
 489	CHORE-348	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Bauplan-Normativ der Plattformdienste: Inventur von Dispatch und Worklist, Entsc
 488	FEAT-89	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Domaene: query, claim_next und withdraw bauen -- drei Plattformverben o
-487	CHORE-347	CORE	done	refused	-			milestone-workstream-conflict	no	Innenansicht der Plattform-Komponente festhalten: Revision 2 von platform-layer.
+487	CHORE-347	CORE	done	assigned	kumbuka	Architektur	5	named-exception:architektur	no	Innenansicht der Plattform-Komponente festhalten: Revision 2 von platform-layer.
 486	CHORE-346	HK	open	assigned	kumbuka	Architektur		named-exception:architektur	no	Extraktionsvollstaendigkeit von spec/docs/working/ pruefen, bevor der Ordner abg
 485	CHORE-345	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	Methodikschicht neu schneiden: Entscheidungsverfahren, Doktrin-Zustaendigkeit, K
 483	FEAT-88	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Die beiden fehlenden Modi des Graph-Validators: templates und der Index unter ge
@@ -30,7 +30,7 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 481	CHORE-343	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Die fuenf verbleibenden Zielbilder schreiben: Memory, Dispatch, Worklist, Verzei
 480	CHORE-342	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Document-Service: Zielbild, Adressraum, deklarierte Metadaten und Kanten -- Konz
 479	BUG-48	CORE	open	assigned	kumbuka	Produktlinie	1	cluster:CORE	no	create ueberschreibt ein gesendetes Logbuch-Objekt still statt einen Konflikt zu
-478	CHORE-341	HK	open	refused	-			milestone-workstream-conflict	no	Graph-Validator fuer den Architektur-Knotenkorpus bauen — das in Schritt 5 vorge
+478	CHORE-341	HK	open	assigned	kumbuka	Architektur	1	hk-heuristic:arch-keyword	yes	Graph-Validator fuer den Architektur-Knotenkorpus bauen — das in Schritt 5 vorge
 477	CHORE-340	CORE	done	assigned	kumbuka	Architektur		named-exception:architektur	no	Zweite Runde der Korpusmigration: CON- und Leitplankenknoten, TAR/REA-Spaltung, 
 476	CHORE-339	CORE	done	assigned	kumbuka	Architektur		named-exception:architektur	no	Erste Runde der Korpusmigration: VIS-Setzung, Nordstern-Invarianten als REQ, CON
 475			new	refused	-			empty-cluster	no	ADR fuer den Verbprozess: wie neue Verben und neue Schemata hinzukommen
@@ -44,12 +44,12 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 467	FEAT-86	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	MCP- und REST-Oberflaeche des Gedaechtnisdienstes samt Authentifizierung und dem
 466	CHORE-337	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Drei Reparaturen aus Sprint 154: WITH-CHECK-Begruendung, Hygiene-Gate ohne Satel
 465	BUG-47	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Migrations-Callback in kumbuka-server ist nicht registriert und hat keinen Zeuge
-464	CHORE-336	CORE	open	refused	-			milestone-workstream-conflict	no	Restarbeit der Extraktion: Artefaktveroeffentlichung von kumbuka-memory und Zuor
-463	FEAT-85	DEPLOY	done	refused	-			milestone-workstream-conflict	no	Deployment des leeren Gedaechtnisdienstes: Container-Image, Health-Endpunkt, Gra
+464	CHORE-336	CORE	open	assigned	kumbuka	Architektur	5	named-exception:architektur	no	Restarbeit der Extraktion: Artefaktveroeffentlichung von kumbuka-memory und Zuor
+463	FEAT-85	DEPLOY	done	assigned	kumbuka	Betrieb	5	cluster:DEPLOY	no	Deployment des leeren Gedaechtnisdienstes: Container-Image, Health-Endpunkt, Gra
 462	CHORE-335	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Zielbild der Datenschicht: public auftrennen, Rollen und Eigentum je Schema, Rec
 461	BUG-46	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Reichweite des Log-Waechters: nur LOG in Grossbuchstaben wird gesehen, Argumente
 460	BUG-45	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Reichweite des Log-Waechters: erzwungenes LOG in Grossbuchstaben und Argumentsch
-459	CHORE-334	DEPLOY	open	refused	-			milestone-workstream-conflict	no	release.sh haertet: Umgebungs-Waechter vor dem Rendern, Gesundheit im Effect Gua
+459	CHORE-334	DEPLOY	open	assigned	kumbuka	Betrieb	1	cluster:DEPLOY	no	release.sh haertet: Umgebungs-Waechter vor dem Rendern, Gesundheit im Effect Gua
 458	CHORE-333	CORE	open	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	V22 sammelt die drei Produktions-Handgriffe ein: View-Eigentuemer, Dispatch-Migr
 457	BUG-44	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Der Dispatch-Dienst haelt TRUNCATE und TRIGGER auf dem eigenen Schema: TRUNCATE 
 456	FEAT-84	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Plattform-Fassade als eigener Dienst: Schema-Routing ohne eigene Autoritaet, pri
@@ -66,25 +66,25 @@ nr	id	cluster	status	bucket	target_scope	workstream	milestone	rule	heuristic	tit
 445	FEAT-81	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienst, Oberflaechenhaelfte: REST-Flaeche gegen den ratifizierten Verbk
 444	CHORE-327	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Fassade und einheitliches URI-adressiertes Verbvokabular: Harmonisierung auf ein
 443			new	refused	-			empty-cluster	no	Index ueber ADRs und Entscheidungs-Ledger mechanisch generieren statt von Hand p
-442	CHORE-326	HK	open	refused	-			milestone-workstream-conflict	no	Zielbild der Worklist pflegen und in einen ADR zurueckspiegeln
+442	CHORE-326	HK	open	assigned	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Zielbild der Worklist pflegen und in einen ADR zurueckspiegeln
 441		CORE	new	assigned	kumbuka	Produktlinie		cluster:CORE	no	Kontextkosten der MCP-Verbflaeche gegen die API messen statt schaetzen
-440	CHORE-324	HK	open	refused	-			milestone-workstream-conflict	no	Zielbild des Dispatch-Dienstes pflegen und in ADR-0042 und ADR-0038 zurueckspieg
+440	CHORE-324	HK	open	assigned	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Zielbild des Dispatch-Dienstes pflegen und in ADR-0042 und ADR-0038 zurueckspieg
 439	CHORE-325	HK	open	assigned	kumbuka	Architektur		hk-heuristic:arch-keyword	yes	ADR-Bestand auf hoechstens 30 konsolidieren: neue Nomenklatur, Zuordnungstabelle
-438	CHORE-323	HK	done	refused	-			milestone-workstream-conflict	no	M5-Gatter: Architekturreview und Gap-Analyse nach beiden Dienstspezifikationen, 
+438	CHORE-323	HK	done	assigned	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	M5-Gatter: Architekturreview und Gap-Analyse nach beiden Dienstspezifikationen, 
 437	FEAT-80	CORE	planned	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Ereignis-Log der Steuerungsdienste: Nachweispfad als Ersatz fuer die verschwinde
 436	CHORE-322	HK	open	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	kumbuka-server nach kumbuka-memory umbenennen: Submodulpfade, Imagenamen, Matrix
 435	CHORE-321	GTM	open	assigned	kumbuka	GTM		cluster:GTM	no	Aussagenschaerfe durchziehen: Formulierung zum Betreiber-Lesezugriff in Position
-434	CHORE-320	DEPLOY	open	refused	-			milestone-workstream-conflict	no	Abschaltung des Vorgaengers: REGISTRY.md, state/, alter Dienststapel und Steueru
-433	CHORE-319	DEPLOY	open	refused	-			milestone-workstream-conflict	no	Umzug des Bestands: Git-Korpus, Agent-Run-SQLite und die unversionierten Zustand
+434	CHORE-320	DEPLOY	open	assigned	kumbuka	Betrieb	5	cluster:DEPLOY	no	Abschaltung des Vorgaengers: REGISTRY.md, state/, alter Dienststapel und Steueru
+433	CHORE-319	DEPLOY	open	assigned	kumbuka	Betrieb	5	cluster:DEPLOY	no	Umzug des Bestands: Git-Korpus, Agent-Run-SQLite und die unversionierten Zustand
 432	FEAT-79	EE	open	assigned	kumbuka	Produktlinie	5	cluster:EE	no	Worklist Enterprise: Versionierung veraenderlicher Zeilen als Append-on-Write, m
 431	FEAT-78	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Domaene und Store auf SQL: Zeilen, Nummernraeume pro Scope, Ruecknahme 
 430	FEAT-77	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Worklist-Dienstgeruest, Substrathaelfte: eigenes Repository, Quarkus, Schema mit
 429	FEAT-76	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Domaene und Store auf SQL: Objektmodell, neun Statuswerte mit einem Ver
 428	FEAT-75	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Dispatch-Dienstgeruest, Substrathaelfte: Repository, Quarkus, Schema mit eigener
-427	CHORE-318	HK	done	refused	-			milestone-workstream-conflict	no	Spezifikation Worklist Manager (Stufe 2): 25 Verbenvertraege, veraenderliche Zei
-426	CHORE-317	HK	done	refused	-			milestone-workstream-conflict	no	Spezifikation Logbuch (Stufe 2): 20 Verbenvertraege, Statusmaschine, Invarianten
+427	CHORE-318	HK	done	assigned	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Spezifikation Worklist Manager (Stufe 2): 25 Verbenvertraege, veraenderliche Zei
+426	CHORE-317	HK	done	assigned	kumbuka	Architektur	5	hk-heuristic:arch-keyword	yes	Spezifikation Logbuch (Stufe 2): 20 Verbenvertraege, Statusmaschine, Invarianten
 425	FEAT-74	CORE	done	assigned	kumbuka	Produktlinie	5	cluster:CORE	no	Mandantenverzeichnis Stufe 1: Sicht platform.scope_access, lesend fuer die beide
-424	CHORE-316	HK	open	refused	-			milestone-workstream-conflict	no	INDEX-Dateien auf Zeigergroesse zuruecknehmen: Prosa gehoert in das Dokument, de
+424	CHORE-316	HK	open	assigned	kumbuka	Architektur	2	hk-heuristic:arch-keyword	yes	INDEX-Dateien auf Zeigergroesse zuruecknehmen: Prosa gehoert in das Dokument, de
 423	CHORE-315	HK	done	deferred	jbaconsult			hk-heuristic:jba-keyword	yes	M5 planen: Spezifikation als erste Etappe der Neuimplementierung, Meilensteinzer
 422	BUG-41	CORE	open	assigned	kumbuka	Produktlinie		cluster:CORE	no	Logbuch: Paar-Invariante am Uebergang statt am Gate pruefen, terminale Sackgasse
 421	CHORE-314	CORE	open	assigned	kumbuka	Produktlinie	2	cluster:CORE	no	Projektanweisung auf den Bootstrap-Kern reduzieren, den Rest als Kontext-Dokumen
