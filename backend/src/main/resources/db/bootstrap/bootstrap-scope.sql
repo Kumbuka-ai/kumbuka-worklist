@@ -332,51 +332,29 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
--- The three markers.
+-- No milestone markers.
 --
--- These are the predecessor's three non-numeric milestone tokens, and the
--- mapping is exact rather than interpreted:
+-- The predecessor carried three markers for the absence of a milestone
+-- (M?, M0, Mx) and the earlier bootstrap seeded them here as three
+-- milestone rows with kind not_assessed / off_path / no_vision. REA-0007
+-- §4 (ratified 2026-09-09) retracts them without a successor: "the
+-- predecessor's three markers for the absence of a milestone all mean
+-- the same thing and have no successor. A row carrying one arrives
+-- without a milestone. No catch-all milestone is created: it would
+-- reintroduce at a new location the ambiguity the planning layer
+-- removes."
 --
---   M?  not yet assessed              -> not_assessed
---   M0  off the product path          -> off_path
---   Mx  on the path, no vision covers -> no_vision
+-- The CHECK constraint in V4 (`kind IN ('milestone', 'not_assessed',
+-- 'off_path', 'no_vision')`) still permits the three tokens for
+-- compatibility with any existing row that still carries them; the
+-- constants in `Milestone.java` stay for the same reason. Neither is
+-- called by this bootstrap any more, and neither is issued by any verb
+-- since MilestoneService.create refuses `kind` on the surface.
 --
--- They are rows and positions on the axis rather than exceptions, which is why
--- they live in the milestone table. A marker carries neither vision nor
--- mission — the schema enforces that — because a marker is the statement that
--- no goal applies.
---
--- WHY THIS IS WRITTEN AGAINST THE TABLE. `MilestoneService.create` offers no
--- route to set `kind`; markers are not creatable through a verb. That was a
--- decision in the milestone build, and it is the reason a bootstrap has to
--- reach past the surface here.
---
--- The numbers 1..3 are allocated by this file, so the high water mark is
--- carried forward in the same transaction below. Without that the service
--- allocates 1 again at the first real milestone and collides — silently,
--- because this script would have completed cleanly.
+-- The milestone number_space is therefore left at 0. The service
+-- allocates 1 at the first real milestone; nothing here reserves any
+-- range.
 -- ---------------------------------------------------------------------------
-INSERT INTO worklist.milestone (tenant_id, scope_id, number, title, kind, status, rank)
-VALUES
-    (:'tenant_id', :'scope_id', 1, 'Noch nicht bewertet',      'not_assessed', 'planned', 10),
-    (:'tenant_id', :'scope_id', 2, 'Abseits des Produktpfads', 'off_path',     'planned', 20),
-    (:'tenant_id', :'scope_id', 3, 'Keine Vision deckt dies',  'no_vision',    'planned', 30)
-ON CONFLICT DO NOTHING;
-
--- Carry the milestone counter past the three markers. `GREATEST` keeps this
--- idempotent and keeps a second run from lowering a mark the service has since
--- advanced.
---
--- Only the milestone counter is written. `item` and `iteration` allocate
--- nothing here, and a counter row absent is the same as a counter at zero —
--- the service creates the row at its first allocation.
-INSERT INTO worklist.number_space (tenant_id, scope_id, selector_id, high_water_mark)
-SELECT :'tenant_id', :'scope_id', s.id, 3
-  FROM worklist.selector s
- WHERE s.tenant_id = :'tenant_id' AND s.scope_id = :'scope_id' AND s.token = 'milestone'
-ON CONFLICT (tenant_id, scope_id, selector_id)
-DO UPDATE SET high_water_mark = GREATEST(worklist.number_space.high_water_mark, 3),
-              updated_at = now();
 
 COMMIT;
 

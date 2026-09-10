@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate the transactional corpus-import SQL file (Sprint 177.9).
+"""Generate the transactional corpus-import SQL file (Sprint 177.9,
+sharpened 177.10).
 
 Reads the pinned source (snapshot.env + WORKLIST.md via git show) and the
 177.8 assignment rule (imported from dry_run.py), emits a single-file
@@ -7,6 +8,11 @@ one-transaction SQL script that the operator applies on the host where
 Flyway runs.
 
 The script does NOT connect to any database. It only writes a file.
+
+177.10: the emitted file uses `psql` variables `:'tenant_id'` and
+`:'scope_id'` for tenant and scope, so the file's digest is fixed and
+independent of which scope it is applied to. The operator passes both
+UUIDs at the psql invocation.
 
 REA-0007 §5 "The form of the delivery": one transaction, safe to reapply
 or refused, and the file identifies itself in the target. This
@@ -20,13 +26,17 @@ requires no schema change (the auftrag forbids one). The definition's
 `name` field carries `sha=...; pin=...; rows=N` and the idempotency
 check reads it back on second application.
 
-Invocation:
+Invocation of the generator (produces the file; no UUIDs):
     python3 generate_import.py \\
         --steering /path/to/steering \\
         --snapshot ./snapshot.env \\
-        --tenant-id <uuid> \\
-        --scope-id  <uuid> \\
         --out       ./out/import.sql
+
+Invocation of the file (the operator, on the host):
+    psql -v ON_ERROR_STOP=on \\
+         -v tenant_id=<uuid> \\
+         -v scope_id=<uuid> \\
+         -f import.sql
 """
 from __future__ import annotations
 
@@ -68,16 +78,18 @@ from dry_run import (  # noqa: E402
 # - dissolved  → analog to bootstrap's `obsolete` (closed=T, successful=F).
 #                The source uses `dissolved` where the bootstrap language
 #                uses `obsolete`; the four predicates align exactly.
-# - planned    → analog to `open` (actionable=T). Under TAR-0002 §4
-#                `planned` is a VIEW over iteration_membership, not a
-#                status value. The row's status carrier still needs a
-#                declared value — actionable-not-in-progress is the
-#                closest fit. The `planned` semantic (has membership)
-#                does not travel with this import — no iterations are
-#                moved. This is Concept's to ratify.
+# - planned    → mapped to `open` (actionable=T). Ratified 177.10:
+#                the running iteration does NOT travel with this import
+#                — the operator opens a fresh iteration in the new
+#                service — so a row that was `planned` in the
+#                predecessor arrives with no iteration membership, and
+#                the derived `planned` view (TAR-0002 §4: "planned is
+#                derived and never stored") holds nothing new. Mapping
+#                to `open` is therefore correct and not a loss: there
+#                is nothing to derive from.
 # - observing  → analog to `new` (all four predicates false). The row
 #                is neither actionable nor closed; a mediator between
-#                open and terminal. Concept's to ratify.
+#                open and terminal. Ratified 177.10.
 # ---------------------------------------------------------------------------
 
 STATUS_PREDICATES: dict[str, tuple[bool, bool, bool, bool]] = {
@@ -228,8 +240,8 @@ def emit_header(sha_placeholder: str, pin_sha: str, row_count: int) -> str:
 
 
 def emit_body(
-    tenant_id: str,
-    scope_id: str,
+    tenant_ref: str,
+    scope_ref: str,
     milestones: list[dict],
     assignments: list[Assignment],
     pin_sha: str,
@@ -238,20 +250,30 @@ def emit_body(
 ) -> str:
     """Emit the transactional body between BODY_BEGIN_MARKER and
     BODY_END_MARKER. Called twice: once with digest='<sha256_placeholder>'
-    to compute the actual sha, once with the real digest."""
+    to compute the actual sha, once with the real digest.
+
+    177.10: `tenant_ref` and `scope_ref` are the psql-var references
+    (`:'tenant_id'` and `:'scope_id'`), not UUID literals. The emitted
+    file is scope-independent; the operator binds both at psql call.
+    """
     lines: list[str] = []
     ap = lines.append
 
-    tenant_lit = sql_quote(tenant_id)
-    scope_lit = sql_quote(scope_id)
+    tenant_lit = tenant_ref
+    scope_lit = scope_ref
 
     ap(BODY_BEGIN_MARKER)
     ap("")
     ap("BEGIN;")
     ap("")
     ap("-- RLS binds the migrator too (V3 FORCE), so every DML in this file")
-    ap(f"-- runs under app.tenant_id = {tenant_id}.")
+    ap("-- runs under app.tenant_id bound to the caller-supplied :'tenant_id'.")
     ap(f"SELECT set_config('app.tenant_id', {tenant_lit}, true);")
+    ap("")
+    ap("-- The scope id lives in its own transaction-local GUC so the")
+    ap("-- idempotency DO-block below (where psql variables are NOT")
+    ap("-- substituted) can read it via current_setting.")
+    ap(f"SELECT set_config('kw_import.scope_id', {scope_lit}, true);")
     ap("")
 
     # -- Idempotency check ---------------------------------------------------
@@ -260,14 +282,13 @@ def emit_body(
     ap("-- ----------------------------------------------------------------")
     ap("DO $$")
     ap("DECLARE")
+    ap("    v_scope UUID := current_setting('kw_import.scope_id')::uuid;")
     ap("    existing_name TEXT;")
     ap("BEGIN")
-    ap(f"    PERFORM set_config('app.tenant_id', {tenant_lit}, true);")
     ap("    SELECT name INTO existing_name")
     ap("      FROM worklist.attribute_definition")
-    ap(f"     WHERE tenant_id = {tenant_lit}")
-    ap(f"       AND scope_id  = {scope_lit}")
-    ap("       AND key       = 'corpus_import_marker';")
+    ap("     WHERE scope_id = v_scope")
+    ap("       AND key      = 'corpus_import_marker';")
     ap("    IF existing_name IS NOT NULL THEN")
     ap("        RAISE EXCEPTION")
     ap("            'corpus-import already applied to this scope: %. "
@@ -340,7 +361,9 @@ def emit_body(
     ap("-- 5, etc. — a shift is unavoidable because the marker numbers are")
     ap("-- already taken. Idempotent via WHERE NOT EXISTS on title.")
     ap("-- ----------------------------------------------------------------")
-    milestone_shift = 3  # bootstrap markers hold 1..3
+    # 177.10: bootstrap no longer seeds the three markers (REA-0007 §4);
+    # milestone numbers start at 1, so M1..Mn in the source land at 1..n.
+    milestone_shift = 0
     default_ws_lookup = (
         f"(SELECT id FROM worklist.workstream WHERE tenant_id = {tenant_lit} "
         f"AND scope_id = {scope_lit} AND is_default = true)"
@@ -500,35 +523,33 @@ def emit_body(
     ap("-- ----------------------------------------------------------------")
     ap("-- Counters: lift the item and milestone number_space rows to the")
     ap("-- highest allocated number so the next `create` gives N+1.")
+    ap("-- INSERT ... ON CONFLICT because the bootstrap does NOT plant an")
+    ap("-- item or iteration counter row (it says so in a comment): the")
+    ap("-- service creates the row at its first allocation. Here we need")
+    ap("-- it now, so we INSERT — and if the service or an earlier run")
+    ap("-- already planted one, DO UPDATE lifts it.")
     ap("-- ----------------------------------------------------------------")
-    ap("UPDATE worklist.number_space ns")
-    ap("   SET high_water_mark = GREATEST(")
-    ap("           ns.high_water_mark,")
-    ap("           COALESCE((SELECT MAX(number) FROM worklist.item")
-    ap(f"                      WHERE tenant_id = {tenant_lit}")
-    ap(f"                        AND scope_id  = {scope_lit}), 0))")
-    ap(f" WHERE ns.tenant_id = {tenant_lit}")
-    ap(f"   AND ns.scope_id  = {scope_lit}")
-    ap(f"   AND ns.workstream_id IS NULL")
-    ap("   AND ns.selector_id = (SELECT id FROM worklist.selector")
-    ap(f"                          WHERE tenant_id = {tenant_lit}")
-    ap(f"                            AND scope_id  = {scope_lit}")
-    ap("                            AND token     = 'item');")
-    ap("")
-    ap("UPDATE worklist.number_space ns")
-    ap("   SET high_water_mark = GREATEST(")
-    ap("           ns.high_water_mark,")
-    ap("           COALESCE((SELECT MAX(number) FROM worklist.milestone")
-    ap(f"                      WHERE tenant_id = {tenant_lit}")
-    ap(f"                        AND scope_id  = {scope_lit}), 0))")
-    ap(f" WHERE ns.tenant_id = {tenant_lit}")
-    ap(f"   AND ns.scope_id  = {scope_lit}")
-    ap(f"   AND ns.workstream_id IS NULL")
-    ap("   AND ns.selector_id = (SELECT id FROM worklist.selector")
-    ap(f"                          WHERE tenant_id = {tenant_lit}")
-    ap(f"                            AND scope_id  = {scope_lit}")
-    ap("                            AND token     = 'milestone');")
-    ap("")
+    for selector_token, source_table in [
+        ("item", "item"),
+        ("milestone", "milestone"),
+    ]:
+        ap("INSERT INTO worklist.number_space")
+        ap("    (id, tenant_id, scope_id, selector_id, workstream_id, "
+           "high_water_mark)")
+        ap("SELECT gen_random_uuid(),")
+        ap(f"       {tenant_lit}, {scope_lit},")
+        ap(f"       (SELECT id FROM worklist.selector "
+           f"WHERE tenant_id = {tenant_lit} AND scope_id = {scope_lit} "
+           f"AND token = '{selector_token}'),")
+        ap("       NULL,")
+        ap(f"       COALESCE((SELECT MAX(number) FROM worklist.{source_table} "
+           f"WHERE tenant_id = {tenant_lit} AND scope_id = {scope_lit}), 0)")
+        ap("ON CONFLICT (tenant_id, scope_id, selector_id) "
+           "WHERE workstream_id IS NULL")
+        ap("DO UPDATE SET high_water_mark = GREATEST(")
+        ap("    worklist.number_space.high_water_mark,")
+        ap("    EXCLUDED.high_water_mark);")
+        ap("")
 
     # -- Self-identification INSERT -----------------------------------------
     ap("-- ----------------------------------------------------------------")
@@ -638,8 +659,6 @@ def compute_digest(body: str) -> str:
 def generate(
     steering: Path,
     snapshot: Path,
-    tenant_id: str,
-    scope_id: str,
     out: Path,
 ) -> tuple[str, int]:
     snap = load_snapshot_env(snapshot)
@@ -656,24 +675,18 @@ def generate(
 
     kumbuka_count = sum(1 for a in assignments if a.bucket == "assigned")
 
+    # 177.10: tenant and scope are psql variables; the emitted file is
+    # UUID-independent. Pass sentinel strings that expand to `:'tenant_id'`
+    # and `:'scope_id'` in every INSERT.
+    tenant_ref = ":'tenant_id'"
+    scope_ref = ":'scope_id'"
+
     # Pass 1: emit body with placeholder digest.
-    body_pass1 = emit_body(tenant_id, scope_id, milestones, assignments,
+    body_pass1 = emit_body(tenant_ref, scope_ref, milestones, assignments,
                            pin_sha, DIGEST_PLACEHOLDER, kumbuka_count)
-    real_digest = compute_digest(
-        body_pass1.replace(DIGEST_PLACEHOLDER, DIGEST_PLACEHOLDER)
-    )
+    real_digest = compute_digest(body_pass1)
 
-    # Compute the digest that will hold after substitution: the digest is
-    # over the body with the FINAL digest embedded, not the placeholder.
-    # We solve this by defining "the digest excludes the digest string
-    # itself" — the body is hashed with the placeholder still in it, and
-    # then substituted. The digest thus represents the *shape* of the
-    # transaction, not the substituted content. Verifier reproduces the
-    # same trick: reads the body region, replaces the recorded digest
-    # (extracted from the marker INSERT) with the placeholder, then
-    # hashes.
     body_final = body_pass1.replace(DIGEST_PLACEHOLDER, real_digest)
-
     header = emit_header(real_digest, pin_sha, kumbuka_count)
     full = header + body_final
 
@@ -686,15 +699,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--steering", required=True, type=Path)
     ap.add_argument("--snapshot", required=True, type=Path)
-    ap.add_argument("--tenant-id", required=True)
-    ap.add_argument("--scope-id", required=True)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
-    digest, rows = generate(
-        args.steering, args.snapshot,
-        args.tenant_id, args.scope_id, args.out,
-    )
+    digest, rows = generate(args.steering, args.snapshot, args.out)
     print(f"wrote {args.out}", file=sys.stderr)
     print(f"  digest: {digest}", file=sys.stderr)
     print(f"  rows:   {rows}", file=sys.stderr)
