@@ -107,7 +107,14 @@ OPEN_CALL_IN_EXCEPTIONS: dict[str, tuple[str, Optional[str]]] = {
 # Terminal statuses of the predecessor's row lifecycle. REA-0007 §3
 # refuses to name new lifecycle states here; if a further terminal
 # status appears the run stops rather than guessing.
-TERMINAL_STATUSES = {"done", "dissolved"}
+#
+# 178.1: `dropped` joins the set. It shares its four predicates with
+# `dissolved` and `obsolete` (closed=true, successful=false; see
+# STATUS_PREDICATES in generate_import.py), so a `dropped` row in the
+# empty-cluster class is not an open planning question either. Three
+# rows in the pin move from the refusal path into the catch-all as a
+# result — measured, not guessed.
+TERMINAL_STATUSES = {"done", "dissolved", "dropped"}
 
 # The catch-all workstream that receives terminal rows without a cluster.
 # It stays as `default` because that is the platform's built-in name for

@@ -159,6 +159,105 @@ Details unter `out/diff-to-177-6.md`. Kurzfassung:
    entfernt `apply_milestone_invariant`, und die
    `milestone-workstream-conflict`-Refusal-Kategorie verschwindet.
 
+## Was 178.1 gegenueber 177.10 geaendert hat — Stoppbedingung erreicht
+
+Ratifiziert im Sprint 178: die alte Nr des Predecessors ist Sediment aus
+Markdown und verschwindet vollstaendig aus dem Ziel. Die Items werden dicht
+neunummeriert (1..N in aufsteigender alter-Nr-Reihenfolge); die sprechende
+ID bleibt als Referenz auffindbar; die Ref-Spalte wandert in die V4-Tabelle
+`worklist.item_reference`. Zusaetzlich wird `dropped` terminal, `verify.sql`
+wird ein lauffaehiger Waechter, und `reset-scope.sql` haengt sich als
+Neuversuchs-Werkzeug an das Regal.
+
+**Achtung Stoppbedingung.** Aenderung 3 (Ref-Segmente in `item_reference`)
+trifft heute auf einen btree-v4-Deckel am Index
+`idx_item_reference_target (tenant_id, scope_id, target)`: 13 der 466
+vorgesehenen Ref-Segmente am gepinnten Bestand sind laenger als der
+Postgres-Zeilenlimit fuer btree v4 (2704 Byte). Der Generator haelt hier
+laut an (`_assert_reference_targets_fit`); der Auftrag verbietet
+Schemaanpassung und Inhaltsverkuerzung. Der Echtlauf ist damit erneut
+gesperrt, bis die Konzept-Seite entscheidet — Details in der
+Sub-Sprint-Rueckgabe `dispatch://kumbuka/sprint/178.1/return`.
+
+Aenderungen dieses Sprints:
+
+1. **Generator** (`generate_import.py`)
+   - `emit_body` sortiert die zugewiesenen Zeilen nach der alten Nr und
+     vergibt 1..N. Eine interne Zuordnung `nr → new_number` treibt Item-
+     Insert-Nummer und die Umschreibung der Deps-Kanten.
+   - `truncate_title_at_word_boundary` kappt Titel > 200 Zeichen an der
+     letzten Wortgrenze; das angehaengte `…` haelt `char_length` auf
+     genau 200. `description` traegt in diesem Fall den vollen
+     Original-Titel; sonst ist sie NULL.
+   - `build_reference_targets` bildet je Zeile die geordnete Referenz-
+     Liste (ID / Ref-Segmente / `component: <Scope>`) und ist die
+     Grundlage der `item_reference`-Emission.
+   - Vor der Emission: `_assert_reference_targets_fit` misst alle
+     Targets gegen den btree-v4-Deckel. Ein Vorfall > 2704 Byte bricht
+     laut ab; die Ausgabe nennt Nr, Ident und Byte-Groesse jeder
+     betroffenen Zeile.
+   - Der Header nennt die erwarteten Zahlen (`expected_rows`,
+     `expected_id_refs`, `expected_truncated_titles`, `expected_edges`)
+     als Kommentarzeile; `verify.sql` liest sie als psql-Variablen.
+2. **Trockenlauf** (`dry_run.py`)
+   - `TERMINAL_STATUSES` bekommt `dropped` dazu. Am Pin wandern drei
+     `dropped`-Zeilen in den Auffang; die Verteilung und der Digest
+     aendern sich, das ist gewollt.
+3. **Wachter** (`verify.sql`)
+   - Vollstaendig neu geschrieben gegen das V4-Schema (`item_status.name`
+     statt `status.token`), Aufrufkonvention wie die Importdatei
+     (`-v tenant_id=<uuid> -v scope_id=<uuid> -v expected_digest=<sha>` +
+     erwartete Zahlen), transaktionale GUCs (`kw_verify.*`) statt
+     `:'tenant_id'` in DO-Bloecken, terminale Liste `('done','dissolved',
+     'dropped')`.
+   - V0 Identitaet vor Inhalt (Marker existiert, sha/pin/rows treffen).
+   - V1a/V1b Verteilung/Auffang; V2 dichte 1..N; V3 Zaehler=N; V4 Anzahl
+     Items mit ID als erstem Referenz-Eintrag; V5 gekappte Titel mit
+     description; V6 Kantenzahl; V7 kein Titel ist eine nackte Nr; V8
+     Straenge-Saat.
+4. **Reset** (`reset-scope.sql`, neu)
+   - Loescht in einer Transaktion alles scope-gebundene aus V4 bis V13
+     (item_relation, item_reference, iteration_membership, claim,
+     view_preference, attribute_option, scope_setting, item, milestone,
+     iteration, number_space, attribute_definition, workstream,
+     selector, item_status, relation_type). Selbstbestaetigung am Ende
+     (Scope leer). Laeuft unter Migrator-Rolle, bindet `app.tenant_id`
+     selbst; scheitert ein DELETE am Privileg (ADR-0005), bricht die
+     Transaktion laut ab und nennt die Luecke — kein GRANT wird ergaenzt.
+5. **Mechanik** (`verify_import.sh`)
+   - PROBE 1 Import + `verify.sql` gruen; PROBE 2 Idempotenz; PROBE 3
+     Selbstidentifikation; PROBE 4 Transaktionsgrenze; PROBE 5 Reset +
+     Bootstrap+Import erneut + `verify.sql` gruen; PROBE R1..R5 rot mit
+     Wortlaut (Dichte / ID-Refs / Titel-Deckel / V0-Marker /
+     Reset-Luecke).
+   - Aktueller Lauf haelt am `generate_import.py`-Wachter an: 13
+     zu grosse Ref-Segmente reissen den btree-v4-Deckel. Sobald der
+     Deckel geloest ist, laeuft `verify_import.sh` durch.
+
+**Aufruf des Wachters gegen einen Ist-Bestand** (Betreiber, wenn die
+Konzept-Seite den Weg freigemacht hat):
+
+```
+psql -v ON_ERROR_STOP=on \
+     -v tenant_id="'<uuid>'" \
+     -v scope_id="'<uuid>'" \
+     -v expected_digest=<sha> \
+     -v expected_rows=<N> \
+     -v expected_id_refs=<N> \
+     -v expected_truncated_titles=<N> \
+     -v expected_edges=<N> \
+     -f verify.sql
+```
+
+**Reset**:
+
+```
+psql -v ON_ERROR_STOP=on \
+     -v tenant_id="'<uuid>'" \
+     -v scope_id="'<uuid>'" \
+     -f reset-scope.sql
+```
+
 ## Was 177.8 gegenueber 177.7 geaendert hat
 
 Details unter `out/diff-to-177-7.md`. Kurzfassung:
