@@ -1,6 +1,6 @@
 -- verify.sql
 --
--- Nachbedingungen des Steuerungskorpus-Imports (Sprint 178.1, ersetzt 177.7).
+-- Nachbedingungen des Steuerungskorpus-Imports (Sprint 178.2, ergaenzt 178.1).
 --
 -- Jede Pruefung ist ein Wachter. Sie druckt ihren Messwert und RAISE'd bei
 -- Verletzung. Vor jeder inhaltlichen Pruefung steht V0 (Identitaet vor Inhalt):
@@ -17,6 +17,8 @@
 --        -v expected_id_refs=<N> \
 --        -v expected_truncated_titles=<N> \
 --        -v expected_edges=<N> \
+--        -v expected_prose_rows=<N> \
+--        -v expected_reference_entries=<N> \
 --        -f verify.sql
 --
 -- Die erwarteten Zahlen kommen aus dem Kopf der frisch generierten
@@ -38,6 +40,8 @@ SELECT set_config('kw_verify.expected_rows',             :'expected_rows',      
 SELECT set_config('kw_verify.expected_id_refs',          :'expected_id_refs',          true);
 SELECT set_config('kw_verify.expected_truncated_titles', :'expected_truncated_titles', true);
 SELECT set_config('kw_verify.expected_edges',            :'expected_edges',            true);
+SELECT set_config('kw_verify.expected_prose_rows',        :'expected_prose_rows',        true);
+SELECT set_config('kw_verify.expected_reference_entries', :'expected_reference_entries', true);
 
 -- ---------------------------------------------------------------------------
 -- V0. Identitaet vor Inhalt. Der corpus_import_marker existiert, sein Digest
@@ -234,9 +238,19 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- V5. Titel-Kappung: Jedes Item mit Titel von genau 200 Zeichen, das mit '…'
--- endet, hat eine nicht-leere description. Zusatzmessung: Anzahl der so
--- gekappten Titel entspricht expected_truncated_titles.
+-- V5. Titel-Kappung: die Menge der gekappten Titel ist erkennbar am
+-- Endzeichen '…' (der Generator kappt an der letzten Wortgrenze <= 199,
+-- rstrip't und haengt '…' an — der resultierende Titel hat char_length
+-- HOECHSTENS 200 statt exakt 200, weil die Wortgrenze frueher liegen kann;
+-- gemessen 2026-09-10). Die Pruefung stuetzt sich deshalb auf das Endzeichen
+-- und die Kappungsobergrenze (char_length <= 200) statt auf eine
+-- Punktgroesse.
+--
+-- Nachbedingung:
+--   (a) Anzahl der Items mit Titel endet auf '…' und char_length <= 200
+--       entspricht expected_truncated_titles.
+--   (b) Jedes so gekappte Item hat description NOT NULL (und traegt
+--       damit den vollen Originaltitel, siehe 178.2 §2).
 -- ---------------------------------------------------------------------------
 \echo 'V5: gekappte Titel mit description:'
 DO $$
@@ -250,7 +264,7 @@ BEGIN
       INTO v_truncated
       FROM worklist.item i
      WHERE i.scope_id = v_scope
-       AND char_length(i.title) = 200
+       AND char_length(i.title) <= 200
        AND right(i.title, 1) = U&'\2026';  -- '…'
     IF v_truncated <> v_expected THEN
         RAISE EXCEPTION
@@ -261,7 +275,7 @@ BEGIN
       INTO v_missing_desc
       FROM worklist.item i
      WHERE i.scope_id = v_scope
-       AND char_length(i.title) = 200
+       AND char_length(i.title) <= 200
        AND right(i.title, 1) = U&'\2026'
        AND (i.description IS NULL OR btrim(i.description) = '');
     IF v_missing_desc <> 0 THEN
@@ -333,6 +347,74 @@ BEGIN
             v_hits;
     END IF;
     RAISE NOTICE 'V7 gruen: kein Titel ist eine nackte Nr.';
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- V9. Prosa-Regel (178.2): drei Aussagen ueber item_reference und
+-- item.description.
+--
+--   (a) Die Anzahl der Zeilen in item_reference entspricht
+--       :expected_reference_entries. Der Generator zaehlt sie beim Bau der
+--       Datei; der Wert steht im Header.
+--   (b) Kein item_reference.target ist laenger als 2000 Byte. Das ist die
+--       Regel-Umleitung selbst — waere ein solcher Eintrag drin, waere die
+--       Prosa-Regel im Generator umgangen oder defekt.
+--   (c) Die Anzahl der Items mit Prosa in `description` entspricht
+--       :expected_prose_rows. Als "traegt Prosa" zaehlt hier
+--       octet_length(description) > 2000: die drei Nicht-Prosa-Faelle
+--       liegen darunter (NULL, gekappter Titel = Originaltitel <= 436 Byte,
+--       leer nach der Bau-Tabelle) und der Prosa-Fall enthaelt per Regel
+--       mindestens ein Segment > 2000 Byte. Die Grenze ist damit unabhaengig
+--       vom Trenner '---' und vom Titelvergleich.
+-- ---------------------------------------------------------------------------
+\echo 'V9: Prosa-Regel (Referenz-Zaehlung, target-Deckel, description-Prosa):'
+DO $$
+DECLARE
+    v_scope            UUID   := current_setting('kw_verify.scope_id')::uuid;
+    v_expected_refs    BIGINT := current_setting('kw_verify.expected_reference_entries')::bigint;
+    v_expected_prose   BIGINT := current_setting('kw_verify.expected_prose_rows')::bigint;
+    v_refs_count       BIGINT;
+    v_oversize_targets BIGINT;
+    v_prose_rows       BIGINT;
+BEGIN
+    SELECT count(*) INTO v_refs_count
+      FROM worklist.item_reference r
+     WHERE r.scope_id = v_scope
+       AND r.status   = 'asserted';
+    IF v_refs_count <> v_expected_refs THEN
+        RAISE EXCEPTION
+            'V9 rot: item_reference-Zeilen weichen ab. erwartet %, gefunden %.',
+            v_expected_refs, v_refs_count;
+    END IF;
+
+    SELECT count(*) INTO v_oversize_targets
+      FROM worklist.item_reference r
+     WHERE r.scope_id = v_scope
+       AND r.status   = 'asserted'
+       AND octet_length(r.target) > 2000;
+    IF v_oversize_targets <> 0 THEN
+        RAISE EXCEPTION
+            'V9 rot: % item_reference.target-Zeilen sind > 2000 Byte. '
+            'Prosa-Regel im Generator umgangen oder defekt.',
+            v_oversize_targets;
+    END IF;
+
+    SELECT count(*) INTO v_prose_rows
+      FROM worklist.item i
+     WHERE i.scope_id = v_scope
+       AND i.description IS NOT NULL
+       AND octet_length(i.description) > 2000;
+    IF v_prose_rows <> v_expected_prose THEN
+        RAISE EXCEPTION
+            'V9 rot: Items mit Prosa in description weichen ab. '
+            'erwartet %, gefunden %.',
+            v_expected_prose, v_prose_rows;
+    END IF;
+
+    RAISE NOTICE
+        'V9 gruen: % Referenz-Zeilen (kein target > 2000 Byte), '
+        '% Items mit Prosa in description.',
+        v_refs_count, v_prose_rows;
 END $$;
 
 -- ---------------------------------------------------------------------------

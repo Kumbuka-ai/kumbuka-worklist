@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 #
 # verify_import.sh — Mechanismus-Probe fuer den corpus-import bench,
-# Sprint 178.1. Faehrt gegen einen ephemeren Postgres-16 unter der
-# Migrator-Rolle (NOSUPERUSER, NOBYPASSRLS) durch:
+# Sprint 178.2 (ergaenzt 178.1). Faehrt gegen einen ephemeren Postgres-16
+# unter der Migrator-Rolle (NOSUPERUSER, NOBYPASSRLS) durch. Die eigentliche
+# Aufrufsequenz — Bootstrap, Import, verify.sql, reset-scope.sql — ist
+# identisch zur Betreiberform im README; $MG ersetzt den `psql`-Prefix des
+# Betreibers durch die docker-exec-Variante fuer den Test-Container.
 #
 #   PROBE V13   V13-Migration schaltet den Marker-INSERT frei (rot vor,
 #               gruen nach).
@@ -13,19 +16,24 @@
 #   PROBE 5     reset-scope.sql, danach Bootstrap+Import erneut, verify.sql
 #               gruen (das Reset-Skript raeumt den Scope so weit, dass ein
 #               Neuversuch sauber laeuft).
-#   PROBE R1    Importdatei mit doppelter Nummer -> V2 (Dichte) rot.
-#   PROBE R2    Importdatei ohne ID-Referenzen  -> V4 rot.
-#   PROBE R3    Gekappte Titel ohne description  -> V5 rot.
-#   PROBE R4    Falscher expected_digest        -> V0 rot vor jeder anderen
+#   PROBE R1    Item auf Nummer N+5 -> Luecke ohne Duplikat -> V2 rot
+#               (neu geschnitten in 178.2; die 178.1-Variante brach schon
+#               am uq_item_address, V2 kam nie zum Zug).
+#   PROBE R2    Importdatei ohne ID-Referenzen -> V4 rot.
+#   PROBE R3    Gekappte Titel ohne description -> V5 rot.
+#   PROBE R4    Falscher expected_digest -> V0 rot vor jeder anderen
 #               Pruefung.
-#   PROBE R5    Reset laesst scope_setting stehen; zweiter Bootstrap rot mit
-#               beobachtetem Wortlaut.
+#   PROBE R5    Reset laesst scope_setting stehen; zweiter Bootstrap rot
+#               mit beobachtetem Wortlaut.
+#   PROBE R6    Prosa-Segment (2500 Byte) als Referenz emittiert -> V9 rot
+#               oder btree-Index-Fehler beim Import; welches beobachtet
+#               wurde, gehoert in die Rueckgabe (178.2).
 #
 # Voraussetzungen: docker, python3.
 
 set -euo pipefail
 
-CONTAINER=kw-test-pg-178-1
+CONTAINER=kw-test-pg-178-2
 POSTGRES_PW=super
 MIGRATOR_ROLE=worklist_migrator
 MIGRATOR_PW=migrpw
@@ -157,37 +165,51 @@ echo "== running bootstrap-scope.sql for kumbuka =="
 
 echo ""
 echo "== generating import.sql (UUID-independent) =="
-GEN_OUT=/tmp/gen-out-178-1.txt
+GEN_OUT=/tmp/gen-out-178-2.txt
 python3 generate_import.py \
     --steering /Users/johannes/Work/kumbuka.ai/dev/steering \
     --snapshot ./snapshot.env \
     --out       ./out/import.sql 2> >(tee "$GEN_OUT" >&2)
 
-DIGEST=$(awk '/digest:/ {print $2}' "$GEN_OUT")
+EXPECTED_DIGEST=$(awk '/digest:/ {print $2}' "$GEN_OUT")
 EXPECTED_ROWS=$(awk '/^  rows:/ {print $2}' "$GEN_OUT")
 EXPECTED_ID_REFS=$(awk '/^  id_refs:/ {print $2}' "$GEN_OUT")
 EXPECTED_TRUNC=$(awk '/^  truncated_titles:/ {print $2}' "$GEN_OUT")
 EXPECTED_EDGES=$(awk '/^  edges:/ {print $2}' "$GEN_OUT")
+EXPECTED_PROSE=$(awk '/^  prose_rows:/ {print $2}' "$GEN_OUT")
+EXPECTED_REFS=$(awk '/^  reference_entries:/ {print $2}' "$GEN_OUT")
 BYTES=$(wc -c < ./out/import.sql | tr -d ' ')
 
-echo "  digest:            $DIGEST"
-echo "  expected rows:     $EXPECTED_ROWS"
-echo "  expected id_refs:  $EXPECTED_ID_REFS"
-echo "  expected truncs:   $EXPECTED_TRUNC"
-echo "  expected edges:    $EXPECTED_EDGES"
-echo "  bytes:             $BYTES"
+echo "  digest:                   $EXPECTED_DIGEST"
+echo "  expected_rows:            $EXPECTED_ROWS"
+echo "  expected_id_refs:         $EXPECTED_ID_REFS"
+echo "  expected_truncated_titles: $EXPECTED_TRUNC"
+echo "  expected_edges:           $EXPECTED_EDGES"
+echo "  expected_prose_rows:      $EXPECTED_PROSE"
+echo "  expected_reference_entries: $EXPECTED_REFS"
+echo "  bytes:                    $BYTES"
 
+# Die Funktion baut den psql-Aufruf, den der Betreiber tippt: gleiche
+# Variablen, gleiche Reihenfolge. Der einzige Unterschied ist $MG, das die
+# psql-Verbindung in den Test-Container schickt und deshalb die Datei per
+# Pipe reinreicht (der Container kennt den Host-Pfad nicht); der Betreiber-
+# Aufrufblock im README ersetzt $MG durch `psql` und nutzt `-f verify.sql`.
 verify_sql() {
-    # $1 = digest to verify against
+    # $1 = digest to verify against (default EXPECTED_DIGEST)
+    local digest="${1:-$EXPECTED_DIGEST}"
+    local tenant="${2:-$TENANT_ID}"
+    local scope="${3:-$SCOPE_ID}"
     $MG \
-        -v tenant_id="$TENANT_ID" \
-        -v scope_id="$SCOPE_ID" \
-        -v expected_digest="$1" \
+        -v tenant_id="$tenant" \
+        -v scope_id="$scope" \
+        -v expected_digest="$digest" \
         -v expected_rows="$EXPECTED_ROWS" \
         -v expected_id_refs="$EXPECTED_ID_REFS" \
         -v expected_truncated_titles="$EXPECTED_TRUNC" \
         -v expected_edges="$EXPECTED_EDGES" \
-        -f verify.sql
+        -v expected_prose_rows="$EXPECTED_PROSE" \
+        -v expected_reference_entries="$EXPECTED_REFS" \
+        < verify.sql
 }
 
 # ---------------------------------------------------------------------------
@@ -201,7 +223,7 @@ echo "=========================================================="
 $MG -v tenant_id="$TENANT_ID" -v scope_id="$SCOPE_ID" < ./out/import.sql >/dev/null
 echo "  import.sql applied cleanly"
 
-verify_sql "$DIGEST" > /tmp/verify-1.out 2>&1
+verify_sql "$EXPECTED_DIGEST" > /tmp/verify-1.out 2>&1
 if grep -qE "ERROR|EXCEPTION" /tmp/verify-1.out; then
     echo "  FAIL verify.sql rot:"
     cat /tmp/verify-1.out
@@ -209,6 +231,47 @@ if grep -qE "ERROR|EXCEPTION" /tmp/verify-1.out; then
 fi
 grep -E "NOTICE|V[0-9]" /tmp/verify-1.out | head -30
 echo "  OK verify.sql gruen"
+
+echo ""
+echo "-- Stichprobe: CHORE-319 (Prosa), FEAT-76 (Prosa), Item#1 (Kontrast) --"
+$MG > /tmp/sample.out 2>&1 <<SQL
+SELECT set_config('app.tenant_id', '$TENANT_ID', false);
+WITH picks AS (
+    SELECT i.id, i.number, i.title,
+           left(i.description, 200) AS description_head,
+           octet_length(i.description) AS description_bytes
+      FROM worklist.item i
+     WHERE i.scope_id = '$SCOPE_ID'
+       AND (
+             EXISTS (SELECT 1 FROM worklist.item_reference r
+                      WHERE r.item_id = i.id AND r.ordinal = 0
+                        AND r.target IN ('CHORE-319','FEAT-76'))
+             OR i.number = 1
+           )
+)
+SELECT number, title,
+       description_bytes,
+       coalesce(description_head, '(NULL)') AS description_head
+  FROM picks ORDER BY number;
+\\echo ''
+\\echo '-- Referenz-Eintraege (ordinal, target) je Item der Stichprobe --'
+SELECT set_config('app.tenant_id', '$TENANT_ID', false);
+SELECT (SELECT target FROM worklist.item_reference r0
+         WHERE r0.item_id = r.item_id AND r0.ordinal = 0) AS pick_id,
+       r.ordinal, left(r.target, 100) AS target_head
+  FROM worklist.item_reference r
+ WHERE r.scope_id = '$SCOPE_ID'
+   AND r.item_id IN (
+     SELECT i.id FROM worklist.item i
+      WHERE i.scope_id = '$SCOPE_ID'
+        AND (EXISTS (SELECT 1 FROM worklist.item_reference r2
+                      WHERE r2.item_id = i.id AND r2.ordinal = 0
+                        AND r2.target IN ('CHORE-319','FEAT-76'))
+             OR i.number = 1)
+   )
+ ORDER BY pick_id NULLS FIRST, r.ordinal;
+SQL
+cat /tmp/sample.out
 
 # ---------------------------------------------------------------------------
 # PROBE 2 — Idempotenz: zweites Einspielen refused.
@@ -239,13 +302,13 @@ echo "=========================================================="
 cp out/import.sql out/import-tampered.sql
 sed -i.bak 's/Konzept- und Architekturarbeit/TAMPERED description/' out/import-tampered.sql
 TAMPERED_DIGEST=$(awk "/corpus-import-body-begin/,/corpus-import-body-end/" out/import-tampered.sql | \
-    sed "s/$DIGEST/0000000000000000000000000000000000000000000000000000000000000000/g" | \
+    sed "s/$EXPECTED_DIGEST/0000000000000000000000000000000000000000000000000000000000000000/g" | \
     shasum -a 256 | awk '{print $1}')
-if [[ "$TAMPERED_DIGEST" == "$DIGEST" ]]; then
+if [[ "$TAMPERED_DIGEST" == "$EXPECTED_DIGEST" ]]; then
     echo "  FAIL tamper undetected"
     exit 1
 fi
-echo "  OK: header claims $DIGEST"
+echo "  OK: header claims $EXPECTED_DIGEST"
 echo "                tampered body hashes to $TAMPERED_DIGEST"
 
 # ---------------------------------------------------------------------------
@@ -302,7 +365,7 @@ echo ""
 echo "=========================================================="
 echo "PROBE 5 — reset-scope + Bootstrap+Import erneut + verify"
 echo "=========================================================="
-$MG -v tenant_id="$TENANT_ID" -v scope_id="$SCOPE_ID" -f reset-scope.sql > /tmp/reset.out 2>&1
+$MG -v tenant_id="$TENANT_ID" -v scope_id="$SCOPE_ID" < reset-scope.sql > /tmp/reset.out 2>&1
 grep -E "NOTICE|reset-scope" /tmp/reset.out | tail -5
 
 REMAINING=$($MG -tA <<SQL | tail -1
@@ -320,7 +383,7 @@ echo "  bootstrap rerun clean"
 $MG -v tenant_id="$TENANT_ID" -v scope_id="$SCOPE_ID" < ./out/import.sql >/dev/null
 echo "  import rerun clean"
 
-verify_sql "$DIGEST" > /tmp/verify-2.out 2>&1
+verify_sql "$EXPECTED_DIGEST" > /tmp/verify-2.out 2>&1
 if grep -qE "ERROR|EXCEPTION" /tmp/verify-2.out; then
     echo "  FAIL verify.sql nach rerun rot:"
     cat /tmp/verify-2.out
@@ -345,12 +408,14 @@ expect_verify_red() {
     $MG \
         -v tenant_id="$1" \
         -v scope_id="$2" \
-        -v expected_digest="$DIGEST" \
+        -v expected_digest="$EXPECTED_DIGEST" \
         -v expected_rows="$EXPECTED_ROWS" \
         -v expected_id_refs="$EXPECTED_ID_REFS" \
         -v expected_truncated_titles="$EXPECTED_TRUNC" \
         -v expected_edges="$EXPECTED_EDGES" \
-        -f verify.sql > "$out" 2>&1 || true
+        -v expected_prose_rows="$EXPECTED_PROSE" \
+        -v expected_reference_entries="$EXPECTED_REFS" \
+        < verify.sql > "$out" 2>&1 || true
     if grep -qE "$3" "$out"; then
         echo "  OK $4 rot mit Wortlaut:"
         grep -E "$3" "$out" | head -1
@@ -362,41 +427,80 @@ expect_verify_red() {
 }
 
 # ---------------------------------------------------------------------------
-# PROBE R1 — Dichte-Nummernraum rot (Duplikat statt eindeutig).
+# PROBE R1 (neu, 178.2) — Luecke ohne Duplikat -> V2 rot.
+#
+# 178.1 hatte R1 als Duplikat gebaut; der Import brach schon am
+# uq_item_address, V2 kam nie zum Zug. Neuer Schnitt: das erste Item
+# bekommt statt Nummer 1 die Nummer N+5. Damit fehlt Nummer 1 im
+# Bereich 1..N; es gibt kein Duplikat, der Import laeuft gruen, V2
+# wird mit seinem eigenen Wortlaut rot.
 # ---------------------------------------------------------------------------
 
 echo ""
 echo "=========================================================="
-echo "PROBE R1 — rot: Dichte-Pruefung V2"
+echo "PROBE R1 — rot: Dichte-Pruefung V2 (Luecke ohne Duplikat)"
 echo "=========================================================="
 
 TENANT_R1=$(python3 -c "import uuid; print(uuid.uuid4())")
 SCOPE_R1=$(python3 -c "import uuid; print(uuid.uuid4())")
 fresh_scope "$TENANT_R1" "$SCOPE_R1"
 
-# Kontrolllauf vorher: verify.sql wuerde ohne Marker rot werden (V0), also
-# spielen wir den Import gruen ein und beobachten V2 dann rot nach dem Patch.
-python3 <<PY
-import re
+GAP_NUMBER=$((EXPECTED_ROWS + 5))
+python3 - "$GAP_NUMBER" <<'PY'
+import re, sys
+gap = sys.argv[1]
 text = open('out/import.sql').read()
-# Verdopple die Nummer '2' auf '1' -> Nummer 2 fehlt.
-inserts = list(re.finditer(r'INSERT INTO worklist\.item\n[^;]+;', text))
-target = inserts[1]  # zweiter Item-INSERT (number = 2)
-patched = target.group(0).replace('number      = 2', 'number      = 1', 1)
-patched = re.sub(r'(       )2,(\n       \')', r'\g<1>1,\g<2>', patched, count=1)
-text = text[:target.start()] + patched + text[target.end():]
-open('out/import-r1.sql', 'w').write(text)
+
+# Item Nummer 1 rueckt auf GAP_NUMBER (N+5). Das trifft:
+#   (a) die Value-Zeile des ersten Item-INSERTs        ("       1,\n       '...")
+#   (b) die WHERE NOT EXISTS-Klausel dieses Item-INSERTs ("AND number      = 1)")
+#   (c) jedes item_reference/item_relation-Lookup, das
+#       "AND number = 1)" enthaelt (Sub-Select fuer item_id).
+# Ohne (c) haetten die item_reference-Zeilen der ehemaligen Nummer 1
+# NULL als item_id und der Import brach am NOT-NULL constraint.
+first_item = re.search(r'INSERT INTO worklist\.item\n[^;]+;', text)
+assert first_item is not None
+before = text[:first_item.start()]
+item_body = first_item.group(0)
+after = text[first_item.end():]
+
+# (a) Value-Zeile — nur der eine Ort im ersten Item-Block.
+item_body = re.sub(
+    r'(       )1,(\n       \')',
+    r'\g<1>' + gap + r',\g<2>',
+    item_body,
+    count=1,
+)
+# (b) WHERE NOT EXISTS-Klausel im selben Item-Block.
+item_body = item_body.replace('AND number      = 1)', f'AND number      = {gap})')
+
+# (c) Item-Lookups mit dichtem "= 1)" in Rest der Datei (item_reference,
+# item_relation). "AND number = 1)" ist der eindeutige Suffix; andere
+# Nummern enden auf "0)", "2)" ... "1)" bei "= 11)", "= 21)" usw. wuerde
+# entkoppeln — deshalb Regex mit vorangehendem "= " und einer Klammer
+# als Grenze.
+after = re.sub(r'AND number = 1\)', f'AND number = {gap})', after)
+
+open('out/import-r1.sql', 'w').write(before + item_body + after)
 PY
 
-$MG -v tenant_id="$TENANT_R1" -v scope_id="$SCOPE_R1" < out/import-r1.sql > /tmp/r1-import.out 2>&1 || true
-# Der Import selbst laeuft wahrscheinlich schon rot (unique index), das ist
-# auch eine Form von 'V2 rot'. Wir akzeptieren beide Wortlaute.
-if grep -qE 'duplicate key|uq_item_address' /tmp/r1-import.out; then
-    echo "  OK V2 rot bereits im Import (Duplikat verletzt uq_item_address):"
-    grep -E "duplicate key|uq_item_address" /tmp/r1-import.out | head -1
-else
-    expect_verify_red "$TENANT_R1" "$SCOPE_R1" "V2 rot: Nummernraum nicht dicht|V2 rot: mindestens eine Nummer|V2 rot: Zeilenzahl weicht ab" "V2"
+$MG -v tenant_id="$TENANT_R1" -v scope_id="$SCOPE_R1" < out/import-r1.sql > /tmp/r1-import.out 2>&1
+if grep -qE "ERROR|EXCEPTION" /tmp/r1-import.out; then
+    echo "  FAIL R1-Import scheiterte, bevor V2 zum Zug kam:"
+    cat /tmp/r1-import.out
+    exit 1
 fi
+echo "  R1-Import gruen (Luecke ohne Duplikat)"
+expect_verify_red "$TENANT_R1" "$SCOPE_R1" "V2 rot: Nummernraum nicht dicht|V2 rot: mindestens eine Nummer" "V2"
+
+# Kontrolllauf danach: Hauptscope-verify ist unveraendert gruen.
+verify_sql "$EXPECTED_DIGEST" > /tmp/r1-post.out 2>&1
+if grep -qE "ERROR|EXCEPTION" /tmp/r1-post.out; then
+    echo "  FAIL Kontrolllauf danach rot:"
+    cat /tmp/r1-post.out
+    exit 1
+fi
+echo "  Kontrolllauf danach gruen"
 
 # ---------------------------------------------------------------------------
 # PROBE R2 — Import ohne ID-Referenzen -> V4 rot.
@@ -509,7 +613,9 @@ $MG \
     -v expected_id_refs="$EXPECTED_ID_REFS" \
     -v expected_truncated_titles="$EXPECTED_TRUNC" \
     -v expected_edges="$EXPECTED_EDGES" \
-    -f verify.sql > /tmp/r4.out 2>&1 || true
+    -v expected_prose_rows="$EXPECTED_PROSE" \
+    -v expected_reference_entries="$EXPECTED_REFS" \
+    < verify.sql > /tmp/r4.out 2>&1 || true
 
 if grep -q "V0 rot: Digest weicht ab" /tmp/r4.out; then
     echo "  OK V0 rot vor jeder inhaltlichen Pruefung:"
@@ -526,12 +632,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# PROBE R5 — Reset laesst scope_setting stehen -> zweiter Bootstrap rot.
+# PROBE R5 — Reset laesst attribute_definition stehen -> zweiter Import rot
+# am corpus_import_marker (Idempotenz-Gate aus REA-0007 §5).
+#
+# Der 178.1-Versuch mit scope_setting hat ergeben, dass ein zweiter
+# Bootstrap trotzdem durchgeht (bootstrap-scope.sql schreibt scope_setting
+# selbst nicht direkt, die Idempotenz aller INSERTs faengt Dubletten ab).
+# 178.2 nimmt daher die attribute_definition — dort lebt der
+# corpus_import_marker; bleibt er stehen, refused der zweite Import
+# typisiert.
 # ---------------------------------------------------------------------------
 
 echo ""
 echo "=========================================================="
-echo "PROBE R5 — rot: unvollstaendiger Reset (scope_setting bleibt)"
+echo "PROBE R5 — rot: unvollstaendiger Reset (attribute_definition bleibt)"
 echo "=========================================================="
 
 TENANT_R5=$(python3 -c "import uuid; print(uuid.uuid4())")
@@ -539,29 +653,114 @@ SCOPE_R5=$(python3 -c "import uuid; print(uuid.uuid4())")
 fresh_scope "$TENANT_R5" "$SCOPE_R5"
 $MG -v tenant_id="$TENANT_R5" -v scope_id="$SCOPE_R5" < ./out/import.sql >/dev/null
 
-# reset-scope.sql ohne die scope_setting-Zeile: temporaere Kopie erzeugen.
-grep -v 'DELETE FROM worklist.scope_setting' reset-scope.sql > /tmp/reset-broken.sql
+# reset-scope.sql ohne die attribute_definition-Zeile (die den Marker
+# traegt): temporaere Kopie erzeugen. attribute_option muss auch bleiben,
+# damit der FK nicht bricht — aber sie ist beim kumbuka-Import ohnehin
+# nicht bestueckt (V4 attribute_option leer im Import).
+grep -v 'DELETE FROM worklist.attribute_definition' reset-scope.sql \
+    > /tmp/reset-broken.sql
 
-# Der Reset selbst laeuft in dieser Variante durch (item etc. sind weg,
-# scope_setting bleibt). Ein zweiter Bootstrap trifft dann auf die schon
-# vorhandene scope_setting-Zeile.
-$MG -v tenant_id="$TENANT_R5" -v scope_id="$SCOPE_R5" -f /tmp/reset-broken.sql >/dev/null 2>&1 || true
+# Der Reset laeuft in dieser Variante ab bis attribute_definition; item,
+# workstream, selector etc. sind weg, aber der corpus_import_marker im
+# attribute_definition steht noch. Das reset-Skript prueft am Ende auf
+# leerem Scope; wir toggeln die Selbstbestaetigung raus, damit der
+# Reset-Aufruf durchlaeuft.
+sed -i.bak '/reset-scope gruen/,/END \$\$;/d' /tmp/reset-broken.sql || true
+$MG -v tenant_id="$TENANT_R5" -v scope_id="$SCOPE_R5" < /tmp/reset-broken.sql > /tmp/r5-reset.out 2>&1 || true
 
-{ echo "SELECT set_config('app.tenant_id', '$TENANT_R5', false);"; cat "$BOOTSTRAP"; } | \
-    $MG -v tenant_id="$TENANT_R5" -v scope_id="$SCOPE_R5" > /tmp/r5-bootstrap.out 2>&1 || true
+# Zweiter Import muss am Marker rot werden.
+$MG -v tenant_id="$TENANT_R5" -v scope_id="$SCOPE_R5" < ./out/import.sql > /tmp/r5-import.out 2>&1 || true
 
-if grep -qE 'duplicate key|pk_scope_setting|scope_setting.*already exists' /tmp/r5-bootstrap.out; then
-    echo "  OK zweiter Bootstrap rot mit Wortlaut:"
-    grep -E "duplicate key|pk_scope_setting|already exists" /tmp/r5-bootstrap.out | head -1
+if grep -q "already applied" /tmp/r5-import.out; then
+    echo "  OK zweiter Import rot am corpus_import_marker:"
+    grep "already applied" /tmp/r5-import.out | head -1
 else
-    # Wenn Bootstrap trotzdem durchgeht, waere R5 vom Dispatch als 'nicht
-    # brechbar' zu melden; dann nennen wir es explizit statt zu erfinden.
-    echo "  HINWEIS: Bootstrap laeuft trotz stehender scope_setting durch."
-    echo "  Der Dispatch verlangt dann die explizite Nennung statt einer"
-    echo "  erfundenen Probe:"
-    cat /tmp/r5-bootstrap.out | head -20
+    echo "  R5 NICHT brechbar: zweiter Import laeuft trotz stehender attribute_definition durch."
+    echo "  Der Dispatch verlangt dann die explizite Nennung statt einer erfundenen Probe."
+    echo "  --- reset.out (tail):"
+    tail -10 /tmp/r5-reset.out
+    echo "  --- import.out (tail):"
+    tail -10 /tmp/r5-import.out
+fi
+
+# ---------------------------------------------------------------------------
+# PROBE R6 (neu, 178.2) — Prosa-Segment als Referenz -> V9 rot oder
+# btree-Index-Fehler beim Import; welches, gehoert in die Rueckgabe.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=========================================================="
+echo "PROBE R6 — rot: Prosa als Referenz (V9 oder btree-Deckel)"
+echo "=========================================================="
+
+TENANT_R6=$(python3 -c "import uuid; print(uuid.uuid4())")
+SCOPE_R6=$(python3 -c "import uuid; print(uuid.uuid4())")
+fresh_scope "$TENANT_R6" "$SCOPE_R6"
+
+# Baue eine gepatchte Importdatei, die einen zusaetzlichen
+# item_reference-INSERT auf ITEM Nr 1 mit ORDINAL 99 und einem
+# 2500-Byte-Text als target einfuegt. Ordinal 99 kollidiert nicht mit
+# den vom Generator vergebenen (0..k mit k weit unter 99). 2500 Byte
+# ist > PROSE_THRESHOLD_BYTES (2000) und < BTREE_V4_MAX_TARGET_BYTES
+# (2704), also:
+#   - Traegt der Index den Wert (er tut es, unter dem btree-Deckel),
+#     V9 rot mit Wortlaut "target-Zeilen sind > 2000 Byte".
+#   - Reisst der Index-Deckel unerwartet, das ist ebenfalls eine
+#     gueltige Beobachtung; beide Wortlaute grep'en wir.
+python3 <<'PY'
+text = open('out/import.sql').read()
+prose = 'X' * 2500
+# Der zusaetzliche INSERT wird ans Ende der item_reference-Sektion vor
+# dem naechsten Kapitel (item_relation) angehaengt. Wir suchen den
+# letzten item_reference-INSERT und fuegen danach den neuen ein.
+marker = "INSERT INTO worklist.item_reference"
+positions = [i for i in range(len(text)) if text.startswith(marker, i)]
+assert positions, "keine item_reference-INSERTs gefunden"
+last = positions[-1]
+end = text.index(';', last) + 1
+
+# Ein selbstgebauter INSERT: einfacher als das Klonen. Er verweist auf
+# Item Nr 1 und benutzt ordinal 99.
+extra = (
+    "\nINSERT INTO worklist.item_reference\n"
+    "    (id, tenant_id, scope_id, item_id, ordinal, target, status)\n"
+    "SELECT gen_random_uuid(),\n"
+    "       :'tenant_id', :'scope_id',\n"
+    "       (SELECT id FROM worklist.item "
+    "WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id' "
+    "AND selector_id = (SELECT id FROM worklist.selector "
+    "WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id' "
+    "AND token = 'item') AND number = 1),\n"
+    "       99,\n"
+    "       '" + prose + "',\n"
+    "       'asserted';\n"
+)
+open('out/import-r6.sql', 'w').write(text[:end] + extra + text[end:])
+PY
+
+$MG -v tenant_id="$TENANT_R6" -v scope_id="$SCOPE_R6" < out/import-r6.sql > /tmp/r6-import.out 2>&1 || true
+if grep -qE 'index row size .* exceeds btree|idx_item_reference_target' /tmp/r6-import.out; then
+    echo "  OK R6 rot am btree-Deckel des Import selbst:"
+    grep -E "index row size|idx_item_reference_target" /tmp/r6-import.out | head -1
+else
+    # Import durchgelaufen; verify.sql muss V9 rot melden.
+    if grep -qE "ERROR|EXCEPTION" /tmp/r6-import.out; then
+        echo "  FAIL R6-Import brach mit unerwartetem Fehler:"
+        cat /tmp/r6-import.out
+        exit 1
+    fi
+    expect_verify_red "$TENANT_R6" "$SCOPE_R6" \
+        "V9 rot: .*target-Zeilen sind > 2000 Byte|V9 rot: item_reference-Zeilen weichen ab" "V9"
+fi
+
+# Kontrolllauf danach: Hauptscope-verify ist unveraendert gruen.
+verify_sql "$EXPECTED_DIGEST" > /tmp/r6-post.out 2>&1
+if grep -qE "ERROR|EXCEPTION" /tmp/r6-post.out; then
+    echo "  FAIL Kontrolllauf danach rot:"
+    cat /tmp/r6-post.out
     exit 1
 fi
+echo "  Kontrolllauf danach gruen"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -572,10 +771,12 @@ echo "=========================================================="
 echo "ALL PROBES PASSED under role $MIGRATOR_ROLE"
 echo "  (NOSUPERUSER, NOBYPASSRLS, CREATEROLE)"
 echo "=========================================================="
-echo "  file:               backend/tools/corpus-import/out/import.sql"
-echo "  digest:             $DIGEST"
-echo "  bytes:              $BYTES"
-echo "  expected_rows:      $EXPECTED_ROWS"
-echo "  expected_id_refs:   $EXPECTED_ID_REFS"
-echo "  expected_truncs:    $EXPECTED_TRUNC"
-echo "  expected_edges:     $EXPECTED_EDGES"
+echo "  file:                        backend/tools/corpus-import/out/import.sql"
+echo "  digest:                      $EXPECTED_DIGEST"
+echo "  bytes:                       $BYTES"
+echo "  expected_rows:               $EXPECTED_ROWS"
+echo "  expected_id_refs:            $EXPECTED_ID_REFS"
+echo "  expected_truncated_titles:   $EXPECTED_TRUNC"
+echo "  expected_edges:              $EXPECTED_EDGES"
+echo "  expected_prose_rows:         $EXPECTED_PROSE"
+echo "  expected_reference_entries:  $EXPECTED_REFS"
