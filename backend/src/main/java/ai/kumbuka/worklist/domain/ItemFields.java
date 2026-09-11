@@ -222,7 +222,12 @@ final class ItemFields {
             // attribute, and it is dropped rather than stored. Otherwise
             // clearing an attribute and never having set it would be two
             // different states that read the same.
-            if (entry.getValue() != null) {
+            //
+            // An empty collection or array is the same absence: for a
+            // text_list this is the explicit rule from the concept, and
+            // for the other multi-valued types it is the consistent one —
+            // a value that carries no entries is the absence of a value.
+            if (entry.getValue() != null && !isEmptyContainer(entry.getValue())) {
                 sorted.put(String.valueOf(entry.getKey()), entry.getValue());
             }
         }
@@ -276,6 +281,17 @@ final class ItemFields {
                 + (element == null ? "null" : element.getClass().getSimpleName())
                 + " was given",
             List.of(field.canonicalName()));
+    }
+
+    /** Whether a value carries no entries — an empty collection or array. */
+    private static boolean isEmptyContainer(Object value) {
+        if (value instanceof Collection<?> collection) {
+            return collection.isEmpty();
+        }
+        if (value instanceof Object[] array) {
+            return array.length == 0;
+        }
+        return false;
     }
 
     /** The distinct, trimmed, non-empty renderings of a caller's collection. */

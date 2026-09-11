@@ -16,7 +16,7 @@ import java.util.List;
  * columns and an array; all five are declarations now, and the service does
  * not know any of them by name — it knows that the scope declared them.
  *
- * <h2>The seven types, and why nothing narrows them</h2>
+ * <h2>The eight types, and why nothing narrows them</h2>
  *
  * The set is closed at the platform level and the platform asks no question
  * about which one a scope picks. The same business field is {@link #CHOICE}
@@ -67,14 +67,22 @@ public class AttributeDefinition extends DeclaredValue {
     public static final String MULTI_CHOICE = "multi_choice";
     /** An address of another item; a pointer, never a relation. */
     public static final String ITEM_REFERENCE = "item_reference";
+    /**
+     * An ordered list of free-text entries. Order and duplicates are part of
+     * the value; entries are neither trimmed nor sorted on the way in. Not
+     * one of {@link #ENUMERATED}: a scope names no options for it. Not
+     * {@link #sortable}: a list has no total order to build an index against,
+     * and the schema refuses the combination directly.
+     */
+    public static final String TEXT_LIST = "text_list";
 
     /**
      * The whole set, in one place, so a refusal can say what was possible and
-     * the check constraint in V4 has exactly one counterpart in Java rather
-     * than a list per caller.
+     * the check constraint in V4 (widened by V14) has exactly one counterpart
+     * in Java rather than a list per caller.
      */
-    public static final List<String> TYPES =
-        List.of(TEXT, NUMBER, DATE, BOOLEAN, CHOICE, MULTI_CHOICE, ITEM_REFERENCE);
+    public static final List<String> TYPES = List.of(
+        TEXT, NUMBER, DATE, BOOLEAN, CHOICE, MULTI_CHOICE, ITEM_REFERENCE, TEXT_LIST);
 
     /** The types whose values are drawn from {@link AttributeOption}. */
     public static final List<String> ENUMERATED = List.of(CHOICE, MULTI_CHOICE);

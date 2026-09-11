@@ -940,6 +940,9 @@ public class ItemService {
 
     /** One attribute value, in the form the column holds. */
     private Object storedValue(AttributeDefinition definition, Object given) {
+        if (AttributeDefinition.TEXT_LIST.equals(definition.type)) {
+            return textListValue(definition, given);
+        }
         if (!AttributeDefinition.ENUMERATED.contains(definition.type)) {
             return given;
         }
@@ -957,6 +960,99 @@ public class ItemService {
             }
         }
         return List.copyOf(options);
+    }
+
+    /**
+     * A text_list value in the form the column holds: an ordered list of the
+     * strings the caller gave, kept as-is.
+     *
+     * <p>Order is preserved, duplicates are preserved, and entries are neither
+     * trimmed nor sorted — the value the reader sees is the value the writer
+     * wrote. That is why the checks below are refusals rather than fix-ups: a
+     * cell whose contents differ from what the caller sent would be a value
+     * two different callers can spell the same, and a read is worth what it is
+     * because it is the round trip of the write.
+     *
+     * <p>An empty list is the absence of the attribute and never reaches this
+     * method — {@link ItemFields#attributes(Object)} drops the key on the way
+     * in, the same way it drops a key with a null value. The refusals are
+     * therefore only for values that CARRY entries and carry the wrong kind.
+     *
+     * <p>Every refusal carries the attribute key as its offender, so a caller
+     * writing several attributes at once can tell which one it was.
+     */
+    private List<String> textListValue(AttributeDefinition definition, Object given) {
+        List<?> elements = asArrayOrRefuse(definition, given);
+
+        if (elements.size() > 50) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " admits at most 50 entries on the "
+                    + "write path, and " + elements.size() + " were given. A cap that "
+                    + "bound the read path would seal the store against its own "
+                    + "content; this one bounds what a fresh write may produce",
+                List.of(definition.key));
+        }
+
+        List<String> out = new ArrayList<>(elements.size());
+        for (Object element : elements) {
+            out.add(validTextListEntry(definition, element));
+        }
+        return List.copyOf(out);
+    }
+
+    /** The caller's value as a list, or a refusal naming the attribute key. */
+    private static List<?> asArrayOrRefuse(AttributeDefinition definition, Object given) {
+        if (given instanceof java.util.Collection<?> collection) {
+            return new ArrayList<>(collection);
+        }
+        if (given instanceof Object[] array) {
+            return new ArrayList<>(java.util.Arrays.asList(array));
+        }
+        throw new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            "attribute " + definition.key + " is a text_list, so its value is a "
+                + "JSON array of strings — "
+                + (given == null ? "null" : given.getClass().getSimpleName())
+                + " is not one",
+            List.of(definition.key));
+    }
+
+    /**
+     * One text_list entry: a string, not blank after trimming, at most 1500
+     * characters. Returned as-is, so order, spacing and duplicates round-trip.
+     */
+    private static String validTextListEntry(AttributeDefinition definition, Object element) {
+        if (!(element instanceof CharSequence)) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " is a list of strings, and an "
+                    + "entry of type "
+                    + (element == null ? "null" : element.getClass().getSimpleName())
+                    + " was given. Numbers and booleans are not coerced: two "
+                    + "different values would spell the same one, and the reader "
+                    + "would have no way to tell them apart",
+                List.of(definition.key));
+        }
+        String value = element.toString();
+        if (value.trim().isEmpty()) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " admits no blank entry: an entry "
+                    + "that trims to nothing is the absence of an entry, and a "
+                    + "position occupied by one would read as content where none is",
+                List.of(definition.key));
+        }
+        if (value.length() > 1500) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " admits entries of at most 1500 "
+                    + "characters on the write path, and one was given at "
+                    + value.length() + ". The read path returns whatever was "
+                    + "stored, however that got in",
+                List.of(definition.key));
+        }
+        return value;
     }
 
     /**

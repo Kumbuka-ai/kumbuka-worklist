@@ -1147,7 +1147,7 @@ class ItemDomainIT {
     // ==================================================================
 
     /**
-     * There is no eighth attribute type: the types are structure, the values
+     * There is no ninth attribute type: the types are structure, the values
      * are data.
      *
      * <p>This is what the four fixed axes became. The axis set was structure
@@ -1157,14 +1157,214 @@ class ItemDomainIT {
      * the whole point of the change.
      */
     @Test
-    void there_is_no_attribute_type_beyond_the_seven() {
+    void there_is_no_attribute_type_beyond_the_eight() {
         WorklistException refusal = catchWorklistException(() ->
             vocabulary.declareAttribute(SCOPE, "urgency", "Urgency", "colour", 1, false));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
             .contains("text", "number", "date", "boolean", "choice", "multi_choice",
-                "item_reference");
+                "item_reference", "text_list");
+    }
+
+    // ==================================================================
+    // text_list — the eighth type.
+    // ==================================================================
+
+    /**
+     * A text_list attribute stores its entries in the order given, keeps
+     * duplicates, and reads back what was written.
+     *
+     * <p>Order and duplicates are part of the value. The concept says so
+     * because the alternative is a value the reader cannot check against
+     * anything: a scope declaring an attribute for "steps taken" has no way
+     * to tell "started" from "started, again" if the list was silently
+     * deduplicated, and no way to tell a sequence from a set if the order
+     * were dropped.
+     */
+    @Test
+    void a_text_list_attribute_roundtrips_with_order_and_duplicates_preserved() {
+        String key = attribute("text_list");
+        UUID id = createdId("text_list roundtrip probe");
+
+        Map<String, Object> after = updateField(id, "attributes",
+            Map.of(key, List.of("second", "first", "second")));
+
+        assertThat(attributesOf(after))
+            .as("the entries come back in the order they went in and duplicates are "
+                + "not squashed — a list where the writer's order was thrown away is a "
+                + "list only a reader who never wrote to it would recognise")
+            .containsEntry(key, List.of("second", "first", "second"));
+
+        Map<String, Object> reRead = items.read(SCOPE, id);
+        assertThat(attributesOf(reRead))
+            .as("and a fresh read gives the same thing — the roundtrip is the write's "
+                + "return AND the next reader's, or the store has two answers to one "
+                + "question")
+            .containsEntry(key, List.of("second", "first", "second"));
+    }
+
+    /**
+     * A text_list whose value is not an array is refused by INVALID_VALUE
+     * naming the attribute key.
+     *
+     * <p>Named by the KEY rather than the field, because a caller writing
+     * several attributes at once needs to know WHICH of them was refused;
+     * saying only "attributes" would leave the caller to guess.
+     */
+    @Test
+    void a_text_list_value_that_is_not_an_array_is_refused() {
+        String key = attribute("text_list");
+        UUID id = createdId("text_list scalar probe");
+
+        WorklistException refusal = catchWorklistException(() ->
+            updateField(id, "attributes", Map.of(key, "one string, not a list")));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders())
+            .as("the refusal names the key so a caller writing several attributes at "
+                + "once can tell which one was refused")
+            .containsExactly(key);
+        assertThat(refusal.getMessage())
+            .as("and the message says why: a text_list is a JSON array of strings, and "
+                + "a string on its own is not one")
+            .contains(key, "text_list");
+    }
+
+    /**
+     * A text_list entry that is not a string is refused: numbers and booleans
+     * are not coerced.
+     *
+     * <p>The concept fixes that in one line — "keine Umwandlung von Zahlen
+     * oder Booleans" — and the reason is the same one the identity-carrying
+     * fields answer to: two different values would spell the same one, and a
+     * reader would have no way to tell them apart.
+     */
+    @Test
+    void a_text_list_entry_that_is_not_a_string_is_refused() {
+        String key = attribute("text_list");
+        UUID id = createdId("text_list non-string probe");
+
+        WorklistException refusal = catchWorklistException(() ->
+            updateField(id, "attributes", Map.of(key, List.of("first", 42, "third"))));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders()).containsExactly(key);
+        assertThat(refusal.getMessage())
+            .as("a number is not a string and the value in question is named — a "
+                + "refusal saying only 'wrong type' is a refusal the caller has to "
+                + "guess through")
+            .contains(key);
+    }
+
+    /**
+     * A text_list entry that trims to nothing is refused.
+     *
+     * <p>A position occupied by whitespace would read as content where none
+     * is, and the reader has no way to tell a genuine blank from a value the
+     * writer meant to be there. Refused rather than trimmed away: trimming
+     * would move the position of every later entry silently.
+     */
+    @Test
+    void a_text_list_entry_that_trims_to_nothing_is_refused() {
+        String key = attribute("text_list");
+        UUID id = createdId("text_list blank probe");
+
+        WorklistException refusal = catchWorklistException(() ->
+            updateField(id, "attributes", Map.of(key, List.of("first", "   ", "third"))));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders()).containsExactly(key);
+    }
+
+    /**
+     * A text_list of 51 entries is refused; 50 go through.
+     *
+     * <p>The boundary case is the case. A cap only ever observed rejecting
+     * "obviously too long" is a cap ungoverned at its own edge — the same
+     * lesson the title-length probe drew, moved to a list.
+     */
+    @Test
+    void a_text_list_of_51_entries_is_refused_and_50_go_through() {
+        String key = attribute("text_list");
+        UUID id = createdId("text_list count probe");
+
+        List<String> overCap = java.util.stream.IntStream.range(0, 51)
+            .mapToObj(i -> "entry-" + i).toList();
+        WorklistException refusal = catchWorklistException(() ->
+            updateField(id, "attributes", Map.of(key, overCap)));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders()).containsExactly(key);
+
+        List<String> atCap = java.util.stream.IntStream.range(0, 50)
+            .mapToObj(i -> "entry-" + i).toList();
+        Map<String, Object> after = updateField(id, "attributes", Map.of(key, atCap));
+        assertThat(attributesOf(after))
+            .as("exactly 50 entries go through — the equality case that a cap-at-51 "
+                + "would have missed")
+            .containsEntry(key, atCap);
+    }
+
+    /**
+     * A text_list entry of 1501 characters is refused; 1500 go through.
+     *
+     * <p>Same reason as the item-title cap: a cap that only rejected 2000
+     * would leave 1501 to 1999 unchecked, and the drift lives at the edge.
+     */
+    @Test
+    void a_text_list_entry_of_1501_is_refused_and_1500_goes_through() {
+        String key = attribute("text_list");
+        UUID id = createdId("text_list length probe");
+
+        String overCap = "x".repeat(1501);
+        WorklistException refusal = catchWorklistException(() ->
+            updateField(id, "attributes", Map.of(key, List.of("short", overCap))));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders()).containsExactly(key);
+
+        String atCap = "x".repeat(1500);
+        Map<String, Object> after =
+            updateField(id, "attributes", Map.of(key, List.of("short", atCap)));
+        assertThat(attributesOf(after))
+            .as("exactly 1500 characters go through, and the read gives the same string")
+            .containsEntry(key, List.of("short", atCap));
+    }
+
+    /**
+     * A text_list with an empty array is the absence of the attribute — not
+     * stored, not read back — matching the behaviour of a key with a null
+     * value.
+     *
+     * <p>Otherwise clearing an attribute and never having set it would be
+     * two different states that read the same, which is exactly the class of
+     * defect the round-trip guarantees are designed against. And the concept
+     * says so directly: "ein leeres Array ist die Abwesenheit des Attributs
+     * und wird wie null behandelt".
+     */
+    @Test
+    void an_empty_text_list_reads_as_absence() {
+        String key = attribute("text_list");
+        UUID id = createdId("text_list absence probe");
+
+        // First set a real value, so we can then observe the empty array
+        // clearing it back to absence.
+        updateField(id, "attributes", Map.of(key, List.of("held")));
+        assertThat(attributesOf(items.read(SCOPE, id)))
+            .as("the value is there before the empty array clears it")
+            .containsEntry(key, List.of("held"));
+
+        Map<String, Object> after = updateField(id, "attributes",
+            new HashMap<>(Map.of(key, List.of())));
+
+        assertThat(attributesOf(after))
+            .as("the key is not in the answer — an empty array is absence, and absence "
+                + "is what a caller sees when the attribute was never set")
+            .doesNotContainKey(key);
+        assertThat(attributesOf(items.read(SCOPE, id)))
+            .as("and a fresh read confirms it: the row does not carry the attribute")
+            .doesNotContainKey(key);
     }
 
     /** An attribute key is a token: lower case, no whitespace, not empty. */
