@@ -147,7 +147,7 @@ public class VocabularyRegistry {
     // ------------------------------------------------------------------
 
     /**
-     * Declare an attribute: a key, a display name, and one of the seven
+     * Declare an attribute: a key, a display name, and one of the eight
      * types.
      *
      * <p>Idempotent for the same reason declaring a selector is: the caller is

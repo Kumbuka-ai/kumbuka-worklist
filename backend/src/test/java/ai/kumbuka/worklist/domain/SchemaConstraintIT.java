@@ -723,9 +723,105 @@ class SchemaConstraintIT {
     }
 
     // ==================================================================
+    // The attribute-definition type set (V14 widens it to include text_list).
+    // ==================================================================
+
+    /**
+     * The type of a declared attribute is one of the eight the platform
+     * carries; anything else is refused at the check constraint.
+     *
+     * <p>The green half is what makes the constraint the shape it is meant to
+     * be: a text_list declaration goes through, as would any other admitted
+     * type — the refusal is not "any name for a type" but "one of these
+     * eight". Without both halves a constraint that refused everything would
+     * satisfy the red assertion without saying anything about the schema.
+     */
+    @Test
+    void an_unknown_attribute_type_is_refused_and_text_list_goes_through()
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+
+            assertThatThrownBy(() -> insertAttributeDefinition(c, "colour_attr", "colour",
+                    false))
+                .as("RED STATE, observed: a type outside the platform's set must be "
+                    + "refused. The set is closed at the platform level and a new type "
+                    + "would be a schema change here")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("ck_attribute_definition_type");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            insertAttributeDefinition(c, "steps_attr", "text_list", false);
+            c.commit();
+
+            assertThat(count(c, "attribute_definition"))
+                .as("a text_list declaration is admitted — the eighth type the "
+                    + "constraint now names")
+                .isEqualTo(1);
+            c.commit();
+        }
+    }
+
+    /**
+     * A text_list declaration with {@code sortable = true} is refused;
+     * {@code sortable = false} goes through.
+     *
+     * <p>An expression index that ordered a list would pick whichever total
+     * order the operator class happened to have — and no such order is the
+     * value's own. A rule with no mechanism above the schema is exactly the
+     * class this project keeps finding, so the refusal lives here.
+     */
+    @Test
+    void a_sortable_text_list_declaration_is_refused_and_a_non_sortable_one_stands()
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, tenant);
+
+            assertThatThrownBy(() -> insertAttributeDefinition(c, "sorted_steps",
+                    "text_list", true))
+                .as("RED STATE, observed: a text_list with sortable = true must be "
+                    + "refused. Ordering by a list would be a promise the value cannot "
+                    + "keep, and the read path would pick whichever total order the "
+                    + "operator class had, silently")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("ck_attribute_definition_text_list_not_sortable");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            insertAttributeDefinition(c, "unsorted_steps", "text_list", false);
+            c.commit();
+
+            assertThat(count(c, "attribute_definition"))
+                .as("and a non-sortable list is admitted — the constraint refuses the "
+                    + "combination, not the type on its own")
+                .isEqualTo(1);
+            c.commit();
+        }
+    }
+
+    // ==================================================================
     // Planting. Every statement is issued as the runtime role, under a bound
     // tenant, so a refusal is the constraint and never the policy.
     // ==================================================================
+
+    private void insertAttributeDefinition(Connection c, String key, String type,
+            boolean sortable) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.attribute_definition
+                    (id, tenant_id, scope_id, key, name, type, sortable)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            st.setObject(1, UUID.randomUUID());
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
+            st.setString(4, key);
+            st.setString(5, "Attribute " + key);
+            st.setString(6, type);
+            st.setBoolean(7, sortable);
+            st.executeUpdate();
+        }
+    }
 
     private UUID insertSelector(Connection c) throws SQLException {
         UUID id = UUID.randomUUID();
