@@ -1,7 +1,9 @@
-# Steuerungskorpus-Import (Sprint 177.5 → 177.8)
+# Steuerungskorpus-Import (Sprint 177.5 → 178.2)
 
 Ueberfuehrung des Bestands der Vorgaenger-Worklist in den Worklist-Dienst.
-Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche.
+Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche. Aktueller
+Zustand (178.2): der Echtlauf ist entsperrt; der Betreiber-Aufruf steht
+unter "Was 178.2 gegenueber 178.1 geaendert hat".
 
 ## Bauteile
 
@@ -18,10 +20,16 @@ Ausschliesslich per SQL, kein Importeur ueber die Verbflaeche.
   Zielscope an. Der Meilenstein-Zaehler ist seit V12 (177.7) wieder
   scope-weit; die Saat hebt die Zaehler-Zeile per UPDATE auf die
   hoechste vergebene Milestone-Nummer.
-- `verify.sql` — fuenf Verifikationsabfragen (V1..V5). V1 ist seit
-  177.8 geschaerft: keine OFFENE Zeile im Auffang (terminale sind dort
-  erwartet). Die vormalige cross-workstream-milestone-Abfrage ist mit
-  V12 entfallen.
+- `verify.sql` — Waechter des Ist-Bestands, seit 178.2 mit V0..V9
+  (V0 Identitaet vor Inhalt, V1a/b Verteilung/Auffang, V2 Dichte 1..N,
+  V3 Zaehler, V4 ID-Referenzen, V5 gekappte Titel, V6 Kantenzahl, V7
+  keine nackte Nr im Titel, V8 Straenge, V9 Prosa-Regel). Jede Pruefung
+  RAISE'd bei Verletzung; V0 rot verhindert jede weitere Pruefung.
+- `reset-scope.sql` — leert einen Scope aus V4..V13-Tabellen in FK-
+  safer Reihenfolge; Selbstbestaetigung am Ende.
+- `verify_import.sh` — Mechanismus-Probe: Import + verify.sql, Reset +
+  Rerun, und die roten Proben R1..R6 (R6 seit 178.2: Prosa als
+  Referenz -> V9 rot oder btree-Deckel).
 - `out/` — Ausgabe des Trockenlaufs (assignment.tsv, deferred.txt,
   report.md, diff-to-177-5.md, diff-to-177-6.md, diff-to-177-7.md). In
   git eingecheckt zum Nachlesen; wird bei jedem Lauf ueberschrieben.
@@ -159,7 +167,126 @@ Details unter `out/diff-to-177-6.md`. Kurzfassung:
    entfernt `apply_milestone_invariant`, und die
    `milestone-workstream-conflict`-Refusal-Kategorie verschwindet.
 
-## Was 178.1 gegenueber 177.10 geaendert hat — Stoppbedingung erreicht
+## Was 178.2 gegenueber 178.1 geaendert hat — Import laeuft durch
+
+Konzept-Entscheidung vom 2026-09-10 (Sprint 178): **Prosa geht nach
+`item.description`, Zeiger bleiben in `worklist.item_reference`.** Ein
+Ref-Segment mit einer UTF-8-Laenge > 2000 Byte ist Prosa; die Zahl ist
+eine runde Zahl mit Abstand zum btree-v4-Deckel des Ziel-Index, keine
+Klassifikation nach Inhalt. Damit ist die Stoppbedingung aus 178.1
+aufgeloest, und der Echtlauf ist zur Betreiber-Anwendung entsperrt.
+
+Aenderungen dieses Sprints:
+
+1. **Prosa-Regel im Generator** (`generate_import.py`)
+   - `build_reference_targets(row)` liefert jetzt zwei Listen:
+     `references` (die kurzen Zeiger) und `prose_segments` (jedes Ref-
+     Segment > 2000 Byte). Nur `references` gehen in `item_reference`;
+     die ID sitzt weiterhin auf `ordinal 0`, `component: <Scope>` bleibt
+     am Ende, und die Ordinals sind lueckenlos.
+   - `build_description(...)` baut `item.description` nach der 178.2-
+     Fall-Tabelle: (Titel gekappt, keine Prosa) → voller Originaltitel;
+     (keine Kappung, Prosa) → Prosa-Segmente durch Leerzeile getrennt;
+     (Titel gekappt und Prosa) → Titel, Leerzeile, `---`, Leerzeile,
+     dann Prosa; sonst `NULL`.
+   - `_assert_reference_targets_fit` prueft jetzt die *tatsaechlich* als
+     Referenz vorgesehenen Targets — nach der Regel muss er still bleiben.
+     Feuert er trotzdem, ist die Regel oder ihre Anwendung defekt, und
+     die Rueckgabe nennt es.
+   - Header und stderr nennen zwei neue Zahlen: `expected_prose_rows`
+     (Items mit Prosa in description) und `expected_reference_entries`
+     (Gesamtzahl der `item_reference`-Zeilen).
+2. **V9 in `verify.sql`**
+   - (a) `count(item_reference) = expected_reference_entries`,
+   - (b) `octet_length(target) > 2000` ist nirgends erfuellt (kein
+     Ref-Eintrag ist laenger als die Prosa-Grenze),
+   - (c) `octet_length(description) > 2000` gleich `expected_prose_rows`.
+     `octet_length` als Kriterium ist gewaehlt, weil die drei
+     Nicht-Prosa-Faelle (NULL, gekappter Titel = Originaltitel <= 436
+     Byte, leer) alle unter 2000 Byte liegen — die Grenze ist damit
+     unabhaengig vom Trenner `---` und vom Titelvergleich.
+3. **R1 neu geschnitten in `verify_import.sh`**
+   - Statt Duplikat: das erste Item bekommt Nummer N+5. Das erzeugt
+     eine Luecke ohne Duplikat; der Import laeuft gruen, V2 wird mit
+     eigenem Wortlaut rot.
+4. **R6 neu in `verify_import.sh`**
+   - Zusaetzlicher `item_reference`-INSERT mit ordinal 99 und einem
+     2500-Byte-target; V9 muss rot werden, oder — wenn der btree-Deckel
+     zuschlaegt — der Import selbst mit `index row size ... exceeds
+     btree version 4`. Die Rueckgabe nennt den beobachteten Fall.
+5. **R5 auf `attribute_definition` umgestellt**
+   - Die 178.1-Variante (scope_setting nicht loeschen) bricht den
+     zweiten Bootstrap nicht: bootstrap-scope.sql schreibt
+     scope_setting nicht direkt. 178.2 nimmt den Marker im
+     `attribute_definition`: bleibt er stehen, refused der zweite
+     Import typisiert mit "corpus-import already applied".
+6. **Aufrufblock als Shell-Variablen** in README und Harness identisch
+   (siehe **Betreiber-Aufruf** unten).
+
+**Betreiber-Aufruf** — die verify_import.sh im Harness benutzt exakt
+diese Aufrufform ($MG steht dort fuer `docker exec ... psql ...` gegen
+den ephemeren Test-Container; im Wirt-Aufruf ist $MG einfach `psql`).
+
+```bash
+# Deklarierte Werte oben, keine Platzhalter inline.
+TENANT_ID="<uuid>"
+SCOPE_ID="<uuid>"
+EXPECTED_DIGEST="<sha256>"
+EXPECTED_ROWS="<N>"
+EXPECTED_ID_REFS="<N>"
+EXPECTED_TRUNC="<N>"
+EXPECTED_EDGES="<N>"
+EXPECTED_PROSE="<N>"
+EXPECTED_REFS="<N>"
+BOOTSTRAP=/path/to/src/main/resources/db/bootstrap/bootstrap-scope.sql
+IMPORT=./out/import.sql
+
+# 1) Bootstrap — set_config vor dem Skript, per Pipe (das Skript traegt
+#    kein eigenes BEGIN/COMMIT-Wrapper drumherum).
+{ echo "SELECT set_config('app.tenant_id', '$TENANT_ID', false);"; cat "$BOOTSTRAP"; } | \
+    psql -v ON_ERROR_STOP=on \
+         -v tenant_id="$TENANT_ID" \
+         -v scope_id="$SCOPE_ID"
+
+# 2) Import — die Datei traegt ihr eigenes BEGIN/COMMIT.
+psql -v ON_ERROR_STOP=on \
+     -v tenant_id="$TENANT_ID" \
+     -v scope_id="$SCOPE_ID" \
+     -f "$IMPORT"
+
+# 3) Verify.
+psql -v ON_ERROR_STOP=on \
+     -v tenant_id="$TENANT_ID" \
+     -v scope_id="$SCOPE_ID" \
+     -v expected_digest="$EXPECTED_DIGEST" \
+     -v expected_rows="$EXPECTED_ROWS" \
+     -v expected_id_refs="$EXPECTED_ID_REFS" \
+     -v expected_truncated_titles="$EXPECTED_TRUNC" \
+     -v expected_edges="$EXPECTED_EDGES" \
+     -v expected_prose_rows="$EXPECTED_PROSE" \
+     -v expected_reference_entries="$EXPECTED_REFS" \
+     -f verify.sql
+
+# 4) Reset (fuer Neuversuch).
+psql -v ON_ERROR_STOP=on \
+     -v tenant_id="$TENANT_ID" \
+     -v scope_id="$SCOPE_ID" \
+     -f reset-scope.sql
+```
+
+**Schemastand-Probe vor dem Anwenden** (erwartet 13):
+
+```sql
+SELECT max(installed_rank) AS latest_rank, max(version) AS latest_version
+  FROM worklist.flyway_schema_history
+ WHERE success = true;
+```
+
+Der `\set tenant_id '''<uuid>'''`-Weg aus 178.1 ist verworfen: `\set`
+mit Anfuehrungszeichen im Wert kombiniert mit `:'tenant_id'` quotet ein
+zweites Mal und der UUID-Cast scheitert.
+
+## Was 178.1 gegenueber 177.10 geaendert hat
 
 Ratifiziert im Sprint 178: die alte Nr des Predecessors ist Sediment aus
 Markdown und verschwindet vollstaendig aus dem Ziel. Die Items werden dicht
@@ -169,15 +296,12 @@ ID bleibt als Referenz auffindbar; die Ref-Spalte wandert in die V4-Tabelle
 wird ein lauffaehiger Waechter, und `reset-scope.sql` haengt sich als
 Neuversuchs-Werkzeug an das Regal.
 
-**Achtung Stoppbedingung.** Aenderung 3 (Ref-Segmente in `item_reference`)
-trifft heute auf einen btree-v4-Deckel am Index
-`idx_item_reference_target (tenant_id, scope_id, target)`: 13 der 466
-vorgesehenen Ref-Segmente am gepinnten Bestand sind laenger als der
-Postgres-Zeilenlimit fuer btree v4 (2704 Byte). Der Generator haelt hier
-laut an (`_assert_reference_targets_fit`); der Auftrag verbietet
-Schemaanpassung und Inhaltsverkuerzung. Der Echtlauf ist damit erneut
-gesperrt, bis die Konzept-Seite entscheidet — Details in der
-Sub-Sprint-Rueckgabe `dispatch://kumbuka/sprint/178.1/return`.
+**Stoppbedingung damals** (2026-09-10, dann durch 178.2 aufgeloest):
+Aenderung 3 (Ref-Segmente in `item_reference`) traf auf den btree-v4-
+Deckel am Index `idx_item_reference_target`: 13 der 466 vorgesehenen
+Ref-Segmente am gepinnten Bestand sind laenger als 2704 Byte. Die
+Konzept-Seite hat 178.2 mit der Prosa-Regel geoeffnet (> 2000 Byte in
+Ref → nach `item.description`).
 
 Aenderungen dieses Sprints:
 
@@ -230,33 +354,11 @@ Aenderungen dieses Sprints:
      Bootstrap+Import erneut + `verify.sql` gruen; PROBE R1..R5 rot mit
      Wortlaut (Dichte / ID-Refs / Titel-Deckel / V0-Marker /
      Reset-Luecke).
-   - Aktueller Lauf haelt am `generate_import.py`-Wachter an: 13
-     zu grosse Ref-Segmente reissen den btree-v4-Deckel. Sobald der
-     Deckel geloest ist, laeuft `verify_import.sh` durch.
 
-**Aufruf des Wachters gegen einen Ist-Bestand** (Betreiber, wenn die
-Konzept-Seite den Weg freigemacht hat):
-
-```
-psql -v ON_ERROR_STOP=on \
-     -v tenant_id="'<uuid>'" \
-     -v scope_id="'<uuid>'" \
-     -v expected_digest=<sha> \
-     -v expected_rows=<N> \
-     -v expected_id_refs=<N> \
-     -v expected_truncated_titles=<N> \
-     -v expected_edges=<N> \
-     -f verify.sql
-```
-
-**Reset**:
-
-```
-psql -v ON_ERROR_STOP=on \
-     -v tenant_id="'<uuid>'" \
-     -v scope_id="'<uuid>'" \
-     -f reset-scope.sql
-```
+Die Betreiber-Aufrufblocks aus 178.1 waren defekt (`\set tenant_id
+'''<uuid>'''` quotet ein zweites Mal; Bootstrap-Block hatte ein
+zusaetzliches `BEGIN`). 178.2 ersetzt sie durch die Shell-Variablen-
+Form oben im 178.2-Abschnitt.
 
 ## Was 177.8 gegenueber 177.7 geaendert hat
 
