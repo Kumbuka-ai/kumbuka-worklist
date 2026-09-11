@@ -1289,20 +1289,16 @@ class ItemDomainIT {
         String key = attribute("text_list");
         UUID id = createdId("text_list count probe");
 
-        List<String> overCap = new ArrayList<>();
-        for (int i = 0; i < 51; i++) {
-            overCap.add("entry-" + i);
-        }
+        List<String> overCap = java.util.stream.IntStream.range(0, 51)
+            .mapToObj(i -> "entry-" + i).toList();
         WorklistException refusal = catchWorklistException(() ->
             updateField(id, "attributes", Map.of(key, overCap)));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.offenders()).containsExactly(key);
 
-        List<String> atCap = new ArrayList<>();
-        for (int i = 0; i < 50; i++) {
-            atCap.add("entry-" + i);
-        }
+        List<String> atCap = java.util.stream.IntStream.range(0, 50)
+            .mapToObj(i -> "entry-" + i).toList();
         Map<String, Object> after = updateField(id, "attributes", Map.of(key, atCap));
         assertThat(attributesOf(after))
             .as("exactly 50 entries go through — the equality case that a cap-at-51 "

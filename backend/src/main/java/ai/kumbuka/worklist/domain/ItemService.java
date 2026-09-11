@@ -982,20 +982,7 @@ public class ItemService {
      * writing several attributes at once can tell which one it was.
      */
     private List<String> textListValue(AttributeDefinition definition, Object given) {
-        List<?> elements;
-        if (given instanceof java.util.Collection<?> collection) {
-            elements = new ArrayList<>(collection);
-        } else if (given instanceof Object[] array) {
-            elements = new ArrayList<>(java.util.Arrays.asList(array));
-        } else {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "attribute " + definition.key + " is a text_list, so its value is a "
-                    + "JSON array of strings — "
-                    + (given == null ? "null" : given.getClass().getSimpleName())
-                    + " is not one",
-                List.of(definition.key));
-        }
+        List<?> elements = asArrayOrRefuse(definition, given);
 
         if (elements.size() > 50) {
             throw new WorklistException(
@@ -1009,39 +996,63 @@ public class ItemService {
 
         List<String> out = new ArrayList<>(elements.size());
         for (Object element : elements) {
-            if (!(element instanceof CharSequence)) {
-                throw new WorklistException(
-                    WorklistException.Reason.INVALID_VALUE,
-                    "attribute " + definition.key + " is a list of strings, and an "
-                        + "entry of type "
-                        + (element == null ? "null" : element.getClass().getSimpleName())
-                        + " was given. Numbers and booleans are not coerced: two "
-                        + "different values would spell the same one, and the reader "
-                        + "would have no way to tell them apart",
-                    List.of(definition.key));
-            }
-            String value = element.toString();
-            if (value.trim().isEmpty()) {
-                throw new WorklistException(
-                    WorklistException.Reason.INVALID_VALUE,
-                    "attribute " + definition.key + " admits no blank entry: an entry "
-                        + "that trims to nothing is the absence of an entry, and a "
-                        + "position occupied by one would read as content where none "
-                        + "is",
-                    List.of(definition.key));
-            }
-            if (value.length() > 1500) {
-                throw new WorklistException(
-                    WorklistException.Reason.INVALID_VALUE,
-                    "attribute " + definition.key + " admits entries of at most 1500 "
-                        + "characters on the write path, and one was given at "
-                        + value.length() + ". The read path returns whatever was "
-                        + "stored, however that got in",
-                    List.of(definition.key));
-            }
-            out.add(value);
+            out.add(validTextListEntry(definition, element));
         }
         return List.copyOf(out);
+    }
+
+    /** The caller's value as a list, or a refusal naming the attribute key. */
+    private static List<?> asArrayOrRefuse(AttributeDefinition definition, Object given) {
+        if (given instanceof java.util.Collection<?> collection) {
+            return new ArrayList<>(collection);
+        }
+        if (given instanceof Object[] array) {
+            return new ArrayList<>(java.util.Arrays.asList(array));
+        }
+        throw new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            "attribute " + definition.key + " is a text_list, so its value is a "
+                + "JSON array of strings — "
+                + (given == null ? "null" : given.getClass().getSimpleName())
+                + " is not one",
+            List.of(definition.key));
+    }
+
+    /**
+     * One text_list entry: a string, not blank after trimming, at most 1500
+     * characters. Returned as-is, so order, spacing and duplicates round-trip.
+     */
+    private static String validTextListEntry(AttributeDefinition definition, Object element) {
+        if (!(element instanceof CharSequence)) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " is a list of strings, and an "
+                    + "entry of type "
+                    + (element == null ? "null" : element.getClass().getSimpleName())
+                    + " was given. Numbers and booleans are not coerced: two "
+                    + "different values would spell the same one, and the reader "
+                    + "would have no way to tell them apart",
+                List.of(definition.key));
+        }
+        String value = element.toString();
+        if (value.trim().isEmpty()) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " admits no blank entry: an entry "
+                    + "that trims to nothing is the absence of an entry, and a "
+                    + "position occupied by one would read as content where none is",
+                List.of(definition.key));
+        }
+        if (value.length() > 1500) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " admits entries of at most 1500 "
+                    + "characters on the write path, and one was given at "
+                    + value.length() + ". The read path returns whatever was "
+                    + "stored, however that got in",
+                List.of(definition.key));
+        }
+        return value;
     }
 
     /**
