@@ -98,6 +98,14 @@ public class ItemService {
      */
     private static final Logger LOG = Logger.getLogger(ItemService.class);
 
+    /**
+     * The label {@link ItemFields#refuseUuidShape} names in the refusal it
+     * raises when a status field arrives as a uuid rather than a name. Kept
+     * as one constant so the four call sites cannot drift apart, and so a
+     * future rename of the wire form lands here rather than at every guard.
+     */
+    private static final String A_STATUS_NAME = "a status name";
+
     @Inject ItemRepository items;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
@@ -196,7 +204,7 @@ public class ItemService {
         if (name.isEmpty()) {
             return null;
         }
-        ItemFields.refuseUuidShape(Field.STATUS, name, "a status name");
+        ItemFields.refuseUuidShape(Field.STATUS, name, A_STATUS_NAME);
         ItemStatus status = vocabulary.statusByName(scopeId, name);
         if (status == null) {
             throw new WorklistException(
@@ -465,7 +473,7 @@ public class ItemService {
                     + "platform's; which value a scope closes with is its own declaration",
                 List.of(Field.STATUS.canonicalName()));
         }
-        ItemFields.refuseUuidShape(Field.STATUS, statusName, "a status name");
+        ItemFields.refuseUuidShape(Field.STATUS, statusName, A_STATUS_NAME);
         ItemStatus status = vocabulary.statusByName(scopeId, statusName);
         if (status == null) {
             throw new WorklistException(
@@ -991,7 +999,7 @@ public class ItemService {
                     + "absence of one",
                 List.of(field.canonicalName()));
         }
-        ItemFields.refuseUuidShape(field, name, "a status name");
+        ItemFields.refuseUuidShape(field, name, A_STATUS_NAME);
         if (ItemFields.unchangedAsText(held, name)) {
             return false;
         }
@@ -1023,7 +1031,7 @@ public class ItemService {
                 missingMessage,
                 List.of(Field.STATUS.canonicalName()));
         }
-        ItemFields.refuseUuidShape(Field.STATUS, name, "a status name");
+        ItemFields.refuseUuidShape(Field.STATUS, name, A_STATUS_NAME);
         ItemStatus status = vocabulary.statusByName(scopeId, name);
         if (status == null) {
             throw new WorklistException(

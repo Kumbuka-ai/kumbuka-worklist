@@ -197,6 +197,58 @@ class ItemMilestoneAssignmentIT {
         assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
     }
 
+    /**
+     * A milestone value at each of the four form-refusal edges.
+     *
+     * <p>The four are grouped in one test because they exercise one
+     * refusal-shape ({@code INVALID_VALUE} on the milestone field) reached
+     * through four distinct branches — a Number {@code == 0}, a Number
+     * {@code < 0}, a String that parses to a Long {@code <= 0}, and a String
+     * that does not parse at all. Each edge is one branch in
+     * {@code milestoneNumberOrRefuse}; each is a refusal a caller can meet if
+     * a client hands the field the wrong kind of thing.
+     */
+    @Test
+    void a_milestone_value_at_the_form_edges_is_refused() {
+        UUID itemId = itemAt("the milestone form-edge case");
+        String token = tokenOf(itemId);
+
+        WorklistException zeroNumber = refusalFrom(() -> items.update(scope, itemId, Map.of(
+            Field.MILESTONE_ID.canonicalName(), 0,
+            Field.CONFLICT_TOKEN.canonicalName(), token)));
+        assertThat(zeroNumber.reason())
+            .as("zero is not a milestone number — the scope allocates from one, so "
+                + "zero cannot have been handed out")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(zeroNumber.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+
+        WorklistException negativeNumber = refusalFrom(() -> items.update(scope, itemId, Map.of(
+            Field.MILESTONE_ID.canonicalName(), -1L,
+            Field.CONFLICT_TOKEN.canonicalName(), token)));
+        assertThat(negativeNumber.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(negativeNumber.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+
+        WorklistException negativeString = refusalFrom(() -> items.update(scope, itemId, Map.of(
+            Field.MILESTONE_ID.canonicalName(), "-5",
+            Field.CONFLICT_TOKEN.canonicalName(), token)));
+        assertThat(negativeString.reason())
+            .as("the String path parses first and refuses second — a value that parses "
+                + "to a non-positive number is the same refusal as the Number path, so "
+                + "the two shapes cannot answer the same question differently")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(negativeString.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+
+        WorklistException unparseable = refusalFrom(() -> items.update(scope, itemId, Map.of(
+            Field.MILESTONE_ID.canonicalName(), "abc",
+            Field.CONFLICT_TOKEN.canonicalName(), token)));
+        assertThat(unparseable.reason())
+            .as("a value that does not parse as a number at all is a form refusal — "
+                + "the message names the field so a caller writing several at once knows "
+                + "which one was refused")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(unparseable.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+    }
+
     @Test
     void a_milestone_value_that_is_not_a_number_is_refused_by_form() {
         UUID itemId = itemAt("the not-a-number case");

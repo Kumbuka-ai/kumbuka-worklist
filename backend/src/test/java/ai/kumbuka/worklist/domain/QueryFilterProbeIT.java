@@ -152,6 +152,77 @@ class QueryFilterProbeIT {
     }
 
     // ==================================================================
+    // Probe 2b — the two refusals a filter value carries by itself
+    // ==================================================================
+
+    @Test
+    void a_status_filter_naming_an_undeclared_value_is_refused() {
+        createItem("an item", openStatus);
+
+        Throwable refused = catchThrowable(() ->
+            items.query(scope, new QuerySpec(Map.of("status", "no-such-status"), 100)));
+
+        assertThat(refused)
+            .as("a value the scope has not declared is refused rather than answered "
+                + "with the empty set — a filter over an undeclared value would look "
+                + "like a legitimate empty otherwise")
+            .isInstanceOf(WorklistException.class);
+        WorklistException typed = (WorklistException) refused;
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
+        assertThat(typed.offenders()).containsExactly("status");
+    }
+
+    @Test
+    void a_milestone_filter_naming_no_milestone_is_refused() {
+        createItem("an item", openStatus);
+
+        Throwable refused = catchThrowable(() ->
+            items.query(scope, new QuerySpec(Map.of("milestone", 999_999L), 100)));
+
+        assertThat(refused)
+            .as("a milestone number that names nothing is refused rather than "
+                + "answered with the empty set — the same rule the write path runs, "
+                + "moved to the read")
+            .isInstanceOf(WorklistException.class);
+        WorklistException typed = (WorklistException) refused;
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
+        assertThat(typed.offenders()).containsExactly("milestone");
+    }
+
+    @Test
+    void an_empty_status_filter_value_is_normalised_to_no_filter_value() {
+        createItem("an item", openStatus);
+
+        // Whitespace trims to empty; the parser normalises that to a null filter
+        // value rather than raising a VALUE_UNDECLARED — the empty absence is
+        // not the same fact as a name nobody declared.
+        Throwable refused = catchThrowable(() ->
+            items.query(scope, new QuerySpec(Map.of("status", "   "), 100)));
+
+        assertThat(refused)
+            .as("empty and whitespace-only are the same as no value; the query is "
+                + "not refused here, because 'nothing' is not a value the scope has "
+                + "or has not declared")
+            .isNull();
+    }
+
+    @Test
+    void an_empty_milestone_filter_value_is_normalised_to_no_filter_value() {
+        createItem("an item", openStatus);
+
+        // Same rule, on the milestone axis: the empty string parses to null and
+        // the query does not refuse the filter — the empty absence is not the
+        // same fact as a number pointing at nothing.
+        Throwable refused = catchThrowable(() ->
+            items.query(scope, new QuerySpec(Map.of("milestone", ""), 100)));
+
+        assertThat(refused)
+            .as("an empty milestone value is the empty absence, not a not-found — "
+                + "the parser normalises it away rather than refusing")
+            .isNull();
+    }
+
+    // ==================================================================
     // Probe 3 — the limit caps, and truncation is reported
     // ==================================================================
 

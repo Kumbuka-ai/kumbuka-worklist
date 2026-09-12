@@ -163,6 +163,60 @@ class MilestoneWorkstreamDecouplingIT {
             .isEqualTo(2L);
     }
 
+    /**
+     * A create naming a workstream nobody declared is refused as
+     * {@link WorklistException.Reason#WORKSTREAM_UNKNOWN}.
+     *
+     * <p>V12 retracted the invariant that ties the milestone to a workstream,
+     * but the field still travels — and a value it names has to exist. The
+     * check runs at create because the wire form is the token the scope
+     * declared, and inventing one here would let a typo pass silently.
+     */
+    @Test
+    void create_milestone_with_an_unknown_workstream_is_refused() {
+        Throwable refused = org.assertj.core.api.Assertions.catchThrowable(() ->
+            milestones.create(scope, Map.of(
+                Field.TITLE.canonicalName(), "unresolvable workstream",
+                Field.VISION.canonicalName(), "a north star",
+                Field.WORKSTREAM_ID.canonicalName(), "no-such-workstream")));
+
+        assertThat(refused).isInstanceOf(WorklistException.class);
+        WorklistException typed = (WorklistException) refused;
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.WORKSTREAM_UNKNOWN);
+    }
+
+    /**
+     * An update naming a workstream nobody declared is refused the same way.
+     *
+     * <p>Distinct branch from create — the update path runs a separate
+     * resolution — and the milestone's row keeps the workstream it had. What
+     * this asserts is that a caller cannot move the milestone to a value the
+     * scope has not committed to.
+     */
+    @Test
+    void update_milestone_workstream_to_an_unknown_value_is_refused() {
+        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
+        Map<String, Object> created = milestones.create(scope, Map.of(
+            Field.TITLE.canonicalName(), "settled milestone",
+            Field.VISION.canonicalName(), "vision",
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
+        UUID milestoneId = (UUID) created.get(Field.ID.canonicalName());
+        String token = (String) created.get(Field.CONFLICT_TOKEN.canonicalName());
+
+        Throwable refused = org.assertj.core.api.Assertions.catchThrowable(() ->
+            milestones.update(scope, milestoneId, Map.of(
+                Field.WORKSTREAM_ID.canonicalName(), "no-such-workstream",
+                Field.CONFLICT_TOKEN.canonicalName(), token)));
+
+        assertThat(refused).isInstanceOf(WorklistException.class);
+        WorklistException typed = (WorklistException) refused;
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.WORKSTREAM_UNKNOWN);
+        assertThat(milestones.read(scope, milestoneId).get(Field.WORKSTREAM_ID.canonicalName()))
+            .as("the milestone still points at the workstream it had — the refusal is "
+                + "not merely a message, it is a write that did not land")
+            .isEqualTo(mobile.token);
+    }
+
     // ==================================================================
     // Planting.
     // ==================================================================

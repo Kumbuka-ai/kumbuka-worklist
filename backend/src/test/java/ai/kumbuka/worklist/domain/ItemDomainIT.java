@@ -729,6 +729,61 @@ class ItemDomainIT {
         assertThat(vocabulary.requireStatus(SCOPE, closedStatus()).closed).isTrue();
     }
 
+    /**
+     * The status cannot be cleared on update.
+     *
+     * <p>An empty value takes the same path a null does — it is normalised to
+     * the empty absence, and the refusal names the field. The predecessor's
+     * delete does not become "clear the status"; it is a terminal declared
+     * status now, reached through {@code withdraw}.
+     */
+    @Test
+    void an_update_clearing_the_status_is_refused() {
+        UUID id = createdId("clear-status probe");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
+
+        WorklistException refusal = catchWorklistException(() -> {
+            Map<String, Object> clearing = new HashMap<>();
+            clearing.put("status", "");
+            clearing.put("conflict_token", conflictToken);
+            items.update(SCOPE, id, clearing);
+        });
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(refusal.offenders()).containsExactly("status");
+        assertThat(refusal.getMessage())
+            .as("the message names why: an item carries a status on every path, so "
+                + "clearing it back to nothing would be exactly the pre-declaration state "
+                + "the vocabulary rule exists against")
+            .contains("cannot be cleared");
+    }
+
+    /**
+     * A create whose status names a value the scope has not declared is refused
+     * as {@link WorklistException.Reason#VALUE_UNDECLARED}.
+     *
+     * <p>The update path already refuses the same way ({@link
+     * #a_status_is_a_declared_value_and_an_undeclared_one_is_refused()}); the
+     * create path runs a distinct resolution, and this asserts the same rule
+     * holds at intake.
+     */
+    @Test
+    void create_with_an_undeclared_status_is_refused() {
+        itemView();
+        WorklistException refusal = catchWorklistException(() ->
+            items.create(SCOPE, Map.of(
+                "title", "undeclared status at intake",
+                "status", "no such status name here")));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
+        assertThat(refusal.offenders()).containsExactly("status");
+        assertThat(refusal.getMessage())
+            .as("and the message points to where the vocabulary comes from — the "
+                + "statuses of a scope are its own data, and inventing one at intake "
+                + "would be this service deciding what a scope's list means")
+            .contains("declared");
+    }
+
     /** A status cannot be both closed and in progress, and the refusal says so. */
     @Test
     void a_status_cannot_be_both_finished_and_being_worked_on() {
@@ -759,6 +814,51 @@ class ItemDomainIT {
             (String) items.read(SCOPE, id).get("conflict_token"));
         assertThat(after.get("status"))
             .isEqualTo(vocabulary.requireStatus(SCOPE, closedStatus()).name);
+    }
+
+    /**
+     * A withdrawal without a status name — null or whitespace — is refused
+     * before the token check runs, because the missing field is the sharper
+     * fact.
+     */
+    @Test
+    void a_withdrawal_without_a_status_name_is_refused() {
+        UUID id = createdId("withdraw missing status probe");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
+
+        WorklistException nullName = catchWorklistException(() ->
+            items.withdraw(SCOPE, id, null, conflictToken));
+        assertThat(nullName.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(nullName.offenders()).containsExactly("status");
+
+        WorklistException blankName = catchWorklistException(() ->
+            items.withdraw(SCOPE, id, "   ", conflictToken));
+        assertThat(blankName.reason())
+            .as("whitespace-only is the same fact as null — no status name arrived, "
+                + "and the withdrawal cannot decide which value the scope closes with")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(blankName.offenders()).containsExactly("status");
+    }
+
+    /**
+     * A withdrawal into a status the scope has not declared is refused as
+     * {@link WorklistException.Reason#VALUE_UNDECLARED}.
+     *
+     * <p>Distinct from the not-closed refusal at
+     * {@link #a_withdrawal_is_terminal_and_the_value_is_the_scopes_own()}: this
+     * is a name nobody declared, and the answer says so rather than pretending
+     * the name is a valid non-closed one.
+     */
+    @Test
+    void a_withdrawal_into_an_undeclared_status_is_refused() {
+        UUID id = createdId("withdraw undeclared status probe");
+        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
+
+        WorklistException refusal = catchWorklistException(() ->
+            items.withdraw(SCOPE, id, "no such status name here", conflictToken));
+
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
+        assertThat(refusal.offenders()).containsExactly("status");
     }
 
     // ==================================================================
@@ -897,6 +997,67 @@ class ItemDomainIT {
             .as("the edge has a foreign key on both ends, so a dangling reference is not "
                 + "something to find later — it is something that cannot be stored")
             .isNotNull();
+    }
+
+    /**
+     * Every malformed relation target is a refusal that names the field.
+     *
+     * <p>Five shapes, five refusals, and they are five rather than one because
+     * a caller acts on each differently: a missing value is a call to add one;
+     * a scheme error is a spelling problem; a wrong-view or non-numeric segment
+     * is a form problem the caller can fix by hand; a cross-scope address is a
+     * write across the boundary that this service will not stand behind. A
+     * store answering all of them "not found" would send every caller down the
+     * same wrong path.
+     */
+    @Test
+    void relate_refuses_every_malformed_target_address() {
+        UUID from = createdId("relate malformed target probe");
+        relationType("carries", false);
+        String conflictToken = (String) items.read(SCOPE, from).get("conflict_token");
+
+        WorklistException nullAddress = catchWorklistException(() ->
+            items.relate(SCOPE, from, null, "carries", conflictToken));
+        assertThat(nullAddress.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(nullAddress.offenders()).containsExactly("relations");
+
+        WorklistException wrongScheme = catchWorklistException(() ->
+            items.relate(SCOPE, from, "http://foo", "carries", conflictToken));
+        assertThat(wrongScheme.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(wrongScheme.getMessage())
+            .as("the message names the expected scheme — a caller reading it can fix "
+                + "the shape without a second call")
+            .contains("worklist://");
+
+        String ownSlug = String.valueOf(items.read(SCOPE, from).get("scope"));
+        WorklistException wrongView = catchWorklistException(() ->
+            items.relate(SCOPE, from,
+                "worklist://" + ownSlug + "/milestone/1", "carries", conflictToken));
+        assertThat(wrongView.reason())
+            .as("only the item view carries edges as the other end here — a milestone "
+                + "address is a form refusal, not a not-found on the item table")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(wrongView.offenders()).containsExactly("relations");
+
+        WorklistException wrongNumber = catchWorklistException(() ->
+            items.relate(SCOPE, from,
+                "worklist://" + ownSlug + "/item/not-a-number", "carries", conflictToken));
+        assertThat(wrongNumber.reason())
+            .as("a segment where a number is expected is a form refusal — the address "
+                + "does not resolve because it cannot be parsed, and saying 'not found' "
+                + "here would let a spelling problem look like a missing row")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(wrongNumber.offenders()).containsExactly("relations");
+
+        WorklistException foreignScope = catchWorklistException(() ->
+            items.relate(SCOPE, from,
+                "worklist://not-my-scope/item/1", "carries", conflictToken));
+        assertThat(foreignScope.reason())
+            .as("an edge across scopes is refused rather than stored dangling — the "
+                + "scope in the address must match this write's scope, or the row is "
+                + "reachable from neither side")
+            .isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
+        assertThat(foreignScope.offenders()).containsExactly("relations");
     }
 
     // ==================================================================
