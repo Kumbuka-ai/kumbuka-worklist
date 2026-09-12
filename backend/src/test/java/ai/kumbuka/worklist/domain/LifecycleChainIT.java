@@ -227,8 +227,13 @@ class LifecycleChainIT {
         // Only the imports declared at the top of the file are checked.
         // Scanning the WHOLE source for the strings would flag them in this
         // very block, which is a self-defeating shape rather than a guard.
+        // Possessive quantifiers on both variable parts: `\s++` and `[^;]++`
+        // commit to what they consume and never give it back, so a failure to
+        // match is decided in one pass. The accepted language is identical and
+        // Sonar's S8786 backtracking heuristic stops flagging it.
         java.util.regex.Pattern importLine =
-            java.util.regex.Pattern.compile("^import\\s+([^;]+);", java.util.regex.Pattern.MULTILINE);
+            java.util.regex.Pattern.compile("^import\\s++([^;]++);",
+                java.util.regex.Pattern.MULTILINE);
         String content = java.nio.file.Files.readString(source);
         java.util.regex.Matcher m = importLine.matcher(content);
         List<String> imports = new java.util.ArrayList<>();

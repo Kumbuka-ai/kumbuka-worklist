@@ -782,7 +782,7 @@ class PlanningDomainIT {
         Map<String, Object> read = items.read(scope, itemId);
         Object number = read.get("number");
         Object slug = read.get("scope");
-        String scopeSlug = slug == null ? String.valueOf(scope) : String.valueOf(slug);
+        String scopeSlug = String.valueOf(slug == null ? scope : slug);
         return "worklist://" + scopeSlug + "/item/" + number;
     }
 
