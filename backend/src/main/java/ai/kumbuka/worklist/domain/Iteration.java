@@ -55,6 +55,18 @@ public class Iteration extends AggregateRoot {
     @Column(name = "number", nullable = false)
     public long number;
 
+    /**
+     * One line, the iteration's handle in every listing.
+     *
+     * <p>Ratified 2026-09-12 (SPRINT_180.5). Nullable at the column so
+     * existing rows survive the schema addition without a backfill; the
+     * domain treats absence and empty string as the same absence, and
+     * refuses a value longer than 200 characters as a typed refusal before
+     * the check constraint sees it.
+     */
+    @Column(name = "title")
+    public String title;
+
     /** What this iteration is about, in a phrase. Mandatory. */
     @Column(name = "motto", nullable = false)
     public String motto;

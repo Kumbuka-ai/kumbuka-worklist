@@ -182,16 +182,54 @@ public class SelectorRegistry {
 
         NumberSpace space = selectors.lockSpace(selector.id);
         if (space == null) {
-            // A selector without its space is a row that predates the
-            // declaration path above, or one written around it. Reported
-            // rather than repaired: creating the missing space here would
-            // silently accept the second case.
-            throw new WorklistException(
-                WorklistException.Reason.SELECTOR_UNDECLARED,
-                "selector " + selector.token + " has no number space in scope " + scopeId
-                    + ". A declared selector always has one; this selector was not "
-                    + "declared through the declaring verb",
-                List.of(selector.token));
+            // Lazy init, ratified 2026-09-12 (SPRINT_180.5). The number
+            // space is a bookkeeping row keyed by the SELECTOR, and the
+            // Vokabularpakt binds only the selector's declaration — not
+            // this row. A missing scope-wide space for a resolved selector
+            // is a catch-up write, not the second address space the
+            // earlier refusal existed against: the selector was resolved
+            // by {@code require(scope, token)} on the way in, so we are
+            // not admitting a mis-spelt token, we are catching up with a
+            // scope opened before the row was seeded (the shape Kumbuka's
+            // bootstrap left behind — selectors declared through raw SQL,
+            // no scope-wide number_space row for iteration and, for
+            // milestone, a per-workstream row that lockSpace ignores).
+            //
+            // TWO SHAPES ARE HANDLED, one per branch below.
+            //
+            //   1. A per-workstream row exists (V12 part-2 backfill did
+            //      not reach this scope). V12's uq_number_space_selector
+            //      is (tenant, scope, selector_id) unconditionally, so a
+            //      second row cannot be inserted alongside it. We READ
+            //      the stray row and rewrite its workstream_id to null —
+            //      the same act V12's UPDATE performed on scopes bootstrapped
+            //      before this migration. The high-water mark carries
+            //      forward.
+            //
+            //   2. No row of any shape exists. Insert one at zero.
+            //
+            // The write is inside this @Transactional, so a rollback
+            // takes it with it, and the same PESSIMISTIC_WRITE reasoning
+            // holds for the increment below — this catch-up is not the
+            // counter's first hand-out, it is the row that lets a first
+            // hand-out happen at all.
+            NumberSpace stray = selectors.lockAnySpace(selector.id);
+            if (stray != null) {
+                stray.workstreamId = null;
+                selectors.flush();
+                space = stray;
+                LOG.infof("number space for selector %s in scope %s carried forward "
+                    + "from per-workstream to scope-wide (mark %d)",
+                    selector.token, scopeId, space.highWaterMark);
+            } else {
+                space = new NumberSpace();
+                space.selectorId = selector.id;
+                space.scopeId    = scopeId;
+                space.highWaterMark = 0L;
+                selectors.insert(space);
+                LOG.infof("number space for selector %s opened lazily in scope %s",
+                    selector.token, scopeId);
+            }
         }
 
         space.highWaterMark = space.highWaterMark + 1;

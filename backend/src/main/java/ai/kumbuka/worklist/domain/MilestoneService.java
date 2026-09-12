@@ -57,6 +57,20 @@ public class MilestoneService extends PlanningService {
     @Inject SelectorRegistry selectors;
     @Inject WorkstreamService workstreams;
 
+    /**
+     * The write-path caps on the three text handles a milestone carries.
+     *
+     * <p>Held as constants in front of V7's check constraints
+     * ({@code ck_milestone_title_length}, {@code ck_milestone_vision_length},
+     * {@code ck_milestone_mission_length}), so a caller reads a typed
+     * refusal rather than a 500 escaping the flush. A schema cap raised
+     * later would raise the constant here in the same commit; the two are
+     * the same statement.
+     */
+    private static final int TITLE_MAX = 200;
+    private static final int VISION_MAX = 200;
+    private static final int MISSION_MAX = 1500;
+
     // ------------------------------------------------------------------
     // Reading.
     // ------------------------------------------------------------------
@@ -108,9 +122,10 @@ public class MilestoneService extends PlanningService {
         Milestone milestone = new Milestone();
         milestone.scopeId = scopeId;
         milestone.workstreamId = workstream.id;
-        milestone.title = required(Field.TITLE, given.get(Field.TITLE),
+        milestone.title = capped(Field.TITLE, required(Field.TITLE, given.get(Field.TITLE),
             "a milestone carries a title. It is the axis position's handle in every "
-                + "listing, and the one field a marker needs as much as a goal does");
+                + "listing, and the one field a marker needs as much as a goal does"),
+            TITLE_MAX);
         milestone.number = allocateNumber(scopeId);
 
         Map<Field, Object> settable = settableOnly(Addressed.MILESTONE, given);
@@ -255,8 +270,9 @@ public class MilestoneService extends PlanningService {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
-                String title = required(field, value,
-                    "a milestone carries a title on every status, so it cannot be cleared");
+                String title = capped(field, required(field, value,
+                    "a milestone carries a title on every status, so it cannot be cleared"),
+                    TITLE_MAX);
                 return moved(held, title, () -> milestone.title = title);
             }
             case KIND -> {
@@ -269,11 +285,11 @@ public class MilestoneService extends PlanningService {
                 return applyStatus(milestone, held, field, value);
             }
             case VISION -> {
-                String vision = ItemFields.text(field, value);
+                String vision = capped(field, ItemFields.text(field, value), VISION_MAX);
                 return moved(held, vision, () -> milestone.vision = vision);
             }
             case MISSION -> {
-                String mission = ItemFields.text(field, value);
+                String mission = capped(field, ItemFields.text(field, value), MISSION_MAX);
                 return moved(held, mission, () -> milestone.mission = mission);
             }
             case RANK -> {

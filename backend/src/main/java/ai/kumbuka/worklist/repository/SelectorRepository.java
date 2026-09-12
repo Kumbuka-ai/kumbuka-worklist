@@ -119,6 +119,29 @@ public class SelectorRepository {
             .setParameter(P_WS, workstreamId));
     }
 
+    /**
+     * Any number-space row for this selector — scope-wide or per-workstream —
+     * locked for the caller's transaction, or null when the selector has none.
+     *
+     * <p>Used by the lazy-init fallback in {@link
+     * ai.kumbuka.worklist.domain.SelectorRegistry#allocate} to recognise the
+     * shape a scope opened by bootstrap-scope.sql before SPRINT_180.5 left
+     * behind: a per-workstream milestone counter and no scope-wide row.
+     * V12's index {@code uq_number_space_selector} is
+     * {@code (tenant, scope, selector_id)} without a workstream predicate,
+     * so a second row for the same selector cannot be inserted alongside it;
+     * the lazy path therefore READS the stray row and rewrites its
+     * {@code workstream_id} to null, carrying the high-water mark forward
+     * exactly as V12's part-2 backfill would have done. Never opens a new
+     * row.
+     */
+    @Transactional
+    public NumberSpace lockAnySpace(UUID selectorId) {
+        return single(spaceQuery("s.selectorId = :selector")
+            .setParameter(P_SELECTOR, selectorId)
+            .setLockMode(LockModeType.PESSIMISTIC_WRITE));
+    }
+
     private TypedQuery<NumberSpace> spaceQuery(String predicate) {
         return em.createQuery(
             "SELECT s FROM NumberSpace s WHERE " + predicate, NumberSpace.class);

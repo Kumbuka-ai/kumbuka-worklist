@@ -152,6 +152,37 @@ public abstract class PlanningService {
     }
 
     /**
+     * A text value bounded by the same cap the schema puts on the column.
+     *
+     * <p>Held here as a typed refusal in front of every {@code CHECK
+     * (char_length(...) &lt;= N)} the migrations add, because a
+     * constraint violation arrives at flush, under JTA, outside the typed
+     * refusal model — and a refusal that never reaches a mapper becomes a
+     * 500 without a JSON body. The check runs on the length of the
+     * INCOMING text; a null value passes through unaltered so the field
+     * remains optional at the domain wherever the column allows it.
+     *
+     * <p>Length uses {@link String#length()}, which counts UTF-16 code
+     * units and agrees with PostgreSQL's {@code char_length} on the
+     * Basic Multilingual Plane. A supplementary character can differ by
+     * one unit; the schema check is the definitive one and would then
+     * refuse with the same reason, which the caller sees the same way.
+     */
+    protected static String capped(Field field, String value, int max) {
+        if (value != null && value.length() > max) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                field.canonicalName() + " is capped at " + max + " characters and "
+                    + value.length() + " were given. The cap is the same on the write "
+                    + "path and on the column; it refuses here so a caller reads a "
+                    + "typed refusal rather than a constraint violation escaping the "
+                    + "flush",
+                List.of(field.canonicalName()));
+        }
+        return value;
+    }
+
+    /**
      * A value the caller must have supplied, refused by name when absent.
      *
      * <p>Used where the column is not null and there is nothing for this

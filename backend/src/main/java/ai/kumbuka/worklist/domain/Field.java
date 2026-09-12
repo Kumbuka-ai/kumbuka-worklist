@@ -149,8 +149,15 @@ public enum Field {
 
     // --- what a caller characterises -------------------------------------
 
-    /** One line, the object's handle in every listing. */
-    TITLE("title", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
+    /**
+     * One line, the object's handle in every listing.
+     *
+     * <p>Ratified 2026-09-12 (SPRINT_180.5) for the iteration too. Motto
+     * and description are the criterion the axis position is refused
+     * against; the title is the axis position's first-line handle, and
+     * every planning root now carries one under the same canonical name.
+     */
+    TITLE("title", Set.of(ITEM, MILESTONE, ITERATION), Set.of(ITEM, MILESTONE, ITERATION)),
 
     /**
      * On an item: what it is and why it matters — never how it will be done.

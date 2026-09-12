@@ -60,6 +60,12 @@ public class IterationService extends PlanningService {
     /** What the cardinality refusal and its warning call the thing being counted. */
     private static final String OPEN_ITERATIONS = "the number of open iterations in this scope";
 
+    /**
+     * The write-path cap on {@link Field#TITLE}, held here so the typed refusal
+     * fires before {@code ck_iteration_title_length} (V15) does.
+     */
+    private static final int TITLE_MAX = 200;
+
     // ------------------------------------------------------------------
     // Reading.
     // ------------------------------------------------------------------
@@ -114,6 +120,8 @@ public class IterationService extends PlanningService {
         iteration.description = required(Field.DESCRIPTION, given.get(Field.DESCRIPTION),
             "an iteration carries a description: what it contains and what it does not. "
                 + "Mandatory for the same reason the motto is, and not decoration");
+        iteration.title = capped(Field.TITLE,
+            ItemFields.text(Field.TITLE, given.get(Field.TITLE)), TITLE_MAX);
         iteration.number = allocateNumber(scopeId);
 
         Integer rank = whole(Field.RANK, given.get(Field.RANK));
@@ -321,6 +329,10 @@ public class IterationService extends PlanningService {
             Object value) {
         Object held = current.get(field.canonicalName());
         switch (field) {
+            case TITLE -> {
+                String title = capped(Field.TITLE, ItemFields.text(field, value), TITLE_MAX);
+                return moved(held, title, () -> iteration.title = title);
+            }
             case MOTTO -> {
                 String motto = required(field, value,
                     "an iteration carries a motto on every path, so it cannot be cleared");
@@ -469,6 +481,7 @@ public class IterationService extends PlanningService {
         fields.put(Field.ID.canonicalName(), iteration.id);
         fields.put(Field.SCOPE.canonicalName(), iteration.scopeId);
         fields.put(Field.NUMBER.canonicalName(), iteration.number);
+        fields.put(Field.TITLE.canonicalName(), iteration.title);
         fields.put(Field.MOTTO.canonicalName(), iteration.motto);
         fields.put(Field.DESCRIPTION.canonicalName(), iteration.description);
         fields.put(Field.RANK.canonicalName(), iteration.rank);

@@ -116,6 +116,32 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
+-- The scope-wide number_space rows.
+--
+-- Ratified 2026-09-12 (SPRINT_180.5). SelectorRegistry.declare seeds both the
+-- selector and the counter together when a scope opens through the service;
+-- this bootstrap does not go through that path (it plants selectors as raw
+-- rows above), and before this section every scope opened here reached the
+-- allocator with no counter to lock — the SELECTOR_UNDECLARED refusal for a
+-- declared selector, observed on Kumbuka's own scope.
+--
+-- One row per view, workstream_id = NULL, high_water_mark = 0. Iteration and
+-- item and workstream carry a scope-wide counter by construction; milestone
+-- is scope-wide again after V12 (TAR-0002 §4). The per-workstream milestone
+-- row below is retracted alongside this seed, so a fresh scope opens with
+-- exactly one number_space row per selector — the shape uq_number_space_selector
+-- (V12) requires.
+-- ---------------------------------------------------------------------------
+INSERT INTO worklist.number_space
+    (tenant_id, scope_id, selector_id, workstream_id, high_water_mark)
+SELECT :'tenant_id', :'scope_id', s.id, NULL, 0
+FROM worklist.selector s
+WHERE s.tenant_id = :'tenant_id'
+  AND s.scope_id  = :'scope_id'
+  AND s.token IN ('item', 'iteration', 'milestone', 'workstream')
+ON CONFLICT DO NOTHING;
+
+-- ---------------------------------------------------------------------------
 -- The default workstream.
 --
 -- Ratified 2026-09-08: the fourth view. Every scope opens with a default
@@ -140,31 +166,27 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- Advance the workstream selector's own counter so the next declare
--- allocates 2 rather than colliding at 1.
+-- allocates 2 rather than colliding at 1. The scope-wide counter row was
+-- seeded above at zero; this UPDATE moves the mark to 1 for the default
+-- workstream just planted.
 UPDATE worklist.number_space ns
 SET high_water_mark = GREATEST(ns.high_water_mark, 1)
 FROM worklist.selector s
 WHERE ns.tenant_id   = :'tenant_id'
   AND ns.scope_id    = :'scope_id'
   AND ns.selector_id = s.id
-  AND s.token        = 'workstream';
+  AND s.token        = 'workstream'
+  AND ns.workstream_id IS NULL;
 
--- The milestone counter for the default workstream: created here so a
--- scope opened after V9 has the same per-(scope, workstream) shape the
--- backfill left behind for scopes opened before. Bind the counter to the
--- default's id and open it at zero.
-INSERT INTO worklist.number_space
-    (tenant_id, scope_id, selector_id, workstream_id, high_water_mark)
-SELECT :'tenant_id', :'scope_id', s.id, w.id, 0
-FROM worklist.selector s
-CROSS JOIN worklist.workstream w
-WHERE s.tenant_id = :'tenant_id'
-  AND s.scope_id  = :'scope_id'
-  AND s.token     = 'milestone'
-  AND w.tenant_id = :'tenant_id'
-  AND w.scope_id  = :'scope_id'
-  AND w.is_default = true
-ON CONFLICT DO NOTHING;
+-- The per-workstream milestone counter is NOT opened here.
+--
+-- V9 introduced a per-(scope, workstream) milestone counter; V12
+-- (2026-09-09) retracted the milestone-workstream edge and returned the
+-- milestone counter to scope-wide. The scope-wide row is seeded above
+-- alongside the other three selectors, so nothing further is needed here.
+-- The previous per-workstream insert would have collided with the new
+-- scope-wide row on uq_number_space_selector (tenant, scope, selector),
+-- which is now a scope-wide unique index without a workstream predicate.
 
 -- ---------------------------------------------------------------------------
 -- The status vocabulary, and its four predicates.
