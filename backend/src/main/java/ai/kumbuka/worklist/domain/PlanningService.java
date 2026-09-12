@@ -169,6 +169,35 @@ public abstract class PlanningService {
     }
 
     /**
+     * A text value whose length is inside the field's cap, or a typed refusal
+     * that NAMES the field, the cap and the length that was given.
+     *
+     * <p>The store carries the same cap as a check constraint (V7 for item
+     * and milestone, V16 for iteration): a value over the cap is refused
+     * whichever path a write took. What this check does is catch the value
+     * BEFORE flush, so the refusal reaches the caller as a typed one — a
+     * constraint violation would arrive at JTA commit, outside the typed
+     * refusal model, and reach the caller as an internal error.
+     *
+     * <p>Null is passed through: nullability is the field's own question and
+     * is checked separately. The refusal here says "too long", not "missing".
+     */
+    protected static String capped(Field field, String value, int max) {
+        if (value == null || value.length() <= max) {
+            return value;
+        }
+        throw new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            field.canonicalName() + " is capped at " + max + " characters on the "
+                + "write path, and " + value.length() + " were given. The store carries "
+                + "the same cap as a check constraint, so a value over it is refused "
+                + "whichever path a write took; the refusal is raised here so it "
+                + "reaches the caller typed rather than as a constraint violation at "
+                + "flush",
+            List.of(field.canonicalName()));
+    }
+
+    /**
      * The value a declared vocabulary admits, or a refusal listing what it
      * does admit.
      *

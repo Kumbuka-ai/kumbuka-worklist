@@ -149,21 +149,33 @@ WHERE ns.tenant_id   = :'tenant_id'
   AND ns.selector_id = s.id
   AND s.token        = 'workstream';
 
--- The milestone counter for the default workstream: created here so a
--- scope opened after V9 has the same per-(scope, workstream) shape the
--- backfill left behind for scopes opened before. Bind the counter to the
--- default's id and open it at zero.
+-- The scope-wide counters for the item, iteration and milestone selectors.
+--
+-- `SelectorRegistry.allocate` reads the scope-wide row of each selector
+-- (`workstream_id IS NULL`) and refuses typed with SELECTOR_UNDECLARED when
+-- one is missing. `SelectorRegistry.declare` opens that row alongside the
+-- selector — a scope opened through the verb surface therefore always has
+-- one — but this bootstrap seeds the selectors directly through DML, so
+-- the counter rows have to be seeded here too.
+--
+-- Milestone returned to scope-wide with V12 (2026-09-09). The per-
+-- workstream row an earlier bootstrap seeded here is retired: it belongs
+-- to the shape V12 retracted, and V15 (2026-09-12) removes any that
+-- survive elsewhere. Item's counter is seeded here as well so this file
+-- reads as ONE step — every selector this bootstrap declares carries the
+-- row that answers when it is used.
+--
+-- The default workstream is number 1; its counter is advanced with
+-- GREATEST(mark, 1) above so the next `declare` allocates 2. Item,
+-- iteration and milestone all open at zero, which is what the store
+-- carries for a scope with nothing in it yet.
 INSERT INTO worklist.number_space
     (tenant_id, scope_id, selector_id, workstream_id, high_water_mark)
-SELECT :'tenant_id', :'scope_id', s.id, w.id, 0
+SELECT :'tenant_id', :'scope_id', s.id, NULL, 0
 FROM worklist.selector s
-CROSS JOIN worklist.workstream w
 WHERE s.tenant_id = :'tenant_id'
   AND s.scope_id  = :'scope_id'
-  AND s.token     = 'milestone'
-  AND w.tenant_id = :'tenant_id'
-  AND w.scope_id  = :'scope_id'
-  AND w.is_default = true
+  AND s.token IN ('item', 'iteration', 'milestone')
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------

@@ -150,7 +150,9 @@ public enum Field {
     // --- what a caller characterises -------------------------------------
 
     /** One line, the object's handle in every listing. */
-    TITLE("title", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
+    TITLE("title",
+        Set.of(ITEM, MILESTONE, ITERATION),
+        Set.of(ITEM, MILESTONE, ITERATION)),
 
     /**
      * On an item: what it is and why it matters — never how it will be done.

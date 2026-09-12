@@ -110,6 +110,7 @@ class IterationProducedCloseIT {
 
     private UUID createIteration() {
         return (UUID) iterations.create(scope, Map.of(
+            Field.TITLE.canonicalName(), "a title",
             Field.MOTTO.canonicalName(), "a motto",
             Field.DESCRIPTION.canonicalName(), "a description"))
             .get(Field.ID.canonicalName());

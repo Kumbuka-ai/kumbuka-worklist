@@ -159,7 +159,8 @@ class NoUuidLabelsAtSurfaceIT {
 
         // iteration create — same rule on the time axis.
         Response iteration = restCall("POST", SurfaceFixture.collection(Selector.ITERATION),
-            null, Map.of("motto", "guard", "description", "what this iteration holds"));
+            null, Map.of("title", "guard", "motto", "guard",
+                "description", "what this iteration holds"));
         iteration.then().statusCode(201);
         assertNoUuid("create (iteration)", iteration);
 

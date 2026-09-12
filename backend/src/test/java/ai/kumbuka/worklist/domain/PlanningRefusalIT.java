@@ -418,10 +418,13 @@ class PlanningRefusalIT {
         assertThat(refusalFrom(() -> milestones.create(scope, Map.of("rank", 1))).offenders())
             .containsExactly("title");
         assertThat(refusalFrom(() -> iterations.create(scope,
-                Map.of("description", "no motto"))).offenders())
+                Map.of("motto", "one", "description", "no title"))).offenders())
+            .containsExactly("title");
+        assertThat(refusalFrom(() -> iterations.create(scope,
+                Map.of("title", "a title", "description", "no motto"))).offenders())
             .containsExactly("motto");
         assertThat(refusalFrom(() -> iterations.create(scope,
-                Map.of("motto", "no description"))).offenders())
+                Map.of("title", "a title", "motto", "no description"))).offenders())
             .containsExactly("description");
 
         UUID iteration = iteration("complete");
@@ -429,6 +432,10 @@ class PlanningRefusalIT {
                 "motto", "  ", "conflict_token", token(iteration)))).offenders())
             .as("and what is mandatory cannot be cleared through an update either")
             .containsExactly("motto");
+        assertThat(refusalFrom(() -> iterations.update(scope, iteration, Map.of(
+                "title", "  ", "conflict_token", token(iteration)))).offenders())
+            .as("clearing the title through an update is refused too")
+            .containsExactly("title");
 
         Map<String, Object> moved = iterations.update(scope, iteration, Map.of(
             "motto", "renamed", "rank", 7, "conflict_token", token(iteration)));
@@ -442,7 +449,9 @@ class PlanningRefusalIT {
 
     private UUID iteration(String motto) {
         return (UUID) iterations.create(scope, Map.of(
-            "motto", motto, "description", "what " + motto + " contains")).get("id");
+            "title", motto,
+            "motto", motto,
+            "description", "what " + motto + " contains")).get("id");
     }
 
     private String token(UUID iterationId) {

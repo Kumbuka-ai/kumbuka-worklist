@@ -119,6 +119,7 @@ class ScopeOpeningProbeIT {
             Field.TITLE.canonicalName(), "the first item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
         Map<String, Object> iteration = iterations.create(scope, Map.of(
+            Field.TITLE.canonicalName(), "the first iteration",
             Field.MOTTO.canonicalName(), "the first iteration",
             Field.DESCRIPTION.canonicalName(), "what it holds"));
 
@@ -142,6 +143,7 @@ class ScopeOpeningProbeIT {
             Field.TITLE.canonicalName(), "an item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
         Map<String, Object> iteration = iterations.create(scope, Map.of(
+            Field.TITLE.canonicalName(), "a title",
             Field.MOTTO.canonicalName(), "a motto",
             Field.DESCRIPTION.canonicalName(), "a description"));
         Map<String, Object> milestone = milestones.create(scope, Map.of(
@@ -169,6 +171,7 @@ class ScopeOpeningProbeIT {
             Field.TITLE.canonicalName(), "a second item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
         Map<String, Object> secondIteration = iterations.create(scope, Map.of(
+            Field.TITLE.canonicalName(), "second",
             Field.MOTTO.canonicalName(), "later",
             Field.DESCRIPTION.canonicalName(), "held after"));
 
