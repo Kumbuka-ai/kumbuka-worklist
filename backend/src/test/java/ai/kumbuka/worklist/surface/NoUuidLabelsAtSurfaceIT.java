@@ -127,7 +127,6 @@ class NoUuidLabelsAtSurfaceIT {
         created.then().statusCode(201);
         assertNoUuid("create", created);
         long itemNumber = ((Number) created.jsonPath().get("fields.number")).longValue();
-        String itemAddress = created.jsonPath().getString("address");
         String itemToken = created.jsonPath().getString("fields.conflict_token");
 
         // read — the projection carries the name, the number, the token,

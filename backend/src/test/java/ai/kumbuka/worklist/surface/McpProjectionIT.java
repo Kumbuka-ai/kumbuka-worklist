@@ -345,11 +345,6 @@ class McpProjectionIT {
             .extract().path("result.structuredContent.fields.conflict_token");
     }
 
-    private String idOf(String address) {
-        return call("read", Map.of("address", address))
-            .extract().path("result.structuredContent.fields.id");
-    }
-
     /** The number part of an address, which is its last segment. */
     private static String numberOf(String address) {
         return address.substring(address.lastIndexOf('/') + 1);
