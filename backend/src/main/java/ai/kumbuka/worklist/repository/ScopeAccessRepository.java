@@ -64,6 +64,37 @@ public class ScopeAccessRepository {
     }
 
     /**
+     * The access row a scope id points at, as the bound subject sees it, or
+     * empty.
+     *
+     * <p>The reverse of {@link #findBySlug}. The projections need it because
+     * the wire form of {@code scope} is the slug and the domain works in
+     * {@code scopeId} — turning one back into the other on the read is what
+     * lets the response present the label without the domain forgetting the
+     * identity.
+     */
+    @Transactional
+    public Optional<ScopeAccessRow> findByScopeId(UUID scopeId) {
+        List<Object[]> rows = em.createNativeQuery("""
+                SELECT scope_id, tenant_id, slug, archived
+                FROM platform.scope_access
+                WHERE scope_id = :scopeId
+                """)
+            .setParameter("scopeId", scopeId)
+            .getResultList();
+
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Object[] row = rows.get(0);
+        return Optional.of(new ScopeAccessRow(
+            (UUID) row[0],
+            (UUID) row[1],
+            (String) row[2],
+            (Boolean) row[3]));
+    }
+
+    /**
      * Binds the calling subject for this transaction.
      *
      * <p>{@code is_local = true} is the whole safety property: the value resets

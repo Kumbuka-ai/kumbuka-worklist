@@ -456,16 +456,21 @@ class PlanningDomainIT {
         List<UUID> reversed = new java.util.ArrayList<>(planned);
         java.util.Collections.reverse(reversed);
 
+        // The wire form of the order is a list of canonical item addresses;
+        // convert once for both writes and both expectations.
+        List<String> reversedAddresses = reversed.stream()
+            .map(this::addressOfItem).toList();
+
         // ONE token, for twelve rows.
         Map<String, Object> answer = iterations.update(scope, iteration, Map.of(
-            "order", reversed.stream().map(String::valueOf).toList(),
+            "order", reversedAddresses,
             "conflict_token", token(iteration)));
 
         assertThat(answer.get("order"))
             .as("the sequence is now the one that was given, and it took one token to "
                 + "say so — twelve rows moved under the iteration's single aggregate "
                 + "token")
-            .isEqualTo(reversed);
+            .isEqualTo(reversedAddresses);
         assertThat(memberships.read(scope, iteration, reversed.get(0)).get("position"))
             .as("position is derived from the order and never given")
             .isEqualTo(0);
@@ -474,7 +479,7 @@ class PlanningDomainIT {
         // nothing, so no reader of this iteration is invalidated for free.
         String settled = token(iteration);
         iterations.update(scope, iteration, Map.of(
-            "order", reversed.stream().map(String::valueOf).toList(),
+            "order", reversedAddresses,
             "conflict_token", settled));
         assertThat(token(iteration))
             .as("RED STATE, by its trace: without the comparison a re-sent sequence would "
@@ -496,19 +501,20 @@ class PlanningDomainIT {
         UUID stranger = onPath(item("not a member"));
         memberships.plan(scope, iteration, member, token(iteration));
 
+        String strangerAddress = addressOfItem(stranger);
         WorklistException refusal = refusalFrom(() ->
             iterations.update(scope, iteration, Map.of(
-                "order", List.of(String.valueOf(member), String.valueOf(stranger)),
+                "order", List.of(addressOfItem(member), strangerAddress),
                 "conflict_token", token(iteration))));
 
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.MEMBERSHIP_UNKNOWN);
-        assertThat(refusal.offenders()).contains(String.valueOf(stranger));
+        assertThat(refusal.offenders()).contains(strangerAddress);
 
         // The legitimate neighbour: the sequence that names exactly the
         // members must go through, or the check would refuse every reorder.
         iterations.update(scope, iteration, Map.of(
-            "order", List.of(String.valueOf(member)),
+            "order", List.of(addressOfItem(member)),
             "conflict_token", token(iteration)));
     }
 
@@ -737,8 +743,9 @@ class PlanningDomainIT {
         // acquires its address at creation, so the view it is addressed under
         // has to exist by then. Declaring is idempotent.
         selectors.declare(scope, Selector.ITEM);
+        String statusName = vocabulary.requireStatus(scope, statusId).name;
         return (UUID) items.create(scope, Map.of(
-            "title", title, "status", String.valueOf(statusId))).get("id");
+            "title", title, "status", statusName)).get("id");
     }
 
     /** A milestone of the given kind. Markers carry neither vision nor mission. */
@@ -765,6 +772,15 @@ class PlanningDomainIT {
 
     private static int membershipRowsOf(UUID iterationId) throws SQLException {
         return PlanningFixture.membershipRowsOf(iterationId);
+    }
+
+    /** The canonical address of an item as the wire form of an order entry. */
+    private String addressOfItem(UUID itemId) {
+        Map<String, Object> read = items.read(scope, itemId);
+        Object number = read.get("number");
+        Object slug = read.get("scope");
+        String scopeSlug = slug == null ? String.valueOf(scope) : String.valueOf(slug);
+        return "worklist://" + scopeSlug + "/item/" + number;
     }
 
     private static WorklistException refusalFrom(ThrowingCallable call) {

@@ -190,32 +190,49 @@ class ItemFieldsTest {
     /**
      * The relation set is sorted, distinct, and typed on both halves.
      *
-     * <p>Sorted because it is a set: a caller re-sending a read answer would
-     * otherwise present the same edges in another order and the comparison
-     * would report a change nobody made.
+     * <p>The type is the display name a scope declared it under, the item is
+     * the canonical address {@code worklist://<scope>/item/<number>}. Sorted
+     * because it is a set: a caller re-sending a read answer would otherwise
+     * present the same edges in another order and the comparison would
+     * report a change nobody made.
      */
     @Test
     void relations_are_normalised_to_a_sorted_distinct_set_of_typed_edges() {
-        UUID type = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        UUID one = UUID.fromString("00000000-0000-0000-0000-00000000000a");
-        UUID two = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+        String type = "blocks";
+        String one = "worklist://kumbuka/item/10";
+        String two = "worklist://kumbuka/item/20";
 
         List<Map<String, Object>> normalised = ItemFields.relations(List.of(
-            Map.of("type", type.toString(), "item", two),
-            Map.of("type", type, "item", one.toString()),
+            Map.of("type", type, "item", two),
+            Map.of("type", type, "item", one),
             Map.of("type", type, "item", two)));
 
         assertThat(normalised)
-            .as("sorted by target then type, distinct, whichever shape each half arrived in")
+            .as("sorted by target address then type name, distinct in the value's own form")
             .containsExactly(
                 Map.of("type", type, "item", one),
                 Map.of("type", type, "item", two));
 
         WorklistException typeless = (WorklistException) catchThrowable(() ->
-            ItemFields.relations(List.of(Map.of("item", one.toString()))));
+            ItemFields.relations(List.of(Map.of("item", one))));
         assertThat(typeless.reason())
             .as("an edge without a type is the predecessor's untyped one, and every "
                 + "machine reader of it has to guess whether it blocks")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+
+        WorklistException uuidTyped = (WorklistException) catchThrowable(() ->
+            ItemFields.relations(List.of(Map.of(
+                "type", UUID.randomUUID().toString(), "item", one))));
+        assertThat(uuidTyped.reason())
+            .as("a uuid where a name is expected is a form refusal named on the field")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+
+        WorklistException uuidItem = (WorklistException) catchThrowable(() ->
+            ItemFields.relations(List.of(Map.of(
+                "type", type, "item", UUID.randomUUID().toString()))));
+        assertThat(uuidItem.reason())
+            .as("and a uuid where an address is expected is the same refusal — the "
+                + "reader sees the address form, so the writer sends it back")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
     }
 

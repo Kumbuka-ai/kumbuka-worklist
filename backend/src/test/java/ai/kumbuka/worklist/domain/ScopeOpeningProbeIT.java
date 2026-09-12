@@ -117,7 +117,7 @@ class ScopeOpeningProbeIT {
         // freshly opened scope.
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the first item",
-            Field.STATUS.canonicalName(), openStatus.toString()));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
         Map<String, Object> iteration = iterations.create(scope, Map.of(
             Field.MOTTO.canonicalName(), "the first iteration",
             Field.DESCRIPTION.canonicalName(), "what it holds"));
@@ -140,7 +140,7 @@ class ScopeOpeningProbeIT {
 
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item",
-            Field.STATUS.canonicalName(), openStatus.toString()));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
         Map<String, Object> iteration = iterations.create(scope, Map.of(
             Field.MOTTO.canonicalName(), "a motto",
             Field.DESCRIPTION.canonicalName(), "a description"));
@@ -167,7 +167,7 @@ class ScopeOpeningProbeIT {
         // A second item and a second iteration keep to their own counters.
         Map<String, Object> secondItem = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "a second item",
-            Field.STATUS.canonicalName(), openStatus.toString()));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
         Map<String, Object> secondIteration = iterations.create(scope, Map.of(
             Field.MOTTO.canonicalName(), "later",
             Field.DESCRIPTION.canonicalName(), "held after"));

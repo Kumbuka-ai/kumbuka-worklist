@@ -88,8 +88,8 @@ class SurfaceCoverageIT {
 
     @Test
     void every_specified_outward_form_is_reachable_and_answered_by_the_surface() {
-        String status = String.valueOf(actionableStatus());
-        String closed = String.valueOf(closedStatus());
+        String status = actionableStatus();
+        String closed = closedStatus();
 
         // ---- create, at collection depth -------------------------------
         ValidatableResponse created = call("POST", collection(Selector.ITEM), null,
@@ -242,16 +242,21 @@ class SurfaceCoverageIT {
         // is what the probe measures. The graph verbs' own semantics sit
         // in their own probe. The item token is unchanged by these calls:
         // the domain refuses before stamping.
+        String missingAddress = "worklist://" + SurfaceFixture.SCOPE + "/item/9999999";
+        String missingTypeName = "no-such-relation-type";
         call("POST", item(Selector.ITEM, itemNumber) + ":relate", itemToken,
-            Map.of("toItem", UUID.randomUUID().toString(),
-                "type", UUID.randomUUID().toString()))
+            Map.of("toItem", missingAddress, "type", missingTypeName))
             .statusCode(404)
             .body("reason", org.hamcrest.Matchers.is("ITEM_UNKNOWN"));
+        // For unrelate to reach the RELATION_UNKNOWN answer we need a
+        // resolvable target — an item that exists — so that the not-found
+        // is on the edge and not on the target. The declared type is
+        // absent in the scope, so this is refused as VALUE_UNDECLARED at
+        // the vocabulary check. Answered by the same domain refusal path.
         call("POST", item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
-            Map.of("toItem", UUID.randomUUID().toString(),
-                "type", UUID.randomUUID().toString()))
-            .statusCode(404)
-            .body("reason", org.hamcrest.Matchers.is("RELATION_UNKNOWN"));
+            Map.of("toItem", itemAddress, "type", missingTypeName))
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
         // ---- accept, which is carried and refuses -------------------------
         call("POST", item(Selector.ITEM, itemNumber) + ":accept", itemToken, null)
@@ -262,7 +267,7 @@ class SurfaceCoverageIT {
         call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
             Map.of("status", closed))
             .statusCode(200)
-            .body("fields.status", org.hamcrest.Matchers.is(closed));
+            .body("fields.status", org.hamcrest.Matchers.is("coverage-done"));
 
         // ---- the seven the scheme does not carry --------------------------
         for (String verb : List.of("send", "append", "abandon", "block", "resume", "consume")) {
@@ -308,8 +313,20 @@ class SurfaceCoverageIT {
             .statusCode(400)
             .body("reason", org.hamcrest.Matchers.is("PAYLOAD_MALFORMED"));
 
+        // A well-formed but undeclared status name reaches the domain as a
+        // VALUE_UNDECLARED refusal — Sprint 180.4 fixes the wire form as the
+        // declared display name, so a name nobody declared is a rejection
+        // of a scope's vocabulary rather than a surface-level payload fault.
         call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
-            Map.of("status", "not a status identity"))
+            Map.of("status", "not a status name here"))
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
+
+        // A UUID in the status field is a form refusal — the wire form is
+        // the display name, and the platform's identity is not something a
+        // caller reads back any more.
+        call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
+            Map.of("status", UUID.randomUUID().toString()))
             .statusCode(400)
             .body("reason", org.hamcrest.Matchers.is("PAYLOAD_MALFORMED"));
 
@@ -469,14 +486,14 @@ class SurfaceCoverageIT {
         return (String) settings.read(SCOPE_ID).get("conflict_token");
     }
 
-    private UUID actionableStatus() {
+    private String actionableStatus() {
         return vocabulary.declareStatus(SCOPE_ID, "coverage-open", 1,
-            true, false, false, false).id;
+            true, false, false, false).name;
     }
 
-    private UUID closedStatus() {
+    private String closedStatus() {
         return vocabulary.declareStatus(SCOPE_ID, "coverage-done", 2,
-            false, false, true, true).id;
+            false, false, true, true).name;
     }
 
     /**

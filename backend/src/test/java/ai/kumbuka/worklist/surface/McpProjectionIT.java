@@ -77,8 +77,8 @@ class McpProjectionIT {
 
     @Test
     void an_object_created_over_mcp_is_readable_over_mcp_at_the_address_it_answered() {
-        String status = String.valueOf(vocabulary
-            .declareStatus(SCOPE_ID, "mcp-open", 1, true, false, false, false).id);
+        String status = vocabulary
+            .declareStatus(SCOPE_ID, "mcp-open", 1, true, false, false, false).name;
 
         String address = call("create", Map.of(
             "scope", SurfaceFixture.SCOPE,
@@ -108,10 +108,10 @@ class McpProjectionIT {
      */
     @Test
     void every_declared_tool_reaches_its_act() {
-        String status = String.valueOf(vocabulary
-            .declareStatus(SCOPE_ID, "mcp-chain-open", 3, true, false, false, false).id);
-        String closed = String.valueOf(vocabulary
-            .declareStatus(SCOPE_ID, "mcp-chain-done", 4, false, false, true, true).id);
+        String status = vocabulary
+            .declareStatus(SCOPE_ID, "mcp-chain-open", 3, true, false, false, false).name;
+        String closed = vocabulary
+            .declareStatus(SCOPE_ID, "mcp-chain-done", 4, false, false, true, true).name;
         openTheScope();
 
         String item = created(Selector.ITEM, Map.of("title", "an mcp chain", "status", status));
@@ -173,7 +173,7 @@ class McpProjectionIT {
         call("withdraw", Map.of("address", item, "conflict_token", itemToken,
             "status", closed))
             .body("result.isError", is(false))
-            .body("result.structuredContent.fields.status", is(closed));
+            .body("result.structuredContent.fields.status", is("mcp-chain-done"));
     }
 
     /**
@@ -250,16 +250,15 @@ class McpProjectionIT {
      */
     @Test
     void every_verb_built_by_this_sub_sprint_reaches_its_act_over_mcp() {
-        String status = String.valueOf(vocabulary
-            .declareStatus(SCOPE_ID, "carrier-open", 3, true, false, false, false).id);
-        UUID relationType = vocabulary
-            .declareRelationType(SCOPE_ID, "carrier-relates", false, 1).id;
+        String status = vocabulary
+            .declareStatus(SCOPE_ID, "carrier-open", 3, true, false, false, false).name;
+        String relationTypeName = vocabulary
+            .declareRelationType(SCOPE_ID, "carrier-relates", false, 1).name;
 
         String first = created(Selector.ITEM,
             Map.of("title", "the source", "status", status));
         String second = created(Selector.ITEM,
             Map.of("title", "the target", "status", status));
-        String secondId = String.valueOf(idOf(second));
 
         // ---- claim + release, at item depth --------------------------------
         String receipt = call("claim",
@@ -292,15 +291,15 @@ class McpProjectionIT {
         firstToken = call("relate",
                 Map.of("address", first,
                     "conflict_token", firstToken,
-                    "to_item", secondId,
-                    "type", relationType.toString()))
+                    "to_item", second,
+                    "type", relationTypeName))
             .body("result.isError", is(false))
             .extract().path("result.structuredContent.fields.conflict_token");
         call("unrelate",
                 Map.of("address", first,
                     "conflict_token", firstToken,
-                    "to_item", secondId,
-                    "type", relationType.toString()))
+                    "to_item", second,
+                    "type", relationTypeName))
             .body("result.isError", is(false));
 
         // ---- validate: the scope walk at collection depth ------------------
@@ -344,11 +343,6 @@ class McpProjectionIT {
     private String tokenOf(String address) {
         return call("read", Map.of("address", address))
             .extract().path("result.structuredContent.fields.conflict_token");
-    }
-
-    private String idOf(String address) {
-        return call("read", Map.of("address", address))
-            .extract().path("result.structuredContent.fields.id");
     }
 
     /** The number part of an address, which is its last segment. */

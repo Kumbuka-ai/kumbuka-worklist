@@ -175,7 +175,7 @@ class ClaimExclusivityIT {
         String receipt = String.valueOf(held.get(ClaimService.F_RECEIPT));
 
         WorklistException wrong = refusalFrom(() ->
-            claims.release(scope, item, "not-the-receipt-that-was-minted"));
+            claims.release(scope, item, "holder", "not-the-receipt-that-was-minted"));
         assertThat(wrong.reason())
             .as("the check is on the value in the row, not on the actor. A receipt "
                 + "nobody minted holds no lease, and a caller passing one is refused "
@@ -190,7 +190,7 @@ class ClaimExclusivityIT {
         assertThat(stillHeld.liveAt(Instant.now())).isTrue();
 
         // The right receipt does end it, and a fresh claim afterwards succeeds.
-        claims.release(scope, item, receipt);
+        claims.release(scope, item, "holder", receipt);
         Claim released = claimRows.byItem(item);
         assertThat(released.liveAt(Instant.now()))
             .as("release moves the expiry back to the granting instant. The row remains, "
@@ -210,9 +210,10 @@ class ClaimExclusivityIT {
     // ==================================================================
 
     private UUID createItem() {
+        String openName = vocabulary.requireStatus(scope, openStatus).name;
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item to claim",
-            Field.STATUS.canonicalName(), openStatus.toString()));
+            Field.STATUS.canonicalName(), openName));
         return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
     }
 

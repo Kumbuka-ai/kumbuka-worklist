@@ -270,7 +270,7 @@ class PlanningRefusalIT {
         assertThat(iterations.read(scope, iteration).get("order"))
             .as("what it held stays READABLE — that is what makes a closed iteration a "
                 + "record of what was worked rather than a gap")
-            .isEqualTo(List.of(item));
+            .isEqualTo(List.of(addressOfItem(item)));
     }
 
     /** {@code advance} with nothing left to promote is a call to plan, and says so. */
@@ -325,7 +325,7 @@ class PlanningRefusalIT {
     @Test
     void a_field_of_another_object_is_unknown_on_this_one() {
         WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
-            "title", "an item", "status", String.valueOf(openStatus),
+            "title", "an item", "status", vocabulary.requireStatus(scope, openStatus).name,
             "motto", "which an item does not have")));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
@@ -457,13 +457,22 @@ class PlanningRefusalIT {
         return (String) milestones.read(scope, milestoneId).get("conflict_token");
     }
 
+    /** The canonical address of an item as the wire form of an order entry. */
+    private String addressOfItem(UUID itemId) {
+        Map<String, Object> read = items.read(scope, itemId);
+        Object number = read.get("number");
+        Object slug = read.get("scope");
+        String scopeSlug = slug == null ? String.valueOf(scope) : String.valueOf(slug);
+        return "worklist://" + scopeSlug + "/item/" + number;
+    }
+
     /** An actionable item carrying a real goal, which is what makes it plannable. */
     private UUID onPath(String title) {
         // The item view, declared before anything is created under it: the
         // address is allocated at creation now. Declaring is idempotent.
         selectors.declare(scope, Selector.ITEM);
         UUID item = (UUID) items.create(scope, Map.of(
-            "title", title, "status", String.valueOf(openStatus))).get("id");
+            "title", title, "status", vocabulary.requireStatus(scope, openStatus).name)).get("id");
         UUID milestone = (UUID) milestones.create(scope, Map.of(
             "title", "a goal for " + title, "vision", "the north star")).get("id");
         return PlanningFixture.pointAtMilestone(item, milestone);

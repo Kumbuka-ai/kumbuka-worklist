@@ -64,9 +64,9 @@ class ItemWorkstreamInvariantIT {
 
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "no-workstream item",
-            Field.STATUS.canonicalName(), openStatus.toString()));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
 
-        assertThat(item.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(defaultWs.id);
+        assertThat(item.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(defaultWs.token);
     }
 
     @Test
@@ -76,10 +76,10 @@ class ItemWorkstreamInvariantIT {
 
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "a mobile item",
-            Field.STATUS.canonicalName(), openStatus.toString(),
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
 
-        assertThat(item.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(mobile.id);
+        assertThat(item.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(mobile.token);
     }
 
     @Test
@@ -87,19 +87,23 @@ class ItemWorkstreamInvariantIT {
         selectors.declare(scope, Selector.ITEM);
         WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "orphan item",
-            Field.STATUS.canonicalName(), openStatus.toString(),
-            Field.WORKSTREAM_ID.canonicalName(), UUID.randomUUID().toString())));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
+            Field.WORKSTREAM_ID.canonicalName(), "no-such-workstream")));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.WORKSTREAM_UNKNOWN);
     }
 
     @Test
-    void create_refuses_a_workstream_value_that_is_not_a_uuid() {
+    void create_refuses_a_uuid_where_a_workstream_token_is_expected() {
         selectors.declare(scope, Selector.ITEM);
         WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "malformed ws",
-            Field.STATUS.canonicalName(), openStatus.toString(),
-            Field.WORKSTREAM_ID.canonicalName(), "not-a-uuid")));
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
+            Field.WORKSTREAM_ID.canonicalName(), UUID.randomUUID().toString())));
+        assertThat(refusal.reason())
+            .as("the wire form of a workstream is the token the scope declared, and "
+                + "a uuid is a form refusal — the platform's identity is not what "
+                + "the reader sees back any more")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
     }
 
     // ==================================================================
@@ -120,10 +124,12 @@ class ItemWorkstreamInvariantIT {
         UUID itemId = createItem("same-ws item", mobile.id);
         UUID milestoneInMobile = createMilestone("mobile goal", mobile.id);
 
+        Long milestoneNumber = (Long) milestones.read(scope, milestoneInMobile)
+            .get(Field.NUMBER.canonicalName());
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), milestoneInMobile.toString(),
+            Field.MILESTONE_ID.canonicalName(), milestoneNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
-        assertThat(updated.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(milestoneInMobile);
+        assertThat(updated.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(milestoneNumber);
     }
 
     @Test
@@ -135,9 +141,9 @@ class ItemWorkstreamInvariantIT {
         UUID itemId = createItem("moveable item", mobile.id);
 
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
-            Field.WORKSTREAM_ID.canonicalName(), backend.id.toString(),
+            Field.WORKSTREAM_ID.canonicalName(), backend.token,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
-        assertThat(updated.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(backend.id);
+        assertThat(updated.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(backend.token);
     }
 
     @Test
@@ -161,8 +167,9 @@ class ItemWorkstreamInvariantIT {
     private UUID createItem(String title, UUID workstreamId) {
         return (UUID) items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), openStatus.toString(),
-            Field.WORKSTREAM_ID.canonicalName(), workstreamId.toString()))
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
+            Field.WORKSTREAM_ID.canonicalName(),
+            workstreams.require(scope, workstreamId).token))
             .get(Field.ID.canonicalName());
     }
 
@@ -170,7 +177,8 @@ class ItemWorkstreamInvariantIT {
         return (UUID) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.VISION.canonicalName(), "vision of " + title,
-            Field.WORKSTREAM_ID.canonicalName(), workstreamId.toString()))
+            Field.WORKSTREAM_ID.canonicalName(),
+            workstreams.require(scope, workstreamId).token))
             .get(Field.ID.canonicalName());
     }
 

@@ -139,8 +139,8 @@ class WorkstreamAxisIT {
         selectors.declare(scope, Selector.ITEM);
         items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item in beta",
-            Field.STATUS.canonicalName(), openStatus.toString(),
-            Field.WORKSTREAM_ID.canonicalName(), ws.id.toString()));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
+            Field.WORKSTREAM_ID.canonicalName(), ws.token));
 
         WorklistException refusal = refusalFrom(() ->
             workstreams.rename(scope, ws.id, "alpha", ws.conflictToken));
@@ -172,8 +172,8 @@ class WorkstreamAxisIT {
         selectors.declare(scope, Selector.ITEM);
         WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item under a withdrawn ws",
-            Field.STATUS.canonicalName(), openStatus.toString(),
-            Field.WORKSTREAM_ID.canonicalName(), withdrawn.id.toString())));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
+            Field.WORKSTREAM_ID.canonicalName(), withdrawn.token)));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.WORKSTREAM_WITHDRAWN);
     }

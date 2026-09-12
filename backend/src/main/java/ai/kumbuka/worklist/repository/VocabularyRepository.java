@@ -52,6 +52,31 @@ public class VocabularyRepository {
         return id == null ? null : em.find(ItemStatus.class, id);
     }
 
+    /**
+     * The declared status a scope carries under that name, or null.
+     *
+     * <p>The wire form of status is the display name, and the write path
+     * needs the reverse of {@link #statusById} to turn a name back into an
+     * identity. Names are unique per scope on the declaration table, so at
+     * most one row answers.
+     */
+    @Transactional
+    public ItemStatus statusByName(UUID scopeId, String name) {
+        if (scopeId == null || name == null || name.isBlank()) {
+            return null;
+        }
+        try {
+            return em.createQuery(
+                    "SELECT s FROM ItemStatus s WHERE s.scopeId = :scope "
+                        + "AND s.name = :name", ItemStatus.class)
+                .setParameter(P_SCOPE, scopeId)
+                .setParameter("name", name)
+                .getSingleResult();
+        } catch (NoResultException absent) {
+            return null;
+        }
+    }
+
     /** Every status a scope declared, by rank then name. */
     @Transactional
     public List<ItemStatus> statusesIn(UUID scopeId) {
@@ -121,6 +146,29 @@ public class VocabularyRepository {
     @Transactional
     public RelationType relationTypeById(UUID id) {
         return id == null ? null : em.find(RelationType.class, id);
+    }
+
+    /**
+     * The relation type a scope carries under that name, or null.
+     *
+     * <p>Reverse of {@link #relationTypeById}. Names are unique per scope on
+     * the declaration table, so at most one row answers.
+     */
+    @Transactional
+    public RelationType relationTypeByName(UUID scopeId, String name) {
+        if (scopeId == null || name == null || name.isBlank()) {
+            return null;
+        }
+        try {
+            return em.createQuery(
+                    "SELECT r FROM RelationType r WHERE r.scopeId = :scope "
+                        + "AND r.name = :name", RelationType.class)
+                .setParameter(P_SCOPE, scopeId)
+                .setParameter("name", name)
+                .getSingleResult();
+        } catch (NoResultException absent) {
+            return null;
+        }
     }
 
     /** Every relation type a scope declared, by rank then name. */

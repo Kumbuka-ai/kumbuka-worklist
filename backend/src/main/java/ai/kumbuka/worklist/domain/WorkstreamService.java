@@ -1,5 +1,6 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -47,6 +48,7 @@ public class WorkstreamService {
 
     @Inject WorkstreamRepository workstreams;
     @Inject SelectorRegistry selectors;
+    @Inject ScopeAccessRepository scopeAccess;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -62,7 +64,7 @@ public class WorkstreamService {
     @Transactional
     public List<Map<String, Object>> query(UUID scopeId) {
         return workstreams.inScope(scopeId).stream()
-            .map(WorkstreamService::project)
+            .map(this::project)
             .toList();
     }
 
@@ -319,10 +321,10 @@ public class WorkstreamService {
         return value.strip();
     }
 
-    private static Map<String, Object> project(Workstream workstream) {
+    private Map<String, Object> project(Workstream workstream) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("id", workstream.id);
-        fields.put("scope", workstream.scopeId);
+        fields.put("scope", slugOf(workstream.scopeId));
         fields.put("number", workstream.number);
         fields.put("token", workstream.token);
         fields.put("description", workstream.description);
@@ -332,5 +334,16 @@ public class WorkstreamService {
         fields.put("updated_at", workstream.updatedAt);
         fields.put("conflict_token", workstream.conflictToken);
         return fields;
+    }
+
+    /** The slug of a scope, or the scope's id when the access row is absent. */
+    private String slugOf(UUID scopeId) {
+        try {
+            return scopeAccess.findByScopeId(scopeId)
+                .map(ScopeAccessRepository.ScopeAccessRow::slug)
+                .orElse(String.valueOf(scopeId));
+        } catch (RuntimeException notReadable) {
+            return String.valueOf(scopeId);
+        }
     }
 }

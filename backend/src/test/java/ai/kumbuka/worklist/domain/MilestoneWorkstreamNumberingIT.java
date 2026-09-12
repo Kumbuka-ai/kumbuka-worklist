@@ -60,12 +60,12 @@ class MilestoneWorkstreamNumberingIT {
         Long first = (Long) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "mobile goal 1",
             Field.VISION.canonicalName(), "vision 1",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()))
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token))
             .get(Field.NUMBER.canonicalName());
         Long second = (Long) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "mobile goal 2",
             Field.VISION.canonicalName(), "vision 2",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()))
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token))
             .get(Field.NUMBER.canonicalName());
 
         assertThat(first).isEqualTo(1L);
@@ -79,7 +79,7 @@ class MilestoneWorkstreamNumberingIT {
         Map<String, Object> created = milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "default-workstream goal",
             Field.VISION.canonicalName(), "vision"));
-        assertThat(created.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(defaultWs.id);
+        assertThat(created.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(defaultWs.token);
     }
 
     @Test
@@ -89,16 +89,16 @@ class MilestoneWorkstreamNumberingIT {
         Map<String, Object> created = milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "echoed milestone",
             Field.VISION.canonicalName(), "vision",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()));
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
         UUID milestoneId = (UUID) created.get(Field.ID.canonicalName());
         String token = (String) created.get(Field.CONFLICT_TOKEN.canonicalName());
 
         // Echoing the same value — reading and writing back — must be a
         // no-op, not a refusal.
         Map<String, Object> updated = milestones.update(scope, milestoneId, Map.of(
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString(),
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token,
             Field.CONFLICT_TOKEN.canonicalName(), token));
-        assertThat(updated.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(mobile.id);
+        assertThat(updated.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(mobile.token);
     }
 
     @Test
