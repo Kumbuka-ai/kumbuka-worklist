@@ -132,7 +132,8 @@ class SurfaceCoverageIT {
 
         // ---- the time axis: create --------------------------------------
         ValidatableResponse iteration = call("POST", collection(Selector.ITERATION), null,
-            Map.of("motto", "coverage", "description", "what this iteration contains"))
+            Map.of("title", "coverage", "motto", "coverage",
+                "description", "what this iteration contains"))
             .statusCode(201);
         long iterationNumber = numberOf(iteration);
         String iterationToken = iteration.extract().path("fields.conflict_token");

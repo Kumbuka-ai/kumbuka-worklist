@@ -64,6 +64,13 @@ public class IterationService extends PlanningService {
     /** What the cardinality refusal and its warning call the thing being counted. */
     private static final String OPEN_ITERATIONS = "the number of open iterations in this scope";
 
+    /**
+     * The write-path cap on the title, matching the check constraint V16
+     * carries on the column. Two hundred characters, the same ceiling
+     * {@code item.title} and {@code milestone.title} carry from V7.
+     */
+    static final int TITLE_MAX = 200;
+
     // ------------------------------------------------------------------
     // Reading.
     // ------------------------------------------------------------------
@@ -111,6 +118,11 @@ public class IterationService extends PlanningService {
 
         Iteration iteration = new Iteration();
         iteration.scopeId = scopeId;
+        iteration.title = capped(Field.TITLE, required(Field.TITLE, given.get(Field.TITLE),
+            "an iteration carries a title, the one-line handle a listing shows. "
+                + "It sits beside the motto and the description, and each has its own "
+                + "job — the title is not one of the three played by another"),
+            TITLE_MAX);
         iteration.motto = required(Field.MOTTO, given.get(Field.MOTTO),
             "an iteration carries a motto. With the description beside it, it is the "
                 + "only machine-readable criterion by which an agent can refuse an item "
@@ -325,6 +337,12 @@ public class IterationService extends PlanningService {
             Object value) {
         Object held = current.get(field.canonicalName());
         switch (field) {
+            case TITLE -> {
+                String title = capped(field, required(field, value,
+                    "an iteration carries a title on every path, so it cannot be cleared"),
+                    TITLE_MAX);
+                return moved(held, title, () -> iteration.title = title);
+            }
             case MOTTO -> {
                 String motto = required(field, value,
                     "an iteration carries a motto on every path, so it cannot be cleared");
@@ -488,6 +506,7 @@ public class IterationService extends PlanningService {
         fields.put(Field.ID.canonicalName(), iteration.id);
         fields.put(Field.SCOPE.canonicalName(), scopeSlug);
         fields.put(Field.NUMBER.canonicalName(), iteration.number);
+        fields.put(Field.TITLE.canonicalName(), iteration.title);
         fields.put(Field.MOTTO.canonicalName(), iteration.motto);
         fields.put(Field.DESCRIPTION.canonicalName(), iteration.description);
         fields.put(Field.RANK.canonicalName(), iteration.rank);

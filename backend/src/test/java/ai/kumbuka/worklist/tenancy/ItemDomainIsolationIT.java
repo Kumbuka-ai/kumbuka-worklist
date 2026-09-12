@@ -608,8 +608,8 @@ class ItemDomainIsolationIT {
         UUID id = UUID.randomUUID();
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.iteration
-                    (id, tenant_id, scope_id, number, motto, description)
-                VALUES (?, ?, ?, 1, 'a motto', 'a description')
+                    (id, tenant_id, scope_id, number, title, motto, description)
+                VALUES (?, ?, ?, 1, 'a title', 'a motto', 'a description')
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);

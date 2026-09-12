@@ -55,6 +55,19 @@ public class Iteration extends AggregateRoot {
     @Column(name = "number", nullable = false)
     public long number;
 
+    /**
+     * One line, the iteration's handle in every listing.
+     *
+     * <p>Mandatory, and the third required text field beside {@link #motto}
+     * and {@link #description}. The three sit on the row for three different
+     * jobs — the title is what a listing shows, the motto is what an
+     * iteration is ABOUT in a phrase, and the description is what it contains
+     * and what it does not. They are not one field played by three, and
+     * folding them would make the listing carry a sentence.
+     */
+    @Column(name = "title", nullable = false)
+    public String title;
+
     /** What this iteration is about, in a phrase. Mandatory. */
     @Column(name = "motto", nullable = false)
     public String motto;

@@ -709,7 +709,10 @@ class PlanningDomainIT {
     /** An iteration of this scope, with a rank so the order is deterministic. */
     private Map<String, Object> created(String motto, int rank) {
         return iterations.create(scope, Map.of(
-            "motto", motto, "description", "what " + motto + " contains", "rank", rank));
+            "title", motto,
+            "motto", motto,
+            "description", "what " + motto + " contains",
+            "rank", rank));
     }
 
     private static UUID iterationId(Map<String, Object> iteration) {
@@ -779,7 +782,7 @@ class PlanningDomainIT {
         Map<String, Object> read = items.read(scope, itemId);
         Object number = read.get("number");
         Object slug = read.get("scope");
-        String scopeSlug = slug == null ? String.valueOf(scope) : String.valueOf(slug);
+        String scopeSlug = String.valueOf(slug == null ? scope : slug);
         return "worklist://" + scopeSlug + "/item/" + number;
     }
 

@@ -130,7 +130,8 @@ class McpProjectionIT {
         String milestone = created(Selector.MILESTONE,
             Map.of("title", "an mcp goal", "vision", "the north star"));
         String iteration = created(Selector.ITERATION,
-            Map.of("motto", "mcp", "description", "what this iteration contains"));
+            Map.of("title", "mcp", "motto", "mcp",
+                "description", "what this iteration contains"));
 
         pointAtMilestone(item, milestone);
 
