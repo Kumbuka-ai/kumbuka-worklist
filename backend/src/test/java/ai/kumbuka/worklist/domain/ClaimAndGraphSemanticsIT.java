@@ -100,15 +100,16 @@ class ClaimAndGraphSemanticsIT {
     void relate_asserts_an_edge_that_did_not_exist_and_reasserts_one_that_did() {
         UUID from = createItem("source");
         UUID to = createItem("target");
-        UUID type = vocabulary.declareRelationType(scope, "carries", false, 1).id;
+        vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
-        token = tokenOfProjection(items.relate(scope, from, to, type, token));
+        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token));
 
         // Re-asserting an existing edge writes nothing and does not stamp
         // the aggregate again — the token stays the same across the second
         // call.
-        String reasserted = tokenOfProjection(items.relate(scope, from, to, type, token));
+        String reasserted = tokenOfProjection(
+            items.relate(scope, from, addressOf(to), "carries", token));
         assertThat(reasserted)
             .as("relate is idempotent under the triple: reasserting an existing edge "
                 + "writes nothing, so the item is not stamped and the token does not "
@@ -119,10 +120,10 @@ class ClaimAndGraphSemanticsIT {
     @Test
     void relate_refuses_an_edge_from_an_item_to_itself() {
         UUID item = createItem("the only item");
-        UUID type = vocabulary.declareRelationType(scope, "carries", false, 1).id;
+        vocabulary.declareRelationType(scope, "carries", false, 1);
 
         WorklistException refusal = refusalFrom(() ->
-            items.relate(scope, item, item, type, tokenOf(item)));
+            items.relate(scope, item, addressOf(item), "carries", tokenOf(item)));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
     }
@@ -130,11 +131,11 @@ class ClaimAndGraphSemanticsIT {
     @Test
     void relate_refuses_a_target_not_in_the_scope() {
         UUID from = createItem("source");
-        UUID type = vocabulary.declareRelationType(scope, "carries", false, 1).id;
-        UUID nonExistent = UUID.randomUUID();
+        vocabulary.declareRelationType(scope, "carries", false, 1);
 
         WorklistException refusal = refusalFrom(() ->
-            items.relate(scope, from, nonExistent, type, tokenOf(from)));
+            items.relate(scope, from,
+                "worklist://" + scope + "/item/9999999", "carries", tokenOf(from)));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
     }
@@ -143,15 +144,17 @@ class ClaimAndGraphSemanticsIT {
     void relate_moves_a_withdrawn_edge_back_to_asserted() {
         UUID from = createItem("source");
         UUID to = createItem("target");
-        UUID type = vocabulary.declareRelationType(scope, "carries", false, 1).id;
+        vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
-        token = tokenOfProjection(items.relate(scope, from, to, type, token));
-        token = tokenOfProjection(items.unrelate(scope, from, to, type, token));
+        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token));
+        token = tokenOfProjection(
+            items.unrelate(scope, from, addressOf(to), "carries", token));
 
         // The row is now withdrawn. Re-asserting it moves the status back
         // and stamps the aggregate — the token rotates.
-        String afterReassert = tokenOfProjection(items.relate(scope, from, to, type, token));
+        String afterReassert = tokenOfProjection(
+            items.relate(scope, from, addressOf(to), "carries", token));
         assertThat(afterReassert)
             .as("re-asserting a withdrawn edge is a write: the row moves from withdrawn "
                 + "to asserted, and the aggregate is stamped so the token rotates")
@@ -166,10 +169,10 @@ class ClaimAndGraphSemanticsIT {
     void unrelate_refuses_an_edge_that_was_never_asserted() {
         UUID from = createItem("source");
         UUID to = createItem("target");
-        UUID type = vocabulary.declareRelationType(scope, "carries", false, 1).id;
+        vocabulary.declareRelationType(scope, "carries", false, 1);
 
         WorklistException refusal = refusalFrom(() ->
-            items.unrelate(scope, from, to, type, tokenOf(from)));
+            items.unrelate(scope, from, addressOf(to), "carries", tokenOf(from)));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.RELATION_UNKNOWN);
     }
@@ -178,15 +181,15 @@ class ClaimAndGraphSemanticsIT {
     void unrelate_refuses_an_edge_that_has_already_been_withdrawn() {
         UUID from = createItem("source");
         UUID to = createItem("target");
-        UUID type = vocabulary.declareRelationType(scope, "carries", false, 1).id;
+        vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
-        token = tokenOfProjection(items.relate(scope, from, to, type, token));
+        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token));
         String withdrawnToken = tokenOfProjection(
-            items.unrelate(scope, from, to, type, token));
+            items.unrelate(scope, from, addressOf(to), "carries", token));
 
         WorklistException refusal = refusalFrom(() ->
-            items.unrelate(scope, from, to, type, withdrawnToken));
+            items.unrelate(scope, from, addressOf(to), "carries", withdrawnToken));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.RELATION_UNKNOWN);
     }
@@ -210,11 +213,11 @@ class ClaimAndGraphSemanticsIT {
     void validate_reports_a_blocking_cycle_when_one_stands_in_the_scope() {
         UUID a = createItem("a");
         UUID b = createItem("b");
-        UUID blocks = vocabulary.declareRelationType(scope, "blocks", true, 1).id;
+        vocabulary.declareRelationType(scope, "blocks", true, 1);
 
         // a blocks b, b blocks a — a two-node cycle over the blocking edge.
-        items.relate(scope, a, b, blocks, tokenOf(a));
-        items.relate(scope, b, a, blocks, tokenOf(b));
+        items.relate(scope, a, addressOf(b), "blocks", tokenOf(a));
+        items.relate(scope, b, addressOf(a), "blocks", tokenOf(b));
 
         Map<String, Object> report = items.validate(scope);
 
@@ -239,8 +242,18 @@ class ClaimAndGraphSemanticsIT {
     private UUID createItem(String title) {
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), openStatus.toString()));
+            Field.STATUS.canonicalName(),
+            vocabulary.requireStatus(scope, openStatus).name));
         return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
+    }
+
+    /** The canonical address of the item, as the wire form of a relation target. */
+    private String addressOf(UUID itemId) {
+        Map<String, Object> read = items.read(scope, itemId);
+        Object number = read.get(Field.NUMBER.canonicalName());
+        Object slug = read.get(Field.SCOPE.canonicalName());
+        String scopeSlug = slug == null ? String.valueOf(scope) : String.valueOf(slug);
+        return "worklist://" + scopeSlug + "/item/" + number;
     }
 
     private String tokenOf(UUID itemId) {

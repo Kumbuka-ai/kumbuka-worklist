@@ -146,7 +146,7 @@ public class McpAdapter {
         return Map.of(
             "protocolVersion", PROTOCOL_VERSION,
             "capabilities", Map.of("tools", Map.of()),
-            "serverInfo", Map.of("name", "kumbuka-worklist", "version", "0.1.0"));
+            "serverInfo", Map.of("name", "kumbuka-worklist", "version", "0.4.2"));
     }
 
     /** The declared tools, in the shape MCP asks for them. */

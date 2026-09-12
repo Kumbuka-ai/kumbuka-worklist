@@ -93,8 +93,9 @@ class QueryFilterProbeIT {
         createItem("second done item", doneStatus);
         createItem("third done item", doneStatus);
 
+        String openName = vocabulary.requireStatus(scope, openStatus).name;
         ItemService.QueryAnswer narrowed = items.query(scope,
-            new QuerySpec(Map.of("status", openStatus.toString()), 100));
+            new QuerySpec(Map.of("status", openName), 100));
 
         assertThat(narrowed.items())
             .as("the caller asked for items with the 'open' status. Exactly the two "
@@ -109,7 +110,7 @@ class QueryFilterProbeIT {
                     + "not just as many rows as the count, but the RIGHT rows. A "
                     + "dropped filter would answer with rows carrying the other status "
                     + "too")
-                .isEqualTo(openStatus);
+                .isEqualTo(openName);
         }
 
         // The counter-probe: no filter answers with the whole set. Without
@@ -191,7 +192,8 @@ class QueryFilterProbeIT {
     private UUID createItem(String title, UUID statusId) {
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), statusId.toString()));
+            Field.STATUS.canonicalName(),
+            vocabulary.requireStatus(scope, statusId).name));
         return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
     }
 

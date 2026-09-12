@@ -2,6 +2,8 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
 import ai.kumbuka.worklist.repository.PlanningRepository;
+import ai.kumbuka.worklist.repository.ScopeAccessRepository;
+import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -101,6 +103,8 @@ public class ItemService {
     @Inject VocabularyRegistry vocabulary;
     @Inject PlanningRepository planning;
     @Inject WorkstreamService workstreams;
+    @Inject WorkstreamRepository workstreamRepository;
+    @Inject ScopeAccessRepository scopeAccess;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -131,7 +135,7 @@ public class ItemService {
     /** A subset of a scope's items, narrowed by the spec, capped at its limit. */
     @Transactional
     public QueryAnswer query(UUID scopeId, QuerySpec spec) {
-        Map<String, Object> parsed = parseItemFilter(spec.filter());
+        Map<String, Object> parsed = parseItemFilter(scopeId, spec.filter());
 
         List<Item> rows = items.inScope(scopeId, parsed, spec.limit());
         boolean truncated = rows.size() > spec.limit();
@@ -144,12 +148,15 @@ public class ItemService {
     /**
      * The item's own enumerated filter fields, parsed for the repository.
      *
-     * <p>Only {@code status} and {@code milestone} are narrowable today, both
-     * as uuids: they are the two columns of {@link Item} that read a declared
-     * value, and the query is an equality over the stored identity. A free
-     * text — title, description — is refused rather than accepted with
-     * whatever matching rule seemed reasonable, because the shape of a
-     * substring query is a surface commitment this build does not take.
+     * <p>Only {@code status} and {@code milestone} are narrowable today. The
+     * status filter takes the declared status NAME (the same wire form the
+     * projection returns) and the milestone filter takes the milestone
+     * NUMBER — both are resolved to the stored identity here, because the
+     * repository query is an equality on {@code status_id} / {@code
+     * milestone_id}. A free text — title, description — is refused rather
+     * than accepted with whatever matching rule seemed reasonable, because
+     * the shape of a substring query is a surface commitment this build does
+     * not take.
      *
      * <p>An unknown field is refused by name here rather than at the
      * repository. That is the same rule {@link Field#resolve} runs on the
@@ -159,42 +166,64 @@ public class ItemService {
      * exact defect against which {@link ai.kumbuka.worklist.surface.VerbSurface#query}
      * refused to grow a filter at all until this iteration.
      */
-    private static Map<String, Object> parseItemFilter(Map<String, Object> raw) {
+    private Map<String, Object> parseItemFilter(UUID scopeId, Map<String, Object> raw) {
         Map<String, Object> parsed = new java.util.LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : raw.entrySet()) {
             String name = entry.getKey();
             Object value = entry.getValue();
             switch (name) {
-                case "status", "milestone" -> parsed.put(name, uuidOrRefuse(name, value));
+                case "status" -> parsed.put(name, resolveStatusFilter(scopeId, value));
+                case "milestone" -> parsed.put(name, resolveMilestoneFilter(scopeId, value));
                 default -> throw new WorklistException(
                     WorklistException.Reason.UNKNOWN_FIELD,
                     "no filter of an item names '" + name + "'. Its narrowable fields are "
-                        + "'status' and 'milestone', both by declared identity — a free "
-                        + "text or a declared attribute is not narrowable through this "
-                        + "verb today. Nothing was answered: a filter this service does "
-                        + "not read would be dropped, and a dropped filter makes the "
-                        + "whole set look like a correct narrow answer",
+                        + "'status' (by declared name) and 'milestone' (by number) — a "
+                        + "free text or a declared attribute is not narrowable through "
+                        + "this verb today. Nothing was answered: a filter this service "
+                        + "does not read would be dropped, and a dropped filter makes "
+                        + "the whole set look like a correct narrow answer",
                     List.of(name));
             }
         }
         return parsed;
     }
 
-    private static UUID uuidOrRefuse(String field, Object raw) {
+    private UUID resolveStatusFilter(UUID scopeId, Object raw) {
         if (raw == null) {
             return null;
         }
-        try {
-            return UUID.fromString(String.valueOf(raw));
-        } catch (IllegalArgumentException notAnId) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "the filter '" + field + "' takes a declared identity — a uuid — and '"
-                    + raw + "' is not one. A declared value's display name is a property "
-                    + "that may be changed at will, so a caller filtering by one would "
-                    + "be filtering by something that is allowed to move under them",
-                List.of(field));
+        String name = String.valueOf(raw).trim();
+        if (name.isEmpty()) {
+            return null;
         }
+        ItemFields.refuseUuidShape(Field.STATUS, name, "a status name");
+        ItemStatus status = vocabulary.statusByName(scopeId, name);
+        if (status == null) {
+            throw new WorklistException(
+                WorklistException.Reason.VALUE_UNDECLARED,
+                "the filter 'status' names '" + name + "', which no scope declaration "
+                    + "carries in " + scopeId + ". A filter over a value this scope "
+                    + "does not declare would answer the empty set, and answering it "
+                    + "as a refusal is what tells a typo from a legitimate empty",
+                List.of("status"));
+        }
+        return status.id;
+    }
+
+    private UUID resolveMilestoneFilter(UUID scopeId, Object raw) {
+        Long number = milestoneNumberOrRefuse(Field.MILESTONE_ID, raw);
+        if (number == null) {
+            return null;
+        }
+        Milestone milestone = planning.milestoneByNumber(scopeId, number);
+        if (milestone == null) {
+            throw new WorklistException(
+                WorklistException.Reason.MILESTONE_UNKNOWN,
+                "the filter 'milestone' names number " + number + ", which no "
+                    + "milestone of scope " + scopeId + " carries",
+                List.of("milestone"));
+        }
+        return milestone.id;
     }
 
     /**
@@ -261,27 +290,23 @@ public class ItemService {
                 List.of(Field.TITLE.canonicalName()));
         }
 
-        UUID statusId = ItemFields.id(Field.STATUS, given.get(Field.STATUS));
-        if (statusId == null) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "an item carries a status, and a status is a value the scope declared "
-                    + "rather than one of a fixed set this service knows. Declare the "
-                    + "vocabulary of scope " + scopeId + " and name the status to start "
-                    + "an item in",
-                List.of(Field.STATUS.canonicalName()));
-        }
-
-        // The address is allocated HERE, transactionally with the insert, and
-        // the view is not a parameter: every item is addressed under the one
-        // view that holds items. Before the selector became the view this
-        // could not be done — the family had to be decided before a number
-        // could be drawn from its space, so a call-in carried no address until
-        // ratification. With one counter per scope and the head of the address
-        // fixed, that reason is gone, and an object that exists without an
-        // address is one no verb can reach.
+        // The view is required and the address allocated BEFORE the
+        // vocabulary is looked up: a scope that has not declared the item
+        // view (or has withdrawn it) cannot hold any item at all, and that
+        // refusal is the sharper one — a status declaration is a vocabulary
+        // act inside a view that exists. The order preserves the pre-180.4
+        // answer where a fresh scope answered SELECTOR_UNDECLARED and a
+        // closed one SELECTOR_WITHDRAWN rather than something about a
+        // status. The allocation is safe here because the transaction rolls
+        // it back cleanly if a later check refuses.
         Selector view = selectors.require(scopeId, Selector.ITEM);
         long number = selectors.allocate(scopeId, view);
+
+        ItemStatus initialStatus = resolveStatus(scopeId, given.get(Field.STATUS),
+            "an item carries a status, and a status is a value the scope declared "
+                + "rather than one of a fixed set this service knows. Declare the "
+                + "vocabulary of scope " + scopeId + " and name the status to start "
+                + "an item in");
 
         // The workstream is mandatory — ratified 2026-09-08. If the caller
         // named one, use it (existence, refusal on withdrawn); if not, fall
@@ -295,7 +320,7 @@ public class ItemService {
         Item item = new Item();
         item.scopeId = scopeId;
         item.title = title;
-        item.statusId = vocabulary.requireStatus(scopeId, statusId).id;
+        item.statusId = initialStatus.id;
         item.selectorId = view.id;
         item.number = number;
         item.workstreamId = workstream.id;
@@ -430,20 +455,35 @@ public class ItemService {
      * code — a second write path is a second place for those three to drift.
      */
     @Transactional
-    public Map<String, Object> withdraw(UUID scopeId, UUID itemId, UUID statusId,
+    public Map<String, Object> withdraw(UUID scopeId, UUID itemId, String statusName,
             String conflictToken) {
-        ItemStatus status = vocabulary.requireStatus(scopeId, statusId);
+        if (statusName == null || statusName.isBlank()) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "withdrawing an item moves it to a status the scope declared as closed, "
+                    + "and no status name arrived. That a withdrawal is terminal is the "
+                    + "platform's; which value a scope closes with is its own declaration",
+                List.of(Field.STATUS.canonicalName()));
+        }
+        ItemFields.refuseUuidShape(Field.STATUS, statusName, "a status name");
+        ItemStatus status = vocabulary.statusByName(scopeId, statusName);
+        if (status == null) {
+            throw new WorklistException(
+                WorklistException.Reason.VALUE_UNDECLARED,
+                "no status '" + statusName + "' is declared in scope " + scopeId,
+                List.of(Field.STATUS.canonicalName()));
+        }
         if (!status.closed) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "withdrawing an item moves it to a status that is CLOSED, and " + statusId
-                    + " is not. Which values a scope closes with is its own declaration; "
-                    + "that a withdrawal is terminal is the platform's",
-                List.of(String.valueOf(statusId)));
+                "withdrawing an item moves it to a status that is CLOSED, and '"
+                    + statusName + "' is not. Which values a scope closes with is its "
+                    + "own declaration; that a withdrawal is terminal is the platform's",
+                List.of(statusName));
         }
 
         Map<String, Object> answer = update(scopeId, itemId, Map.of(
-            Field.STATUS.canonicalName(), String.valueOf(status.id),
+            Field.STATUS.canonicalName(), status.name,
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
         LOG.infof("item withdrawn in scope %s", scopeId);
         return answer;
@@ -471,11 +511,12 @@ public class ItemService {
      * change lands on top of the state I read".
      */
     @Transactional
-    public Map<String, Object> relate(UUID scopeId, UUID itemId, UUID toItemId,
-            UUID relationTypeId, String conflictToken) {
+    public Map<String, Object> relate(UUID scopeId, UUID itemId, String toItemAddress,
+            String relationTypeName, String conflictToken) {
         Item item = require(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
+        UUID toItemId = resolveItemAddress(scopeId, toItemAddress);
         if (itemId.equals(toItemId)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
@@ -483,24 +524,15 @@ public class ItemService {
                     + "express, and the only one a constraint can see",
                 List.of(Field.RELATIONS.canonicalName()));
         }
-        Item target = items.byId(toItemId);
-        if (target == null || !target.scopeId.equals(scopeId)) {
-            throw new WorklistException(
-                WorklistException.Reason.ITEM_UNKNOWN,
-                "no item " + toItemId + " in scope " + scopeId + " to relate to. A "
-                    + "reference is refused rather than stored dangling: an edge is a "
-                    + "row here, and the foreign key is the check",
-                List.of(String.valueOf(toItemId)));
-        }
-        vocabulary.requireRelationType(scopeId, relationTypeId);
+        RelationType type = resolveRelationTypeByName(scopeId, relationTypeName);
 
-        ItemRelation edge = findEdge(item.id, toItemId, relationTypeId);
+        ItemRelation edge = findEdge(item.id, toItemId, type.id);
         boolean changed;
         if (edge == null) {
             edge = new ItemRelation();
             edge.fromItemId = item.id;
             edge.toItemId = toItemId;
-            edge.relationTypeId = relationTypeId;
+            edge.relationTypeId = type.id;
             edge.scopeId = scopeId;
             items.insertEdge(edge);
             changed = true;
@@ -533,20 +565,23 @@ public class ItemService {
      * which of the three parts they got wrong.
      */
     @Transactional
-    public Map<String, Object> unrelate(UUID scopeId, UUID itemId, UUID toItemId,
-            UUID relationTypeId, String conflictToken) {
+    public Map<String, Object> unrelate(UUID scopeId, UUID itemId, String toItemAddress,
+            String relationTypeName, String conflictToken) {
         Item item = require(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
-        ItemRelation edge = findEdge(item.id, toItemId, relationTypeId);
+        UUID toItemId = resolveItemAddress(scopeId, toItemAddress);
+        RelationType type = resolveRelationTypeByName(scopeId, relationTypeName);
+
+        ItemRelation edge = findEdge(item.id, toItemId, type.id);
         if (edge == null || ItemRelation.WITHDRAWN.equals(edge.status)) {
             throw new WorklistException(
                 WorklistException.Reason.RELATION_UNKNOWN,
-                "no asserted edge from item " + itemId + " to item " + toItemId
-                    + " of type " + relationTypeId + " in scope " + scopeId + ". A "
+                "no asserted edge from item " + itemId + " to '" + toItemAddress
+                    + "' of type '" + type.name + "' in scope " + scopeId + ". A "
                     + "withdrawn edge reads the same as an absent one from here; "
                     + "reasserting it is what 'relate' does",
-                List.of(String.valueOf(toItemId), String.valueOf(relationTypeId)));
+                List.of(toItemAddress, type.name));
         }
 
         edge.status = ItemRelation.WITHDRAWN;
@@ -615,7 +650,7 @@ public class ItemService {
         }
 
         Map<String, Object> answer = new LinkedHashMap<>();
-        answer.put(Field.SCOPE.canonicalName(), scopeId);
+        answer.put(Field.SCOPE.canonicalName(), slugOf(scopeId));
         answer.put("findings", findings);
         answer.put("consistent", findings.isEmpty());
         LOG.debugf("validate reported %d finding(s) in scope %s", findings.size(), scopeId);
@@ -780,47 +815,44 @@ public class ItemService {
     }
 
     /**
-     * The milestone assignment: resolved against the milestone's identity in
+     * The milestone assignment: resolved against the milestone's NUMBER in
      * the same scope, and null clears it.
      *
-     * <p>The value travels as an identity, never as a title. A title is a
-     * property the scope may change at any moment, so a caller writing one
-     * would be writing something that can move under them. A value that is
-     * not a UUID is a typed refusal that names the field, on the same road
-     * every other identity-carrying field takes here.
+     * <p>The value travels as the number the scope allocated, never as a
+     * title and never as a uuid — the read answer names the number, and the
+     * write path takes it back. A title is a property the scope may change at
+     * any moment; the platform's identity is not something the reader sees at
+     * all any more. A value that is neither null, a positive integer nor an
+     * empty string is a typed refusal that names the field.
      *
      * <p>Existence is checked before writing: a milestone that does not
      * exist, or that belongs to another scope, or that has been closed, is a
-     * typed refusal — and the scope check is written in explicitly so that
-     * an id from another tenant cannot slip through as a not-found. The
-     * three marker rows are legitimate targets: they are milestones in the
-     * table and positions on the axis, and they are rows for exactly that
-     * reason.
+     * typed refusal. The three marker rows are legitimate targets: they are
+     * milestones in the table and positions on the axis, and they are rows
+     * for exactly that reason.
      */
     private boolean applyMilestone(Item item, Object held, Field field, Object value) {
-        UUID milestoneId = ItemFields.id(field, value);
-        if (ItemFields.unchangedAsText(held, milestoneId)) {
+        Long milestoneNumber = milestoneNumberOrRefuse(field, value);
+        if (ItemFields.unchangedAsText(held, milestoneNumber)) {
             return false;
         }
-        if (milestoneId == null) {
+        if (milestoneNumber == null) {
             item.milestoneId = null;
             return true;
         }
-        Milestone milestone = planning.milestoneById(milestoneId);
-        if (milestone == null || !item.scopeId.equals(milestone.scopeId)) {
+        Milestone milestone = planning.milestoneByNumber(item.scopeId, milestoneNumber);
+        if (milestone == null) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
-                "no milestone " + milestoneId + " in scope " + item.scopeId + ". A "
-                    + "milestone from another scope is refused rather than reported "
-                    + "as absent: the two answers look the same to the caller but "
-                    + "differ in what they let through — an id that names something "
-                    + "elsewhere is a mistake, not a missing row",
+                "no milestone numbered " + milestoneNumber + " in scope " + item.scopeId
+                    + ". Numbers on the goal axis are never reused, so this one was "
+                    + "either never handed out or names something in another scope",
                 List.of(field.canonicalName()));
         }
         if (Milestone.CLOSED.equals(milestone.status)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "milestone " + milestoneId + " is closed. An item's assignment is what "
+                "milestone " + milestoneNumber + " is closed. An item's assignment is what "
                     + "the item is working towards, and a closed milestone is not "
                     + "something anything is working towards any more",
                 List.of(field.canonicalName()));
@@ -836,26 +868,79 @@ public class ItemService {
     }
 
     /**
+     * A caller's value as a milestone number, or null when the field carries
+     * the empty absence, or a typed refusal naming what was given.
+     */
+    private static Long milestoneNumberOrRefuse(Field field, Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number given) {
+            long value = given.longValue();
+            if (value <= 0) {
+                throw milestoneFormRefusal(field, raw);
+            }
+            return value;
+        }
+        String rendered = String.valueOf(raw).trim();
+        if (rendered.isEmpty()) {
+            return null;
+        }
+        ItemFields.refuseUuidShape(field, rendered, "a milestone number");
+        try {
+            long value = Long.parseLong(rendered);
+            if (value <= 0) {
+                throw milestoneFormRefusal(field, rendered);
+            }
+            return value;
+        } catch (NumberFormatException notANumber) {
+            throw milestoneFormRefusal(field, rendered);
+        }
+    }
+
+    private static WorklistException milestoneFormRefusal(Field field, Object raw) {
+        return new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            field.canonicalName() + " takes the milestone's number — the count the "
+                + "scope allocated it under — as a positive integer. Refused: '" + raw
+                + "'. A number a caller could choose is a number that can be handed out "
+                + "twice; leave the field empty to clear the assignment",
+            List.of(field.canonicalName()));
+    }
+
+    /**
      * Change the item's workstream.
      *
-     * <p>The workstream is mandatory, so clearing is refused. Setting it
-     * checks existence and refuses a withdrawn one. A milestone the item
-     * carries is unaffected: several workstreams reach one milestone
-     * together (TAR-0002 section 4, V12).
+     * <p>The workstream is mandatory, so clearing is refused. The value
+     * travels as the workstream's TOKEN — the string the caller reads back
+     * in the projection. A uuid on the wire is a form refusal that names the
+     * field: the platform's identity is not what a reader ever sees any
+     * more. Setting checks existence and refuses a withdrawn one. A
+     * milestone the item carries is unaffected: several workstreams reach
+     * one milestone together (TAR-0002 section 4, V12).
      */
     private boolean applyWorkstream(Item item, Object held, Field field, Object value) {
-        UUID workstreamId = ItemFields.id(field, value);
-        if (workstreamId == null) {
+        String token = ItemFields.text(field, value);
+        if (token == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_WORKSTREAM_MISSING,
                 "an item carries a workstream on every status, so it cannot be cleared. "
                     + "Move it to another workstream instead",
                 List.of(field.canonicalName()));
         }
-        if (ItemFields.unchangedAsText(held, workstreamId)) {
+        ItemFields.refuseUuidShape(field, token, "a workstream token");
+        if (ItemFields.unchangedAsText(held, token)) {
             return false;
         }
-        Workstream workstream = workstreams.require(item.scopeId, workstreamId);
+        Workstream workstream = workstreamRepository.findByToken(item.scopeId, token);
+        if (workstream == null) {
+            throw new WorklistException(
+                WorklistException.Reason.WORKSTREAM_UNKNOWN,
+                "no workstream '" + token + "' in scope " + item.scopeId + ". The value "
+                    + "travels as the token the scope declared it under, which is what "
+                    + "the read answer named",
+                List.of(field.canonicalName()));
+        }
         workstreams.refuseWithdrawn(workstream);
 
         item.workstreamId = workstream.id;
@@ -865,34 +950,40 @@ public class ItemService {
     /**
      * Resolve a workstream at item-create time.
      *
-     * <p>Named → require + refuse-withdrawn. Absent → the scope's default.
-     * A withdrawn default would be a defect V8 rules out and
+     * <p>Named by TOKEN → look up + refuse-withdrawn. Absent → the scope's
+     * default. A withdrawn default would be a defect V8 rules out and
      * {@code WorkstreamService.withdraw} refuses; the branch below trusts
-     * that.
+     * that. A uuid is a typed refusal.
      */
     private Workstream resolveWorkstream(UUID scopeId, Object value) {
-        if (value == null) {
+        String token = ItemFields.text(Field.WORKSTREAM_ID, value);
+        if (token == null) {
             return workstreams.requireDefault(scopeId);
         }
-        UUID workstreamId;
-        try {
-            workstreamId = UUID.fromString(String.valueOf(value));
-        } catch (IllegalArgumentException notAnId) {
+        ItemFields.refuseUuidShape(Field.WORKSTREAM_ID, token, "a workstream token");
+        Workstream workstream = workstreamRepository.findByToken(scopeId, token);
+        if (workstream == null) {
             throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "the workstream is named by its identity, not by its token. Refused: "
-                    + value,
+                WorklistException.Reason.WORKSTREAM_UNKNOWN,
+                "no workstream '" + token + "' in scope " + scopeId + ". The value "
+                    + "travels as the token the scope declared it under",
                 List.of(Field.WORKSTREAM_ID.canonicalName()));
         }
-        Workstream workstream = workstreams.require(scopeId, workstreamId);
         workstreams.refuseWithdrawn(workstream);
         return workstream;
     }
 
-    /** The status: resolved against the scope's own declared vocabulary. */
+    /**
+     * The status: resolved against the scope's own declared vocabulary by
+     * its display NAME.
+     *
+     * <p>The value travels as the string the reader saw — the display name
+     * the scope declared the status under. A uuid on the wire is a form
+     * refusal, and an unknown name is refused as an undeclared value.
+     */
     private boolean applyStatus(Item item, Object held, Field field, Object value) {
-        UUID statusId = ItemFields.id(field, value);
-        if (statusId == null) {
+        String name = ItemFields.text(field, value);
+        if (name == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "an item carries a status on every path, so it cannot be cleared. What "
@@ -900,11 +991,49 @@ public class ItemService {
                     + "absence of one",
                 List.of(field.canonicalName()));
         }
-        if (ItemFields.unchangedAsText(held, statusId)) {
+        ItemFields.refuseUuidShape(field, name, "a status name");
+        if (ItemFields.unchangedAsText(held, name)) {
             return false;
         }
-        item.statusId = vocabulary.requireStatus(item.scopeId, statusId).id;
+        ItemStatus status = vocabulary.statusByName(item.scopeId, name);
+        if (status == null) {
+            throw new WorklistException(
+                WorklistException.Reason.VALUE_UNDECLARED,
+                "no status '" + name + "' is declared in scope " + item.scopeId
+                    + ". The statuses of a scope are its own data — declare the "
+                    + "status before setting it on an item",
+                List.of(field.canonicalName()));
+        }
+        item.statusId = status.id;
         return true;
+    }
+
+    /**
+     * Resolve a status name at item-create time.
+     *
+     * <p>A UUID is a typed refusal. An empty value is refused with the given
+     * message so the caller sees the field-level error rather than a
+     * confusing shape hint.
+     */
+    private ItemStatus resolveStatus(UUID scopeId, Object value, String missingMessage) {
+        String name = ItemFields.text(Field.STATUS, value);
+        if (name == null) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                missingMessage,
+                List.of(Field.STATUS.canonicalName()));
+        }
+        ItemFields.refuseUuidShape(Field.STATUS, name, "a status name");
+        ItemStatus status = vocabulary.statusByName(scopeId, name);
+        if (status == null) {
+            throw new WorklistException(
+                WorklistException.Reason.VALUE_UNDECLARED,
+                "no status '" + name + "' is declared in scope " + scopeId + ". The "
+                    + "statuses of a scope are its own data — declare the status before "
+                    + "setting it on an item",
+                List.of(Field.STATUS.canonicalName()));
+        }
+        return status;
     }
 
     /**
@@ -1132,33 +1261,40 @@ public class ItemService {
      * of that. An edge that re-enters a set it had left is asserted again on
      * the row that was already there.
      *
-     * <p>A reference to an item that does not exist is refused by the foreign
-     * key, and an undeclared type by {@link VocabularyRegistry}. A CYCLE over
-     * blocking relations still can be written: no constraint expresses
-     * acyclicity, the walk that finds one is a domain check with a red probe
-     * of its own, and it is not built here.
+     * <p>Entries arrive with the type as a display name and the item as its
+     * canonical address; both are resolved here against the scope. A
+     * reference to an item that does not exist is refused as
+     * {@link WorklistException.Reason#ITEM_UNKNOWN}, and an undeclared type
+     * is refused by {@link VocabularyRegistry}. A CYCLE over blocking
+     * relations still can be written: no constraint expresses acyclicity,
+     * the walk that finds one is a domain check with a red probe of its own,
+     * and it is not built here.
      */
     private boolean applyRelations(Item item, List<Map<String, Object>> wanted) {
+        List<ResolvedEdge> resolved = new ArrayList<>(wanted.size());
         for (Map<String, Object> entry : wanted) {
-            if (item.id.equals(entry.get(ItemFields.ITEM))) {
+            String typeName = (String) entry.get(ItemFields.TYPE);
+            String itemAddress = (String) entry.get(ItemFields.ITEM);
+            RelationType type = resolveRelationTypeByName(item.scopeId, typeName);
+            UUID toItemId = resolveItemAddress(item.scopeId, itemAddress);
+            if (item.id.equals(toItemId)) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
                     "an item cannot relate to itself. That is the one cycle a single row "
                         + "can express, and the only one a constraint can see",
                     List.of(Field.RELATIONS.canonicalName()));
             }
-            vocabulary.requireRelationType(item.scopeId, (UUID) entry.get(ItemFields.TYPE));
+            resolved.add(new ResolvedEdge(type.id, toItemId));
         }
 
         List<ItemRelation> edges = items.edgesOf(item.id);
         boolean changed = false;
 
-        List<Map<String, Object>> present = new ArrayList<>();
+        List<ResolvedEdge> present = new ArrayList<>();
         for (ItemRelation edge : edges) {
-            Map<String, Object> key = Map.of(
-                ItemFields.TYPE, edge.relationTypeId, ItemFields.ITEM, edge.toItemId);
+            ResolvedEdge key = new ResolvedEdge(edge.relationTypeId, edge.toItemId);
             present.add(key);
-            String target = wanted.contains(key)
+            String target = resolved.contains(key)
                 ? ItemRelation.ASSERTED : ItemRelation.WITHDRAWN;
             if (!target.equals(edge.status)) {
                 edge.status = target;
@@ -1166,14 +1302,14 @@ public class ItemService {
             }
         }
 
-        for (Map<String, Object> entry : wanted) {
+        for (ResolvedEdge entry : resolved) {
             if (present.contains(entry)) {
                 continue;
             }
             ItemRelation edge = new ItemRelation();
             edge.fromItemId = item.id;
-            edge.toItemId = (UUID) entry.get(ItemFields.ITEM);
-            edge.relationTypeId = (UUID) entry.get(ItemFields.TYPE);
+            edge.toItemId = entry.toItemId();
+            edge.relationTypeId = entry.typeId();
             edge.scopeId = item.scopeId;
             items.insertEdge(edge);
             changed = true;
@@ -1183,6 +1319,112 @@ public class ItemService {
             items.flush();
         }
         return changed;
+    }
+
+    /** One resolved edge, keyed for set membership. */
+    private record ResolvedEdge(UUID typeId, UUID toItemId) {
+    }
+
+    /**
+     * Resolve a relation-type display name against the scope's declarations.
+     *
+     * <p>A uuid-shaped value is refused as a form error before the lookup
+     * runs — the wire form is the name, and letting the platform's identity
+     * through here would be the same silent-acceptance defect the name
+     * regime exists to remove.
+     */
+    private RelationType resolveRelationTypeByName(UUID scopeId, String name) {
+        if (name == null || name.isBlank()) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "a relation entry's type is the display name a scope declared it "
+                    + "under, and no value arrived",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        ItemFields.refuseUuidShape(Field.RELATIONS, name,
+            "a relation type's display name");
+        RelationType type = vocabulary.relationTypeByName(scopeId, name);
+        if (type == null) {
+            throw new WorklistException(
+                WorklistException.Reason.VALUE_UNDECLARED,
+                "no relation type '" + name + "' is declared in scope " + scopeId
+                    + ". An edge carries a declared type, and the one thing the "
+                    + "platform reads out of a type is whether it blocks — an undeclared "
+                    + "type is an edge nothing can answer that question about",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        return type;
+    }
+
+    /**
+     * Resolve an item address {@code worklist://<slug>/item/<number>} against
+     * the scope this write is bound to.
+     *
+     * <p>The scope in the address must be the scope of the item being
+     * written: an edge to another scope's item is refused rather than stored
+     * dangling. The number is looked up against the item's own address
+     * space; a number that names nothing is a not-found and not a form error.
+     */
+    private UUID resolveItemAddress(UUID scopeId, String address) {
+        if (address == null || address.isBlank()) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "a relation entry's item is the canonical address of the other end — "
+                    + "'worklist://<scope>/item/<number>' — and no value arrived",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        ItemFields.refuseUuidShape(Field.RELATIONS, address,
+            "the other item's canonical address worklist://<scope>/item/<number>");
+        String scheme = "worklist://";
+        if (!address.startsWith(scheme)) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "the relation target '" + address + "' is not a worklist address. Its "
+                    + "form is '" + scheme + "<scope>/item/<number>'",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        String rest = address.substring(scheme.length());
+        String[] parts = rest.split("/", -1);
+        if (parts.length != 3 || !Selector.ITEM.equals(parts[1])
+                || parts[0].isBlank() || parts[2].isBlank()) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "the relation target '" + address + "' does not name an item address. "
+                    + "Its form is 'worklist://<scope>/item/<number>' and only the item "
+                    + "view carries edges as the other end here",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        String targetSlug = parts[0];
+        long number;
+        try {
+            number = Long.parseLong(parts[2]);
+        } catch (NumberFormatException notANumber) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "the relation target '" + address + "' carries '" + parts[2] + "' where "
+                    + "a number is expected. Numbers in addresses are counted from one",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        String ownSlug = slugOf(scopeId);
+        if (!ownSlug.equals(targetSlug)) {
+            throw new WorklistException(
+                WorklistException.Reason.ITEM_UNKNOWN,
+                "the relation target '" + address + "' names scope '" + targetSlug
+                    + "', which is not the scope of this item. An edge across scopes "
+                    + "is refused rather than stored dangling",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        Selector view = selectors.require(scopeId, Selector.ITEM);
+        Item target = items.byAddress(scopeId, view.id, number);
+        if (target == null) {
+            throw new WorklistException(
+                WorklistException.Reason.ITEM_UNKNOWN,
+                "no item numbered " + number + " in scope " + scopeId + " to relate to. "
+                    + "A reference is refused rather than stored dangling: an edge is a "
+                    + "row here, and the foreign key is the check",
+                List.of(Field.RELATIONS.canonicalName()));
+        }
+        return target.id;
     }
 
     private Item require(UUID scopeId, UUID itemId) {
@@ -1212,23 +1454,75 @@ public class ItemService {
      * to make it matter.
      */
     private Map<String, Object> project(Item item) {
+        String scopeSlug = slugOf(item.scopeId);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), item.id);
-        fields.put(Field.SCOPE.canonicalName(), item.scopeId);
+        fields.put(Field.SCOPE.canonicalName(), scopeSlug);
         fields.put(Field.SELECTOR.canonicalName(), tokenOfSelector(item));
         fields.put(Field.NUMBER.canonicalName(), item.number);
         fields.put(Field.TITLE.canonicalName(), item.title);
         fields.put(Field.DESCRIPTION.canonicalName(), item.description);
-        fields.put(Field.STATUS.canonicalName(), item.statusId);
+        fields.put(Field.STATUS.canonicalName(), statusNameOf(item.statusId));
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
-        fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item));
-        fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneId);
-        fields.put(Field.WORKSTREAM_ID.canonicalName(), item.workstreamId);
+        fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
+        fields.put(Field.MILESTONE_ID.canonicalName(), milestoneNumberOf(item.milestoneId));
+        fields.put(Field.WORKSTREAM_ID.canonicalName(),
+            workstreamTokenOf(item.scopeId, item.workstreamId));
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken);
         return fields;
+    }
+
+    /**
+     * The slug of a scope, from the platform's read contract, or the scope's
+     * own id rendered as a slug when the access row is absent — e.g. a probe
+     * scope written directly without publishing to {@code platform.scope_access}
+     * — or the read contract is not granted to the runtime role in this
+     * environment. The fallback keeps the read answer and the address-resolving
+     * write path agreeing on what to spell in the scope position; two answers
+     * to "what is the slug" would put the two halves of a round trip on
+     * different addresses.
+     */
+    private String slugOf(UUID scopeId) {
+        try {
+            return scopeAccess.findByScopeId(scopeId)
+                .map(ScopeAccessRepository.ScopeAccessRow::slug)
+                .orElse(String.valueOf(scopeId));
+        } catch (RuntimeException notReadable) {
+            return String.valueOf(scopeId);
+        }
+    }
+
+    /** The display name of a declared status, or null. */
+    private String statusNameOf(UUID statusId) {
+        if (statusId == null) {
+            return null;
+        }
+        ItemStatus status = vocabulary.statusById(statusId);
+        return status == null ? null : status.name;
+    }
+
+    /** The number of a milestone, or null. */
+    private Long milestoneNumberOf(UUID milestoneId) {
+        if (milestoneId == null) {
+            return null;
+        }
+        Milestone milestone = planning.milestoneById(milestoneId);
+        return milestone == null ? null : milestone.number;
+    }
+
+    /** The token of a workstream in a scope, or null. */
+    private String workstreamTokenOf(UUID scopeId, UUID workstreamId) {
+        if (workstreamId == null) {
+            return null;
+        }
+        try {
+            return workstreams.require(scopeId, workstreamId).token;
+        } catch (WorklistException absent) {
+            return null;
+        }
     }
 
     private String tokenOfSelector(Item item) {
@@ -1294,14 +1588,38 @@ public class ItemService {
      * normalisation uses, so that a read answer sent straight back compares
      * equal rather than looking like a reordering.
      */
-    private List<Map<String, Object>> assertedRelations(Item item) {
+    private List<Map<String, Object>> assertedRelations(Item item, String scopeSlug) {
         List<Map<String, Object>> answer = new ArrayList<>();
         for (ItemRelation relation : items.assertedRelations(item.id)) {
             Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put(ItemFields.TYPE, relation.relationTypeId);
-            entry.put(ItemFields.ITEM, relation.toItemId);
+            entry.put(ItemFields.TYPE, relationTypeNameOf(relation.relationTypeId));
+            entry.put(ItemFields.ITEM, itemAddressOf(scopeSlug, relation.toItemId));
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);
+    }
+
+    /** The display name of a declared relation type, or null. */
+    private String relationTypeNameOf(UUID typeId) {
+        if (typeId == null) {
+            return null;
+        }
+        RelationType type = vocabulary.relationTypeById(typeId);
+        return type == null ? null : type.name;
+    }
+
+    /**
+     * The canonical address of an item as {@code worklist://<slug>/item/<number>},
+     * or null when either half is unavailable.
+     */
+    private String itemAddressOf(String scopeSlug, UUID toItemId) {
+        if (toItemId == null) {
+            return null;
+        }
+        Item target = items.byId(toItemId);
+        if (target == null || target.number == null || scopeSlug == null) {
+            return null;
+        }
+        return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + target.number;
     }
 }

@@ -173,8 +173,9 @@ public final class McpTools {
                     required(ARG_ADDRESS, STRING, ADDRESS_DOC),
                     required(ARG_TOKEN, STRING, TOKEN_DOC),
                     required("status", STRING,
-                        "The closed status to withdraw into, by identity. Which values a "
-                            + "scope closes with is its own declaration."))),
+                        "The closed status to withdraw into, by its declared display "
+                            + "NAME. Which values a scope closes with is its own "
+                            + "declaration."))),
 
             new Tool("close",
                 "Terminal, on an iteration or a milestone. An iteration refuses while it "
@@ -258,10 +259,10 @@ public final class McpTools {
                     required(ARG_ADDRESS, STRING, ADDRESS_DOC),
                     required(ARG_TOKEN, STRING, TOKEN_DOC),
                     required(ARG_TO_ITEM, STRING,
-                        "The identity of the item at the other end of the edge."),
+                        "The canonical address of the item at the other end of the "
+                            + "edge, 'worklist://<scope>/item/<number>'."),
                     required(ARG_TYPE, STRING,
-                        "The identity of the declared relation type. A display name "
-                            + "would be a value the scope may change under the caller."))),
+                        "The declared relation type by its display NAME."))),
 
             new Tool("unrelate",
                 "Withdraw one asserted edge from this item to another. The row remains "
@@ -271,9 +272,10 @@ public final class McpTools {
                     required(ARG_ADDRESS, STRING, ADDRESS_DOC),
                     required(ARG_TOKEN, STRING, TOKEN_DOC),
                     required(ARG_TO_ITEM, STRING,
-                        "The identity of the item at the other end of the edge."),
+                        "The canonical address of the item at the other end of the "
+                            + "edge, 'worklist://<scope>/item/<number>'."),
                     required(ARG_TYPE, STRING,
-                        "The identity of the declared relation type."))),
+                        "The declared relation type by its display NAME."))),
 
             new Tool("validate",
                 "Walk the scope and report every consistency the store guarantees. "

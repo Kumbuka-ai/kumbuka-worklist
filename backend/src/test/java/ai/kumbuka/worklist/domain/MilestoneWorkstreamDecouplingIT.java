@@ -76,12 +76,13 @@ class MilestoneWorkstreamDecouplingIT {
         // Pre-rollback: this update refused with WORKSTREAM_MILESTONE_MISMATCH.
         // Post-rollback (V12 + Java changes): the assignment lands.
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), milestoneInBackend.toString(),
+            Field.MILESTONE_ID.canonicalName(),
+            milestones.read(scope, milestoneInBackend).get(Field.NUMBER.canonicalName()),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
 
         assertThat(updated.get(Field.MILESTONE_ID.canonicalName()))
             .as("cross-workstream milestone now attaches — the edge is retracted")
-            .isEqualTo(milestoneInBackend);
+            .isEqualTo(milestones.read(scope, milestoneInBackend).get(Field.NUMBER.canonicalName()));
     }
 
     @Test
@@ -92,22 +93,23 @@ class MilestoneWorkstreamDecouplingIT {
         UUID itemId = createItem("consistent then moved", mobile.id);
         UUID milestoneInMobile = createMilestone("mobile goal", mobile.id);
         items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), milestoneInMobile.toString(),
+            Field.MILESTONE_ID.canonicalName(),
+            milestones.read(scope, milestoneInMobile).get(Field.NUMBER.canonicalName()),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
 
         // Pre-rollback: the second update refused with WORKSTREAM_MILESTONE_MISMATCH.
         // Post-rollback: the workstream moves; the milestone stays where it is
         // and continues to be reached by the item.
         Map<String, Object> moved = items.update(scope, itemId, Map.of(
-            Field.WORKSTREAM_ID.canonicalName(), backend.id.toString(),
+            Field.WORKSTREAM_ID.canonicalName(), backend.token,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
 
         assertThat(moved.get(Field.WORKSTREAM_ID.canonicalName()))
             .as("the item moved to backend — the milestone-workstream edge is gone")
-            .isEqualTo(backend.id);
+            .isEqualTo(backend.token);
         assertThat(moved.get(Field.MILESTONE_ID.canonicalName()))
             .as("the milestone still reaches the item across the boundary")
-            .isEqualTo(milestoneInMobile);
+            .isEqualTo(milestones.read(scope, milestoneInMobile).get(Field.NUMBER.canonicalName()));
     }
 
     @Test
@@ -118,7 +120,7 @@ class MilestoneWorkstreamDecouplingIT {
         Map<String, Object> created = milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "settled milestone",
             Field.VISION.canonicalName(), "vision",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()));
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
         UUID milestoneId = (UUID) created.get(Field.ID.canonicalName());
         String token = (String) created.get(Field.CONFLICT_TOKEN.canonicalName());
 
@@ -128,7 +130,7 @@ class MilestoneWorkstreamDecouplingIT {
         // echoed. The row's number is scope-wide now, so moving the workstream
         // does not detach any number from its axis.
         Map<String, Object> updated = milestones.update(scope, milestoneId, Map.of(
-            Field.WORKSTREAM_ID.canonicalName(), backend.id.toString(),
+            Field.WORKSTREAM_ID.canonicalName(), backend.token,
             Field.CONFLICT_TOKEN.canonicalName(), token));
 
         assertThat(updated)
@@ -146,13 +148,13 @@ class MilestoneWorkstreamDecouplingIT {
         Long firstInMobile = (Long) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "mobile goal 1",
             Field.VISION.canonicalName(), "first mobile star",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.id.toString()))
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token))
             .get(Field.NUMBER.canonicalName());
 
         Long firstInBackend = (Long) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "backend goal 1",
             Field.VISION.canonicalName(), "first backend star",
-            Field.WORKSTREAM_ID.canonicalName(), backend.id.toString()))
+            Field.WORKSTREAM_ID.canonicalName(), backend.token))
             .get(Field.NUMBER.canonicalName());
 
         assertThat(firstInMobile).isEqualTo(1L);
@@ -168,8 +170,9 @@ class MilestoneWorkstreamDecouplingIT {
     private UUID createItem(String title, UUID workstreamId) {
         return (UUID) items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), openStatus.toString(),
-            Field.WORKSTREAM_ID.canonicalName(), workstreamId.toString()))
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
+            Field.WORKSTREAM_ID.canonicalName(),
+            workstreams.require(scope, workstreamId).token))
             .get(Field.ID.canonicalName());
     }
 
@@ -177,7 +180,8 @@ class MilestoneWorkstreamDecouplingIT {
         return (UUID) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.VISION.canonicalName(), "vision of " + title,
-            Field.WORKSTREAM_ID.canonicalName(), workstreamId.toString()))
+            Field.WORKSTREAM_ID.canonicalName(),
+            workstreams.require(scope, workstreamId).token))
             .get(Field.ID.canonicalName());
     }
 

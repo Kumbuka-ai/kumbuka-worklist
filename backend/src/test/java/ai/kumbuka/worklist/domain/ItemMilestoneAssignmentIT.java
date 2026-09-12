@@ -78,40 +78,45 @@ class ItemMilestoneAssignmentIT {
     void an_item_carries_a_milestone_of_its_scope_and_a_marker_is_a_valid_target() {
         UUID itemId = itemAt("the assignment case");
         UUID goalId = milestoneAt("a real goal", true);
+        Long goalNumber = numberOf(goalId);
 
         Map<String, Object> answer = items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), goalId.toString(),
+            Field.MILESTONE_ID.canonicalName(), goalNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
+        // The projection carries the milestone's NUMBER — the wire form
+        // fixed in Sprint 180.4 — and the write path takes the same.
         assertThat(answer.get(Field.MILESTONE_ID.canonicalName()))
-            .as("the identity stored is what the caller sent")
-            .isEqualTo(goalId);
+            .as("the milestone's number is what the projection now names")
+            .isEqualTo(goalNumber);
 
         // A second item, this time assigned to a marker — the three marker
         // rows are milestones in the table and positions on the axis, so
         // they are legitimate targets rather than exceptions.
         UUID secondItem = itemAt("the marker case");
         UUID markerId = markerAt();
+        Long markerNumber = numberOf(markerId);
         answer = items.update(scope, secondItem, Map.of(
-            Field.MILESTONE_ID.canonicalName(), markerId.toString(),
+            Field.MILESTONE_ID.canonicalName(), markerNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(secondItem)));
-        assertThat(answer.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(markerId);
+        assertThat(answer.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(markerNumber);
     }
 
     @Test
     void a_null_assignment_clears_the_milestone_and_a_no_op_leaves_the_token() {
         UUID itemId = itemAt("the null and no-op case");
         UUID goalId = milestoneAt("a north star", true);
+        Long goalNumber = numberOf(goalId);
 
         items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), goalId.toString(),
+            Field.MILESTONE_ID.canonicalName(), goalNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
         String settled = tokenOf(itemId);
 
-        // The same identity again is not a change. Nothing is written, the
+        // The same number again is not a change. Nothing is written, the
         // token stays where it is, and the honest round trip is admitted
         // rather than refused.
         items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), goalId.toString(),
+            Field.MILESTONE_ID.canonicalName(), goalNumber,
             Field.CONFLICT_TOKEN.canonicalName(), settled));
         assertThat(tokenOf(itemId))
             .as("a no-op assignment writes nothing")
@@ -138,19 +143,28 @@ class ItemMilestoneAssignmentIT {
         settings.create(otherScope, Map.of(
             "max_planned_iterations", 5, "warn_planned_iterations", 4,
             "max_memberships_per_iteration", 5, "warn_memberships_per_iteration", 4));
+        selectors.declare(otherScope, Selector.MILESTONE);
         UUID foreignMilestone = (UUID) milestones.create(otherScope, Map.of(
             Field.TITLE.canonicalName(), "another scope's goal",
             Field.VISION.canonicalName(), "elsewhere")).get(Field.ID.canonicalName());
+        Long foreignNumber = numberInOtherScope(otherScope, foreignMilestone);
 
+        // Foreign scope's milestone shares the number space of this scope
+        // only by accident: the number pointing to a row in `otherScope`
+        // does not name a row in `scope`, and the write path refuses on
+        // the same not-found path. What this case guards is that a caller
+        // cannot use a value that is only meaningful elsewhere to probe
+        // this scope's rows — and the number, unlike a uuid, is scope-
+        // relative, so no such probe exists at the wire level any more.
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), foreignMilestone.toString(),
+            Field.MILESTONE_ID.canonicalName(), foreignNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
 
         assertThat(refusal.reason())
-            .as("a milestone from another scope must be a typed refusal — an id that "
-                + "names something elsewhere is a mistake and not a missing row; "
-                + "letting it through as 'not found' would let another tenant's id "
-                + "become an existence probe")
+            .as("a milestone number that names nothing in this scope is a typed refusal — "
+                + "a value that resolves to nothing here is a call to plant the row "
+                + "first, and the answer says so instead of letting the write through "
+                + "and inventing a target")
             .isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
         assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
     }
@@ -158,10 +172,9 @@ class ItemMilestoneAssignmentIT {
     @Test
     void a_milestone_id_that_names_nothing_is_a_typed_refusal() {
         UUID itemId = itemAt("the absent-milestone case");
-        UUID nothing = UUID.randomUUID();
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), nothing.toString(),
+            Field.MILESTONE_ID.canonicalName(), 999_999L,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
@@ -172,11 +185,12 @@ class ItemMilestoneAssignmentIT {
     void a_closed_milestone_is_refused_because_nothing_is_working_towards_it() {
         UUID itemId = itemAt("the closed-milestone case");
         UUID goalId = milestoneAt("a soon-closed goal", true);
+        Long goalNumber = numberOf(goalId);
         String goalToken = (String) milestones.read(scope, goalId).get(Field.CONFLICT_TOKEN.canonicalName());
         milestones.close(scope, goalId, goalToken);
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), goalId.toString(),
+            Field.MILESTONE_ID.canonicalName(), goalNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
@@ -184,19 +198,26 @@ class ItemMilestoneAssignmentIT {
     }
 
     @Test
-    void a_milestone_value_that_is_not_a_uuid_is_refused_by_form() {
-        UUID itemId = itemAt("the not-a-uuid case");
+    void a_milestone_value_that_is_not_a_number_is_refused_by_form() {
+        UUID itemId = itemAt("the not-a-number case");
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "milestone/1",
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
 
         assertThat(refusal.reason())
-            .as("a value that is not a UUID is a form refusal — a name is a property "
-                + "the scope may rename at any moment, and only the identity can be "
-                + "written without moving under any caller who wrote it")
+            .as("a value that is not a number is a form refusal — the wire form fixed "
+                + "in Sprint 180.4 is the milestone number the scope allocated")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+
+        // A UUID is refused for the same reason: the platform's identity is
+        // no longer part of the wire form.
+        WorklistException uuidShape = refusalFrom(() -> items.update(scope, itemId, Map.of(
+            Field.MILESTONE_ID.canonicalName(), UUID.randomUUID().toString(),
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
+        assertThat(uuidShape.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(uuidShape.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
     }
 
     // ==================================================================
@@ -205,9 +226,21 @@ class ItemMilestoneAssignmentIT {
 
     private UUID itemAt(String title) {
         selectors.declare(scope, Selector.ITEM);
+        String openName = vocabulary.requireStatus(scope, openStatus).name;
         return (UUID) items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), openStatus.toString())).get(Field.ID.canonicalName());
+            Field.STATUS.canonicalName(), openName)).get(Field.ID.canonicalName());
+    }
+
+    private Long numberOf(UUID milestoneId) {
+        Object number = milestones.read(scope, milestoneId).get(Field.NUMBER.canonicalName());
+        return number == null ? null : ((Number) number).longValue();
+    }
+
+    private Long numberInOtherScope(UUID otherScope, UUID milestoneId) {
+        Object number = milestones.read(otherScope, milestoneId)
+            .get(Field.NUMBER.canonicalName());
+        return number == null ? null : ((Number) number).longValue();
     }
 
     private UUID milestoneAt(String title, boolean asGoal) {

@@ -2,6 +2,7 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ClaimRepository;
 import ai.kumbuka.worklist.repository.ItemRepository;
+import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -72,6 +73,7 @@ public class ClaimService {
 
     @Inject ClaimRepository claims;
     @Inject ItemRepository items;
+    @Inject ScopeAccessRepository scopeAccess;
 
     // ------------------------------------------------------------------
     // Writing — claim, release, claim_next
@@ -135,7 +137,7 @@ public class ClaimService {
 
         LOG.infof("claim taken on item %s in scope %s until %s",
             itemId, scopeId, claim.expiresAt);
-        return project(item, claim);
+        return project(item, claim, subject);
     }
 
     /**
@@ -154,7 +156,8 @@ public class ClaimService {
      * lease is over sooner than it would have been.
      */
     @Transactional
-    public Map<String, Object> release(UUID scopeId, UUID itemId, String receipt) {
+    public Map<String, Object> release(UUID scopeId, UUID itemId, String subject,
+            String receipt) {
         Item item = requireItem(scopeId, itemId);
         Claim claim = claims.lockByItem(itemId);
         if (claim == null || !claim.liveAt(Instant.now())) {
@@ -195,7 +198,7 @@ public class ClaimService {
         claims.flushAndRefresh(claim);
 
         LOG.infof("claim released on item %s in scope %s", itemId, scopeId);
-        return project(item, claim);
+        return project(item, claim, subject);
     }
 
     /**
@@ -269,7 +272,7 @@ public class ClaimService {
 
         LOG.infof("claim drawn and taken on item %s in scope %s until %s",
             item.id, scopeId, claim.expiresAt);
-        return project(item, claim);
+        return project(item, claim, subject);
     }
 
     // ------------------------------------------------------------------
@@ -290,16 +293,40 @@ public class ClaimService {
      * with no input path would be a canonical name whose settability check
      * nothing consults.
      */
-    private static Map<String, Object> project(Item item, Claim claim) {
+    private Map<String, Object> project(Item item, Claim claim, String callerSubject) {
         Map<String, Object> answer = new LinkedHashMap<>();
         answer.put(Field.ID.canonicalName(), item.id);
-        answer.put(Field.SCOPE.canonicalName(), item.scopeId);
+        answer.put(Field.SCOPE.canonicalName(), slugOf(item.scopeId));
         answer.put(Field.NUMBER.canonicalName(), item.number);
         answer.put(F_RECEIPT, claim.receipt);
-        answer.put(F_ACTOR, claim.actor);
+        answer.put(F_ACTOR, holderStateOf(claim, callerSubject));
         answer.put(F_GRANTED_AT, claim.grantedAt);
         answer.put(F_EXPIRES_AT, claim.expiresAt);
         return answer;
+    }
+
+    /**
+     * The holder state a caller reads out of {@code actor}. Three states —
+     * {@code nobody}/{@code self}/{@code other} — the platform's standing
+     * refusal to name a person behind a claim. A lapsed lease reads as
+     * {@code nobody}, matching the derived meaning of "not held".
+     */
+    private static HolderState holderStateOf(Claim claim, String callerSubject) {
+        if (claim == null || !claim.liveAt(Instant.now())) {
+            return HolderState.NOBODY;
+        }
+        return HolderState.of(claim.actor, callerSubject);
+    }
+
+    /** The slug of a scope, or the scope's id when the access row is absent. */
+    private String slugOf(UUID scopeId) {
+        try {
+            return scopeAccess.findByScopeId(scopeId)
+                .map(ScopeAccessRepository.ScopeAccessRow::slug)
+                .orElse(String.valueOf(scopeId));
+        } catch (RuntimeException notReadable) {
+            return String.valueOf(scopeId);
+        }
     }
 
     /** The lease's own projection keys. See {@link #project} on why they are here. */

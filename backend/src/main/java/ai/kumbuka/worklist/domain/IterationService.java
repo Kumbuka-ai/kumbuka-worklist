@@ -1,5 +1,7 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.ItemRepository;
+import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -56,6 +58,8 @@ public class IterationService extends PlanningService {
      * the three that read one.
      */
     @Inject SelectorRegistry selectors;
+    @Inject ScopeAccessRepository scopeAccess;
+    @Inject ItemRepository itemRepo;
 
     /** What the cardinality refusal and its warning call the thing being counted. */
     private static final String OPEN_ITERATIONS = "the number of open iterations in this scope";
@@ -355,12 +359,21 @@ public class IterationService extends PlanningService {
      * <p>Positions are dense and rewritten as a whole. The rows carry no
      * token of their own, so this whole rewrite presents the iteration's one
      * token — which is the aggregate rule doing its work.
+     *
+     * <p>The wire form of the order is a list of canonical item addresses
+     * ({@code worklist://<scope>/item/<number>}) — the same form
+     * {@link #order(Iteration, String)} answers with. A uuid in the sequence
+     * is a form refusal named on the field: the platform's identity is not
+     * something the reader sees back any more.
      */
     private boolean applyOrder(Iteration iteration, Object value) {
         List<IterationMembership> living = planning.membershipsOf(iteration.id);
         List<String> wanted = ItemFields.tokensInOrder(Field.ORDER, value);
 
-        List<String> held = living.stream().map(m -> String.valueOf(m.itemId)).toList();
+        String scopeSlug = slugOf(iteration.scopeId);
+        List<String> held = living.stream()
+            .map(m -> itemAddressOf(scopeSlug, m.itemId))
+            .toList();
         if (!wanted.containsAll(held) || !held.containsAll(wanted)) {
             List<String> difference = new ArrayList<>(wanted);
             difference.removeAll(held);
@@ -368,15 +381,16 @@ public class IterationService extends PlanningService {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_UNKNOWN,
                 "an order names exactly the items that ARE members of this iteration, "
-                    + "each once. These are named on one side only: " + difference
-                    + ". Reordering does not plan an item in and does not unplan one "
-                    + "out; those are `plan` and `unplan`, and they say what they do",
+                    + "each once, as their canonical addresses. These are named on one "
+                    + "side only: " + difference + ". Reordering does not plan an item "
+                    + "in and does not unplan one out; those are `plan` and `unplan`, "
+                    + "and they say what they do",
                 difference);
         }
 
         boolean changed = false;
         for (int position = 0; position < wanted.size(); position++) {
-            changed |= moveTo(living, wanted.get(position), position);
+            changed |= moveTo(living, scopeSlug, wanted.get(position), position);
         }
         if (changed) {
             planning.flush();
@@ -384,10 +398,14 @@ public class IterationService extends PlanningService {
         return changed;
     }
 
-    private static boolean moveTo(List<IterationMembership> living, String itemId,
-            int position) {
+    private String moveToAddress(String scopeSlug, IterationMembership membership) {
+        return itemAddressOf(scopeSlug, membership.itemId);
+    }
+
+    private boolean moveTo(List<IterationMembership> living, String scopeSlug,
+            String targetAddress, int position) {
         for (IterationMembership membership : living) {
-            if (String.valueOf(membership.itemId).equals(itemId)
+            if (targetAddress.equals(moveToAddress(scopeSlug, membership))
                     && membership.position != position) {
                 membership.position = position;
                 return true;
@@ -465,14 +483,15 @@ public class IterationService extends PlanningService {
      * by the reads AND by the comparison the writes make.
      */
     private Map<String, Object> project(Iteration iteration, List<String> warnings) {
+        String scopeSlug = slugOf(iteration.scopeId);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), iteration.id);
-        fields.put(Field.SCOPE.canonicalName(), iteration.scopeId);
+        fields.put(Field.SCOPE.canonicalName(), scopeSlug);
         fields.put(Field.NUMBER.canonicalName(), iteration.number);
         fields.put(Field.MOTTO.canonicalName(), iteration.motto);
         fields.put(Field.DESCRIPTION.canonicalName(), iteration.description);
         fields.put(Field.RANK.canonicalName(), iteration.rank);
-        fields.put(Field.ORDER.canonicalName(), order(iteration));
+        fields.put(Field.ORDER.canonicalName(), order(iteration, scopeSlug));
         fields.put(Field.CLOSED_AT.canonicalName(), iteration.closedAt);
         fields.put(Field.CREATED_AT.canonicalName(), iteration.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), iteration.updatedAt);
@@ -481,10 +500,45 @@ public class IterationService extends PlanningService {
         return fields;
     }
 
-    /** The membership sequence, as the item identities in their order. */
-    private List<UUID> order(Iteration iteration) {
+    /**
+     * The membership sequence, as canonical item addresses in their order —
+     * {@code worklist://<slug>/item/<number>} for each member.
+     */
+    private List<String> order(Iteration iteration, String scopeSlug) {
+        String slug = scopeSlug == null ? String.valueOf(iteration.scopeId) : scopeSlug;
         return planning.membershipsOf(iteration.id).stream()
-            .map(membership -> membership.itemId)
+            .map(membership -> itemAddressOf(slug, membership.itemId))
             .toList();
+    }
+
+    /**
+     * The slug of a scope, from the platform's read contract, or the scope's
+     * id as a slug when the access row is absent. See {@code ItemService.slugOf}
+     * for the reasoning — the read and write halves of a round trip have to
+     * agree on which string names the scope in the address.
+     */
+    private String slugOf(UUID scopeId) {
+        try {
+            return scopeAccess.findByScopeId(scopeId)
+                .map(ScopeAccessRepository.ScopeAccessRow::slug)
+                .orElse(String.valueOf(scopeId));
+        } catch (RuntimeException notReadable) {
+            return String.valueOf(scopeId);
+        }
+    }
+
+    /**
+     * The canonical address of an item as {@code worklist://<slug>/item/<number>},
+     * or null when either half is unavailable.
+     */
+    private String itemAddressOf(String scopeSlug, UUID itemId) {
+        if (itemId == null || scopeSlug == null) {
+            return null;
+        }
+        Item target = itemRepo.byId(itemId);
+        if (target == null || target.number == null) {
+            return null;
+        }
+        return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + target.number;
     }
 }

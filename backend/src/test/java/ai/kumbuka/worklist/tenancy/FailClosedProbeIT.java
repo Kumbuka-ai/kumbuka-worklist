@@ -239,8 +239,7 @@ class FailClosedProbeIT {
      * test.
      */
     private String status() {
-        return String.valueOf(
-            vocabulary.declareStatus(SCOPE, "open", 1, true, false, false, false).id);
+        return vocabulary.declareStatus(SCOPE, "open", 1, true, false, false, false).name;
     }
 
     private String titleA() {

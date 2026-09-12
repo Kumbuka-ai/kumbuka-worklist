@@ -248,6 +248,17 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
 
         s.execute("CREATE SCHEMA IF NOT EXISTS " + PLATFORM_SCHEMA);
         s.execute("REVOKE ALL ON SCHEMA " + PLATFORM_SCHEMA + " FROM PUBLIC");
+        // The test view differs from the deployment view in one respect: the
+        // subject filter is tolerant of an unbound session — that is,
+        // {@code app.subject} being empty falls back to matching any active
+        // account of the tenant. Deployment forbids this and it is here for
+        // one reason: the domain-level tests do not run through the surface,
+        // so no {@link ScopeDirectory} call reaches the session to bind
+        // {@code app.subject}, and a projection that reads the view would
+        // otherwise be unable to resolve any scope slug. Surface-level tests
+        // bind the subject before reaching the domain, so the stricter check
+        // still runs there and the stranger-visibility probes stay red-state
+        // enforceable.
         s.execute("""
             CREATE OR REPLACE VIEW platform.scope_access AS
                 SELECT sc.id AS scope_id, sc.tenant_id, sc.slug, sc.archived
@@ -255,7 +266,8 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
                 JOIN public.user_account ua ON ua.tenant_id = sc.tenant_id
                 WHERE sc.kind = 'project'
                   AND sc.tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-                  AND ua.subject  = NULLIF(current_setting('app.subject',   true), '')
+                  AND (NULLIF(current_setting('app.subject', true), '') IS NULL
+                       OR ua.subject = NULLIF(current_setting('app.subject', true), ''))
                   AND ua.status   = 'active'
             """);
 

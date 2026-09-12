@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * The verbs, once.
@@ -94,6 +95,19 @@ public class VerbSurface {
      * a log line carrying content walks around it by a different road.
      */
     private static final Logger LOG = Logger.getLogger(VerbSurface.class);
+
+    /**
+     * A string that looks like a uuid.
+     *
+     * <p>Sprint 180.4 fixes the wire form of the four caller-facing declared
+     * values — status, milestone, workstream and relation-type — to names,
+     * numbers, tokens and names respectively. A uuid on any of those fields
+     * is a caller writing the platform's own identity and is a form refusal;
+     * the check runs at the surface for the arguments this class parses
+     * itself, before the domain sees them.
+     */
+    private static final Pattern UUID_SHAPE = Pattern.compile(
+        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     @Inject ItemService items;
     @Inject IterationService iterations;
@@ -343,7 +357,7 @@ public class VerbSurface {
         UUID id = resolve(in, target);
 
         Result result = at(target, items.withdraw(in.scopeId(), id,
-            statusOf(required(body).status()), requireToken(conflictToken)));
+            requireStatusName(required(body).status()), requireToken(conflictToken)));
         LOG.infof("withdraw %s in scope %s", target.id(), in.scopeId());
         return result;
     }
@@ -542,7 +556,7 @@ public class VerbSurface {
         UUID id = resolve(in, target);
 
         String receipt = required(body).receipt();
-        Map<String, Object> answered = claims.release(in.scopeId(), id, receipt);
+        Map<String, Object> answered = claims.release(in.scopeId(), id, subject, receipt);
         LOG.infof("release on %s in scope %s", target.id(), in.scopeId());
         return at(target, answered);
     }
@@ -602,10 +616,11 @@ public class VerbSurface {
         UUID from = resolve(in, target);
 
         VerbInput.Edge edge = required(body);
-        UUID toItemId = uuidOf("to_item", edge.toItem());
-        UUID typeId = uuidOf("type", edge.type());
+        String typeName = requireLabel("type", edge.type(), "a relation type's display name");
+        String toAddress = requireLabel("to_item", edge.toItem(),
+            "the other item's canonical address worklist://<scope>/item/<number>");
 
-        Map<String, Object> answered = items.relate(in.scopeId(), from, toItemId, typeId,
+        Map<String, Object> answered = items.relate(in.scopeId(), from, toAddress, typeName,
             requireToken(conflictToken));
         LOG.infof("relate on %s in scope %s", target.id(), in.scopeId());
         return at(target, answered);
@@ -620,10 +635,11 @@ public class VerbSurface {
         UUID from = resolve(in, target);
 
         VerbInput.Edge edge = required(body);
-        UUID toItemId = uuidOf("to_item", edge.toItem());
-        UUID typeId = uuidOf("type", edge.type());
+        String typeName = requireLabel("type", edge.type(), "a relation type's display name");
+        String toAddress = requireLabel("to_item", edge.toItem(),
+            "the other item's canonical address worklist://<scope>/item/<number>");
 
-        Map<String, Object> answered = items.unrelate(in.scopeId(), from, toItemId, typeId,
+        Map<String, Object> answered = items.unrelate(in.scopeId(), from, toAddress, typeName,
             requireToken(conflictToken));
         LOG.infof("unrelate on %s in scope %s", target.id(), in.scopeId());
         return at(target, answered);
@@ -828,17 +844,27 @@ public class VerbSurface {
         return presented;
     }
 
-    private static UUID statusOf(String raw) {
-        try {
-            return UUID.fromString(raw);
-        } catch (IllegalArgumentException | NullPointerException e) {
+    /**
+     * The status name a withdrawal moves the item into.
+     *
+     * <p>Sprint 180.4: the wire form of a status is the display name the
+     * scope declared it under, and a uuid is refused as malformed here
+     * rather than passed on to the domain — the surface converts the wire
+     * shape to what the domain reads, and this is that conversion.
+     */
+    private static String requireStatusName(String raw) {
+        if (raw == null || raw.isBlank()) {
             throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "a withdrawal names the status it moves the item into, by identity and not "
-                    + "by display name: '" + raw + "' is not one. A declared value's name "
-                    + "is a display property and may be changed at will, so a caller "
-                    + "writing one would be writing something that is allowed to move "
-                    + "under it.");
+                "a withdrawal names the status it moves the item into. No value arrived.");
         }
+        String candidate = raw.strip();
+        if (UUID_SHAPE.matcher(candidate).matches()) {
+            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
+                "a withdrawal names the status it moves the item into by its declared "
+                    + "display name, not by the platform's identity. Refused: '" + candidate
+                    + "'.");
+        }
+        return candidate;
     }
 
     private static <T> T required(T body) {
@@ -864,27 +890,27 @@ public class VerbSurface {
     }
 
     /**
-     * A UUID argument, refused where it does not parse.
+     * A label-shaped argument (a name, a token, an address), refused when it
+     * did not arrive or when it renders as a uuid.
      *
-     * <p>Named here rather than in the domain because the domain never sees a
-     * string — the surface converts on the way in, so a caller sending
-     * something that is not a uuid is told which of their arguments it was
-     * rather than being told a hash lookup did not find a row.
+     * <p>Sprint 180.4: the wire form of every declared value is what the
+     * reader saw — a name, a number, a token — and the platform's identity
+     * is not something a caller reads back any more. A uuid on any of these
+     * arguments is a form refusal that names the argument and what it takes
+     * instead.
      */
-    private static UUID uuidOf(String name, String raw) {
+    private static String requireLabel(String name, String raw, String expectedForm) {
         if (raw == null || raw.isBlank()) {
             throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
                 "the argument '" + name + "' is required and did not arrive.");
         }
-        try {
-            return UUID.fromString(raw);
-        } catch (IllegalArgumentException notAnId) {
+        String candidate = raw.strip();
+        if (UUID_SHAPE.matcher(candidate).matches()) {
             throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the argument '" + name + "' is a declared identity and reads as a uuid: '"
-                    + raw + "' is not one. A declared value's display name is a property "
-                    + "that may be changed at will, so a caller writing one would be "
-                    + "writing something that is allowed to move under it.");
+                "the argument '" + name + "' takes " + expectedForm + ", not the "
+                    + "platform's own identity. A uuid arrived: '" + candidate + "'.");
         }
+        return candidate;
     }
 
     /**

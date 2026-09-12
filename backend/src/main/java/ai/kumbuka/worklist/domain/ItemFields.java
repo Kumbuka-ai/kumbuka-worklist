@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Turning a caller's values into the shape the store compares and stores, and
@@ -47,6 +48,52 @@ final class ItemFields {
     static final String TYPE = "type";
     /** The key of a relation entry's other end, as its identity. */
     static final String ITEM = "item";
+
+    /**
+     * A string that looks like a UUID.
+     *
+     * <p>Sprint 180.4 fixes the wire form of the four caller-facing declared
+     * values — status, milestone, workstream and relation-type — to a NAME, a
+     * NUMBER, a TOKEN, and a NAME respectively. A UUID in any of those fields
+     * is a caller writing the platform's own identity, which is not something
+     * that ever appears in a read answer any more; refusing it here as a form
+     * error names the field and the shape that was expected, rather than
+     * cascading into an undeclared-value refusal that reads as "the row is
+     * missing" when the real problem is the shape of the argument.
+     */
+    static final Pattern UUID_SHAPE = Pattern.compile(
+        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
+    /** Whether the rendered form of a value looks like a UUID. */
+    static boolean looksLikeUuid(Object raw) {
+        if (raw == null) {
+            return false;
+        }
+        return UUID_SHAPE.matcher(String.valueOf(raw)).matches();
+    }
+
+    /**
+     * Refuse a caller value that renders as a UUID on a field that names its
+     * value differently now.
+     *
+     * @param field         the field the value arrived on
+     * @param value         the value, already normalised to text
+     * @param expectedForm  what the field takes on the wire, in prose
+     *                      ("a status name", "a milestone number", "a
+     *                      workstream token", "a relation type name")
+     */
+    static void refuseUuidShape(Field field, Object value, String expectedForm) {
+        if (!looksLikeUuid(value)) {
+            return;
+        }
+        throw new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            field.canonicalName() + " takes " + expectedForm + ", not the platform's own "
+                + "identity. A uuid arrived: '" + value + "'. Declared values travel on the "
+                + "wire by their name (or number, or token), because a caller writing an "
+                + "identity would be writing something the reader never sees back",
+            List.of(field.canonicalName()));
+    }
 
     private ItemFields() {
     }
@@ -156,28 +203,42 @@ final class ItemFields {
     }
 
     /**
-     * The relation set as entries: the declared type and the other end, both
-     * as identities, sorted and distinct.
+     * The relation set as entries: the declared type as its display NAME, the
+     * other end as its canonical ADDRESS, both carried unchanged, sorted and
+     * distinct.
      *
      * <p>Sorted because it is a set and its order carries nothing. Without
      * that, a caller re-sending a read answer would present the same edges in
      * another order and the comparison would report a change nobody made.
+     *
+     * <p><strong>Neither the type nor the item is resolved here.</strong> The
+     * lookup — name to relation-type row, address to item row — needs the
+     * scope, which this class does not have. The domain resolves each entry
+     * as it applies the set, and this method only turns the caller's value
+     * into the shape the domain reads: two strings per entry, in a stable
+     * order.
      */
     static List<Map<String, Object>> relations(Object raw) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Object element : elements(Field.RELATIONS, raw)) {
             Map<?, ?> entry = entry(Field.RELATIONS, element);
-            UUID type = id(Field.RELATIONS, entry.get(TYPE));
-            UUID item = id(Field.RELATIONS, entry.get(ITEM));
+            String type = text(Field.RELATIONS, entry.get(TYPE));
+            String item = text(Field.RELATIONS, entry.get(ITEM));
             if (type == null || item == null) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
-                    "a relation entry carries a `" + TYPE + "` and an `" + ITEM + "`, "
-                        + "both as identities. A relation without a type is the "
-                        + "predecessor's untyped edge, and every machine reader of one "
+                    "a relation entry carries a `" + TYPE + "` and an `" + ITEM + "`. "
+                        + "The type is the display name a scope declared it under and the "
+                        + "item is the other end's canonical address "
+                        + "(worklist://<scope>/item/<number>). A relation without a type is "
+                        + "the predecessor's untyped edge, and every machine reader of one "
                         + "has to guess whether it blocks",
                     List.of(Field.RELATIONS.canonicalName()));
             }
+            refuseUuidShape(Field.RELATIONS, type,
+                "a relation type's display name");
+            refuseUuidShape(Field.RELATIONS, item,
+                "the other item's canonical address worklist://<scope>/item/<number>");
             Map<String, Object> normalised = new LinkedHashMap<>();
             normalised.put(TYPE, type);
             normalised.put(ITEM, item);

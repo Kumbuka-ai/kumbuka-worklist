@@ -81,6 +81,16 @@ public class VocabularyRegistry {
                 List.of(name));
         }
 
+        // Idempotent, like the selector and attribute declarations: a caller
+        // stating "this status exists" gets back the row that does, whichever
+        // side of the retry line the first success fell on. Sprint 180.4 also
+        // makes the name the wire form for the write path, and a duplicate
+        // declaration would produce two rows the lookup cannot distinguish.
+        ItemStatus existing = vocabulary.statusByName(scopeId, name.trim());
+        if (existing != null) {
+            return existing;
+        }
+
         ItemStatus status = new ItemStatus();
         status.scopeId = scopeId;
         status.name = name.trim();
@@ -121,6 +131,31 @@ public class VocabularyRegistry {
                 List.of(String.valueOf(statusId)));
         }
         return status;
+    }
+
+    /**
+     * The declared status of that identity, or null.
+     *
+     * <p>The scope-less counterpart of {@link #requireStatus} — a projection
+     * that reads an item's status to name it back does not need the refusal,
+     * and the same pattern the two other declared-value lookups follow.
+     */
+    @Transactional
+    public ItemStatus statusById(UUID statusId) {
+        return statusId == null ? null : vocabulary.statusById(statusId);
+    }
+
+    /**
+     * The declared status a scope carries under that display name, or null.
+     *
+     * <p>The reverse of {@link #statusById}, exposed for the write path. The
+     * wire form of a status is the display name — a caller writing an item
+     * says "status: open", and this method turns that back into the identity
+     * the row stores.
+     */
+    @Transactional
+    public ItemStatus statusByName(UUID scopeId, String name) {
+        return vocabulary.statusByName(scopeId, name);
     }
 
     /**
@@ -315,6 +350,14 @@ public class VocabularyRegistry {
             int rank) {
         requireName(name, "a relation type");
 
+        // Idempotent for the same reason declareStatus is: the name is the
+        // wire form of a relation entry, and a second row under the same name
+        // would make the lookup ambiguous.
+        RelationType existing = vocabulary.relationTypeByName(scopeId, name.trim());
+        if (existing != null) {
+            return existing;
+        }
+
         RelationType type = new RelationType();
         type.scopeId = scopeId;
         type.name = name.trim();
@@ -358,6 +401,18 @@ public class VocabularyRegistry {
     @Transactional
     public RelationType relationTypeById(UUID typeId) {
         return typeId == null ? null : vocabulary.relationTypeById(typeId);
+    }
+
+    /**
+     * The relation type a scope carries under that display name, or null.
+     *
+     * <p>The reverse of {@link #relationTypeById}, exposed for the write
+     * path — the wire form of a relation type is the display name and this
+     * turns it back into the identity the edge stores.
+     */
+    @Transactional
+    public RelationType relationTypeByName(UUID scopeId, String name) {
+        return vocabulary.relationTypeByName(scopeId, name);
     }
 
     /** Withdraw a relation type. The edges carrying it stay readable. */

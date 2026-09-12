@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
+import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -54,6 +55,7 @@ public class MembershipService extends PlanningService {
 
     @Inject ItemRepository items;
     @Inject VocabularyRegistry vocabulary;
+    @Inject ScopeAccessRepository scopeAccess;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -376,12 +378,12 @@ public class MembershipService extends PlanningService {
      * reads a membership, changes its status and sends the map back, and what
      * travels with it is the token of the thing that owns the write.
      */
-    private static Map<String, Object> project(Iteration iteration,
+    private Map<String, Object> project(Iteration iteration,
             IterationMembership membership, List<String> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), membership.itemId);
-        fields.put(Field.SCOPE.canonicalName(), membership.scopeId);
-        fields.put(Field.ITERATION_ID.canonicalName(), membership.iterationId);
+        fields.put(Field.SCOPE.canonicalName(), slugOf(membership.scopeId));
+        fields.put(Field.ITERATION_ID.canonicalName(), iteration.number);
         fields.put(Field.ITEM_ID.canonicalName(), membership.itemId);
         fields.put(Field.POSITION.canonicalName(), membership.position);
         fields.put(Field.MEMBERSHIP_STATUS.canonicalName(), membership.status);
@@ -390,5 +392,16 @@ public class MembershipService extends PlanningService {
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken);
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
+    }
+
+    /** The slug of a scope, or the scope's id when the access row is absent. */
+    private String slugOf(UUID scopeId) {
+        try {
+            return scopeAccess.findByScopeId(scopeId)
+                .map(ScopeAccessRepository.ScopeAccessRow::slug)
+                .orElse(String.valueOf(scopeId));
+        } catch (RuntimeException notReadable) {
+            return String.valueOf(scopeId);
+        }
     }
 }

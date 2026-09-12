@@ -1,5 +1,7 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.ScopeAccessRepository;
+import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -56,6 +58,8 @@ public class MilestoneService extends PlanningService {
      */
     @Inject SelectorRegistry selectors;
     @Inject WorkstreamService workstreams;
+    @Inject WorkstreamRepository workstreamRepository;
+    @Inject ScopeAccessRepository scopeAccess;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -217,26 +221,24 @@ public class MilestoneService extends PlanningService {
     /**
      * Resolve a workstream at milestone-create time.
      *
-     * <p>Named → require + refuse-withdrawn. Absent → the scope's default.
-     * The check runs before number allocation because the milestone
-     * counter is per-workstream — the allocator needs to know which
-     * counter to advance.
+     * <p>Named by TOKEN → look up + refuse-withdrawn. Absent → the scope's
+     * default. A uuid is a form refusal: the wire form of the field is the
+     * token the scope declared, which is what the read answer names.
      */
     private Workstream resolveWorkstream(UUID scopeId, Object value) {
-        if (value == null) {
+        String token = ItemFields.text(Field.WORKSTREAM_ID, value);
+        if (token == null) {
             return workstreams.requireDefault(scopeId);
         }
-        UUID workstreamId;
-        try {
-            workstreamId = UUID.fromString(String.valueOf(value));
-        } catch (IllegalArgumentException notAnId) {
+        ItemFields.refuseUuidShape(Field.WORKSTREAM_ID, token, "a workstream token");
+        Workstream workstream = workstreamRepository.findByToken(scopeId, token);
+        if (workstream == null) {
             throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "the workstream is named by its identity, not by its token. Refused: "
-                    + value,
+                WorklistException.Reason.WORKSTREAM_UNKNOWN,
+                "no workstream '" + token + "' in scope " + scopeId + ". The value "
+                    + "travels as the token the scope declared it under",
                 List.of(Field.WORKSTREAM_ID.canonicalName()));
         }
-        Workstream workstream = workstreams.require(scopeId, workstreamId);
         workstreams.refuseWithdrawn(workstream);
         return workstream;
     }
@@ -285,13 +287,26 @@ public class MilestoneService extends PlanningService {
                 // retracted (TAR-0002 section 4, REQ-0148 obsolete), and
                 // the milestone's number space returned to scope-wide.
                 // The column `milestone.workstream_id` stays for one image
-                // cycle but carries no invariant; an update is accepted
-                // (or echoed) and no cross-workstream refuse-* fires.
-                UUID given = ItemFields.id(field, value);
-                if (ItemFields.unchangedAsText(held, given)) {
+                // cycle but carries no invariant; the wire form is the
+                // token the scope declared, and a uuid is a form refusal.
+                String token = ItemFields.text(field, value);
+                if (ItemFields.unchangedAsText(held, token)) {
                     return false;
                 }
-                return moved(held, given, () -> milestone.workstreamId = given);
+                if (token == null) {
+                    return moved(held, null, () -> milestone.workstreamId = null);
+                }
+                ItemFields.refuseUuidShape(field, token, "a workstream token");
+                Workstream workstream = workstreamRepository.findByToken(
+                    milestone.scopeId, token);
+                if (workstream == null) {
+                    throw new WorklistException(
+                        WorklistException.Reason.WORKSTREAM_UNKNOWN,
+                        "no workstream '" + token + "' in scope " + milestone.scopeId,
+                        List.of(field.canonicalName()));
+                }
+                return moved(held, token,
+                    () -> milestone.workstreamId = workstream.id);
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable on a milestone and has no application");
@@ -388,11 +403,11 @@ public class MilestoneService extends PlanningService {
      * could disagree, and a write would report a change where a reader saw
      * none.
      */
-    private static Map<String, Object> project(Milestone milestone,
+    private Map<String, Object> project(Milestone milestone,
             List<String> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), milestone.id);
-        fields.put(Field.SCOPE.canonicalName(), milestone.scopeId);
+        fields.put(Field.SCOPE.canonicalName(), slugOf(milestone.scopeId));
         fields.put(Field.NUMBER.canonicalName(), milestone.number);
         fields.put(Field.TITLE.canonicalName(), milestone.title);
         fields.put(Field.KIND.canonicalName(), milestone.kind);
@@ -400,11 +415,35 @@ public class MilestoneService extends PlanningService {
         fields.put(Field.VISION.canonicalName(), milestone.vision);
         fields.put(Field.MISSION.canonicalName(), milestone.mission);
         fields.put(Field.RANK.canonicalName(), milestone.rank);
-        fields.put(Field.WORKSTREAM_ID.canonicalName(), milestone.workstreamId);
+        fields.put(Field.WORKSTREAM_ID.canonicalName(),
+            workstreamTokenOf(milestone.scopeId, milestone.workstreamId));
         fields.put(Field.CREATED_AT.canonicalName(), milestone.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), milestone.updatedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), milestone.conflictToken);
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
+    }
+
+    /** The slug of a scope, or the scope's id when the access row is absent. */
+    private String slugOf(UUID scopeId) {
+        try {
+            return scopeAccess.findByScopeId(scopeId)
+                .map(ScopeAccessRepository.ScopeAccessRow::slug)
+                .orElse(String.valueOf(scopeId));
+        } catch (RuntimeException notReadable) {
+            return String.valueOf(scopeId);
+        }
+    }
+
+    /** The token of a workstream in a scope, or null. */
+    private String workstreamTokenOf(UUID scopeId, UUID workstreamId) {
+        if (workstreamId == null) {
+            return null;
+        }
+        try {
+            return workstreams.require(scopeId, workstreamId).token;
+        } catch (WorklistException absent) {
+            return null;
+        }
     }
 }
