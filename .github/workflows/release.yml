@@ -52,13 +52,82 @@ jobs:
         run: mvn -B -ntp verify
 
   # -------------------------------------------------------------------------
-  # The image: ghcr.io/<owner>/kumbuka-worklist:{tag, version, latest}
+  # The library jar: ai.kumbuka:kumbuka-worklist:<version> → GitHub Packages.
   #
-  # No Maven publish. The memory engine this service is modelled on publishes
-  # its jars because a commercial edition consumes them as a library; nothing
-  # consumes this service as a library, and the services share no code by
-  # design. Publishing a jar nobody imports would invite exactly the coupling
-  # the architecture rules out.
+  # The note that stood here said there was no Maven publish, because nothing
+  # consumed this service as a library and a jar nobody imports would invite
+  # the coupling the architecture rules out. The edition seam per service
+  # (DEC-0038) overtakes that reasoning: worklist-ee is not a fork of this
+  # core — it declares a dependency on exactly this artifact and composes its
+  # enterprise modules on top of it. One named consumer inside the same
+  # product is not the open-ended coupling the old note guarded against, and
+  # nothing here becomes a frozen interface by being published.
+  #
+  # This is in addition to the image, not instead of it: the image below is
+  # unchanged and remains the deployed unit.
+  # -------------------------------------------------------------------------
+  maven-publish:
+    name: maven · deploy the library jar to GitHub Packages
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          # setup-java writes a settings.xml that authenticates the `github`
+          # server — the id distributionManagement names — with the
+          # GITHUB_TOKEN. No secrets indirection needed.
+          server-id: github
+          server-username: GITHUB_ACTOR_FOR_MAVEN
+          server-password: GITHUB_TOKEN_FOR_MAVEN
+
+      - id: meta
+        name: derive version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          REF="${GITHUB_REF#refs/tags/}"
+          if [ -z "$REF" ] || [ "$REF" = "$GITHUB_REF" ]; then
+            REF="$INPUT_TAG"
+          fi
+          if [ -z "$REF" ]; then
+            echo "no tag: this workflow releases from a tag and has nothing to publish" >&2
+            exit 1
+          fi
+          echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
+
+      # The POM carries a -SNAPSHOT version so a local build is never mistaken
+      # for a release. The coordinate a consumer pins is the tag, so the tag's
+      # version is stamped over it here.
+      - name: Set the version to the release version
+        working-directory: backend
+        run: |
+          mvn -B -ntp versions:set \
+              -DnewVersion=${{ steps.meta.outputs.version }} \
+              -DgenerateBackupPoms=false
+
+      - name: Deploy to GitHub Packages
+        working-directory: backend
+        env:
+          GITHUB_ACTOR_FOR_MAVEN: ${{ github.actor }}
+          GITHUB_TOKEN_FOR_MAVEN: ${{ secrets.GITHUB_TOKEN }}
+        # -Dquarkus.build.skip=true keeps the publish a plain library jar: the
+        # consumer composes it into its own Quarkus build and does not want
+        # this module's build-time augmentation baked in. -DskipTests is not a
+        # gap — `verify` above ran the suite on this very tree, and this job
+        # does not start until it passed.
+        run: mvn -B -ntp -DskipTests -Dquarkus.build.skip=true deploy
+
+  # -------------------------------------------------------------------------
+  # The image: ghcr.io/<owner>/kumbuka-worklist:{tag, version, latest}
   # -------------------------------------------------------------------------
   image:
     name: image · build & push
