@@ -9,9 +9,12 @@
 
         DELIBERATELY ONE MODULE. The memory engine this service is modelled
         on splits into `spi` + `server` because it publishes frozen tenancy
-        interfaces to a commercial edition. This service publishes nothing
-        and has no Keycloak extension, so a second module would carry no
-        contract and only cost a reactor.
+        interfaces to a commercial edition. This service publishes one jar
+        with no frozen interface surface and has no Keycloak extension, so a
+        second module would carry no contract and only cost a reactor. The jar
+        exists for worklist-ee, which composes its enterprise modules on top
+        of this core instead of forking it (DEC-0038); that makes it a named
+        consumer, not a contract — nothing here is frozen for it.
 
         DELIBERATELY NO DEPENDENCY ON A SIBLING SERVICE. The dispatch service
         is built from the same substrate template and shares no code with this
@@ -322,4 +325,28 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        Where the library jar goes. The release workflow deploys here beside the
+        image push; worklist-ee pins ai.kumbuka:kumbuka-worklist at a released
+        version and resolves it from this repository (DEC-0038).
+
+        The `github` id is what actions/setup-java authenticates with the
+        workflow GITHUB_TOKEN, so no secret is named here. Both entries carry
+        the same URL — GitHub Packages serves releases and snapshots from one
+        repository — and the release workflow stamps the tag's version over the
+        -SNAPSHOT above before deploying, so what a consumer pins is the tag.
+    -->
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages — Kumbuka-ai/kumbuka-worklist</name>
+            <url>https://maven.pkg.github.com/Kumbuka-ai/kumbuka-worklist</url>
+        </repository>
+        <snapshotRepository>
+            <id>github</id>
+            <name>GitHub Packages — Kumbuka-ai/kumbuka-worklist</name>
+            <url>https://maven.pkg.github.com/Kumbuka-ai/kumbuka-worklist</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>
