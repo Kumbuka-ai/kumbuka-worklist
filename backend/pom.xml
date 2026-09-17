@@ -12,7 +12,7 @@
         interfaces to a commercial edition. This service publishes one jar
         with no frozen interface surface and has no Keycloak extension, so a
         second module would carry no contract and only cost a reactor. The jar
-        exists for worklist-ee, which composes its enterprise modules on top
+        exists for ee-worklist, which composes its enterprise modules on top
         of this core instead of forking it (DEC-0038); that makes it a named
         consumer, not a contract — nothing here is frozen for it.
 
@@ -328,7 +328,7 @@
 
     <!--
         Where the library jar goes. The release workflow deploys here beside the
-        image push; worklist-ee pins ai.kumbuka:kumbuka-worklist at a released
+        image push; ee-worklist pins ai.kumbuka:kumbuka-worklist at a released
         version and resolves it from this repository (DEC-0038).
 
         The `github` id is what actions/setup-java authenticates with the

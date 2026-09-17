@@ -57,7 +57,7 @@ jobs:
   # The note that stood here said there was no Maven publish, because nothing
   # consumed this service as a library and a jar nobody imports would invite
   # the coupling the architecture rules out. The edition seam per service
-  # (DEC-0038) overtakes that reasoning: worklist-ee is not a fork of this
+  # (DEC-0038) overtakes that reasoning: ee-worklist is not a fork of this
   # core — it declares a dependency on exactly this artifact and composes its
   # enterprise modules on top of it. One named consumer inside the same
   # product is not the open-ended coupling the old note guarded against, and
