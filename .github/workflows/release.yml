@@ -186,11 +186,17 @@ jobs:
 
   # -------------------------------------------------------------------------
   # The GitHub release, last — so a release never points at an image that was
-  # not pushed.
+  # not pushed, and never at a library jar that was not published. It waits on
+  # both: a release left behind by a failed deploy promises an artifact nobody
+  # can resolve, and that artifact is what downstream builds pin themselves to.
+  #
+  # The two jobs it waits on stay concurrent with each other. Publishing is an
+  # addition to the image, not a substitute for it, so `image` still depends on
+  # `verify` alone and neither of the two is ordered behind the other.
   # -------------------------------------------------------------------------
   github-release:
     name: github release
-    needs: image
+    needs: [image, maven-publish]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
