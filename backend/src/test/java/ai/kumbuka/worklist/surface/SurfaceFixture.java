@@ -31,6 +31,16 @@ public final class SurfaceFixture {
     public static final String MEMBER = SubstrateDatabaseResource.PROBE_SUBJECT;
 
     /**
+     * A member of the tenant whose shared write right is withdrawn.
+     *
+     * <p>Registered by {@link #registerMutedMember()} and not by default: an
+     * extra account changes what the staged view answers for every test that
+     * runs without binding a subject, so it is staged by the classes that
+     * need it.
+     */
+    public static final String MUTED_MEMBER = "probe-muted-member";
+
+    /**
      * A subject with no membership anywhere.
      *
      * <p>Authenticated and a stranger, which is the caller the check order is
@@ -69,14 +79,66 @@ public final class SurfaceFixture {
      * @return the slug, so the caller addresses it by the name it published
      */
     public static String publishEmptyScope(String slug, java.util.UUID id) {
+        return publishScope(slug, id, "project", false);
+    }
+
+    /**
+     * A scope of this tenant in a chosen kind and lock state, visible to the
+     * member.
+     *
+     * <p>The three properties the platform's read contract publishes since
+     * V24 — kind, lock, and the write right derived from them — are what the
+     * isolation probes are about, so the fixture has to be able to stage a
+     * scope carrying each. Idempotent on the id, like its caller.
+     *
+     * @param kind   {@code project}, {@code private} or {@code global}, as the
+     *               core spells them in {@code platform.scope.kind}
+     * @param locked the content lock. A locked scope also arrives with
+     *               {@code can_write} false, because the core derives one from
+     *               the other
+     * @return the slug, so the caller addresses it by the name it published
+     */
+    public static String publishScope(String slug, java.util.UUID id, String kind,
+                                      boolean locked) {
         PlatformFixture.run(
             "SELECT set_config('app.tenant_id', '"
                 + SubstrateDatabaseResource.TENANT_ID + "', false)",
-            "INSERT INTO public.scope (id, tenant_id, slug, kind) SELECT '" + id + "', '"
-                + SubstrateDatabaseResource.TENANT_ID + "', '" + slug + "', 'project' "
+            "INSERT INTO public.scope (id, tenant_id, slug, kind, locked) SELECT '" + id
+                + "', '" + SubstrateDatabaseResource.TENANT_ID + "', '" + slug + "', '"
+                + kind + "', " + locked + " "
                 + "WHERE NOT EXISTS (SELECT 1 FROM public.scope WHERE id = '" + id + "')",
             "RESET app.tenant_id");
         return slug;
+    }
+
+    /**
+     * Registers a MUTED member of this tenant.
+     *
+     * <p>Muted is how the core withdraws a member's shared write right while
+     * leaving their read — {@code MemberWritePolicy.assertCanWriteShared} —
+     * and it is therefore the only way to stage a scope that a subject may
+     * read and may not write without also locking it. That distinction is
+     * exactly what the two refusals are about, so it has to be stageable
+     * separately.
+     *
+     * <p>Muted is a property of the ACCOUNT and not of one scope, so this
+     * subject loses shared writes everywhere. That is the core's own shape,
+     * not a simplification of the fixture.
+     */
+    public static void registerMutedMember() {
+        PlatformFixture.run(
+            "SELECT set_config('app.tenant_id', '"
+                + SubstrateDatabaseResource.TENANT_ID + "', false)",
+            "INSERT INTO public.user_account (tenant_id, subject, muted) SELECT '"
+                + SubstrateDatabaseResource.TENANT_ID + "', '" + MUTED_MEMBER + "', true "
+                + "WHERE NOT EXISTS (SELECT 1 FROM public.user_account WHERE subject = '"
+                + MUTED_MEMBER + "')",
+            "RESET app.tenant_id");
+    }
+
+    /** Calls as a member of the tenant whose shared write right is withdrawn. */
+    public static void asMutedMember(TestIdentityAssociation identity) {
+        as(identity, MUTED_MEMBER);
     }
 
     /** Calls as the subject the scope is open to. */

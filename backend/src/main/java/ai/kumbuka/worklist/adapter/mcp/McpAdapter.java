@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.adapter.mcp;
 
 import ai.kumbuka.worklist.adapter.payload.Payloads;
+import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
@@ -174,10 +175,12 @@ public class McpAdapter {
         try {
             return content(invoke(tool, arguments), false);
         } catch (SurfaceException e) {
-            return content(Payloads.Refusal.of(e.reason().name(), e.getMessage()), true);
+            return content(RefusalPayload.of(e), true);
         } catch (WorklistException e) {
-            return content(new Payloads.Refusal(e.reason().name(), e.getMessage(),
-                e.offenders()), true);
+            // The same envelope the REST path answers with, built by the same
+            // method — which is what makes "one envelope, whichever hop" a
+            // property of the construction and not a claim about it.
+            return content(RefusalPayload.of(e), true);
         }
     }
 

@@ -1,6 +1,6 @@
 package ai.kumbuka.worklist.adapter.rest;
 
-import ai.kumbuka.worklist.adapter.payload.Payloads;
+import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -21,6 +21,18 @@ import org.jboss.logging.Logger;
  * is what makes an added reason a compile error rather than a silent 500, and
  * this is exactly the place where a silent 500 would be indefensible: the reasons
  * are the published contract of the surface.
+ *
+ * <h2>The status is decided here; the reason code is not</h2>
+ *
+ * What goes in the body — the reason code, the message, the {@code data} — is
+ * {@link RefusalPayload}'s, because DEC-0042 fixes one envelope for this
+ * surface and the protocol surface alike and the two must not each build their
+ * own. What is decided here is the HTTP status, which the protocol surface has
+ * no equivalent of.
+ *
+ * <p>That split is why the not-found group below still names seven reasons
+ * while the wire carries one code for all of them: the status table is the
+ * service's own reading of its refusals, and the envelope is the platform's.
  *
  * <h2>Three statuses that look wrong and are not</h2>
  *
@@ -81,7 +93,7 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
         Response.ResponseBuilder response = Response.status(e.reason().status())
             .type(MediaType.APPLICATION_JSON)
-            .entity(Payloads.Refusal.of(e.reason().name(), e.getMessage()));
+            .entity(RefusalPayload.of(e));
 
         if (e.allow() != null) {
             // A 405 without Allow refuses without saying what would have worked,
@@ -111,7 +123,7 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
             return Response.status(status)
                 .type(MediaType.APPLICATION_JSON)
-                .entity(new Payloads.Refusal(e.reason().name(), e.getMessage(), e.offenders()))
+                .entity(RefusalPayload.of(e))
                 .build();
         }
 
@@ -152,6 +164,28 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 // declared are the same class of answer.
                 case UNKNOWN_FIELD, FIELD_NOT_SETTABLE, INVALID_VALUE, VALUE_UNDECLARED,
                      SELECTOR_UNDECLARED, SELECTOR_WITHDRAWN -> 422;
+
+                // The scope is visible to this caller and this service does not
+                // serve its kind. 422 and not 404: the scope is there, the
+                // caller can see it, and saying otherwise would send them
+                // looking for something in front of them (ADR-0011's
+                // inadmissible-referent answer). 422 is the class the other
+                // "your call names something this surface does not take"
+                // refusals already sit in.
+                case SCOPE_KIND_UNSUPPORTED -> 422;
+
+                // The scope is real and its state says no — the same class as
+                // ITERATION_CLOSED and SELECTOR_WITHDRAWN above, one level up.
+                case SCOPE_LOCKED -> 409;
+
+                // The scope is real, this caller may read it, and may not
+                // write it. 403, and it is the only 403 this surface answers:
+                // the standing rule is "404 and never 403" where a 403 would
+                // ADMIT THAT SOMETHING EXISTS that the caller may not see, and
+                // this one is reachable only for a scope the read contract has
+                // already published to them. Answering 404 here would be the
+                // untrue one — the caller reads this scope every day.
+                case SCOPE_READ_ONLY -> 403;
 
                 // Ours, not the caller's, and no retry of theirs will fix it.
                 case SESSION_NOT_BOUND -> 500;

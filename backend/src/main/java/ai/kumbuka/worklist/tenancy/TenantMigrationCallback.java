@@ -14,8 +14,9 @@ import java.sql.SQLException;
  * instead of failing closed against them.
  *
  * <p>Pure DDL needs no binding, because row-level security filters DML only.
- * The callback is here for the migrations that are not pure DDL, and it is
- * here BEFORE the first of them rather than after: under
+ * The callback is here for the migrations that are not pure DDL — V8, V9,
+ * V12, V15 and V16 all carry backfills — and it is here BEFORE the first of
+ * them rather than after: under
  * {@code FORCE ROW LEVEL SECURITY} a forgotten binding does not raise. The
  * insert simply affects no rows, the migration succeeds, and the seed is
  * missing in a way that surfaces much later and somewhere else.
@@ -47,7 +48,16 @@ public class TenantMigrationCallback extends BaseCallback {
 
     @Override
     public void handle(Event event, Context context) {
-        String tenantId = ConfigProvider.getConfig().getValue("worklist.tenant-id", String.class);
+        // Judged before it is bound, and by the guard's own method. Flyway
+        // runs at start-up and may well run BEFORE the StartupEvent observer,
+        // so this is the first place an unusable value could do damage: the
+        // sentinel would bind as a literal, and the backfills this chain
+        // carries (V8, V9, V12, V15, V16 — it is NOT pure DDL) would then
+        // either fail on the uuid cast or, under FORCE row-level security,
+        // match no rows and succeed having done nothing.
+        String tenantId = TenantConfigurationGuard.requireUsable(
+            ConfigProvider.getConfig().getValue(TenantConfigurationGuard.KEY, String.class))
+            .toString();
         // is_local = true scopes the binding to the transaction Flyway runs
         // the migration in, so it cannot outlive the migration on a pooled
         // connection. Parameterised rather than concatenated: a configured

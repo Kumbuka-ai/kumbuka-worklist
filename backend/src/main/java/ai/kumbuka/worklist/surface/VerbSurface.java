@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.WorkstreamService;
 import ai.kumbuka.worklist.platform.ScopeDirectory;
+import ai.kumbuka.worklist.platform.ScopeDirectory.Access;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -145,7 +146,7 @@ public class VerbSurface {
     @Transactional
     public Result create(String subject, String rawScope, String rawView,
                          VerbInput.Fields body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         refuseWriteOnDeclaredView(in.view(), "create");
         addresses.requireView(in.scopeId(), in.view());
         Map<String, Object> fields = required(body).values();
@@ -176,7 +177,7 @@ public class VerbSurface {
      */
     @Transactional
     public Listing query(String subject, String rawScope, String rawView) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.READ);
         addresses.requireView(in.scopeId(), in.view());
 
         List<Map<String, Object>> found = switch (in.view()) {
@@ -209,7 +210,7 @@ public class VerbSurface {
      */
     @Transactional
     public Listing query(String subject, String rawScope, String rawView, QuerySpec spec) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.READ);
         addresses.requireView(in.scopeId(), in.view());
 
         if (!Selector.ITEM.equals(in.view())) {
@@ -251,7 +252,7 @@ public class VerbSurface {
 
     @Transactional
     public Result read(String subject, String rawScope, String rawView, String rawId) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.READ);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         UUID id = resolve(in, target);
 
@@ -276,7 +277,7 @@ public class VerbSurface {
     @Transactional
     public Result update(String subject, String rawScope, String rawView, String rawId,
                          String conflictToken, VerbInput.Fields body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         refuseWriteOnDeclaredView(in.view(), "update");
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         requireWritable(target);
@@ -312,7 +313,7 @@ public class VerbSurface {
     @Transactional
     public Result accept(String subject, String rawScope, String rawView, String rawId,
                          String conflictToken) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "accept");
         UUID id = resolve(in, target);
 
@@ -352,7 +353,7 @@ public class VerbSurface {
     @Transactional
     public Result withdraw(String subject, String rawScope, String rawView, String rawId,
                            String conflictToken, VerbInput.Withdrawal body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "withdraw");
         UUID id = resolve(in, target);
 
@@ -389,7 +390,7 @@ public class VerbSurface {
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
                         String conflictToken, String produced) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         requireWritable(target);
         UUID id = resolve(in, target);
@@ -434,7 +435,7 @@ public class VerbSurface {
     @Transactional
     public Result advance(String subject, String rawScope, String rawView,
                           String conflictToken) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITERATION.equals(in.view())) {
             throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
                 "'advance' promotes an iteration and is addressed at the iteration view. "
@@ -461,7 +462,7 @@ public class VerbSurface {
     @Transactional
     public Result readMembership(String subject, String rawScope, String rawView,
                                  String rawIteration, String rawItem) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.READ);
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
@@ -472,7 +473,7 @@ public class VerbSurface {
     @Transactional
     public Result plan(String subject, String rawScope, String rawView, String rawIteration,
                        String rawItem, String conflictToken) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
@@ -486,7 +487,7 @@ public class VerbSurface {
     @Transactional
     public Result unplan(String subject, String rawScope, String rawView, String rawIteration,
                          String rawItem, String conflictToken) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
@@ -501,7 +502,7 @@ public class VerbSurface {
     public Result updateMembership(String subject, String rawScope, String rawView,
                                    String rawIteration, String rawItem, String conflictToken,
                                    VerbInput.Fields body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
@@ -530,7 +531,7 @@ public class VerbSurface {
     @Transactional
     public Result claim(String subject, String rawScope, String rawView, String rawId,
                         VerbInput.Lease body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "claim");
         UUID id = resolve(in, target);
 
@@ -551,7 +552,7 @@ public class VerbSurface {
     @Transactional
     public Result release(String subject, String rawScope, String rawView, String rawId,
                           VerbInput.Release body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "release");
         UUID id = resolve(in, target);
 
@@ -573,7 +574,7 @@ public class VerbSurface {
     @Transactional
     public Result claimNext(String subject, String rawScope, String rawView,
                             VerbInput.Lease body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITEM.equals(in.view())) {
             throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
                 "'claim_next' draws an item and is addressed at the item view. The "
@@ -611,7 +612,7 @@ public class VerbSurface {
     @Transactional
     public Result relate(String subject, String rawScope, String rawView, String rawId,
                          String conflictToken, VerbInput.Edge body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "relate");
         UUID from = resolve(in, target);
 
@@ -630,7 +631,7 @@ public class VerbSurface {
     @Transactional
     public Result unrelate(String subject, String rawScope, String rawView, String rawId,
                            String conflictToken, VerbInput.Edge body) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "unrelate");
         UUID from = resolve(in, target);
 
@@ -666,7 +667,7 @@ public class VerbSurface {
      */
     @Transactional
     public Result validate(String subject, String rawScope, String rawView) {
-        Entry in = entry(subject, rawScope, rawView);
+        Entry in = entry(subject, rawScope, rawView, Access.READ);
         if (!Selector.ITEM.equals(in.view())) {
             throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
                 "'validate' walks the scope's cross-item consistencies and is addressed "
@@ -700,7 +701,7 @@ public class VerbSurface {
     @Transactional
     public void uncarried(String subject, String rawScope, String rawView, String at,
                           String verb, String why) {
-        entry(subject, rawScope, rawView);
+        entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
             AddressParser.target(rawView, at);
         }
@@ -719,7 +720,7 @@ public class VerbSurface {
     @Transactional
     public void unbuilt(String subject, String rawScope, String rawView, String at,
                         String verb, String why) {
-        entry(subject, rawScope, rawView);
+        entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
             AddressParser.target(rawView, at);
         }
@@ -733,7 +734,7 @@ public class VerbSurface {
     // ======================================================================
 
     /**
-     * Grammar, then scope visibility.
+     * Grammar, then scope visibility, then what the scope admits.
      *
      * <p>The grammar runs against the raw strings before anything is resolved.
      * Stage 1 is decidable without knowing a scope, so its refusal leaks nothing;
@@ -743,11 +744,21 @@ public class VerbSurface {
      * a probe can call this against a scope it may not see and get 404 with
      * whatever else is wrong with the call, because nothing that would answer
      * differently has run yet.
+     *
+     * <p><strong>Every verb passes through here, and that is why the access mode
+     * is an argument.</strong> The scope's kind, its lock and the subject's
+     * write right are the read contract's answers and the directory judges
+     * them; what the directory cannot know is whether the act about to run is a
+     * read or a write. Declaring it at each call site — rather than deriving it
+     * from a list of verb names kept somewhere — is what keeps a verb added
+     * later from defaulting silently into the permissive case: the parameter
+     * has no default, so a new verb does not compile until somebody says which
+     * it is.
      */
-    private Entry entry(String subject, String rawScope, String rawView) {
+    private Entry entry(String subject, String rawScope, String rawView, Access access) {
         String slug = AddressParser.scope(rawScope);
         String view = AddressParser.view(rawView);
-        return new Entry(scopes.resolve(subject, slug).scopeId(), view);
+        return new Entry(scopes.resolve(subject, slug, access).scopeId(), view);
     }
 
     // ======================================================================

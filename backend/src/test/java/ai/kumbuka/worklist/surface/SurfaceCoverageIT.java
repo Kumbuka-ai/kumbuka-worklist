@@ -248,7 +248,7 @@ class SurfaceCoverageIT {
         call("POST", item(Selector.ITEM, itemNumber) + ":relate", itemToken,
             Map.of("toItem", missingAddress, "type", missingTypeName))
             .statusCode(404)
-            .body("reason", org.hamcrest.Matchers.is("ITEM_UNKNOWN"));
+            .body("reason", org.hamcrest.Matchers.is("NOT_FOUND"));
         // For unrelate to reach the RELATION_UNKNOWN answer we need a
         // resolvable target — an item that exists — so that the not-found
         // is on the edge and not on the target. The declared type is
