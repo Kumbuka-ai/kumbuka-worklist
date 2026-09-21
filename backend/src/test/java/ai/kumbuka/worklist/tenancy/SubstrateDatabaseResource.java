@@ -106,6 +106,19 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
     public static final String PLATFORM_SCHEMA = "platform";
     public static final String DIRECTORY_VIEW = "scope_access";
 
+    /**
+     * The columns the view publishes, in the order V24 of the core declares
+     * them.
+     *
+     * <p>Named here so that a probe can assert the SHAPE of the contract
+     * rather than only its answers. The core is pinned at v0.10.0 and this
+     * list is transcribed from its migration, not read back from the view
+     * this class builds — a list read from the substrate would agree with the
+     * substrate whatever the core says.
+     */
+    public static final java.util.List<String> DIRECTORY_COLUMNS = java.util.List.of(
+        "scope_id", "tenant_id", "slug", "archived", "kind", "locked", "can_write");
+
     /** The scope the directory publishes to the probing subject. */
     public static final String PROBE_SCOPE_SLUG = "probe-scope";
     public static final String PROBE_SUBJECT = "probe-subject";
@@ -221,20 +234,27 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
             END $$;
             """.formatted(PLATFORM_ROLE, PLATFORM_ROLE));
 
+        // The columns V24 of the core reads: `locked` and `created_by` on the
+        // scope, `muted` on the account. They are staged here because the
+        // view below is derived from them and a substrate that omitted them
+        // could not reproduce the view's answers — only its column list.
         s.execute("""
             CREATE TABLE IF NOT EXISTS public.scope (
                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id uuid NOT NULL,
                 slug text NOT NULL,
                 kind text NOT NULL,
-                archived boolean NOT NULL DEFAULT false)
+                archived boolean NOT NULL DEFAULT false,
+                locked boolean NOT NULL DEFAULT false,
+                created_by text)
             """);
         s.execute("""
             CREATE TABLE IF NOT EXISTS public.user_account (
                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id uuid NOT NULL,
                 subject text NOT NULL,
-                status text NOT NULL DEFAULT 'active')
+                status text NOT NULL DEFAULT 'active',
+                muted boolean NOT NULL DEFAULT false)
             """);
 
         for (String table : new String[] {"scope", "user_account"}) {
@@ -259,17 +279,49 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
         // bind the subject before reaching the domain, so the stricter check
         // still runs there and the stranger-visibility probes stay red-state
         // enforceable.
+        // The view in the shape V24 of the core publishes it (kumbuka-server
+        // v0.10.0, `V24__platform_read_contract.sql`): seven columns, and no
+        // `kind = 'project'` filter — a service addresses all three kinds now
+        // and refuses the ones it does not serve ITSELF, with a reason, rather
+        // than being unable to see them.
+        //
+        // `can_write` is transcribed from the core's own derivation, term for
+        // term, and not simplified: a locked scope refuses every
+        // service-channel write, and a muted member loses shared writes while
+        // keeping their private scope. Simplifying it here would make the
+        // substrate answer differently from the deployment in exactly the
+        // cases the probes are about.
+        //
+        // The one departure from the deployment view is the subject filter,
+        // and it is the one this harness always had: `app.subject` being
+        // unbound falls back to the probe subject, because the domain-level
+        // tests do not run through the surface and so never reach a
+        // ScopeDirectory call that binds it. The fallback names ONE subject
+        // rather than admitting any active account, which the earlier form
+        // did: a second account in the tenant — the muted member the
+        // write-right probes need — would otherwise make the join produce two
+        // rows per scope, with DIFFERENT `can_write`, and a query that reads
+        // the first of them would answer by row order. Surface-level tests bind
+        // the subject before reaching the domain, so the stricter check still
+        // runs there and the stranger-visibility probes stay red-state
+        // enforceable. The private-scope author check is written against the
+        // bound subject alone, so under that fallback an authored private
+        // scope is invisible — which is the deployment's answer too.
         s.execute("""
             CREATE OR REPLACE VIEW platform.scope_access AS
-                SELECT sc.id AS scope_id, sc.tenant_id, sc.slug, sc.archived
+                SELECT sc.id AS scope_id, sc.tenant_id, sc.slug, sc.archived,
+                       sc.kind, sc.locked,
+                       (NOT sc.locked AND (sc.kind = 'private' OR NOT ua.muted)) AS can_write
                 FROM public.scope sc
                 JOIN public.user_account ua ON ua.tenant_id = sc.tenant_id
-                WHERE sc.kind = 'project'
-                  AND sc.tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-                  AND (NULLIF(current_setting('app.subject', true), '') IS NULL
-                       OR ua.subject = NULLIF(current_setting('app.subject', true), ''))
+                WHERE sc.tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+                  AND ua.subject = COALESCE(
+                          NULLIF(current_setting('app.subject', true), ''), '%s')
                   AND ua.status   = 'active'
-            """);
+                  AND (sc.kind <> 'private'
+                       OR sc.created_by IS NULL
+                       OR sc.created_by = NULLIF(current_setting('app.subject', true), ''))
+            """.formatted(PROBE_SUBJECT));
 
         // The owner-normalisation sweep, in the one respect this suite cares
         // about: the view must not be owned by a superuser.

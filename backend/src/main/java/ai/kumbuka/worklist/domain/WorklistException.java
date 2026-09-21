@@ -29,6 +29,61 @@ public class WorklistException extends RuntimeException {
         SESSION_NOT_BOUND,
 
         /**
+         * The scope resolved, and this service does not serve scopes of its
+         * kind.
+         *
+         * <p>The one such kind today is {@code private}. A private scope is a
+         * per-tenant container for memory content (V24 of the core, and the
+         * ratification of 2026-09-20 behind it); the worklist holds items,
+         * iterations, milestones and workstreams, and none of those belong in
+         * it. Answering as though the scope were absent would be false — the
+         * caller can see it, the read contract published it to them — and
+         * would send them off to look for a scope that is in front of them.
+         *
+         * <p>Reachable only for a scope the read contract ALREADY published to
+         * this subject, which is what makes distinguishing it admissible under
+         * ADR-0011: "the caller already named the referent in their own write
+         * and can therefore already see it, so distinguishing it discloses
+         * nothing they did not bring with them". A private scope of another
+         * subject is not in the answer at all and is refused as not found,
+         * like anything else the subject cannot see.
+         */
+        SCOPE_KIND_UNSUPPORTED,
+
+        /**
+         * A write arrived at a scope whose content is locked.
+         *
+         * <p>Locked is not archived: archived is retired, locked is frozen,
+         * and V24 publishes the two separately so that a service can say
+         * which. Reading a locked scope stays open — the record is the point
+         * of freezing it.
+         *
+         * <p>Judged BEFORE {@link #SCOPE_READ_ONLY}, and the order is
+         * load-bearing rather than stylistic: V24 derives {@code can_write} as
+         * {@code NOT locked AND (kind = 'private' OR NOT muted)}, so a locked
+         * scope always arrives with {@code can_write} false as well. Judging
+         * the write right first would answer every locked scope with the
+         * weaker sentence and leave this one unreachable.
+         */
+        SCOPE_LOCKED,
+
+        /**
+         * A write arrived at a scope this subject may read and not write.
+         *
+         * <p>The write right is the read contract's answer for a SERVICE
+         * CHANNEL, which is the only channel this service is reached over.
+         * V24 records what it cannot carry: a team admin's override on the
+         * console keys on the channel and not on a row, so it is the console's
+         * decision and never this one's.
+         *
+         * <p>Distinct from {@link #SCOPE_LOCKED} because the remedy is
+         * different. Locked is a property of the scope and lifts for everyone
+         * at once; this one is a property of this subject in this scope, and
+         * the caller who reads it has to ask somebody rather than wait.
+         */
+        SCOPE_READ_ONLY,
+
+        /**
          * An argument named a field that does not exist. The offenders are the
          * argument names, because a refusal that does not say WHICH name it
          * did not recognise leaves the caller to diff two vocabularies by eye.

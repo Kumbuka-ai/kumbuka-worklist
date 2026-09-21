@@ -103,7 +103,7 @@ class CheckOrderProbeIT {
             .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":send")
             .then()
             .statusCode(404)
-            .body("reason", is("SCOPE_UNRESOLVED"));
+            .body("reason", is("NOT_FOUND"));
     }
 
     /**
@@ -149,26 +149,26 @@ class CheckOrderProbeIT {
             .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":claim")
             .then()
             .statusCode(404)
-            .body("reason", is("SCOPE_UNRESOLVED"));
+            .body("reason", is("NOT_FOUND"));
 
         given()
             .when().post(SurfaceFixture.collection(Selector.ITEM) + ":claim_next")
             .then()
             .statusCode(404)
-            .body("reason", is("SCOPE_UNRESOLVED"));
+            .body("reason", is("NOT_FOUND"));
 
         given()
             .when().post(SurfaceFixture.collection(Selector.ITEM) + ":validate")
             .then()
             .statusCode(404)
-            .body("reason", is("SCOPE_UNRESOLVED"));
+            .body("reason", is("NOT_FOUND"));
 
         SurfaceFixture.asMember(identity);
         given()
             .when().post(SurfaceFixture.item(Selector.ITEM, 999_999) + ":claim")
             .then()
             .statusCode(404)
-            .body("reason", is("ITEM_UNKNOWN"));
+            .body("reason", is("NOT_FOUND"));
     }
 
     /**
@@ -187,14 +187,14 @@ class CheckOrderProbeIT {
             .when().get("/api/" + NO_SUCH_SCOPE + "/" + Selector.ITEM)
             .then()
             .statusCode(404)
-            .body("reason", is("SCOPE_UNRESOLVED"));
+            .body("reason", is("NOT_FOUND"));
 
         SurfaceFixture.asStranger(identity);
         given()
             .when().get(SurfaceFixture.collection(Selector.ITEM))
             .then()
             .statusCode(404)
-            .body("reason", is("SCOPE_UNRESOLVED"));
+            .body("reason", is("NOT_FOUND"));
     }
 
     // =======================================================================
@@ -272,6 +272,6 @@ class CheckOrderProbeIT {
             .when().get(SurfaceFixture.item(Selector.ITEM, 999_999))
             .then()
             .statusCode(404)
-            .body("reason", is("ITEM_UNKNOWN"));
+            .body("reason", is("NOT_FOUND"));
     }
 }

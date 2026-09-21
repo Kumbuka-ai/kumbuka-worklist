@@ -49,7 +49,7 @@ class ScopeDirectoryIT {
     @Test
     void a_scope_the_subject_may_enter_resolves() {
         var access = directory.resolve(SubstrateDatabaseResource.PROBE_SUBJECT,
-            SubstrateDatabaseResource.PROBE_SCOPE_SLUG);
+            SubstrateDatabaseResource.PROBE_SCOPE_SLUG, ScopeDirectory.Access.READ);
 
         assertThat(access.slug()).isEqualTo(SubstrateDatabaseResource.PROBE_SCOPE_SLUG);
         assertThat(access.scopeId())
@@ -63,7 +63,7 @@ class ScopeDirectoryIT {
     @Test
     void a_scope_the_subject_may_not_enter_is_a_refusal_and_not_an_empty_result() {
         assertThatThrownBy(() -> directory.resolve("a-subject-who-is-not-a-member",
-            SubstrateDatabaseResource.PROBE_SCOPE_SLUG))
+            SubstrateDatabaseResource.PROBE_SCOPE_SLUG, ScopeDirectory.Access.READ))
             .isInstanceOfSatisfying(WorklistException.class, e -> assertThat(e.reason())
                 .as("the directory answers for the bound subject only, and existence in "
                     + "its answer IS the permission — so a subject who is not a member "
@@ -74,7 +74,7 @@ class ScopeDirectoryIT {
     @Test
     void a_scope_that_does_not_exist_is_a_refusal_too() {
         assertThatThrownBy(() -> directory.resolve(SubstrateDatabaseResource.PROBE_SUBJECT,
-            "no-such-scope"))
+            "no-such-scope", ScopeDirectory.Access.READ))
             .isInstanceOfSatisfying(WorklistException.class, e ->
                 assertThat(e.reason()).isEqualTo(WorklistException.Reason.SCOPE_UNRESOLVED));
     }
@@ -91,7 +91,7 @@ class ScopeDirectoryIT {
     @Test
     void resolving_without_a_bound_session_fails_loudly_and_names_the_binding() {
         assertThatThrownBy(() -> directory.resolve(null,
-            SubstrateDatabaseResource.PROBE_SCOPE_SLUG))
+            SubstrateDatabaseResource.PROBE_SCOPE_SLUG, ScopeDirectory.Access.READ))
             .isInstanceOfSatisfying(WorklistException.class, e -> {
                 assertThat(e.reason())
                     .as("an unbound session is a DIFFERENT refusal from an inaccessible "
@@ -102,7 +102,7 @@ class ScopeDirectoryIT {
             });
 
         assertThatThrownBy(() -> directory.resolve("  ",
-            SubstrateDatabaseResource.PROBE_SCOPE_SLUG))
+            SubstrateDatabaseResource.PROBE_SCOPE_SLUG, ScopeDirectory.Access.READ))
             .isInstanceOfSatisfying(WorklistException.class, e ->
                 assertThat(e.reason()).isEqualTo(WorklistException.Reason.SESSION_NOT_BOUND));
 
@@ -110,7 +110,7 @@ class ScopeDirectoryIT {
         // this, the assertions above would hold just as well against a directory
         // that never resolves anything at all.
         assertThat(directory.resolve(SubstrateDatabaseResource.PROBE_SUBJECT,
-                SubstrateDatabaseResource.PROBE_SCOPE_SLUG).slug())
+                SubstrateDatabaseResource.PROBE_SCOPE_SLUG, ScopeDirectory.Access.READ).slug())
             .as("and with the session bound the very same call succeeds, which is what "
                 + "makes the refusals above about the binding rather than about the view")
             .isEqualTo(SubstrateDatabaseResource.PROBE_SCOPE_SLUG);
@@ -126,7 +126,7 @@ class ScopeDirectoryIT {
     void a_foreign_tenant_binding_does_not_resolve_the_scope() throws Exception {
         try (AutoCloseable ignored = tenantContext.bind(UUID.randomUUID())) {
             assertThatThrownBy(() -> directory.resolve(SubstrateDatabaseResource.PROBE_SUBJECT,
-                SubstrateDatabaseResource.PROBE_SCOPE_SLUG))
+                SubstrateDatabaseResource.PROBE_SCOPE_SLUG, ScopeDirectory.Access.READ))
                 .isInstanceOfSatisfying(WorklistException.class, e -> assertThat(e.reason())
                     .as("the directory keys on tenant AND subject; a valid subject under "
                         + "the wrong tenant must not reach the scope")

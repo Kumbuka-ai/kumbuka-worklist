@@ -45,7 +45,7 @@ public class ScopeAccessRepository {
     @Transactional
     public Optional<ScopeAccessRow> findBySlug(String slug) {
         List<Object[]> rows = em.createNativeQuery("""
-                SELECT scope_id, tenant_id, slug, archived
+                SELECT scope_id, tenant_id, slug, archived, kind, locked, can_write
                 FROM platform.scope_access
                 WHERE slug = :slug
                 """)
@@ -55,12 +55,7 @@ public class ScopeAccessRepository {
         if (rows.isEmpty()) {
             return Optional.empty();
         }
-        Object[] row = rows.get(0);
-        return Optional.of(new ScopeAccessRow(
-            (UUID) row[0],
-            (UUID) row[1],
-            (String) row[2],
-            (Boolean) row[3]));
+        return Optional.of(rowOf(rows.get(0)));
     }
 
     /**
@@ -76,7 +71,7 @@ public class ScopeAccessRepository {
     @Transactional
     public Optional<ScopeAccessRow> findByScopeId(UUID scopeId) {
         List<Object[]> rows = em.createNativeQuery("""
-                SELECT scope_id, tenant_id, slug, archived
+                SELECT scope_id, tenant_id, slug, archived, kind, locked, can_write
                 FROM platform.scope_access
                 WHERE scope_id = :scopeId
                 """)
@@ -86,12 +81,7 @@ public class ScopeAccessRepository {
         if (rows.isEmpty()) {
             return Optional.empty();
         }
-        Object[] row = rows.get(0);
-        return Optional.of(new ScopeAccessRow(
-            (UUID) row[0],
-            (UUID) row[1],
-            (String) row[2],
-            (Boolean) row[3]));
+        return Optional.of(rowOf(rows.get(0)));
     }
 
     /**
@@ -123,13 +113,50 @@ public class ScopeAccessRepository {
     }
 
     /**
+     * One row of the view, read off its columns in their published order.
+     *
+     * <p>Kept in one place because the two queries above project the same
+     * seven columns, and two hand-written projections of one row is where a
+     * column added to the view reaches one caller and not the other.
+     */
+    private static ScopeAccessRow rowOf(Object[] row) {
+        return new ScopeAccessRow(
+            (UUID) row[0],
+            (UUID) row[1],
+            (String) row[2],
+            (Boolean) row[3],
+            (String) row[4],
+            (Boolean) row[5],
+            (Boolean) row[6]);
+    }
+
+    /**
      * One row of the read contract, as it comes off the view.
      *
-     * <p>Distinct from the directory's own {@code ScopeAccess} on purpose. The
-     * two carry the same four values today; keeping them apart is what lets
-     * the published shape of the view change without the type the domain reads
-     * changing with it.
+     * <p>Distinct from the directory's own {@code ScopeAccess} on purpose.
+     * Keeping them apart is what lets the published shape of the view change
+     * without the type the domain reads changing with it.
+     *
+     * <p>The last three arrived with V24 of the core (pinned at v0.10.0) and
+     * are the reason this service can answer three questions it previously
+     * could not: which KIND of scope it was handed, whether the scope's
+     * content is LOCKED, and whether the calling subject may WRITE through a
+     * service channel at all. Before V24 the view filtered on
+     * {@code kind = 'project'} and published none of the three, so a private
+     * scope was simply invisible here and a write into a scope nobody may
+     * write went through.
+     *
+     * @param kind     {@code project}, {@code private} or {@code global}
+     * @param locked   the content lock — a frozen scope, as distinct from an
+     *                 {@code archived} (retired) one
+     * @param canWrite the calling subject's write right OVER A SERVICE
+     *                 CHANNEL. V24 derives it as
+     *                 {@code NOT locked AND (kind = 'private' OR NOT muted)},
+     *                 so a locked scope always arrives with it false — which
+     *                 is why the directory judges {@code locked} first and the
+     *                 more specific refusal is reachable at all.
      */
-    public record ScopeAccessRow(UUID scopeId, UUID tenantId, String slug, boolean archived) {
+    public record ScopeAccessRow(UUID scopeId, UUID tenantId, String slug, boolean archived,
+                                 String kind, boolean locked, boolean canWrite) {
     }
 }

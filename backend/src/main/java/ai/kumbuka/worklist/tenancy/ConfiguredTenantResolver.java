@@ -21,11 +21,27 @@ import java.util.UUID;
 @ApplicationScoped
 public class ConfiguredTenantResolver implements TenantResolver {
 
-    @ConfigProperty(name = "worklist.tenant-id")
-    UUID tenantId;
+    /**
+     * The configured tenant, as the RAW string.
+     *
+     * <p>Not injected as a {@code UUID}, and the reason is in
+     * {@link TenantConfigurationGuard}: the two unusable values this key can
+     * actually carry — the sentinel, and the empty string an empty
+     * environment variable produces — would both fail in Quarkus'
+     * configuration validation, with a conversion message that names the key
+     * and nothing else. Reading it raw is what lets the refusal say which
+     * variable to set and why there is no default.
+     */
+    @ConfigProperty(name = TenantConfigurationGuard.KEY)
+    String tenantId;
 
     @Override
     public UUID currentTenant() {
-        return tenantId;
+        // Judged and parsed by the same method the start-up guard calls, so
+        // the two cannot disagree. Reaching here with an unusable value is
+        // not possible in a started application — the guard refuses the start
+        // — and the call is kept rather than cached because a resolver that
+        // cached it would be a second place holding the axis.
+        return TenantConfigurationGuard.requireUsable(tenantId);
     }
 }

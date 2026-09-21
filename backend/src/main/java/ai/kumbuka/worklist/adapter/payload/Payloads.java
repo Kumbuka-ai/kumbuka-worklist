@@ -174,10 +174,4 @@ public final class Payloads {
      * names the specifics. A caller matching on prose is a caller that breaks
      * when somebody improves the wording.
      */
-    public record Refusal(String reason, String message, List<String> offenders) {
-
-        public static Refusal of(String reason, String message) {
-            return new Refusal(reason, message, List.of());
-        }
-    }
 }

@@ -127,8 +127,18 @@ WORKLIST_DB_PASSWORD        its password
 WORKLIST_MIGRATOR_USERNAME  the migrating role
 WORKLIST_MIGRATOR_PASSWORD  its password
 WORKLIST_OIDC_ISSUER        the tenant realm's issuer URL
-WORKLIST_TENANT_ID          the tenancy axis for this deployment
+WORKLIST_TENANT_ID          the tenancy axis for this deployment — MANDATORY,
+                            no default, the service refuses to start without it
 ```
+
+**`WORKLIST_TENANT_ID` has no default and the service will not guess one.** It
+is the one value in this configuration that no later layer can check: the ORM
+filter, the session binding and the row-level-security policy all enforce the
+axis they are handed, so a guessed tenant id is enforced perfectly, on somebody
+else's data. An unset variable and an empty one are both refused at start-up,
+with a message naming the variable — an empty one is refused explicitly because
+`docker compose config` substitutes the empty string for a variable that is not
+set, and an expression default does not apply to it.
 
 **The service role's password must be rotated.** `V2__service_role.sql`
 creates the role with a placeholder so that a cold start against an empty

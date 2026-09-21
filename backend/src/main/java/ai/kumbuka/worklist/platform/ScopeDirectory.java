@@ -8,6 +8,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -48,16 +49,45 @@ public class ScopeDirectory {
      *  address; the subject that asked for it is the audit log's business. */
     private static final Logger LOG = Logger.getLogger(ScopeDirectory.class);
 
+    /**
+     * The one scope kind this service refuses outright.
+     *
+     * <p>Spelled as the core spells it in {@code platform.scope.kind}; the
+     * other two values, {@code project} and {@code global}, are both served
+     * and neither needs a constant to be served.
+     */
+    private static final String PRIVATE_KIND = "private";
+
     @Inject ScopeAccessRepository scopes;
 
     /**
      * The scope a caller named, or a typed refusal.
      *
+     * <p>Four questions, in this order, and the order is the contract:
+     *
+     * <ol>
+     *   <li>is there a row for this subject — no, and the answer is the
+     *       not-found class, whether the scope is absent or merely invisible;
+     *   <li>is it a kind this service serves — no, and the answer says so;
+     *   <li>is the act a write into a locked scope;
+     *   <li>is the act a write this subject may not make.
+     * </ol>
+     *
+     * <p>Two and three cannot be swapped with one: everything after the first
+     * question is said only about a scope the read contract has already
+     * published to this subject, which is what keeps a distinguishable answer
+     * from becoming an enumeration oracle (ADR-0011). Three cannot be swapped
+     * with four — see {@link WorklistException.Reason#SCOPE_LOCKED}.
+     *
      * @param subject the calling subject, as derived from the token
      * @param slug    the scope name the caller used
+     * @param access  whether the act about to run reads or writes. Passed in
+     *                rather than inferred: the directory knows what the
+     *                contract says about the scope, and only the surface knows
+     *                what the verb is about to do with it.
      */
     @Transactional
-    public ScopeAccess resolve(String subject, String slug) {
+    public ScopeAccess resolve(String subject, String slug, Access access) {
         bindSubject(subject);
         requireSessionBound();
 
@@ -75,13 +105,82 @@ public class ScopeDirectory {
                     + "worked around.");
         }
 
-        LOG.debugf("resolved scope '%s'", slug);
         ScopeAccessRepository.ScopeAccessRow found = row.get();
+        refuseUnservedKind(found);
+        if (access == Access.WRITE) {
+            refuseWriteIntoLockedScope(found);
+            refuseWriteWithoutTheRight(found);
+        }
+
+        LOG.debugf("resolved scope '%s'", slug);
         return new ScopeAccess(
             found.scopeId(),
             found.tenantId(),
             found.slug(),
-            found.archived());
+            found.archived(),
+            found.kind(),
+            found.locked(),
+            found.canWrite());
+    }
+
+    /**
+     * Whether the act about to run reads the scope or writes into it.
+     *
+     * <p>Two values and not a set of verbs: the directory has no business
+     * knowing what {@code advance} is, and a list of verb names here would be
+     * a second copy of the surface's own register — the copy that goes stale
+     * the first time a verb is added.
+     */
+    public enum Access {
+        /** The act reads. A locked scope and a read-only one both admit it. */
+        READ,
+        /** The act writes. Both of those refuse it, for different reasons. */
+        WRITE
+    }
+
+    /**
+     * A scope of a kind this service does not serve.
+     *
+     * <p>Checked for reads as well as writes, and deliberately: a private
+     * scope holds no items to read either, so answering a read and refusing a
+     * write would publish an address space that is empty by construction.
+     */
+    private static void refuseUnservedKind(ScopeAccessRepository.ScopeAccessRow scope) {
+        if (!PRIVATE_KIND.equals(scope.kind())) {
+            return;
+        }
+        throw new WorklistException(WorklistException.Reason.SCOPE_KIND_UNSUPPORTED,
+            "scope '" + scope.slug() + "' is a private scope, and the worklist does not "
+                + "serve one. A private scope is a per-tenant container for memory "
+                + "content; items, iterations, milestones and workstreams are not kept "
+                + "in it. Address a project or a global scope instead.",
+            List.of(scope.slug()));
+    }
+
+    /** A write into a scope whose content is frozen. */
+    private static void refuseWriteIntoLockedScope(ScopeAccessRepository.ScopeAccessRow scope) {
+        if (!scope.locked()) {
+            return;
+        }
+        throw new WorklistException(WorklistException.Reason.SCOPE_LOCKED,
+            "scope '" + scope.slug() + "' is locked, so it takes no writes over a "
+                + "service channel. Reading it is unaffected — freezing a scope keeps "
+                + "the record, it does not withdraw it. The lock is lifted where it was "
+                + "set, which is not here.",
+            List.of(scope.slug()));
+    }
+
+    /** A write this subject may not make in a scope it may read. */
+    private static void refuseWriteWithoutTheRight(ScopeAccessRepository.ScopeAccessRow scope) {
+        if (scope.canWrite()) {
+            return;
+        }
+        throw new WorklistException(WorklistException.Reason.SCOPE_READ_ONLY,
+            "this subject may read scope '" + scope.slug() + "' and may not write into "
+                + "it over a service channel. The write right is the platform's answer, "
+                + "not this service's, so it is changed where membership is "
+                + "administered.",
+            List.of(scope.slug()));
     }
 
     /**
@@ -135,8 +234,18 @@ public class ScopeDirectory {
      * <p>{@code archived} is published rather than filtered, deliberately: a
      * write into a retired scope must be refusable with a specific error
      * rather than with "not found", and a directory that hid archived scopes
-     * could not tell the two apart.
+     * could not tell the two apart. {@code kind}, {@code locked} and
+     * {@code canWrite} arrived with V24 of the core and are carried for the
+     * same reason: a refusal that cannot name which property refused it is a
+     * refusal the caller cannot act on.
+     *
+     * <p>Every value here has already been judged by {@link #resolve} for the
+     * access it was resolved under, so a holder of this record is past the
+     * refusals rather than expected to repeat them. It carries them so that a
+     * caller downstream can say what it is holding — not so that a second
+     * check can be written somewhere else and drift from this one.
      */
-    public record ScopeAccess(UUID scopeId, UUID tenantId, String slug, boolean archived) {
+    public record ScopeAccess(UUID scopeId, UUID tenantId, String slug, boolean archived,
+                              String kind, boolean locked, boolean canWrite) {
     }
 }

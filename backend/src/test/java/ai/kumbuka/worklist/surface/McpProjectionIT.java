@@ -322,7 +322,8 @@ class McpProjectionIT {
      * <p>Both adapters call one surface, so the order cannot drift between them
      * — but "cannot" is a claim about the construction, and this is the call
      * that shows it holding. A stranger asking about a scope they may not see
-     * gets the scope refusal, not the vocabulary one, over MCP as over HTTP.
+     * gets the not-found class, not the vocabulary refusal, over MCP as over
+     * HTTP.
      */
     @Test
     void the_check_order_is_the_same_one_the_rest_surface_runs() {
@@ -330,7 +331,7 @@ class McpProjectionIT {
 
         call("send", Map.of("address", SurfaceFixture.address(Selector.ITEM, 1)))
             .body("result.isError", is(true))
-            .body("result.structuredContent.reason", is("SCOPE_UNRESOLVED"));
+            .body("result.structuredContent.reason", is("NOT_FOUND"));
     }
 
     /** One object, created over MCP, as its complete address. */
