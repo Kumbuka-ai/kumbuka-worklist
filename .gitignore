@@ -8,3 +8,6 @@ target/
 .vscode/
 .DS_Store
 .mvn/wrapper/maven-wrapper.jar
+
+# --- Claude Code (local agent state: worktrees, settings, checkpoints) ---
+.claude/
