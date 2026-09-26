@@ -120,6 +120,16 @@ public class SelectorRepository {
     }
 
     private TypedQuery<NumberSpace> spaceQuery(String predicate) {
+        // `predicate` is a string literal at every call site — the method is
+        // private, so that set is closed and checkable, and all three callers
+        // pass a constant. Every value a caller actually varies goes through
+        // setParameter, never through this concatenation.
+        //
+        // The rule is right to flag the shape, and the safety here rests on the
+        // callers staying literal. If a caller ever builds this string from
+        // input, this becomes a real injection and the suppression below will
+        // hide it. Anyone adding a caller should read that sentence first.
+        // nosemgrep: java.lang.security.audit.formatted-sql-string.formatted-sql-string
         return em.createQuery(
             "SELECT s FROM NumberSpace s WHERE " + predicate, NumberSpace.class);
     }
