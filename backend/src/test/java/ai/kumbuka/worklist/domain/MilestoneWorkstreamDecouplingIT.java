@@ -39,6 +39,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>Post-rollback (V12 + Java changes applied): every test in this
  *       class passes.
  * </ul>
+ *
+ * <h2>What moved out of here on 2026-09-28</h2>
+ *
+ * <p>Four tests in this class wrote {@code workstream} on a milestone to show
+ * that the write no longer refused. That was the right assertion against V12
+ * and the wrong one about the surface: the field was still answered and still
+ * taken, and a write on it landed on a dead column without saying so.
+ * The field is now off the milestone in both directions, so the four are
+ * replaced by {@code MilestoneWorkstreamRetractionIT}, which asserts the
+ * refusal instead of the acceptance.
+ *
+ * <p>What stays here is the half that is about the ITEM: a milestone and an
+ * item may sit in unrelated workstreams, and that is the invariant V12
+ * retracted. It is not observable through the milestone's own field at all,
+ * which is part of why the field had nothing to say.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -65,41 +80,53 @@ class MilestoneWorkstreamDecouplingIT {
         selectors.declare(scope, Selector.MILESTONE);
     }
 
+    /**
+     * An item in one workstream aims at a milestone, and nothing objects.
+     *
+     * <p>Pre-rollback this update refused with
+     * {@code WORKSTREAM_MILESTONE_MISMATCH}, because the milestone sat in a
+     * workstream of its own and the two had to agree. The milestone sits in
+     * none now, so there is nothing for the item's workstream to disagree with
+     * — which is the retraction stated from the item's side, and the only side
+     * it is observable from.
+     */
     @Test
-    void assigning_a_milestone_from_another_workstream_now_passes() {
+    void an_item_in_a_workstream_aims_at_a_milestone_that_is_in_none() {
         Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Workstream backend = workstreams.declare(scope, "backend", "backend stream");
 
         UUID itemId = createItem("cross-ws item", mobile.id);
-        UUID milestoneInBackend = createMilestone("backend goal", backend.id);
+        UUID goal = createMilestone("a goal several streams reach");
+        Object goalNumber = milestones.read(scope, goal).get(Field.NUMBER.canonicalName());
 
-        // Pre-rollback: this update refused with WORKSTREAM_MILESTONE_MISMATCH.
-        // Post-rollback (V12 + Java changes): the assignment lands.
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(),
-            milestones.read(scope, milestoneInBackend).get(Field.NUMBER.canonicalName()),
+            Field.MILESTONE_ID.canonicalName(), goalNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
 
         assertThat(updated.get(Field.MILESTONE_ID.canonicalName()))
-            .as("cross-workstream milestone now attaches — the edge is retracted")
-            .isEqualTo(milestones.read(scope, milestoneInBackend).get(Field.NUMBER.canonicalName()));
+            .as("the milestone attaches — the edge that would have vetoed it is retracted")
+            .isEqualTo(goalNumber);
     }
 
+    /**
+     * Moving the item between workstreams does not detach its milestone.
+     *
+     * <p>Pre-rollback the second update refused: the item was leaving the
+     * workstream the milestone belonged to. Post-rollback the workstream moves
+     * and the milestone stays, because the two axes hang independently on the
+     * item.
+     */
     @Test
-    void moving_the_item_to_a_workstream_the_milestone_is_not_in_now_passes() {
+    void moving_the_item_to_another_workstream_keeps_its_milestone() {
         Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
         Workstream backend = workstreams.declare(scope, "backend", "backend stream");
 
         UUID itemId = createItem("consistent then moved", mobile.id);
-        UUID milestoneInMobile = createMilestone("mobile goal", mobile.id);
+        UUID goal = createMilestone("a goal that survives the move");
+        Object goalNumber = milestones.read(scope, goal).get(Field.NUMBER.canonicalName());
         items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(),
-            milestones.read(scope, milestoneInMobile).get(Field.NUMBER.canonicalName()),
+            Field.MILESTONE_ID.canonicalName(), goalNumber,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
 
-        // Pre-rollback: the second update refused with WORKSTREAM_MILESTONE_MISMATCH.
-        // Post-rollback: the workstream moves; the milestone stays where it is
-        // and continues to be reached by the item.
         Map<String, Object> moved = items.update(scope, itemId, Map.of(
             Field.WORKSTREAM_ID.canonicalName(), backend.token,
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
@@ -109,112 +136,7 @@ class MilestoneWorkstreamDecouplingIT {
             .isEqualTo(backend.token);
         assertThat(moved.get(Field.MILESTONE_ID.canonicalName()))
             .as("the milestone still reaches the item across the boundary")
-            .isEqualTo(milestones.read(scope, milestoneInMobile).get(Field.NUMBER.canonicalName()));
-    }
-
-    @Test
-    void milestone_update_workstream_is_a_noop_and_does_not_refuse() {
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Workstream backend = workstreams.declare(scope, "backend", "backend stream");
-
-        Map<String, Object> created = milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "settled milestone",
-            Field.VISION.canonicalName(), "vision",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
-        UUID milestoneId = (UUID) created.get(Field.ID.canonicalName());
-        String token = (String) created.get(Field.CONFLICT_TOKEN.canonicalName());
-
-        // Pre-rollback: this update refused with WORKSTREAM_MILESTONE_MISMATCH
-        // ("a milestone's workstream is set at create and is not moved after").
-        // Post-rollback: the column is dead, and the write is accepted or
-        // echoed. The row's number is scope-wide now, so moving the workstream
-        // does not detach any number from its axis.
-        Map<String, Object> updated = milestones.update(scope, milestoneId, Map.of(
-            Field.WORKSTREAM_ID.canonicalName(), backend.token,
-            Field.CONFLICT_TOKEN.canonicalName(), token));
-
-        assertThat(updated)
-            .as("no refusal — a milestone's workstream is no longer an invariant")
-            .isNotEmpty();
-    }
-
-    @Test
-    void milestones_in_different_workstreams_share_the_scope_wide_number_line() {
-        // Pre-rollback: the counter ran per-workstream and both got 1.
-        // Post-rollback: the counter is scope-wide, so the two are 1 and 2.
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Workstream backend = workstreams.declare(scope, "backend", "backend stream");
-
-        Long firstInMobile = (Long) milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "mobile goal 1",
-            Field.VISION.canonicalName(), "first mobile star",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.token))
-            .get(Field.NUMBER.canonicalName());
-
-        Long firstInBackend = (Long) milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "backend goal 1",
-            Field.VISION.canonicalName(), "first backend star",
-            Field.WORKSTREAM_ID.canonicalName(), backend.token))
-            .get(Field.NUMBER.canonicalName());
-
-        assertThat(firstInMobile).isEqualTo(1L);
-        assertThat(firstInBackend)
-            .as("scope-wide counter: the second milestone gets 2 regardless of workstream")
-            .isEqualTo(2L);
-    }
-
-    /**
-     * A create naming a workstream nobody declared is refused as
-     * {@link WorklistException.Reason#WORKSTREAM_UNKNOWN}.
-     *
-     * <p>V12 retracted the invariant that ties the milestone to a workstream,
-     * but the field still travels — and a value it names has to exist. The
-     * check runs at create because the wire form is the token the scope
-     * declared, and inventing one here would let a typo pass silently.
-     */
-    @Test
-    void create_milestone_with_an_unknown_workstream_is_refused() {
-        Throwable refused = org.assertj.core.api.Assertions.catchThrowable(() ->
-            milestones.create(scope, Map.of(
-                Field.TITLE.canonicalName(), "unresolvable workstream",
-                Field.VISION.canonicalName(), "a north star",
-                Field.WORKSTREAM_ID.canonicalName(), "no-such-workstream")));
-
-        assertThat(refused).isInstanceOf(WorklistException.class);
-        WorklistException typed = (WorklistException) refused;
-        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.WORKSTREAM_UNKNOWN);
-    }
-
-    /**
-     * An update naming a workstream nobody declared is refused the same way.
-     *
-     * <p>Distinct branch from create — the update path runs a separate
-     * resolution — and the milestone's row keeps the workstream it had. What
-     * this asserts is that a caller cannot move the milestone to a value the
-     * scope has not committed to.
-     */
-    @Test
-    void update_milestone_workstream_to_an_unknown_value_is_refused() {
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-        Map<String, Object> created = milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "settled milestone",
-            Field.VISION.canonicalName(), "vision",
-            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
-        UUID milestoneId = (UUID) created.get(Field.ID.canonicalName());
-        String token = (String) created.get(Field.CONFLICT_TOKEN.canonicalName());
-
-        Throwable refused = org.assertj.core.api.Assertions.catchThrowable(() ->
-            milestones.update(scope, milestoneId, Map.of(
-                Field.WORKSTREAM_ID.canonicalName(), "no-such-workstream",
-                Field.CONFLICT_TOKEN.canonicalName(), token)));
-
-        assertThat(refused).isInstanceOf(WorklistException.class);
-        WorklistException typed = (WorklistException) refused;
-        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.WORKSTREAM_UNKNOWN);
-        assertThat(milestones.read(scope, milestoneId).get(Field.WORKSTREAM_ID.canonicalName()))
-            .as("the milestone still points at the workstream it had — the refusal is "
-                + "not merely a message, it is a write that did not land")
-            .isEqualTo(mobile.token);
+            .isEqualTo(goalNumber);
     }
 
     // ==================================================================
@@ -230,12 +152,18 @@ class MilestoneWorkstreamDecouplingIT {
             .get(Field.ID.canonicalName());
     }
 
-    private UUID createMilestone(String title, UUID workstreamId) {
+    /**
+     * A milestone, named by nothing but its title.
+     *
+     * <p>It takes no workstream because a milestone carries none — which is
+     * exactly what the two tests above are about: the item they are attached
+     * to sits in one, and the milestone sits in none, and the two are
+     * therefore never in conflict.
+     */
+    private UUID createMilestone(String title) {
         return (UUID) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.VISION.canonicalName(), "vision of " + title,
-            Field.WORKSTREAM_ID.canonicalName(),
-            workstreams.require(scope, workstreamId).token))
+            Field.VISION.canonicalName(), "vision of " + title))
             .get(Field.ID.canonicalName());
     }
 

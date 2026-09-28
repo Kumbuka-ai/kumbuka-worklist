@@ -165,6 +165,15 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 case UNKNOWN_FIELD, FIELD_NOT_SETTABLE, INVALID_VALUE, VALUE_UNDECLARED,
                      SELECTOR_UNDECLARED, SELECTOR_WITHDRAWN -> 422;
 
+                // A field whose relation was retracted: the same 422 as an
+                // unknown one, and deliberately so. The caller has to change
+                // the call either way, which is what the status says; what
+                // differs is the sentence, and that travels in the message
+                // and the reason name rather than in the status. Not 410 —
+                // that is an answer about a RESOURCE being gone, and the
+                // milestone this call addresses is right there.
+                case FIELD_RETRACTED -> 422;
+
                 // The scope is visible to this caller and this service does not
                 // serve its kind. 422 and not 404: the scope is there, the
                 // caller can see it, and saying otherwise would send them

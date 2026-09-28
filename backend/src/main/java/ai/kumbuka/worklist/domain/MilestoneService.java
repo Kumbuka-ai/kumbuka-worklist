@@ -1,7 +1,6 @@
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
-import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -71,8 +70,6 @@ public class MilestoneService extends PlanningService {
      * selector, and the milestone selector is the one this allocator reads.
      */
     @Inject SelectorRegistry selectors;
-    @Inject WorkstreamService workstreams;
-    @Inject WorkstreamRepository workstreamRepository;
     @Inject ScopeAccessRepository scopeAccess;
 
     // ------------------------------------------------------------------
@@ -114,18 +111,8 @@ public class MilestoneService extends PlanningService {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         refuseUnsettableChanges(Addressed.MILESTONE, Map.of(), given);
 
-        // V12 (2026-09-09): the milestone-workstream edge is retracted
-        // (TAR-0002 section 4, REQ-0148 obsolete). The `workstream_id`
-        // column on `milestone` stays for one image cycle and is
-        // populated from the caller's argument or from the scope's
-        // default for symmetry with the old shape, but no invariant
-        // reads it. The number is allocated from the scope-wide
-        // milestone counter.
-        Workstream workstream = resolveWorkstream(scopeId, given.get(Field.WORKSTREAM_ID));
-
         Milestone milestone = new Milestone();
         milestone.scopeId = scopeId;
-        milestone.workstreamId = workstream.id;
         milestone.title = capped(Field.TITLE, required(Field.TITLE, given.get(Field.TITLE),
             "a milestone carries a title. It is the axis position's handle in every "
                 + "listing, and the one field a marker needs as much as a goal does"),
@@ -134,12 +121,6 @@ public class MilestoneService extends PlanningService {
 
         Map<Field, Object> settable = settableOnly(Addressed.MILESTONE, given);
         settable.remove(Field.TITLE);
-        // Workstream was resolved above and is set on the row already; leaving
-        // it in the settable map would send it through `applyOne`, whose
-        // switch has no case for it (the frame ratifies the workstream on a
-        // milestone as write-once from create, and moving it later would
-        // change which counter numbered the milestone).
-        settable.remove(Field.WORKSTREAM_ID);
         applyEffectiveChanges(milestone, project(milestone, List.of()), settable);
         refuseGoalOnAMarker(milestone);
 
@@ -233,31 +214,6 @@ public class MilestoneService extends PlanningService {
         return selectors.allocate(scopeId, milestoneSelector);
     }
 
-    /**
-     * Resolve a workstream at milestone-create time.
-     *
-     * <p>Named by TOKEN → look up + refuse-withdrawn. Absent → the scope's
-     * default. A uuid is a form refusal: the wire form of the field is the
-     * token the scope declared, which is what the read answer names.
-     */
-    private Workstream resolveWorkstream(UUID scopeId, Object value) {
-        String token = ItemFields.text(Field.WORKSTREAM_ID, value);
-        if (token == null) {
-            return workstreams.requireDefault(scopeId);
-        }
-        ItemFields.refuseUuidShape(Field.WORKSTREAM_ID, token, "a workstream token");
-        Workstream workstream = workstreamRepository.findByToken(scopeId, token);
-        if (workstream == null) {
-            throw new WorklistException(
-                WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                "no workstream '" + token + "' in scope " + scopeId + ". The value "
-                    + "travels as the token the scope declared it under",
-                List.of(Field.WORKSTREAM_ID.canonicalName()));
-        }
-        workstreams.refuseWithdrawn(workstream);
-        return workstream;
-    }
-
     private boolean applyEffectiveChanges(Milestone milestone, Map<String, Object> current,
             Map<Field, Object> settable) {
         boolean changed = false;
@@ -297,32 +253,6 @@ public class MilestoneService extends PlanningService {
             case RANK -> {
                 Integer rank = whole(field, value);
                 return rank != null && moved(held, rank, () -> milestone.rank = rank);
-            }
-            case WORKSTREAM_ID -> {
-                // V12 (2026-09-09): the milestone-workstream edge is
-                // retracted (TAR-0002 section 4, REQ-0148 obsolete), and
-                // the milestone's number space returned to scope-wide.
-                // The column `milestone.workstream_id` stays for one image
-                // cycle but carries no invariant; the wire form is the
-                // token the scope declared, and a uuid is a form refusal.
-                String token = ItemFields.text(field, value);
-                if (ItemFields.unchangedAsText(held, token)) {
-                    return false;
-                }
-                if (token == null) {
-                    return moved(held, null, () -> milestone.workstreamId = null);
-                }
-                ItemFields.refuseUuidShape(field, token, "a workstream token");
-                Workstream workstream = workstreamRepository.findByToken(
-                    milestone.scopeId, token);
-                if (workstream == null) {
-                    throw new WorklistException(
-                        WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                        "no workstream '" + token + "' in scope " + milestone.scopeId,
-                        List.of(field.canonicalName()));
-                }
-                return moved(held, token,
-                    () -> milestone.workstreamId = workstream.id);
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable on a milestone and has no application");
@@ -431,8 +361,11 @@ public class MilestoneService extends PlanningService {
         fields.put(Field.VISION.canonicalName(), milestone.vision);
         fields.put(Field.MISSION.canonicalName(), milestone.mission);
         fields.put(Field.RANK.canonicalName(), milestone.rank);
-        fields.put(Field.WORKSTREAM_ID.canonicalName(),
-            workstreamTokenOf(milestone.scopeId, milestone.workstreamId));
+        // No `workstream`. Retracted from the milestone on 2026-09-28: the
+        // edge itself went in V12, and the field stayed answerable for
+        // nineteen days after it — which is how a caller came to file
+        // milestones per workstream and build on the conclusion.
+        // `Field.RETRACTED` carries the sentence one who still sends it gets.
         fields.put(Field.CREATED_AT.canonicalName(), milestone.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), milestone.updatedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), milestone.conflictToken);
@@ -451,15 +384,4 @@ public class MilestoneService extends PlanningService {
         }
     }
 
-    /** The token of a workstream in a scope, or null. */
-    private String workstreamTokenOf(UUID scopeId, UUID workstreamId) {
-        if (workstreamId == null) {
-            return null;
-        }
-        try {
-            return workstreams.require(scopeId, workstreamId).token;
-        } catch (WorklistException absent) {
-            return null;
-        }
-    }
 }

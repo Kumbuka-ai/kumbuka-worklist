@@ -126,19 +126,17 @@ public class Milestone extends AggregateRoot {
     @Column(name = "rank", nullable = false)
     public int rank;
 
-    /**
-     * The workstream this milestone lives in. Mandatory once V10 lands.
-     *
-     * <p>Ratified 2026-09-08. Numbering is per workstream — two workstreams
-     * legitimately share a milestone number, and the address form
-     * disambiguates them through the scope alone because the workstream is
-     * a field on the milestone and never an address component. The reason
-     * is that pulling the workstream into the address would break the
-     * fixed address shape and with it citability of every existing
-     * milestone reference.
-     */
-    @Column(name = "workstream_id")
-    public UUID workstreamId;
+    // No workstream. The column `milestone.workstream_id` still exists in the
+    // database and is not mapped here on purpose: V12 (2026-09-09) retracted
+    // the edge and marked the column DEAD, and the mapping was what kept the
+    // running image reading and writing it. Dropping the mapping is the
+    // precondition the column's own DROP waits on — while any deployed image
+    // selects the column, dropping it breaks that image. V13 made it nullable
+    // so an insert that does not name it succeeds.
+    //
+    // Milestones written before this change keep whatever value they carried.
+    // It means nothing and nothing reads it (TAR-0002 section 4: a milestone
+    // belongs to no workstream), which is why no backfill is owed.
 
     @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
