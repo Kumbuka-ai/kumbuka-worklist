@@ -28,14 +28,17 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * <p><strong>An item's milestone is no longer bound to its workstream.</strong>
  * V12 (2026-09-09) retracts the edge — several workstreams reach one
  * milestone together (TAR-0002 section 4, REQ-0148 obsolete). The
- * decoupling probe is in {@link MilestoneWorkstreamDecouplingIT}.
+ * decoupling probe is in {@link MilestoneWorkstreamDecouplingIT}, and the
+ * field's removal from the milestone surface in
+ * {@code MilestoneWorkstreamRetractionIT}. Nothing about a milestone is
+ * asserted here any more: what this class is about is the item's own
+ * obligation, which the retraction does not touch.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
 class ItemWorkstreamInvariantIT {
 
     @Inject ItemService items;
-    @Inject MilestoneService milestones;
     @Inject WorkstreamService workstreams;
     @Inject VocabularyRegistry vocabulary;
     @Inject SelectorRegistry selectors;
@@ -107,30 +110,18 @@ class ItemWorkstreamInvariantIT {
     }
 
     // ==================================================================
-    // Class 2 — item milestone assignments (cross-workstream now passes)
+    // Class 2 — the item's workstream moves, and nothing about a milestone
+    // has a say in it
     //
-    // The two "refused"-shape tests that used to live here are gone with
-    // V12: MilestoneWorkstreamDecouplingIT now asserts the opposite —
-    // that a cross-workstream assignment passes. The one test that stays
-    // here is the SAME-workstream shape, because it is unchanged.
+    // Three tests about the item-milestone-workstream triangle used to live
+    // here. Two went with V12, which retracted the edge the "refused" shapes
+    // asserted. The third — "assigning a milestone from the SAME workstream
+    // passes" — went on 2026-09-28 with the surface retraction: a milestone
+    // carries no workstream at all now, so there is no same one for it to
+    // come from, and the claim that survives (an item in a workstream
+    // reaches a milestone) is asserted in MilestoneWorkstreamDecouplingIT
+    // rather than twice.
     // ==================================================================
-
-    @Test
-    void assigning_a_milestone_from_the_same_workstream_passes() {
-        selectors.declare(scope, Selector.ITEM);
-        selectors.declare(scope, Selector.MILESTONE);
-        Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
-
-        UUID itemId = createItem("same-ws item", mobile.id);
-        UUID milestoneInMobile = createMilestone("mobile goal", mobile.id);
-
-        Long milestoneNumber = (Long) milestones.read(scope, milestoneInMobile)
-            .get(Field.NUMBER.canonicalName());
-        Map<String, Object> updated = items.update(scope, itemId, Map.of(
-            Field.MILESTONE_ID.canonicalName(), milestoneNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
-        assertThat(updated.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(milestoneNumber);
-    }
 
     @Test
     void moving_the_item_to_another_workstream_without_a_milestone_passes() {
@@ -168,15 +159,6 @@ class ItemWorkstreamInvariantIT {
         return (UUID) items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
-            Field.WORKSTREAM_ID.canonicalName(),
-            workstreams.require(scope, workstreamId).token))
-            .get(Field.ID.canonicalName());
-    }
-
-    private UUID createMilestone(String title, UUID workstreamId) {
-        return (UUID) milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), title,
-            Field.VISION.canonicalName(), "vision of " + title,
             Field.WORKSTREAM_ID.canonicalName(),
             workstreams.require(scope, workstreamId).token))
             .get(Field.ID.canonicalName());

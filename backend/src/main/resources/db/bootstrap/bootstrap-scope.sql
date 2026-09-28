@@ -151,12 +151,12 @@ WHERE ns.tenant_id   = :'tenant_id'
 
 -- The scope-wide counters for the item, iteration and milestone selectors.
 --
--- `SelectorRegistry.allocate` reads the scope-wide row of each selector
--- (`workstream_id IS NULL`) and refuses typed with SELECTOR_UNDECLARED when
--- one is missing. `SelectorRegistry.declare` opens that row alongside the
--- selector — a scope opened through the verb surface therefore always has
--- one — but this bootstrap seeds the selectors directly through DML, so
--- the counter rows have to be seeded here too.
+-- `SelectorRegistry.allocate` reads a selector's one counter row and
+-- refuses typed with SELECTOR_UNDECLARED when it is missing.
+-- `SelectorRegistry.declare` opens that row alongside the selector — a
+-- scope opened through the verb surface therefore always has one — but
+-- this bootstrap seeds the selectors directly through DML, so the counter
+-- rows have to be seeded here too.
 --
 -- Milestone returned to scope-wide with V12 (2026-09-09). The per-
 -- workstream row an earlier bootstrap seeded here is retired: it belongs
@@ -165,13 +165,18 @@ WHERE ns.tenant_id   = :'tenant_id'
 -- reads as ONE step — every selector this bootstrap declares carries the
 -- row that answers when it is used.
 --
+-- The insert stops naming `number_space.workstream_id` as of 2026-09-28.
+-- It only ever wrote NULL into it here, so nothing changes about the row
+-- that lands; what changes is that this file no longer has to be edited in
+-- the same breath as the column's DROP.
+--
 -- The default workstream is number 1; its counter is advanced with
 -- GREATEST(mark, 1) above so the next `declare` allocates 2. Item,
 -- iteration and milestone all open at zero, which is what the store
 -- carries for a scope with nothing in it yet.
 INSERT INTO worklist.number_space
-    (tenant_id, scope_id, selector_id, workstream_id, high_water_mark)
-SELECT :'tenant_id', :'scope_id', s.id, NULL, 0
+    (tenant_id, scope_id, selector_id, high_water_mark)
+SELECT :'tenant_id', :'scope_id', s.id, 0
 FROM worklist.selector s
 WHERE s.tenant_id = :'tenant_id'
   AND s.scope_id  = :'scope_id'

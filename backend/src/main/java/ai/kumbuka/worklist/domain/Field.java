@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static ai.kumbuka.worklist.domain.Addressed.ITEM;
 import static ai.kumbuka.worklist.domain.Addressed.ITERATION;
@@ -36,7 +37,9 @@ import static ai.kumbuka.worklist.domain.Addressed.SETTING;
  * <p>Both halves are answered here rather than in a convention. There is one
  * name per field, this enum is where it is defined, and both directions read
  * it. An argument that is not in this enum is a {@link
- * WorklistException.Reason#UNKNOWN_FIELD} that NAMES the argument.
+ * WorklistException.Reason#UNKNOWN_FIELD} that NAMES the argument — unless the
+ * object USED to carry it, which is a third answer and lives in {@link
+ * #RETRACTED}.
  *
  * <h2>One catalogue for five kinds of object, keyed by what is addressed</h2>
  *
@@ -223,20 +226,29 @@ public enum Field {
     MILESTONE_ID("milestone", Set.of(ITEM), Set.of(ITEM)),
 
     /**
-     * The workstream an item or a milestone belongs to.
+     * The workstream an item belongs to.
      *
      * <p>Ratified 2026-09-08. An item carries a workstream as an
-     * OBLIGATION (created without it, the create refuses; V10 turns the
-     * column NOT NULL), and a milestone carries one too. The invariant that
-     * binds the two is enforced in {@code ItemService}: if the item also
-     * carries a milestone, the milestone lies in the item's workstream.
+     * OBLIGATION: created without it, the create resolves the scope's
+     * default, and V10 turns the column NOT NULL.
      *
-     * <p>The value travels as the workstream's IDENTITY, never as its
-     * token, for the same reason {@link #MILESTONE_ID} does — the token
-     * is renamable up to the first pointer, and a caller writing a token
-     * would be writing something that can move under them.
+     * <p><strong>A milestone carries none.</strong> It did between
+     * 2026-09-08 and V12, and the edge was retracted — TAR-0002 section 4
+     * (accepted) states that a milestone belongs to no workstream, and
+     * REQ-0148 is obsolete for the same reason. The name is therefore in
+     * {@link #RETRACTED} for a milestone rather than merely absent from
+     * this declaration: a caller who still sends it gets the sentence that
+     * says what happened, which is not what an unknown name would tell
+     * them.
+     *
+     * <p>The value travels as the workstream's TOKEN, which is the one
+     * declared thing besides {@link #SELECTOR} that does. A workstream's
+     * token is renamable only while nothing points into it and fixed
+     * thereafter ({@code WORKSTREAM_HAS_REFERENCES}), so there is nothing
+     * for a caller's value to move under — the same argument that admits
+     * a selector token. A uuid here is a form refusal.
      */
-    WORKSTREAM_ID("workstream", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
+    WORKSTREAM_ID("workstream", Set.of(ITEM), Set.of(ITEM)),
 
     /**
      * Whether a milestone is a goal or one of the three positions on the axis
@@ -367,6 +379,58 @@ public enum Field {
      */
     WARNINGS("warnings", Set.of(MILESTONE, ITERATION, MEMBERSHIP, SETTING), Set.of());
 
+    /**
+     * Names an object USED to carry, each with the sentence that says why it
+     * does not any more.
+     *
+     * <h2>Why a retraction is its own answer</h2>
+     *
+     * Dropping a name from the declaration above is enough to make a write
+     * carrying it fail, and the failure would be
+     * {@link WorklistException.Reason#UNKNOWN_FIELD} — "no field of a
+     * milestone is named [workstream]". That sentence is true and it is the
+     * wrong one. The caller is not holding a typo: they are holding a field
+     * that this service published, answered reads with and accepted writes
+     * on, and the thing they need to know is that the relation behind it was
+     * retracted and what stands in its place. An unknown-field refusal sends
+     * them to check their spelling.
+     *
+     * <p>So a retracted name resolves to {@link
+     * WorklistException.Reason#FIELD_RETRACTED} and carries the retraction's
+     * own prose, naming the ratified document the retraction rests on. The
+     * caller can act on it without asking anybody.
+     *
+     * <h2>Why the refusal is hard rather than echo-tolerant</h2>
+     *
+     * A read-only field is refused only when it carries a CHANGED value,
+     * because a caller sending a read answer back is doing the obvious thing
+     * and every field of that answer would otherwise be a trap. A retracted
+     * field is not in the read answer at all — the projection stopped
+     * carrying it in the same change — so there is nothing to echo, and no
+     * round trip is broken by refusing it outright. Accepting it would be the
+     * defect this catalogue exists against: a write taken, answered
+     * green and landing nowhere.
+     *
+     * <h2>The entries do not expire on their own</h2>
+     *
+     * An entry stays until no caller can still be holding the name, which is
+     * a judgement about deployed callers rather than about this file. Removing
+     * one turns its refusal back into {@link
+     * WorklistException.Reason#UNKNOWN_FIELD}, which is the right answer once
+     * the name has been gone long enough to be a typo again.
+     */
+    private static final Map<Addressed, Map<String, String>> RETRACTED = Map.of(
+        MILESTONE, Map.of("workstream",
+            "a milestone belongs to no workstream, and several workstreams reach one "
+                + "milestone together — that is the normal case rather than a tolerated "
+                + "one (TAR-0002 section 4, accepted; REQ-0148 obsolete). The edge was "
+                + "retracted in the database by V12 on 2026-09-09 and is now off the "
+                + "surface too, which is what this refusal is: between the two, the "
+                + "field was still answered and still taken, and a write on it landed "
+                + "nowhere without saying so. The edge that stands is the item's: an "
+                + "item belongs to exactly one workstream, so a milestone's work is "
+                + "filed through the items that aim at it"));
+
     private final String canonicalName;
     private final Set<Addressed> carriedBy;
     private final Set<Addressed> settableOn;
@@ -433,18 +497,46 @@ public enum Field {
      * message says which object was addressed. That is the case worth getting
      * right: {@code motto} is a real field of this service, and sending it to
      * an item has to read as "not on an item" rather than as a typo.
+     *
+     * <p>A name THIS object used to carry is a third answer again —
+     * {@link WorklistException.Reason#FIELD_RETRACTED}, with the retraction's
+     * own prose from {@link #RETRACTED}. Every one of the three says nothing
+     * was written, which is the property that matters: an argument this
+     * service does not act on is never dropped.
      */
     public static Map<Field, Object> resolve(Addressed addressed, Map<String, ?> arguments) {
         Map<Field, Object> resolved = new LinkedHashMap<>();
+        Map<String, String> retractedHere = RETRACTED.getOrDefault(addressed, Map.of());
+        List<String> retracted = new ArrayList<>();
         List<String> unknown = new ArrayList<>();
 
         for (Map.Entry<String, ?> entry : arguments.entrySet()) {
             Optional<Field> field = byCanonicalName(addressed, entry.getKey());
-            if (field.isEmpty()) {
-                unknown.add(entry.getKey());
-            } else {
+            if (field.isPresent()) {
                 resolved.put(field.get(), entry.getValue());
+            } else if (retractedHere.containsKey(entry.getKey())) {
+                retracted.add(entry.getKey());
+            } else {
+                unknown.add(entry.getKey());
             }
+        }
+
+        // Retracted before unknown, and the order is load-bearing. A call
+        // naming both gets the retraction, because that is the one the caller
+        // cannot work out for themselves: the unknown-field message lists the
+        // object's fields, and a reader who found `workstream` missing from
+        // that list would go looking for a spelling that never existed.
+        if (!retracted.isEmpty()) {
+            throw new WorklistException(
+                WorklistException.Reason.FIELD_RETRACTED,
+                "a " + addressed.description() + " no longer carries " + retracted
+                    + ". " + retracted.stream()
+                        .map(name -> name + " — " + retractedHere.get(name))
+                        .collect(Collectors.joining("; "))
+                    + ". Nothing was written: a field whose relation was retracted is "
+                    + "refused rather than taken, because a write that is accepted and "
+                    + "lands nowhere is the defect the retraction is undoing",
+                retracted);
         }
 
         if (!unknown.isEmpty()) {

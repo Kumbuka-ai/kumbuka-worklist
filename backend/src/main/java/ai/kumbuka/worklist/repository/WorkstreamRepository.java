@@ -99,7 +99,17 @@ public class WorkstreamRepository {
             .getResultList();
     }
 
-    /** True when this workstream has an item or a milestone pointing at it. */
+    /**
+     * True when this workstream has an item pointing at it.
+     *
+     * <p>Items and nothing else. A milestone was counted here too until
+     * 2026-09-28, and the count was already meaningless: V12 retracted the
+     * milestone-workstream edge (TAR-0002 section 4), so a milestone row's
+     * {@code workstream_id} says nothing about where the milestone belongs.
+     * What the count is FOR is the rename refusal — a token may be corrected
+     * while nothing points into it and is fixed once something does — and a
+     * dead value pointing nowhere is not something that can break.
+     */
     @Transactional
     public boolean hasReferences(UUID scopeId, UUID workstreamId) {
         Long items = em.createQuery(
@@ -108,16 +118,7 @@ public class WorkstreamRepository {
             .setParameter(P_SCOPE, scopeId)
             .setParameter("ws", workstreamId)
             .getSingleResult();
-        if (items != null && items > 0) {
-            return true;
-        }
-        Long milestones = em.createQuery(
-                "SELECT COUNT(m) FROM Milestone m "
-                    + "WHERE m.scopeId = :scope AND m.workstreamId = :ws", Long.class)
-            .setParameter(P_SCOPE, scopeId)
-            .setParameter("ws", workstreamId)
-            .getSingleResult();
-        return milestones != null && milestones > 0;
+        return items != null && items > 0;
     }
 
     /** Insert and flush, so table constraints answer here rather than at commit. */

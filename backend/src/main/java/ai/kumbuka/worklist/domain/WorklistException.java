@@ -91,6 +91,32 @@ public class WorklistException extends RuntimeException {
         UNKNOWN_FIELD,
 
         /**
+         * An argument named a field the addressed object USED to carry, and
+         * whose relation has since been retracted.
+         *
+         * <p>Distinct from {@link #UNKNOWN_FIELD} because the remedy is
+         * different, and that is the whole reason it exists. A caller holding
+         * an unknown name is holding a typo and should check their spelling. A
+         * caller holding a retracted name is holding something this service
+         * published, answered reads with and took writes on; what they need is
+         * the sentence that says the relation is gone and what stands in its
+         * place. Telling them "no such field" sends them looking for a
+         * spelling that never existed.
+         *
+         * <p>The message carries the retraction's own prose from {@code
+         * Field.RETRACTED}, naming the ratified document it rests on. The
+         * offenders are the argument names, as with the other two field
+         * refusals.
+         *
+         * <p>Arrived 2026-09-28: {@code milestone.workstream} was
+         * retracted in the database by V12 and stayed on the surface as a
+         * live-looking field for nineteen days, answering reads and taking
+         * writes that landed nowhere. The reason is the general form of that
+         * answer and not a special case for one field.
+         */
+        FIELD_RETRACTED,
+
+        /**
          * A known field that a caller may not set carried a value other than
          * the one it already has. Echoing a read answer back is fine; changing
          * an id or a timestamp through it is not.
