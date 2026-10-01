@@ -1012,12 +1012,10 @@ class SchemaConstraintIT {
 
     private void insertMilestone(Connection c, long number, String kind, String status,
             String vision) throws SQLException {
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.milestone
-                    (id, tenant_id, scope_id, number, title, kind, status, vision,
-                     workstream_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, number, title, kind, status, vision)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
@@ -1027,7 +1025,6 @@ class SchemaConstraintIT {
             st.setString(6, kind);
             st.setString(7, status);
             st.setString(8, vision);
-            st.setObject(9, workstream);
             st.executeUpdate();
         }
     }
@@ -1174,12 +1171,10 @@ class SchemaConstraintIT {
      */
     private void insertMilestoneWithMission(Connection c, long number, String mission)
             throws SQLException {
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.milestone
-                    (id, tenant_id, scope_id, number, title, kind, status, mission,
-                     workstream_id)
-                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?, ?)
+                    (id, tenant_id, scope_id, number, title, kind, status, mission)
+                VALUES (?, ?, ?, ?, ?, 'milestone', 'planned', ?)
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
@@ -1187,7 +1182,6 @@ class SchemaConstraintIT {
             st.setLong(4, number);
             st.setString(5, "milestone " + number);
             st.setString(6, mission);
-            st.setObject(7, workstream);
             st.executeUpdate();
         }
     }

@@ -590,16 +590,14 @@ class ItemDomainIsolationIT {
     }
 
     private void insertMilestone(Connection c, UUID tenant) throws SQLException {
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.milestone
-                    (id, tenant_id, scope_id, number, title, workstream_id)
-                VALUES (?, ?, ?, 1, 'a milestone', ?)
+                    (id, tenant_id, scope_id, number, title)
+                VALUES (?, ?, ?, 1, 'a milestone')
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
-            st.setObject(4, workstream);
             st.executeUpdate();
         }
     }

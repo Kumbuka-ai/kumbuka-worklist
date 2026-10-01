@@ -176,8 +176,8 @@ class NumberSpaceBackfillIT {
             Db.bindTenant(c, tenant);
             try (var st = c.prepareStatement("""
                     INSERT INTO worklist.number_space
-                        (tenant_id, scope_id, selector_id, workstream_id, high_water_mark)
-                    SELECT ?, ?, s.id, NULL, ?
+                        (tenant_id, scope_id, selector_id, high_water_mark)
+                    SELECT ?, ?, s.id, ?
                     FROM worklist.selector s
                     WHERE s.tenant_id = ? AND s.scope_id = ? AND s.token = 'milestone'
                     """)) {
@@ -214,8 +214,13 @@ class NumberSpaceBackfillIT {
      * The behaviour of V15, run against ONE scope so its effect is
      * observable in this suite. The two selectors are walked exactly as
      * the migration walks them: for each, the scope-wide row is inserted
-     * with the carried-forward mark when missing, and any per-workstream
-     * duplicates on that selector are dropped afterwards.
+     * with the carried-forward mark when missing.
+     *
+     * <p>The replay runs against the schema after V17, which dropped
+     * {@code number_space.workstream_id}. Every counter row is scope-wide
+     * there, so "the scope-wide row" is simply the selector's row, and
+     * V15's closing DELETE of per-workstream duplicates has no shape left to
+     * act on — it is not replayed. V15 itself is applied and stays as it is.
      *
      * <p>Not a {@code DO $$} block: PostgreSQL rejects bind parameters
      * inside one, and the migration's body is faithful either way.
@@ -234,7 +239,6 @@ class NumberSpaceBackfillIT {
                         maxRowNumber(c, targetScope, selectorToken));
                     insertScopeWideRow(c, targetScope, selectorId, consolidated);
                 }
-                deletePerWorkstreamRows(c, targetScope, selectorId);
             }
             c.commit();
         }
@@ -258,7 +262,6 @@ class NumberSpaceBackfillIT {
         try (var st = c.prepareStatement("""
                 SELECT 1 FROM worklist.number_space
                 WHERE tenant_id = ? AND scope_id = ? AND selector_id = ?
-                  AND workstream_id IS NULL
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, targetScope);
@@ -306,27 +309,13 @@ class NumberSpaceBackfillIT {
             throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.number_space
-                    (tenant_id, scope_id, selector_id, workstream_id, high_water_mark)
-                VALUES (?, ?, ?, NULL, ?)
+                    (tenant_id, scope_id, selector_id, high_water_mark)
+                VALUES (?, ?, ?, ?)
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, targetScope);
             st.setObject(3, selectorId);
             st.setLong(4, mark);
-            st.executeUpdate();
-        }
-    }
-
-    private void deletePerWorkstreamRows(Connection c, UUID targetScope, UUID selectorId)
-            throws SQLException {
-        try (var st = c.prepareStatement("""
-                DELETE FROM worklist.number_space
-                WHERE tenant_id = ? AND scope_id = ? AND selector_id = ?
-                  AND workstream_id IS NOT NULL
-                """)) {
-            st.setObject(1, tenant);
-            st.setObject(2, targetScope);
-            st.setObject(3, selectorId);
             st.executeUpdate();
         }
     }

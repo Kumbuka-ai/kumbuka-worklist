@@ -79,9 +79,9 @@ public class NumberSpace extends TenantScoped {
     // now takes one shape, so there is nothing for a discriminator to
     // discriminate.
     //
-    // The column is unmapped rather than merely unused, for the reason the
-    // milestone's is: while a deployed image selects it, its DROP is not
-    // available. The second stage of this rollback drops both.
+    // The column was unmapped first, for the reason the milestone's was:
+    // while a deployed image selected it, its DROP was not available. V17
+    // dropped both columns and their foreign keys.
 
     /**
      * The highest number ever handed out in this space. Zero means none has
