@@ -178,10 +178,11 @@ public final class Db {
      * The tenant's default workstream, planted on first use exactly the way
      * {@link #declaredStatus} plants a status.
      *
-     * <p>V10 makes {@code workstream_id} NOT NULL on {@code item} and
-     * {@code milestone}. A fixture that inserts either without it would be
-     * planting a row the service could not have written; this helper is
-     * what keeps the fixtures shaped like the service.
+     * <p>V10 makes {@code workstream_id} NOT NULL on {@code item}. A
+     * fixture that inserts an item without it would be planting a row the
+     * service could not have written; this helper is what keeps the
+     * fixtures shaped like the service. (V10 narrowed the milestone's column
+     * too; V13 widened it again and V17 dropped it.)
      *
      * <p>The workstream selector and its number-space row are opened along
      * the way if they were not already, and the mark is advanced to 1 so
@@ -239,7 +240,7 @@ public final class Db {
                 INSERT INTO worklist.number_space
                     (tenant_id, scope_id, selector_id, high_water_mark)
                 VALUES (?::uuid, ?::uuid, ?::uuid, 1)
-                ON CONFLICT (tenant_id, scope_id, selector_id) WHERE workstream_id IS NULL
+                ON CONFLICT (tenant_id, scope_id, selector_id)
                 DO UPDATE SET high_water_mark = GREATEST(worklist.number_space.high_water_mark, 1)
                 """)) {
             st.setString(1, tenant.toString());

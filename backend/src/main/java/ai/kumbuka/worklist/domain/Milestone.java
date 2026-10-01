@@ -126,17 +126,11 @@ public class Milestone extends AggregateRoot {
     @Column(name = "rank", nullable = false)
     public int rank;
 
-    // No workstream. The column `milestone.workstream_id` still exists in the
-    // database and is not mapped here on purpose: V12 (2026-09-09) retracted
-    // the edge and marked the column DEAD, and the mapping was what kept the
-    // running image reading and writing it. Dropping the mapping is the
-    // precondition the column's own DROP waits on — while any deployed image
-    // selects the column, dropping it breaks that image. V13 made it nullable
-    // so an insert that does not name it succeeds.
-    //
-    // Milestones written before this change keep whatever value they carried.
-    // It means nothing and nothing reads it (TAR-0002 section 4: a milestone
-    // belongs to no workstream), which is why no backfill is owed.
+    // No workstream. V12 (2026-09-09) retracted the edge (TAR-0002 section 4:
+    // a milestone belongs to no workstream) and marked `milestone.workstream_id`
+    // DEAD; the mapping left this entity first, so no deployed image selected
+    // the column any more, and V17 then dropped it together with
+    // `fk_milestone_workstream`.
 
     @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
