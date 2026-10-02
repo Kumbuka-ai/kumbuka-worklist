@@ -19,8 +19,10 @@
 --      names they had.
 --   4. `item.selector_id`. Every item hangs on the view selector `item`; the
 --      item's number is unique within its scope (V18) and is its address.
---   5. The uuid identity of every support row. Its surrogate `pk` becomes the
---      primary key. The link tables take their primary key from the
+--   5. The uuid identity of every support row. Where the row has a surrogate
+--      `pk`, it becomes the primary key. `scope_setting` has none and needs
+--      none: its primary key stays (tenant_id, scope_id) of V4, and only the
+--      uuid `id` of V5 goes. The link tables take their primary key from the
 --      readable columns.
 --
 -- What stays a uuid: `id` of item, iteration, milestone and workstream -- the
@@ -175,8 +177,11 @@ CREATE INDEX idx_iteration_membership_item ON worklist.iteration_membership
 -- 5. The support rows' identity: the surrogate.
 --
 -- The uuid identity goes with its column, and with it the UNIQUE
--- (tenant_id, id) every uuid key above pointed at. The surrogate becomes the
--- primary key; UNIQUE (tenant_id, pk) of V18 stays as the key target.
+-- (tenant_id, id) every uuid key above pointed at. For the seven rows that
+-- carry a surrogate, the surrogate becomes the primary key; UNIQUE
+-- (tenant_id, pk) of V18 stays as the key target. `scope_setting` carries no
+-- surrogate: its `id` goes without a replacement, and its primary key stays
+-- (tenant_id, scope_id) of V4.
 -- ---------------------------------------------------------------------------
 ALTER TABLE worklist.item_status          DROP COLUMN id;
 ALTER TABLE worklist.relation_type        DROP COLUMN id;
