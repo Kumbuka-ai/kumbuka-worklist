@@ -197,7 +197,7 @@ class ItemDomainIsolationIT {
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenantA);
-            assertThatThrownBy(() -> insertSelector(c, tenantB, UUID.randomUUID()))
+            assertThatThrownBy(() -> insertSelector(c, tenantB))
                 .as("bound to tenant A, an insert naming tenant B must be refused. "
                     + "Without WITH CHECK it would succeed and then vanish from the "
                     + "planter's own view — data across the boundary, invisible to "
@@ -222,8 +222,7 @@ class ItemDomainIsolationIT {
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenantB);
-            UUID foreignSelector = UUID.randomUUID();
-            insertSelector(c, tenantB, foreignSelector);
+            Long foreignSelector = insertSelector(c, tenantB);
             c.commit();
 
             Db.bindTenant(c, tenantA);
@@ -271,9 +270,9 @@ class ItemDomainIsolationIT {
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenantB);
-            UUID from = insertItem(c, tenantB, "edge-source");
-            UUID to = insertItem(c, tenantB, "edge-target");
-            UUID type = insertRelationType(c, tenantB);
+            long from = numberOf(c, insertItem(c, tenantB, "edge-source"));
+            long to = numberOf(c, insertItem(c, tenantB, "edge-target"));
+            Long type = insertRelationType(c, tenantB);
             c.commit();
 
             Db.bindTenant(c, tenantA);
@@ -330,15 +329,14 @@ class ItemDomainIsolationIT {
     void a_bound_session_cannot_change_a_foreign_row_and_is_not_told_so() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenantB);
-            UUID foreignSelector = UUID.randomUUID();
-            insertSelector(c, tenantB, foreignSelector);
+            Long foreignSelector = insertSelector(c, tenantB);
             c.commit();
 
             Db.bindTenant(c, tenantA);
             int affected;
             try (var st = c.prepareStatement(
-                    "UPDATE worklist.selector SET status = 'withdrawn' WHERE id = ?")) {
-                st.setObject(1, foreignSelector);
+                    "UPDATE worklist.selector SET status = 'withdrawn' WHERE pk = ?")) {
+                st.setLong(1, foreignSelector);
                 affected = st.executeUpdate();
             }
             c.commit();
@@ -363,7 +361,7 @@ class ItemDomainIsolationIT {
     void an_unbound_session_cannot_plant_a_selector() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, null);
-            assertThatThrownBy(() -> insertSelector(c, tenantA, UUID.randomUUID()))
+            assertThatThrownBy(() -> insertSelector(c, tenantA))
                 .as("with no tenant bound the predicate is NULL rather than false, and a "
                     + "policy treats that as failing — for writes as well as for reads")
                 .isInstanceOf(SQLException.class)
@@ -388,18 +386,17 @@ class ItemDomainIsolationIT {
     private void plantOneOfEach(Connection c, UUID tenant) throws SQLException {
         Db.bindTenant(c, tenant);
 
-        UUID selector = UUID.randomUUID();
-        insertSelector(c, tenant, selector);
+        Long selector = insertSelector(c, tenant);
         insertNumberSpace(c, tenant, selector);
 
         insertStatus(c, tenant);
-        UUID definition = insertAttributeDefinition(c, tenant);
+        Long definition = insertAttributeDefinition(c, tenant);
         insertAttributeOption(c, tenant, definition);
-        UUID type = insertRelationType(c, tenant);
+        Long type = insertRelationType(c, tenant);
 
         UUID from = insertItem(c, tenant, "edge-source");
         UUID to = insertItem(c, tenant, "edge-target");
-        insertRelation(c, tenant, from, to, type);
+        insertRelation(c, tenant, numberOf(c, from), numberOf(c, to), type);
         insertReference(c, tenant, from);
 
         insertMilestone(c, tenant);
@@ -411,167 +408,148 @@ class ItemDomainIsolationIT {
         insertViewPreference(c, tenant);
     }
 
-    private void insertSelector(Connection c, UUID tenant, UUID id) throws SQLException {
+    private Long insertSelector(Connection c, UUID tenant) throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.selector (id, tenant_id, scope_id, token)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO worklist.selector (tenant_id, scope_id, token)
+                VALUES (?, ?, ?)
+                RETURNING pk
                 """)) {
-            st.setObject(1, id);
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setString(4, freshToken());
-            st.executeUpdate();
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setString(3, freshToken());
+            return returnedPk(st);
         }
     }
 
-    private void insertNumberSpace(Connection c, UUID tenant, UUID selectorId)
+    private void insertNumberSpace(Connection c, UUID tenant, Long selectorPk)
             throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.number_space (id, selector_id, tenant_id, scope_id)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO worklist.number_space (selector_pk, tenant_id, scope_id)
+                VALUES (?, ?, ?)
                 """)) {
-            st.setObject(1, UUID.randomUUID());
-            st.setObject(2, selectorId);
-            st.setObject(3, tenant);
-            st.setObject(4, SCOPE);
+            st.setLong(1, selectorPk);
+            st.setObject(2, tenant);
+            st.setObject(3, SCOPE);
             st.executeUpdate();
         }
     }
 
-    private UUID insertStatus(Connection c, UUID tenant) throws SQLException {
-        UUID id = UUID.randomUUID();
+    private Long insertStatus(Connection c, UUID tenant) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item_status
-                    (id, tenant_id, scope_id, name, actionable, in_progress, closed,
-                     successful)
-                VALUES (?, ?, ?, ?, true, false, false, false)
+                    (tenant_id, scope_id, name, actionable, in_progress, closed, successful)
+                VALUES (?, ?, ?, true, false, false, false)
+                RETURNING pk
                 """)) {
-            st.setObject(1, id);
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setString(4, freshToken());
-            st.executeUpdate();
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setString(3, freshToken());
+            return returnedPk(st);
         }
-        return id;
     }
 
-    private UUID insertAttributeDefinition(Connection c, UUID tenant) throws SQLException {
-        UUID id = UUID.randomUUID();
+    private Long insertAttributeDefinition(Connection c, UUID tenant) throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.attribute_definition
-                    (id, tenant_id, scope_id, key, name, type)
-                VALUES (?, ?, ?, ?, ?, 'choice')
+                INSERT INTO worklist.attribute_definition (tenant_id, scope_id, key, name, type)
+                VALUES (?, ?, ?, ?, 'choice')
+                RETURNING pk
                 """)) {
-            st.setObject(1, id);
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setString(4, freshKey());
-            st.setString(5, "an attribute");
-            st.executeUpdate();
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setString(3, freshKey());
+            st.setString(4, "an attribute");
+            return returnedPk(st);
         }
-        return id;
     }
 
-    private void insertAttributeOption(Connection c, UUID tenant, UUID definition)
+    private void insertAttributeOption(Connection c, UUID tenant, Long definition)
             throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.attribute_option
-                    (id, tenant_id, scope_id, definition_id, name)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_pk, name)
+                VALUES (?, ?, ?, ?)
                 """)) {
-            st.setObject(1, UUID.randomUUID());
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setObject(4, definition);
-            st.setString(5, "an option");
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setLong(3, definition);
+            st.setString(4, "an option");
             st.executeUpdate();
         }
     }
 
-    private UUID insertRelationType(Connection c, UUID tenant) throws SQLException {
-        UUID id = UUID.randomUUID();
+    private Long insertRelationType(Connection c, UUID tenant) throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.relation_type (id, tenant_id, scope_id, name, blocks)
-                VALUES (?, ?, ?, ?, true)
+                INSERT INTO worklist.relation_type (tenant_id, scope_id, name, blocks)
+                VALUES (?, ?, ?, true)
+                RETURNING pk
                 """)) {
-            st.setObject(1, id);
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setString(4, freshToken());
-            st.executeUpdate();
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setString(3, freshToken());
+            return returnedPk(st);
         }
-        return id;
+    }
+
+    private static Long returnedPk(java.sql.PreparedStatement st) throws SQLException {
+        try (ResultSet rs = st.executeQuery()) {
+            rs.next();
+            return rs.getLong(1);
+        }
+    }
+
+    /** An item's number, read under the session's current binding. */
+    private static long numberOf(Connection c, UUID item) throws SQLException {
+        try (var st = c.prepareStatement("SELECT number FROM worklist.item WHERE id = ?")) {
+            st.setObject(1, item);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
     }
 
     /**
-     * An item, with the status its tenant declared and the address the schema
-     * requires.
+     * An item, with the status its tenant declared and its number, which is
+     * its address (ADR-0042).
      *
      * <p>Planted after {@link #insertStatus}, because the status reference is
      * mandatory: a status is a declared value and there is no literal to fall
-     * back on. Since V7 the address is mandatory too — {@code selector_id} and
-     * {@code number} are NOT NULL at the column.
-     *
-     * <p>The selector is reused across every item of a tenant, because
-     * {@link #plantOneOfEach} counts on exactly one selector row per tenant to
-     * observe the row-level policy on that table. A fresh selector per item
-     * would leave the isolation probe reading "3 rows" where it wrote "1".
-     * The number is a per-tenant counter, so two items under the same
-     * selector do not collide on {@code uq_item_address}.
+     * back on. The number is a per-tenant counter, so two items of a tenant do
+     * not collide on {@code uq_item_number}.
      */
     private UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
         UUID id = UUID.randomUUID();
-        UUID selector = anySelector(c, tenant);
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
+        long workstream = Db.workstreamNumber(c, Db.ensureDefaultWorkstream(c, tenant, SCOPE));
         long number = nextNumber
             .computeIfAbsent(tenant, t -> new AtomicLong()).incrementAndGet();
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (id, tenant_id, scope_id, title, status_id, selector_id, number,
-                     workstream_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, title, status_pk, number, workstream_number)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
             st.setString(4, title);
-            st.setObject(5, anyStatus(c, tenant));
-            st.setObject(6, selector);
-            st.setLong(7, number);
-            st.setObject(8, workstream);
+            st.setLong(5, anyStatus(c, tenant));
+            st.setLong(6, number);
+            st.setLong(7, workstream);
             st.executeUpdate();
         }
         return id;
     }
 
-    /** The tenant's own selector, declared on first use and reused after. */
-    private UUID anySelector(Connection c, UUID tenant) throws SQLException {
-        try (var st = c.prepareStatement(
-                "SELECT id FROM worklist.selector WHERE tenant_id = ? LIMIT 1")) {
-            st.setObject(1, tenant);
-            try (ResultSet rs = st.executeQuery()) {
-                if (rs.next()) {
-                    return UUID.fromString(rs.getString(1));
-                }
-            }
-        }
-        UUID id = UUID.randomUUID();
-        insertSelector(c, tenant, id);
-        return id;
-    }
-
-    private void insertRelation(Connection c, UUID tenant, UUID from, UUID to, UUID type)
+    private void insertRelation(Connection c, UUID tenant, long from, long to, Long type)
             throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item_relation
-                    (tenant_id, scope_id, from_item_id, to_item_id, relation_type_id)
+                    (tenant_id, scope_id, from_item_number, to_item_number, relation_type_pk)
                 VALUES (?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
-            st.setObject(3, from);
-            st.setObject(4, to);
-            st.setObject(5, type);
+            st.setLong(3, from);
+            st.setLong(4, to);
+            st.setLong(5, type);
             st.executeUpdate();
         }
     }
@@ -579,8 +557,8 @@ class ItemDomainIsolationIT {
     private void insertReference(Connection c, UUID tenant, UUID item) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item_reference
-                    (tenant_id, scope_id, item_id, ordinal, target)
-                VALUES (?, ?, ?, 0, 'docs/a.md')
+                    (tenant_id, scope_id, item_number, ordinal, target)
+                VALUES (?, ?, (SELECT number FROM worklist.item WHERE id = ?), 0, 'docs/a.md')
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
@@ -621,8 +599,9 @@ class ItemDomainIsolationIT {
             throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.iteration_membership
-                    (tenant_id, scope_id, iteration_id, item_id, position)
-                VALUES (?, ?, ?, ?, 0)
+                    (tenant_id, scope_id, iteration_number, item_number, position)
+                VALUES (?, ?, (SELECT number FROM worklist.iteration WHERE id = ?),
+                        (SELECT number FROM worklist.item WHERE id = ?), 0)
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
@@ -635,8 +614,9 @@ class ItemDomainIsolationIT {
     private void insertClaim(Connection c, UUID tenant, UUID item) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.claim
-                    (tenant_id, scope_id, item_id, receipt, actor, expires_at)
-                VALUES (?, ?, ?, 'a receipt', 'an actor', now() + interval '1 hour')
+                    (tenant_id, scope_id, item_number, receipt, actor, expires_at)
+                VALUES (?, ?, (SELECT number FROM worklist.item WHERE id = ?),
+                        'a receipt', 'an actor', now() + interval '1 hour')
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
@@ -649,10 +629,10 @@ class ItemDomainIsolationIT {
             throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.scope_setting
-                    (tenant_id, scope_id, current_iteration_id, max_planned_iterations,
+                    (tenant_id, scope_id, current_iteration_number, max_planned_iterations,
                      warn_planned_iterations, max_memberships_per_iteration,
                      warn_memberships_per_iteration)
-                VALUES (?, ?, ?, 4, 3, 40, 30)
+                VALUES (?, ?, (SELECT number FROM worklist.iteration WHERE id = ?), 4, 3, 40, 30)
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
@@ -673,13 +653,13 @@ class ItemDomainIsolationIT {
     }
 
     /** The tenant's declared status, or a fresh one when it has none yet. */
-    private UUID anyStatus(Connection c, UUID tenant) throws SQLException {
+    private Long anyStatus(Connection c, UUID tenant) throws SQLException {
         try (var st = c.prepareStatement(
-                "SELECT id FROM worklist.item_status WHERE tenant_id = ? LIMIT 1")) {
+                "SELECT pk FROM worklist.item_status WHERE tenant_id = ? LIMIT 1")) {
             st.setObject(1, tenant);
             try (ResultSet rs = st.executeQuery()) {
                 if (rs.next()) {
-                    return UUID.fromString(rs.getString(1));
+                    return rs.getLong(1);
                 }
             }
         }
@@ -720,10 +700,10 @@ class ItemDomainIsolationIT {
      * failure says what was actually there instead of raising a
      * no-such-element from inside the fixture.
      */
-    private static String statusOfSelector(Connection c, UUID id) throws SQLException {
+    private static String statusOfSelector(Connection c, Long pk) throws SQLException {
         try (var st = c.prepareStatement(
-                "SELECT status FROM worklist.selector WHERE id = ?")) {
-            st.setObject(1, id);
+                "SELECT status FROM worklist.selector WHERE pk = ?")) {
+            st.setLong(1, pk);
             try (ResultSet rs = st.executeQuery()) {
                 List<String> found = new ArrayList<>();
                 while (rs.next()) {

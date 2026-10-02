@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -146,25 +145,6 @@ final class ItemFields {
      */
     static List<String> tokensInOrder(Field field, Object raw) {
         return List.copyOf(rawTokens(field, raw));
-    }
-
-    /** A caller's value as an identity, or a refusal naming what was given. */
-    static UUID id(Field field, Object raw) {
-        String token = text(field, raw == null ? null : String.valueOf(raw));
-        if (token == null) {
-            return null;
-        }
-        try {
-            return UUID.fromString(token);
-        } catch (IllegalArgumentException notAnId) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                field.canonicalName() + " carries the identity of a declared value, and "
-                    + token + " is not one. A declared value has an identity separate "
-                    + "from its name, and the identity is what an item stores — the "
-                    + "name is what a reader sees and may be changed at will",
-                List.of(field.canonicalName()));
-        }
     }
 
     /**

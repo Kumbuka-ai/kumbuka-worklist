@@ -31,13 +31,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MilestoneWorkstreamDropIT {
 
     @Test
-    void the_item_keeps_its_workstream_column() throws SQLException {
-        assertThat(hasColumn("item", "workstream_id"))
-            .as("item.workstream_id carries the edge TAR-0002 section 4 keeps; "
-                + "V17 must not drop it")
+    void the_item_keeps_its_workstream_reference() throws SQLException {
+        assertThat(hasColumn("item", "workstream_number"))
+            .as("the item's workstream carries the edge TAR-0002 section 4 keeps; V17 "
+                + "must not drop it, and since V20 it is held by number (ADR-0042)")
             .isTrue();
-        assertThat(hasConstraint("item", "fk_item_workstream"))
-            .as("the item's workstream reference stays tenant-bound")
+        assertThat(hasConstraint("item", "fk_item_workstream_number"))
+            .as("the item's workstream reference stays a tenant-bound key")
             .isTrue();
     }
 

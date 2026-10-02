@@ -19,18 +19,16 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The two forms of {@code item.attributes} under ADR-0042 stage R2.
+ * The form of {@code item.attributes} under ADR-0042, since stage R3.
  *
- * <p>The column was keyed by definition uuid with option uuids as values, and
- * stage R3 rewrites it to the surrogates. This image has to write the uuid
- * form while the vocabulary still carries uuids — the image before it reads
- * nothing else — and has to read the surrogate form, because it is the image
- * an R3 store is rolled back to.
+ * <p>The column keys an attribute by its definition's surrogate and holds an
+ * option as the option's surrogate; outward, an option travels by its name in
+ * both directions. Stage R2 bridged a uuid form and this one; since V20 there
+ * is only this one.
  *
- * <p>The stored form is read and planted as the administrator, outside the
- * service, so the probe observes the column itself rather than the service's
- * account of it. The expected values are the vocabulary rows' own uuids and
- * surrogates, read from the catalogue, not from anything the service answered.
+ * <p>The stored form is read as the administrator, outside the service, so
+ * the probe observes the column itself. The expected surrogates are the
+ * vocabulary rows' own, read from the catalogue.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -59,33 +57,36 @@ class AttributeFormsIT {
     }
 
     @Test
-    void the_writer_stores_the_uuid_form_while_the_vocabulary_carries_uuids() throws SQLException {
-        UUID item = created(Map.of("size", "S"));
+    void the_column_holds_surrogates_and_the_answer_names_the_options() throws SQLException {
+        UUID item = created(Map.of("size", "S", "tags", List.of("blue", "red")));
 
-        assertThat(text("SELECT (attributes = jsonb_build_object(?::text, ?::text))::text "
-                + "FROM worklist.item WHERE id = ?",
-                definitionUuid("size").toString(), optionUuid("size", "S").toString(), item))
-            .as("the option was named by its name; the column holds the definition's "
-                + "uuid as key and the option's uuid as value, the form the image before "
-                + "this one reads")
+        assertThat(text("SELECT (attributes = jsonb_build_object(?::text, ?::text, ?::text, "
+                + "jsonb_build_array(?::text, ?::text)))::text FROM worklist.item WHERE id = ?",
+                definitionPk("size"), optionPk("size", "S"),
+                definitionPk("tags"), optionPk("tags", "blue"), optionPk("tags", "red"), item))
+            .as("the column keys by the definition's surrogate and holds each option as its "
+                + "surrogate (ADR-0042); the multi_choice set is held sorted by name")
             .isEqualTo("true");
+
+        Map<String, Object> attributes = attributesOf(items.read(scope, item));
+        assertThat(attributes)
+            .as("outward, an option travels by its name")
+            .containsEntry("size", "S")
+            .containsEntry("tags", List.of("blue", "red"));
     }
 
     @Test
-    void the_reader_reads_the_surrogate_form_a_stage_r3_store_holds() throws SQLException {
-        UUID item = created(Map.of("size", "S"));
-        plantStored(item, "jsonb_build_object(?::text, ?::text, ?::text, jsonb_build_array(?::text))",
-            definitionPk("size"), optionPk("size", "M"),
-            definitionPk("tags"), optionPk("tags", "blue"));
+    void a_read_answer_sent_back_unchanged_round_trips() {
+        UUID item = created(Map.of("size", "M"));
+        Map<String, Object> read = items.read(scope, item);
 
-        Map<String, Object> attributes = attributesOf(items.read(scope, item));
-        assertThat(attributes.get("size"))
-            .as("a value stored as the option's surrogate is read and answered as the "
-                + "option, here by its uuid while the store carries one")
-            .isEqualTo(optionUuid("size", "M").toString());
-        assertThat(attributes.get("tags"))
-            .as("a multi_choice value stored as surrogates is read the same way")
-            .isEqualTo(List.of(optionUuid("tags", "blue").toString()));
+        Map<String, Object> again = items.update(scope, item, Map.of(
+            Field.ATTRIBUTES.canonicalName(), attributesOf(read),
+            Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName())));
+        assertThat(again.get(Field.CONFLICT_TOKEN.canonicalName()))
+            .as("the names the answer carried name the same options, so nothing changed and "
+                + "the token did not rotate")
+            .isEqualTo(read.get(Field.CONFLICT_TOKEN.canonicalName()));
     }
 
     // ==================================================================
@@ -105,40 +106,15 @@ class AttributeFormsIT {
         return (Map<String, Object>) answer.get(Field.ATTRIBUTES.canonicalName());
     }
 
-    private void plantStored(UUID item, String expression, Object... args) throws SQLException {
-        try (Connection c = Db.asAdmin();
-             PreparedStatement st = c.prepareStatement(
-                 "UPDATE worklist.item SET attributes = " + expression + " WHERE id = ?")) {
-            int i = 1;
-            for (Object arg : args) {
-                st.setString(i++, String.valueOf(arg));
-            }
-            st.setObject(i, item);
-            st.executeUpdate();
-            c.commit();
-        }
+    private String definitionPk(String key) throws SQLException {
+        return text("SELECT pk::text FROM worklist.attribute_definition "
+            + "WHERE scope_id = ? AND key = ?", scope, key);
     }
 
-    private UUID definitionUuid(String key) throws SQLException {
-        return UUID.fromString(text("SELECT id::text FROM worklist.attribute_definition "
-            + "WHERE scope_id = ? AND key = ?", scope, key));
-    }
-
-    private long definitionPk(String key) throws SQLException {
-        return Long.parseLong(text("SELECT pk::text FROM worklist.attribute_definition "
-            + "WHERE scope_id = ? AND key = ?", scope, key));
-    }
-
-    private UUID optionUuid(String key, String name) throws SQLException {
-        return UUID.fromString(text("SELECT o.id::text FROM worklist.attribute_option o "
+    private String optionPk(String key, String name) throws SQLException {
+        return text("SELECT o.pk::text FROM worklist.attribute_option o "
             + "JOIN worklist.attribute_definition d ON d.pk = o.definition_pk "
-            + "WHERE d.scope_id = ? AND d.key = ? AND o.name = ?", scope, key, name));
-    }
-
-    private long optionPk(String key, String name) throws SQLException {
-        return Long.parseLong(text("SELECT o.pk::text FROM worklist.attribute_option o "
-            + "JOIN worklist.attribute_definition d ON d.pk = o.definition_pk "
-            + "WHERE d.scope_id = ? AND d.key = ? AND o.name = ?", scope, key, name));
+            + "WHERE d.scope_id = ? AND d.key = ? AND o.name = ?", scope, key, name);
     }
 
     private static String text(String sql, Object... args) throws SQLException {

@@ -510,9 +510,7 @@ class SurfaceCoverageIT {
         PlatformFixture.run(
             "SELECT set_config('app.tenant_id', '"
                 + SubstrateDatabaseResource.TENANT_ID + "', false)",
-            "UPDATE worklist.item SET milestone_id = ("
-                + "  SELECT id FROM worklist.milestone WHERE scope_id = '"
-                + SCOPE_ID + "' AND number = " + milestoneNumber + ")"
+            "UPDATE worklist.item SET milestone_number = " + milestoneNumber
                 + " WHERE scope_id = '" + SCOPE_ID + "' AND number = " + number);
     }
 }

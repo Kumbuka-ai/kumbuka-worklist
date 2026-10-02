@@ -1,7 +1,6 @@
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
-import ai.kumbuka.worklist.repository.RetiringUuidRepository;
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -61,9 +60,6 @@ public class IterationService extends PlanningService {
     @Inject SelectorRegistry selectors;
     @Inject ScopeAccessRepository scopeAccess;
     @Inject ItemRepository itemRepo;
-
-    /** The settings' own uuid for the {@code advance} answer (ADR-0042 stage R2). */
-    @Inject RetiringUuidRepository retiring;
 
     /** What the cardinality refusal and its warning call the thing being counted. */
     private static final String OPEN_ITERATIONS = "the number of open iterations in this scope";
@@ -300,8 +296,7 @@ public class IterationService extends PlanningService {
         setting.stamp();
         planning.flushAndRefresh(setting);
         LOG.infof("iteration %d promoted to current in scope %s", next.number, scopeId);
-        return ScopeSettingService.project(setting, retiring.settingId(scopeId), next.id,
-            List.of());
+        return ScopeSettingService.project(setting, next.id, List.of());
     }
 
     // ------------------------------------------------------------------
