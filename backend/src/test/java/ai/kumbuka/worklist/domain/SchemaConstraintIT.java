@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,6 +59,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SchemaConstraintIT {
 
     private static final UUID SCOPE = UUID.fromString(SubstrateDatabaseResource.SCOPE_ID);
+
+    /**
+     * Fixture items take distinct numbers: an item's number is unique in its
+     * scope (V18), and every test of this class writes into the one scope.
+     * Started well clear of the numbers the probes choose themselves.
+     */
+    private static final AtomicLong NEXT_NUMBER = new AtomicLong(1000);
 
     private UUID tenant;
 
@@ -169,46 +177,41 @@ class SchemaConstraintIT {
     // ==================================================================
 
     /**
-     * The address is unique on the TRIPLE scope, selector and number — never
-     * on the pair without the selector.
+     * An item's number is unique within its scope, whatever its selector.
      *
-     * <p>Both halves are the probe. A store constraining the pair would pass
-     * the first assertion and fail the second, and it could never admit
-     * per-selector numbering afterwards: once two selectors have shared a
-     * number, the constraint can never be switched on again.
+     * <p>ADR-0042 makes {@code (tenant_id, scope_id, number)} the target of
+     * every key onto an item, so the number alone has to name one item in a
+     * scope. The selector no longer takes part: every item hangs on the view
+     * selector {@code item}, and an index on the triple alone would admit two
+     * items under one number as soon as a second selector existed — exactly
+     * the case the half marked RED STATE plants. V18 replaced the rule this
+     * probe asserted before, that two selectors may share a number.
      */
     @Test
-    void the_address_is_unique_on_the_triple_and_two_selectors_may_share_a_number()
+    void an_items_number_is_unique_in_its_scope_whatever_its_selector()
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
             UUID feat = insertSelector(c);
             UUID chore = insertSelector(c);
-            UUID first = insertItem(c, "address 1");
-            UUID second = insertItem(c, "address 2");
-            UUID third = insertItem(c, "address 3");
-
-            address(c, first, feat, 51);
+            insertItemAt(c, "address 1", feat, 51);
             c.commit();
 
-            assertThatThrownBy(() -> address(c, second, feat, 51))
-                .as("RED STATE, observed: the same scope, selector and number twice must "
-                    + "be refused. Two items answering to one address makes every "
-                    + "reference ever written to it ambiguous, with no error anywhere")
+            assertThatThrownBy(() -> insertItemAt(c, "address 2", chore, 51))
+                .as("RED STATE, observed: number 51 under a second selector of the same scope "
+                    + "must be refused. A key onto (tenant, scope, number) would otherwise "
+                    + "name two items at once, with no error anywhere")
                 .isInstanceOf(SQLException.class)
-                .hasMessageContaining("uq_item_address");
+                .hasMessageContaining("uq_item_number");
             c.rollback();
 
-            // The other half, and it is the one a pair-wise constraint would
-            // have got wrong.
             Db.bindTenant(c, tenant);
-            address(c, third, chore, 51);
+            insertItemAt(c, "address 3", chore, 52);
             c.commit();
 
-            assertThat(numbersAt(c, 51))
-                .as("the same number under two different selectors is admissible, because "
-                    + "the identity is the triple. That is what makes per-selector "
-                    + "numbering possible at all")
+            assertThat(numbersAt(c, 51) + numbersAt(c, 52))
+                .as("another number under the other selector is admitted; the rule is about "
+                    + "the number, not about the selector")
                 .isEqualTo(2);
             c.commit();
         }
@@ -896,21 +899,29 @@ class SchemaConstraintIT {
             st.setString(4, title);
             st.setObject(5, anyStatus(c));
             st.setObject(6, selector);
-            st.setLong(7, 1L);
+            st.setLong(7, NEXT_NUMBER.getAndIncrement());
             st.setObject(8, workstream);
             st.executeUpdate();
         }
         return id;
     }
 
-    /** The address of an item, set after the fact so the insert is not the test. */
-    private void address(Connection c, UUID item, UUID selector, long number)
+    /** An item at a chosen selector and number, inserted directly. */
+    private void insertItemAt(Connection c, String title, UUID selector, long number)
             throws SQLException {
-        try (var st = c.prepareStatement(
-                "UPDATE worklist.item SET selector_id = ?, number = ? WHERE id = ?")) {
-            st.setObject(1, selector);
-            st.setLong(2, number);
-            st.setObject(3, item);
+        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item
+                    (tenant_id, scope_id, title, status_id, selector_id, number, workstream_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setString(3, title);
+            st.setObject(4, anyStatus(c));
+            st.setObject(5, selector);
+            st.setLong(6, number);
+            st.setObject(7, workstream);
             st.executeUpdate();
         }
     }
