@@ -1,5 +1,6 @@
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.repository.RetiringUuidRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -61,10 +62,13 @@ public class ScopeSettingService extends PlanningService {
      */
     @Inject SelectorRegistry selectors;
 
+    /** The settings' own uuid, read while the store still carries it (ADR-0042 stage R2). */
+    @Inject RetiringUuidRepository retiring;
+
     /** One scope's settings, as the canonical field map. */
     @Transactional
     public Map<String, Object> read(UUID scopeId) {
-        return project(requireSetting(scopeId), List.of());
+        return projectOf(requireSetting(scopeId), List.of());
     }
 
     /**
@@ -89,6 +93,7 @@ public class ScopeSettingService extends PlanningService {
         }
 
         ScopeSetting setting = new ScopeSetting();
+        setting.scopeKey = scopeId;
         setting.scopeId = scopeId;
         setting.maxPlannedIterations = mandatory(Field.MAX_PLANNED_ITERATIONS, given);
         setting.warnPlannedIterations = mandatory(Field.WARN_PLANNED_ITERATIONS, given);
@@ -102,7 +107,7 @@ public class ScopeSettingService extends PlanningService {
         rest.remove(Field.WARN_PLANNED_ITERATIONS);
         rest.remove(Field.MAX_MEMBERSHIPS_PER_ITERATION);
         rest.remove(Field.WARN_MEMBERSHIPS_PER_ITERATION);
-        applyEffectiveChanges(setting, project(setting, List.of()), rest);
+        applyEffectiveChanges(setting, projectOf(setting, List.of()), rest);
 
         planning.insert(setting);
         planning.flushAndRefresh(setting);
@@ -120,7 +125,7 @@ public class ScopeSettingService extends PlanningService {
         }
 
         LOG.infof("scope %s opened, and the three views seeded", scopeId);
-        return project(setting, List.of());
+        return projectOf(setting, List.of());
     }
 
     /**
@@ -137,7 +142,7 @@ public class ScopeSettingService extends PlanningService {
         ScopeSetting setting = requireSetting(scopeId);
         setting.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
-        Map<String, Object> current = project(setting, List.of());
+        Map<String, Object> current = projectOf(setting, List.of());
         refuseUnsettableChanges(Addressed.SETTING, current, given);
 
         if (!applyEffectiveChanges(setting, current, settableOnly(Addressed.SETTING, given))) {
@@ -149,7 +154,7 @@ public class ScopeSettingService extends PlanningService {
         setting.stamp();
         planning.flushAndRefresh(setting);
         LOG.infof("settings of scope %s updated", scopeId);
-        return project(setting, List.of());
+        return projectOf(setting, List.of());
     }
 
     // ------------------------------------------------------------------
@@ -244,6 +249,18 @@ public class ScopeSettingService extends PlanningService {
     }
 
     /**
+     * The projection, with the current iteration's identity resolved from the
+     * number the settings row holds (ADR-0042). The answer still names the
+     * iteration by its identity; only the stored reference changed form.
+     */
+    private Map<String, Object> projectOf(ScopeSetting setting, List<String> warnings) {
+        Iteration current = setting.currentIterationNumber == null ? null
+            : planning.iterationByNumber(setting.scopeId, setting.currentIterationNumber);
+        return project(setting, retiring.settingId(setting.scopeId),
+            current == null ? null : current.id, warnings);
+    }
+
+    /**
      * The settings as the canonical field map — the one answer shape, used by
      * the read AND by the comparison the writes make.
      *
@@ -253,11 +270,12 @@ public class ScopeSettingService extends PlanningService {
      * would invite a write that carried them, and a mark a caller can carry
      * is a mark that can be carried backwards.
      */
-    static Map<String, Object> project(ScopeSetting setting, List<String> warnings) {
+    static Map<String, Object> project(ScopeSetting setting, UUID settingId,
+            UUID currentIterationId, List<String> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put(Field.ID.canonicalName(), setting.id);
+        fields.put(Field.ID.canonicalName(), settingId);
         fields.put(Field.SCOPE.canonicalName(), setting.scopeId);
-        fields.put(Field.CURRENT_ITERATION.canonicalName(), setting.currentIterationId);
+        fields.put(Field.CURRENT_ITERATION.canonicalName(), currentIterationId);
         fields.put(Field.MAX_PLANNED_ITERATIONS.canonicalName(),
             setting.maxPlannedIterations);
         fields.put(Field.WARN_PLANNED_ITERATIONS.canonicalName(),

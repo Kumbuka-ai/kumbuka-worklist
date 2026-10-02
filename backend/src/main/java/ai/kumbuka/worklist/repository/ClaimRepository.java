@@ -49,8 +49,8 @@ public class ClaimRepository {
      * row.
      */
     @Transactional
-    public Claim byItem(UUID itemId) {
-        return itemId == null ? null : em.find(Claim.class, itemId);
+    public Claim byItem(Item item) {
+        return em.find(Claim.class, new Claim.Key(item.scopeId, item.number));
     }
 
     /**
@@ -66,8 +66,9 @@ public class ClaimRepository {
      * rather than exceptional.
      */
     @Transactional
-    public Claim lockByItem(UUID itemId) {
-        return itemId == null ? null : em.find(Claim.class, itemId, LockModeType.PESSIMISTIC_WRITE);
+    public Claim lockByItem(Item item) {
+        return em.find(Claim.class, new Claim.Key(item.scopeId, item.number),
+            LockModeType.PESSIMISTIC_WRITE);
     }
 
     // ------------------------------------------------------------------
@@ -124,7 +125,8 @@ public class ClaimRepository {
                     + "WHERE i.scopeId = :scope AND i.number IS NOT NULL "
                     + "AND NOT EXISTS ("
                     + "  SELECT 1 FROM Claim c "
-                    + "  WHERE c.itemId = i.id AND c.expiresAt > :now"
+                    + "  WHERE c.scopeId = i.scopeId AND c.itemNumber = i.number "
+                    + "  AND c.expiresAt > :now"
                     + ") "
                     + "ORDER BY i.createdAt, i.id", Item.class)
             .setParameter(P_SCOPE, scopeId)

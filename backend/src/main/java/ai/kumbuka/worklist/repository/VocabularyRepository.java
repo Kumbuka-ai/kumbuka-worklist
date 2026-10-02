@@ -46,17 +46,23 @@ public class VocabularyRepository {
     // Statuses
     // ------------------------------------------------------------------
 
-    /** The declared status of that identity, or null. */
+    /**
+     * The declared status of that surrogate, or null.
+     *
+     * <p>The surrogate is what an item's {@code status_pk} holds (ADR-0042),
+     * so this is the lookup a reference resolves through. The tenant is bound
+     * by row-level security; scope membership is checked by the caller.
+     */
     @Transactional
-    public ItemStatus statusById(UUID id) {
-        return id == null ? null : em.find(ItemStatus.class, id);
+    public ItemStatus statusByPk(Long pk) {
+        return pk == null ? null : byPk(ItemStatus.class, pk);
     }
 
     /**
      * The declared status a scope carries under that name, or null.
      *
      * <p>The wire form of status is the display name, and the write path
-     * needs the reverse of {@link #statusById} to turn a name back into an
+     * needs the reverse of {@link #statusByPk} to turn a name back into an
      * identity. Names are unique per scope on the declaration table, so at
      * most one row answers.
      */
@@ -106,10 +112,10 @@ public class VocabularyRepository {
         }
     }
 
-    /** The definition of that identity, or null. */
+    /** The definition of that surrogate, or null. */
     @Transactional
-    public AttributeDefinition definitionById(UUID id) {
-        return id == null ? null : em.find(AttributeDefinition.class, id);
+    public AttributeDefinition definitionByPk(Long pk) {
+        return pk == null ? null : byPk(AttributeDefinition.class, pk);
     }
 
     /** Every definition a scope declared, by rank then key. */
@@ -122,19 +128,38 @@ public class VocabularyRepository {
             .getResultList();
     }
 
-    /** The option of that identity, or null. */
+    /** The option of that surrogate, or null. */
     @Transactional
-    public AttributeOption optionById(UUID id) {
-        return id == null ? null : em.find(AttributeOption.class, id);
+    public AttributeOption optionByPk(Long pk) {
+        return pk == null ? null : byPk(AttributeOption.class, pk);
+    }
+
+    /**
+     * The option of a definition under that name, or null.
+     *
+     * <p>Names are unique per definition since V18, so at most one row answers.
+     */
+    @Transactional
+    public AttributeOption optionByName(Long definitionPk, String name) {
+        try {
+            return em.createQuery(
+                    "SELECT o FROM AttributeOption o WHERE o.definitionPk = :definition "
+                        + "AND o.name = :name", AttributeOption.class)
+                .setParameter("definition", definitionPk)
+                .setParameter("name", name)
+                .getSingleResult();
+        } catch (NoResultException absent) {
+            return null;
+        }
     }
 
     /** Every option of a definition, by rank then name. */
     @Transactional
-    public List<AttributeOption> optionsOf(UUID definitionId) {
+    public List<AttributeOption> optionsOf(Long definitionPk) {
         return em.createQuery(
-                "SELECT o FROM AttributeOption o WHERE o.definitionId = :definition "
+                "SELECT o FROM AttributeOption o WHERE o.definitionPk = :definition "
                     + "ORDER BY o.rank, o.name", AttributeOption.class)
-            .setParameter("definition", definitionId)
+            .setParameter("definition", definitionPk)
             .getResultList();
     }
 
@@ -142,16 +167,16 @@ public class VocabularyRepository {
     // Relation types
     // ------------------------------------------------------------------
 
-    /** The relation type of that identity, or null. */
+    /** The relation type of that surrogate, or null. */
     @Transactional
-    public RelationType relationTypeById(UUID id) {
-        return id == null ? null : em.find(RelationType.class, id);
+    public RelationType relationTypeByPk(Long pk) {
+        return pk == null ? null : byPk(RelationType.class, pk);
     }
 
     /**
      * The relation type a scope carries under that name, or null.
      *
-     * <p>Reverse of {@link #relationTypeById}. Names are unique per scope on
+     * <p>Reverse of {@link #relationTypeByPk}. Names are unique per scope on
      * the declaration table, so at most one row answers.
      */
     @Transactional
@@ -197,5 +222,15 @@ public class VocabularyRepository {
     @Transactional
     public void flush() {
         em.flush();
+    }
+
+    /** A declared value by its surrogate; the tenant is bound by row-level security. */
+    private <T> T byPk(Class<T> type, Long pk) {
+        return em.createQuery(
+                "SELECT v FROM " + type.getSimpleName() + " v WHERE v.pk = :pk", type)
+            .setParameter("pk", pk)
+            .getResultStream()
+            .findFirst()
+            .orElse(null);
     }
 }

@@ -38,7 +38,7 @@ import java.util.UUID;
  * therefore needs an exemption in its reference check, so that the third
  * marker carries a violation nobody can ever fix.
  *
- * <p>As rows they need no exemption: {@code item.milestone_id} always
+ * <p>As rows they need no exemption: {@code item.milestone_number} always
  * resolves and the existence check has no special case. The cost is that a
  * marker must not carry a goal, which is one check constraint in V4, and that
  * nothing deletes it — which is the absent DELETE privilege rather than a

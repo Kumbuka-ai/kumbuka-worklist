@@ -109,7 +109,7 @@ public class ClaimService {
         Duration lease = requirePositive(duration);
 
         Instant now = Instant.now();
-        Claim held = claims.lockByItem(itemId);
+        Claim held = claims.lockByItem(item);
         if (held != null && held.liveAt(now)) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_HELD,
@@ -123,7 +123,7 @@ public class ClaimService {
         }
 
         Claim claim = held == null ? new Claim() : held;
-        claim.itemId = itemId;
+        claim.itemNumber = item.number;
         claim.scopeId = item.scopeId;
         claim.receipt = UUID.randomUUID().toString();
         claim.actor = subject;
@@ -159,7 +159,7 @@ public class ClaimService {
     public Map<String, Object> release(UUID scopeId, UUID itemId, String subject,
             String receipt) {
         Item item = requireItem(scopeId, itemId);
-        Claim claim = claims.lockByItem(itemId);
+        Claim claim = claims.lockByItem(item);
         if (claim == null || !claim.liveAt(Instant.now())) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_ABSENT,
@@ -243,7 +243,7 @@ public class ClaimService {
                 List.of(String.valueOf(scopeId)));
         }
 
-        Claim held = claims.lockByItem(item.id);
+        Claim held = claims.lockByItem(item);
         if (held != null && held.liveAt(Instant.now())) {
             // A race we lost between reading and locking: another agent has
             // taken this exact row in the meantime. Reported as a routine
@@ -258,7 +258,7 @@ public class ClaimService {
         }
 
         Claim claim = held == null ? new Claim() : held;
-        claim.itemId = item.id;
+        claim.itemNumber = item.number;
         claim.scopeId = item.scopeId;
         claim.receipt = UUID.randomUUID().toString();
         claim.actor = subject;
@@ -348,7 +348,7 @@ public class ClaimService {
     }
 
     private static void requireAddressed(Item item) {
-        if (item.number == null || item.selectorId == null) {
+        if (item.number == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "item " + item.id + " has no address yet — it is a raw call-in. A claim "

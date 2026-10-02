@@ -3,7 +3,6 @@ package ai.kumbuka.worklist.repository;
 import ai.kumbuka.worklist.domain.Item;
 import ai.kumbuka.worklist.domain.ItemReference;
 import ai.kumbuka.worklist.domain.ItemRelation;
-import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -81,9 +80,9 @@ public class ItemRepository {
      * optional filter in a signature every internal caller now has to think
      * about.
      *
-     * <p><strong>Enumerated fields only.</strong> {@code status_id} and
-     * {@code milestone_id} are the two the item domain exposes to a query —
-     * both opaque uuids, both compared as equalities, neither leaking a
+     * <p><strong>Enumerated fields only.</strong> {@code status_pk} and
+     * {@code milestone_number} are the two the item domain exposes to a query —
+     * both compared as equalities, neither leaking a
      * scope's vocabulary into the JPQL. A filter over a declared attribute
      * is a natural next step and does NOT sit here today: the containment
      * index answers it and the surface has no shape for one yet.
@@ -104,11 +103,11 @@ public class ItemRepository {
             String param = "f_" + params.size();
             switch (entry.getKey()) {
                 case P_STATUS -> {
-                    jpql.append(" AND i.statusId = :").append(param);
+                    jpql.append(" AND i.statusPk = :").append(param);
                     params.put(param, entry.getValue());
                 }
                 case "milestone" -> {
-                    jpql.append(" AND i.milestoneId = :").append(param);
+                    jpql.append(" AND i.milestoneNumber = :").append(param);
                     params.put(param, entry.getValue());
                 }
                 default -> throw new IllegalArgumentException(
@@ -140,38 +139,29 @@ public class ItemRepository {
      * scope's items would be a second reader of the same index — one that gets
      * slower with the corpus and answers the same question worse.
      *
-     * <p><strong>The selector is part of the query and not an assumption.</strong>
-     * Each view has its own counter, so two selectors legitimately share a
-     * number and only the triple names one object. Matching on the selector
-     * as well is what makes an address whose view does not fit the object a
-     * not-found instead of a second address resolving to it.
+     * <p>An item's number is unique within its scope (V18), so scope and
+     * number name one item; the view selector takes no part in it any more.
      */
     @Transactional
-    public Item byAddress(UUID scopeId, UUID selectorId, long number) {
+    public Item byAddress(UUID scopeId, long number) {
         return em.createQuery(
-                "SELECT i FROM Item i WHERE i.scopeId = :scope "
-                    + "AND i.selectorId = :selector AND i.number = :number", Item.class)
+                "SELECT i FROM Item i WHERE i.scopeId = :scope AND i.number = :number",
+                Item.class)
             .setParameter(P_SCOPE, scopeId)
-            .setParameter("selector", selectorId)
             .setParameter("number", number)
             .getResultStream()
             .findFirst()
             .orElse(null);
     }
 
-    /** The selector of that id, or null. */
-    @Transactional
-    public Selector selectorById(UUID selectorId) {
-        return selectorId == null ? null : em.find(Selector.class, selectorId);
-    }
-
     /** Every relation out of an item, asserted and withdrawn alike. */
     @Transactional
-    public List<ItemRelation> edgesOf(UUID itemId) {
+    public List<ItemRelation> edgesOf(Item item) {
         return em.createQuery(
-                "SELECT r FROM ItemRelation r WHERE r.fromItemId = :item",
-                ItemRelation.class)
-            .setParameter(P_ITEM, itemId)
+                "SELECT r FROM ItemRelation r WHERE r.scopeId = :scope "
+                    + "AND r.fromItemNumber = :item", ItemRelation.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
             .getResultList();
     }
 
@@ -190,36 +180,41 @@ public class ItemRepository {
      * comparison to disagree.
      */
     @Transactional
-    public List<ItemRelation> assertedRelations(UUID itemId) {
+    public List<ItemRelation> assertedRelations(Item item) {
         return em.createQuery(
                 "SELECT r FROM ItemRelation r "
-                    + "WHERE r.fromItemId = :" + P_ITEM
+                    + "WHERE r.scopeId = :" + P_SCOPE
+                    + " AND r.fromItemNumber = :" + P_ITEM
                     + " AND r.status = :" + P_STATUS
-                    + " ORDER BY r.toItemId, r.relationTypeId", ItemRelation.class)
-            .setParameter(P_ITEM, itemId)
+                    + " ORDER BY r.toItemNumber, r.relationTypePk", ItemRelation.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
             .setParameter(P_STATUS, ItemRelation.ASSERTED)
             .getResultList();
     }
 
     /** Every external pointer of an item, asserted and withdrawn alike. */
     @Transactional
-    public List<ItemReference> referencesOf(UUID itemId) {
+    public List<ItemReference> referencesOf(Item item) {
         return em.createQuery(
-                "SELECT r FROM ItemReference r WHERE r.itemId = :item ORDER BY r.ordinal",
-                ItemReference.class)
-            .setParameter(P_ITEM, itemId)
+                "SELECT r FROM ItemReference r WHERE r.scopeId = :scope "
+                    + "AND r.itemNumber = :item ORDER BY r.ordinal", ItemReference.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
             .getResultList();
     }
 
     /** The asserted pointers only, in the reader's order. */
     @Transactional
-    public List<ItemReference> assertedReferences(UUID itemId) {
+    public List<ItemReference> assertedReferences(Item item) {
         return em.createQuery(
                 "SELECT r FROM ItemReference r "
-                    + "WHERE r.itemId = :" + P_ITEM
+                    + "WHERE r.scopeId = :" + P_SCOPE
+                    + " AND r.itemNumber = :" + P_ITEM
                     + " AND r.status = :" + P_STATUS + " ORDER BY r.ordinal",
                 ItemReference.class)
-            .setParameter(P_ITEM, itemId)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
             .setParameter(P_STATUS, ItemReference.ASSERTED)
             .getResultList();
     }

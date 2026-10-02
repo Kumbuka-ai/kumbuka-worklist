@@ -83,17 +83,17 @@ public class SelectorRepository {
      * reading a column that is due to be dropped.
      */
     @Transactional
-    public NumberSpace lockSpace(UUID selectorId) {
-        return single(spaceQuery("s.selectorId = :selector")
-            .setParameter(P_SELECTOR, selectorId)
+    public NumberSpace lockSpace(Long selectorPk) {
+        return single(spaceQuery("s.selectorPk = :selector")
+            .setParameter(P_SELECTOR, selectorPk)
             .setLockMode(LockModeType.PESSIMISTIC_WRITE));
     }
 
     /** The selector's number space without a lock, for a read that only reports it. */
     @Transactional
-    public NumberSpace space(UUID selectorId) {
-        return single(spaceQuery("s.selectorId = :selector")
-            .setParameter(P_SELECTOR, selectorId));
+    public NumberSpace space(Long selectorPk) {
+        return single(spaceQuery("s.selectorPk = :selector")
+            .setParameter(P_SELECTOR, selectorPk));
     }
 
     private TypedQuery<NumberSpace> spaceQuery(String predicate) {

@@ -521,46 +521,90 @@ class SchemaConstraintIT {
     // ==================================================================
 
     /**
-     * An item without a selector is refused at the column.
+     * An item written without a selector stands on its scope's view selector
+     * {@code item}; in a scope that declares no such selector it is refused.
      *
-     * <p>Both halves of the address were nullable through V6 as the intake
-     * state of a raw call-in — a state no verb reaches any more since the
-     * selector became the view and {@code accept} refuses. V7 restates that
-     * observation as a column NOT NULL: an item exists at an address, and a
-     * row without one cannot exist at all.
-     *
-     * <p>The green half is what {@link #insertItem} plants at every other test
-     * in this class: an item with a selector, a number and a status, admitted
-     * without a word about the constraint below.
+     * <p>Through V18 the column was a plain NOT NULL and this probe watched it
+     * refuse a missing selector. Since V19 the image no longer writes the
+     * column: every item hangs on the view selector {@code item}, and the
+     * store fills it on insert so the image before keeps reading a complete
+     * address (ADR-0042 stage R2). What is still refused is an item whose
+     * scope has no such selector, because it has no address space to stand in.
      */
     @Test
-    void an_item_without_a_selector_is_refused_and_a_full_address_stands()
+    void an_item_without_a_selector_stands_on_the_item_view_or_is_refused()
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
             UUID status = anyStatus(c);
+            UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
             c.commit();
 
             Db.bindTenant(c, tenant);
-            assertThatThrownBy(() -> insertItemWithAddress(c, "no selector",
-                    status, null, 1L))
-                .as("RED STATE, observed: an item without a selector must be refused. "
-                    + "The address names the object, and half an address names nothing "
-                    + "the caller can hold on to")
+            UUID bareScope = UUID.randomUUID();
+            assertThatThrownBy(() -> {
+                try (var st = c.prepareStatement("""
+                        INSERT INTO worklist.item
+                            (tenant_id, scope_id, title, status_id, number, workstream_id)
+                        VALUES (?, ?, 'no view', ?, 1, ?)
+                        """)) {
+                    st.setObject(1, tenant);
+                    st.setObject(2, bareScope);
+                    st.setObject(3, status);
+                    st.setObject(4, workstream);
+                    st.executeUpdate();
+                }
+            })
+                .as("RED STATE, observed: an item in a scope that declares no item view "
+                    + "must be refused. Half an address names nothing the caller can hold "
+                    + "on to")
                 .isInstanceOf(SQLException.class)
-                .hasMessageContaining("selector_id");
+                .hasMessageContaining("declares no selector item");
             c.rollback();
 
             Db.bindTenant(c, tenant);
-            UUID selector = insertSelector(c);
-            insertItemWithAddress(c, "full address", status, selector, 1L);
+            UUID itemView = itemView(c);
+            long number = NEXT_NUMBER.getAndIncrement();
+            insertItemWithAddress(c, "no selector given", status, null, number);
             c.commit();
 
-            assertThat(count(c, "item"))
-                .as("and an item with a selector and a number is admitted, which is the "
-                    + "shape every verb produces since the selector became the view")
-                .isEqualTo(1);
+            assertThat(selectorOfItemNumbered(c, number))
+                .as("an item written without a selector stands on the scope's item view, "
+                    + "which is the only selector any verb ever gave an item")
+                .isEqualTo(itemView);
             c.commit();
+        }
+    }
+
+    /** The scope's item view, declared here if this class has not yet done so. */
+    private UUID itemView(Connection c) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.selector (tenant_id, scope_id, token)
+                VALUES (?, ?, 'item') ON CONFLICT (tenant_id, scope_id, token) DO NOTHING
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.executeUpdate();
+        }
+        try (var st = c.prepareStatement(
+                "SELECT id FROM worklist.selector WHERE scope_id = ? AND token = 'item'")) {
+            st.setObject(1, SCOPE);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getObject(1, UUID.class);
+            }
+        }
+    }
+
+    private UUID selectorOfItemNumbered(Connection c, long number) throws SQLException {
+        try (var st = c.prepareStatement(
+                "SELECT selector_id FROM worklist.item WHERE scope_id = ? AND number = ?")) {
+            st.setObject(1, SCOPE);
+            st.setLong(2, number);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getObject(1, UUID.class);
+            }
         }
     }
 
@@ -1172,7 +1216,7 @@ class SchemaConstraintIT {
      */
     private void insertItemWithTitle(Connection c, String title, UUID status,
             UUID selector) throws SQLException {
-        insertItemWithAddress(c, title, status, selector, 1L);
+        insertItemWithAddress(c, title, status, selector, NEXT_NUMBER.getAndIncrement());
     }
 
     /**

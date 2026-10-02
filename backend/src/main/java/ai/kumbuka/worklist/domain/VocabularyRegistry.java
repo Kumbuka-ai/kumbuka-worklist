@@ -101,7 +101,7 @@ public class VocabularyRegistry {
         status.successful = successful;
         vocabulary.insert(status);
 
-        LOG.infof("status %s declared in scope %s", status.id, scopeId);
+        LOG.infof("status %s declared in scope %s", status.pk, scopeId);
         return status;
     }
 
@@ -119,8 +119,8 @@ public class VocabularyRegistry {
      * called would be addressing something that is allowed to move under it.
      */
     @Transactional
-    public ItemStatus requireStatus(UUID scopeId, UUID statusId) {
-        ItemStatus status = vocabulary.statusById(statusId);
+    public ItemStatus requireStatus(UUID scopeId, Long statusId) {
+        ItemStatus status = vocabulary.statusByPk(statusId);
         if (status == null || !status.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
@@ -134,21 +134,18 @@ public class VocabularyRegistry {
     }
 
     /**
-     * The declared status of that identity, or null.
-     *
-     * <p>The scope-less counterpart of {@link #requireStatus} — a projection
-     * that reads an item's status to name it back does not need the refusal,
-     * and the same pattern the two other declared-value lookups follow.
+     * The declared status of that surrogate, or null — the form an item's
+     * reference holds. Scope membership is the caller's to check.
      */
     @Transactional
-    public ItemStatus statusById(UUID statusId) {
-        return statusId == null ? null : vocabulary.statusById(statusId);
+    public ItemStatus statusByPk(Long pk) {
+        return vocabulary.statusByPk(pk);
     }
 
     /**
      * The declared status a scope carries under that display name, or null.
      *
-     * <p>The reverse of {@link #statusById}, exposed for the write path. The
+     * <p>The reverse of {@link #statusByPk}, exposed for the write path. The
      * wire form of a status is the display name — a caller writing an item
      * says "status: open", and this method turns that back into the identity
      * the row stores.
@@ -167,7 +164,7 @@ public class VocabularyRegistry {
      * saying so, or its own history stops being legible.
      */
     @Transactional
-    public ItemStatus withdrawStatus(UUID scopeId, UUID statusId) {
+    public ItemStatus withdrawStatus(UUID scopeId, Long statusId) {
         ItemStatus status = requireStatus(scopeId, statusId);
         if (!DeclaredValue.WITHDRAWN.equals(status.status)) {
             status.status = DeclaredValue.WITHDRAWN;
@@ -259,19 +256,10 @@ public class VocabularyRegistry {
         return definition;
     }
 
-    /**
-     * The declaration of that identity, or null.
-     *
-     * <p>The one lookup by identity on this side, and it exists because the
-     * stored form of an attribute value keys by identity while the
-     * caller-facing form keys by the key. Reading an item means translating
-     * the first into the second, and a value under a declaration that is gone
-     * is an absence rather than a refusal — the column still carries it, and
-     * an answer naming a key no declaration can render would be worse.
-     */
+    /** The declaration of that surrogate, or null; the read path's second key form. */
     @Transactional
-    public AttributeDefinition attributeById(UUID definitionId) {
-        return vocabulary.definitionById(definitionId);
+    public AttributeDefinition attributeByPk(Long pk) {
+        return vocabulary.definitionByPk(pk);
     }
 
     /** Withdraw an attribute. Its key stays occupied; the items keep their values. */
@@ -300,38 +288,75 @@ public class VocabularyRegistry {
                 List.of(key));
         }
 
+        // Idempotent by name, as declaring an attribute is by key: the name is
+        // unique within its definition since V18, so a second declaration of
+        // the same name is the same statement made twice.
+        AttributeOption existing = vocabulary.optionByName(definition.pk, name.trim());
+        if (existing != null) {
+            return existing;
+        }
+
         AttributeOption option = new AttributeOption();
         option.scopeId = scopeId;
-        option.definitionId = definition.id;
+        option.definitionPk = definition.pk;
         option.name = name.trim();
         option.rank = rank;
         vocabulary.insert(option);
 
         LOG.infof("option %s declared under attribute %s in scope %s",
-            option.id, key, scopeId);
+            option.pk, key, scopeId);
         return option;
     }
 
     /** Every option of an attribute, by rank then name. */
     @Transactional
     public List<AttributeOption> options(UUID scopeId, String key) {
-        return vocabulary.optionsOf(requireAttribute(scopeId, key).id);
+        return vocabulary.optionsOf(requireAttribute(scopeId, key).pk);
     }
 
-    /** The option of that identity under that declaration, or a typed refusal. */
+    /**
+     * The option of that surrogate under that declaration, or a typed refusal
+     * naming the value the caller gave.
+     */
     @Transactional
-    public AttributeOption requireOption(AttributeDefinition definition, UUID optionId) {
-        AttributeOption option = vocabulary.optionById(optionId);
-        if (option == null || !option.definitionId.equals(definition.id)) {
+    public AttributeOption requireOption(AttributeDefinition definition, Long optionPk,
+            String given) {
+        AttributeOption option = vocabulary.optionByPk(optionPk);
+        if (option == null || !option.definitionPk.equals(definition.pk)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "no option " + optionId + " is declared under attribute " + definition.key
-                    + ". An option has an identity separate from its name, so what an "
-                    + "item stores is the identity — and an identity that is not in the "
-                    + "declared set is a value nothing can render",
-                List.of(definition.key, String.valueOf(optionId)));
+                "no option " + given + " is declared under attribute " + definition.key
+                    + ". The options of an attribute are the scope's declaration, and a "
+                    + "value outside it is one nothing can render",
+                List.of(definition.key, given));
         }
         return option;
+    }
+
+    /**
+     * The option of that name under that declaration, or a typed refusal.
+     *
+     * <p>The outward form of an option is its name: unique within its
+     * definition since V18, so a name says which option it is.
+     */
+    @Transactional
+    public AttributeOption requireOptionNamed(AttributeDefinition definition, String name) {
+        AttributeOption option = vocabulary.optionByName(definition.pk, name);
+        if (option == null) {
+            throw new WorklistException(
+                WorklistException.Reason.VALUE_UNDECLARED,
+                "no option named " + name + " is declared under attribute " + definition.key
+                    + ". The options of an attribute are the scope's declaration, and a "
+                    + "value outside it is one nothing can render",
+                List.of(definition.key, name));
+        }
+        return option;
+    }
+
+    /** The option of that surrogate, or null; the read path's second value form. */
+    @Transactional
+    public AttributeOption optionByPk(Long pk) {
+        return vocabulary.optionByPk(pk);
     }
 
     // ------------------------------------------------------------------
@@ -365,7 +390,7 @@ public class VocabularyRegistry {
         type.rank = rank;
         vocabulary.insert(type);
 
-        LOG.infof("relation type %s declared in scope %s", type.id, scopeId);
+        LOG.infof("relation type %s declared in scope %s", type.pk, scopeId);
         return type;
     }
 
@@ -377,8 +402,8 @@ public class VocabularyRegistry {
 
     /** The relation type of that identity in this scope, or a typed refusal. */
     @Transactional
-    public RelationType requireRelationType(UUID scopeId, UUID typeId) {
-        RelationType type = vocabulary.relationTypeById(typeId);
+    public RelationType requireRelationType(UUID scopeId, Long typeId) {
+        RelationType type = vocabulary.relationTypeByPk(typeId);
         if (type == null || !type.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
@@ -391,22 +416,16 @@ public class VocabularyRegistry {
         return type;
     }
 
-    /**
-     * The relation type of that identity, or null.
-     *
-     * <p>The scope-less counterpart of {@link #requireRelationType} — a caller
-     * walking the graph is already scope-bound and does not need the refusal.
-     * Nullable rather than typed-refused, matching {@link #attributeById}.
-     */
+    /** The relation type of that surrogate, or null — the form an edge holds. */
     @Transactional
-    public RelationType relationTypeById(UUID typeId) {
-        return typeId == null ? null : vocabulary.relationTypeById(typeId);
+    public RelationType relationTypeByPk(Long pk) {
+        return vocabulary.relationTypeByPk(pk);
     }
 
     /**
      * The relation type a scope carries under that display name, or null.
      *
-     * <p>The reverse of {@link #relationTypeById}, exposed for the write
+     * <p>The reverse of {@link #relationTypeByPk}, exposed for the write
      * path — the wire form of a relation type is the display name and this
      * turns it back into the identity the edge stores.
      */
@@ -417,7 +436,7 @@ public class VocabularyRegistry {
 
     /** Withdraw a relation type. The edges carrying it stay readable. */
     @Transactional
-    public RelationType withdrawRelationType(UUID scopeId, UUID typeId) {
+    public RelationType withdrawRelationType(UUID scopeId, Long typeId) {
         RelationType type = requireRelationType(scopeId, typeId);
         if (!DeclaredValue.WITHDRAWN.equals(type.status)) {
             type.status = DeclaredValue.WITHDRAWN;

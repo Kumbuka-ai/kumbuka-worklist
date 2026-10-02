@@ -57,7 +57,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "iteration_membership", schema = "worklist")
 @IdClass(IterationMembership.Key.class)
-public class IterationMembership extends TenantScoped {
+public class IterationMembership extends ScopeKeyed {
 
     /** In this iteration and not yet started. */
     public static final String TODO = "todo";
@@ -82,13 +82,13 @@ public class IterationMembership extends TenantScoped {
 
     /** The iteration. Half of the identity, and the owner of the conflict token. */
     @Id
-    @Column(name = "iteration_id", nullable = false)
-    public UUID iterationId;
+    @Column(name = "iteration_number", nullable = false)
+    public Long iterationNumber;
 
     /** The item. The other half, and the address a caller holds. */
     @Id
-    @Column(name = "item_id", nullable = false)
-    public UUID itemId;
+    @Column(name = "item_number", nullable = false)
+    public Long itemNumber;
 
     /** Dense within the iteration, rewritten as a whole on reorder. */
     @Column(name = "position", nullable = false)
@@ -125,27 +125,30 @@ public class IterationMembership extends TenantScoped {
 
         private static final long serialVersionUID = 1L;
 
-        public UUID iterationId;
-        public UUID itemId;
+        public UUID scopeId;
+        public Long iterationNumber;
+        public Long itemNumber;
 
         public Key() {
         }
 
-        public Key(UUID iterationId, UUID itemId) {
-            this.iterationId = iterationId;
-            this.itemId = itemId;
+        public Key(UUID scopeId, Long iterationNumber, Long itemNumber) {
+            this.scopeId = scopeId;
+            this.iterationNumber = iterationNumber;
+            this.itemNumber = itemNumber;
         }
 
         @Override
         public boolean equals(Object other) {
             return other instanceof Key key
-                && Objects.equals(iterationId, key.iterationId)
-                && Objects.equals(itemId, key.itemId);
+                && Objects.equals(scopeId, key.scopeId)
+                && Objects.equals(iterationNumber, key.iterationNumber)
+                && Objects.equals(itemNumber, key.itemNumber);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(iterationId, itemId);
+            return Objects.hash(scopeId, iterationNumber, itemNumber);
         }
     }
 }
