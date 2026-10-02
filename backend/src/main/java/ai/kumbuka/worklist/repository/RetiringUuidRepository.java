@@ -52,26 +52,27 @@ public class RetiringUuidRepository {
     /** Definition uuid to surrogate, for one scope; empty once the column is gone. */
     @Transactional
     public Map<UUID, Long> definitionPksByUuid(UUID scopeId) {
-        return pksByUuid("attribute_definition", scopeId);
+        // Native for the reason the class states: the column is not mapped.
+        return pksByUuid(em.createNativeQuery(
+                "SELECT v.pk, to_jsonb(v) ->> 'id' FROM worklist.attribute_definition v "
+                    + "WHERE v.scope_id = ?1")
+            .setParameter(1, scopeId)
+            .getResultList());
     }
 
     /** Option uuid to surrogate, for one scope; empty once the column is gone. */
     @Transactional
     public Map<UUID, Long> optionPksByUuid(UUID scopeId) {
-        return pksByUuid("attribute_option", scopeId);
+        // Native for the reason the class states: the column is not mapped.
+        return pksByUuid(em.createNativeQuery(
+                "SELECT v.pk, to_jsonb(v) ->> 'id' FROM worklist.attribute_option v "
+                    + "WHERE v.scope_id = ?1")
+            .setParameter(1, scopeId)
+            .getResultList());
     }
 
-    /**
-     * Uuid to surrogate for one scope's rows of a vocabulary table. The table
-     * name is one of the two literals above, never a caller's value.
-     */
-    private Map<UUID, Long> pksByUuid(String table, UUID scopeId) {
-        // Native for the reason the class states: the column is not mapped.
-        List<?> rows = em.createNativeQuery(
-                "SELECT v.pk, to_jsonb(v) ->> 'id' FROM worklist." + table
-                    + " v WHERE v.scope_id = ?1")
-            .setParameter(1, scopeId)
-            .getResultList();
+    /** Rows of (surrogate, uuid text) as a map from uuid to surrogate, skipping absent uuids. */
+    private static Map<UUID, Long> pksByUuid(List<?> rows) {
         Map<UUID, Long> answer = new HashMap<>();
         for (Object row : rows) {
             Object[] columns = (Object[]) row;

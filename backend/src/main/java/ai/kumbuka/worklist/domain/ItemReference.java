@@ -60,12 +60,6 @@ public class ItemReference extends TenantScoped {
     public static final String WITHDRAWN = "withdrawn";
 
     /**
-     * The entry's own identity, and the only thing that addresses it.
-     *
-     * <p>Not the ordinal, and not the pair of item and ordinal. See the class
-     * comment: a positional key cannot coexist with a tombstone.
-     */
-    /**
      * The row's identity inside this service: the surrogate every key onto it
      * targets (ADR-0042), allocated by the store, never part of an answer.
      *

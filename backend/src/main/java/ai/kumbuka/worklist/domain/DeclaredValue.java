@@ -65,7 +65,6 @@ public abstract class DeclaredValue extends TenantScoped {
     /** Withdrawn: resolvable for what carries it, closed to anything new. */
     public static final String WITHDRAWN = "withdrawn";
 
-    /** What an item stores. Stable across every rename of the name. */
     /**
      * The row's identity inside this service: the surrogate every key onto it
      * targets (ADR-0042), allocated by the store, never part of an answer.
