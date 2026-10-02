@@ -18,8 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>V12 retracted the milestone-workstream edge (TAR-0002 section 4) and
  * marked {@code milestone.workstream_id} and {@code number_space.workstream_id}
  * DEAD; V17 drops both together with their composite foreign keys. The
- * item's {@code workstream_id} expresses a different invariant — an item
- * belongs to exactly one workstream — and must survive. A drop that took it
+ * item's workstream reference expresses a different invariant — an item
+ * belongs to exactly one workstream — and must survive; since V20 it is held
+ * by {@code item.workstream_number} alone. A drop that took it
  * along would leave every item without its workstream, and nothing else in
  * the suite reads the catalogue to notice.
  *
