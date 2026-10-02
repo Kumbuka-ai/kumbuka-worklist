@@ -500,7 +500,7 @@ class SurfaceCoverageIT {
     /**
      * Points an item at a milestone, over JDBC and under the runtime role.
      *
-     * <p>The item verb {@code update} assigns {@code item.milestone_id} and
+     * <p>The item verb {@code update} assigns {@code item.milestone_number} and
      * runs the existence check; this fixture writes it directly so the
      * planning-coverage case does not re-run the same guard the item probes
      * cover.

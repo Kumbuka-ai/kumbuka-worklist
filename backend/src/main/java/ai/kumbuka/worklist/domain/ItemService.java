@@ -163,9 +163,9 @@ public class ItemService {
      * <p>Only {@code status} and {@code milestone} are narrowable today. The
      * status filter takes the declared status NAME (the same wire form the
      * projection returns) and the milestone filter takes the milestone
-     * NUMBER — both are resolved to the stored identity here, because the
-     * repository query is an equality on {@code status_id} / {@code
-     * milestone_id}. A free text — title, description — is refused rather
+     * NUMBER — both are resolved to the stored key here, because the
+     * repository query is an equality on {@code status_pk} / {@code
+     * milestone_number}. A free text — title, description — is refused rather
      * than accepted with whatever matching rule seemed reasonable, because
      * the shape of a substring query is a surface commitment this build does
      * not take.
@@ -322,10 +322,10 @@ public class ItemService {
 
         // The workstream is mandatory — ratified 2026-09-08. If the caller
         // named one, use it (existence, refusal on withdrawn); if not, fall
-        // to the scope's default. `item.workstream_id` will be NOT NULL
-        // once V10 lands, and this branch is what makes an item without a
-        // workstream inexpressible from the outside long before the store
-        // starts refusing it.
+        // to the scope's default. The store refuses an item without one too
+        // (`item.workstream_number` is NOT NULL since V19); this branch is
+        // what makes such an item inexpressible from the outside, so the
+        // caller meets a named refusal rather than a constraint violation.
         Workstream workstream = resolveWorkstream(scopeId,
             given.get(Field.WORKSTREAM_ID));
 

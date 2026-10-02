@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  *
  * <h2>One fixture writes the milestone column over JDBC on purpose</h2>
  *
- * {@link #onPath} writes {@code item.milestone_id} directly rather than
+ * {@link #onPath} writes the item's milestone column directly rather than
  * through {@code item.update}. The item verb assigns the axis and runs the
  * existence check, but the planning cases here read it as a precondition —
  * driving assignment through the item verb here would re-run the same guard
