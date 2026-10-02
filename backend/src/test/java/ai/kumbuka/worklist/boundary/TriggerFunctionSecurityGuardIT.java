@@ -36,6 +36,7 @@ class TriggerFunctionSecurityGuardIT {
     /** The functions V18 introduces, named here rather than read from the schema. */
     private static final List<String> REFERENCE_FUNCTIONS = List.of(
         "primary_address_is_immutable",
+        "row_is_refused_by_the_policy",
         "sync_number_reference",
         "sync_pk_reference",
         "item_sync_references",

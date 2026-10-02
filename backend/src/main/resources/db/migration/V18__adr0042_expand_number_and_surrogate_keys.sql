@@ -67,9 +67,9 @@
 --
 -- The migrator owns every function and trigger here. The runtime role holds
 -- no TRIGGER privilege (V2) and cannot drop or replace them. EXECUTE on the
--- two resolvers is taken from PUBLIC and given to the runtime role, which
--- needs it because a trigger function calls them under the writer's
--- identity.
+-- two resolvers and their policy check is taken from PUBLIC and given to
+-- the runtime role, which needs it because a trigger function calls them
+-- under the writer's identity.
 --
 -- RLS
 --
@@ -203,6 +203,21 @@ CREATE TRIGGER workstream_address_is_immutable BEFORE UPDATE ON worklist.workstr
 -- parent table name comes only from the trigger functions below, never from
 -- a caller, and is quoted with %I.
 -- ---------------------------------------------------------------------------
+-- A row of a tenant other than the one the session is bound to is refused by
+-- the WITH CHECK of every policy in this schema, for every writer that is
+-- subject to row-level security. Resolving its references first would only
+-- replace that refusal with a different message -- and would hide the
+-- policy from every probe that exists to watch it refuse. So the resolvers
+-- step aside for exactly that row and let the policy speak. A writer that
+-- bypasses row-level security is not covered: for it nothing else would
+-- refuse the row, so its references are resolved like any other.
+CREATE FUNCTION worklist.row_is_refused_by_the_policy(tenant UUID) RETURNS BOOLEAN
+    LANGUAGE sql STABLE SECURITY INVOKER SET search_path = worklist, pg_temp AS $$
+    SELECT tenant IS DISTINCT FROM NULLIF(current_setting('app.tenant_id', true), '')::uuid
+       AND NOT (r.rolsuper OR r.rolbypassrls)
+    FROM pg_catalog.pg_roles r WHERE r.rolname = current_user
+$$;
+
 CREATE FUNCTION worklist.sync_number_reference(
         parent TEXT, op TEXT, tenant UUID, scope UUID,
         old_id UUID, new_id UUID, old_number BIGINT, new_number BIGINT,
@@ -217,6 +232,9 @@ DECLARE
 BEGIN
     id := new_id;
     number := new_number;
+    IF worklist.row_is_refused_by_the_policy(tenant) THEN
+        RETURN;
+    END IF;
     IF NOT id_moved AND NOT number_moved THEN
         RETURN;
     END IF;
@@ -277,6 +295,9 @@ DECLARE
 BEGIN
     id := new_id;
     pk := new_pk;
+    IF worklist.row_is_refused_by_the_policy(tenant) THEN
+        RETURN;
+    END IF;
     IF NOT id_moved AND NOT pk_moved THEN
         RETURN;
     END IF;
@@ -316,6 +337,8 @@ BEGIN
 END;
 $$;
 
+REVOKE EXECUTE ON FUNCTION worklist.row_is_refused_by_the_policy(UUID) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION worklist.row_is_refused_by_the_policy(UUID) TO kumbuka_worklist;
 REVOKE EXECUTE ON FUNCTION worklist.sync_number_reference(TEXT, TEXT, UUID, UUID, UUID, UUID, BIGINT, BIGINT) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION worklist.sync_pk_reference(TEXT, TEXT, UUID, UUID, UUID, BIGINT, BIGINT) FROM PUBLIC;
 GRANT  EXECUTE ON FUNCTION worklist.sync_number_reference(TEXT, TEXT, UUID, UUID, UUID, UUID, BIGINT, BIGINT) TO kumbuka_worklist;
