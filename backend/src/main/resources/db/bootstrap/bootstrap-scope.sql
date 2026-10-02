@@ -49,7 +49,15 @@
 --
 -- IDEMPOTENT. Every insert carries ON CONFLICT DO NOTHING, so a second run
 -- changes nothing and fails nowhere. A bootstrap that cannot be repeated gets
--- taken apart by hand the second time.
+-- taken apart by hand the second time. A conflict clause only fires on a
+-- unique key, and `item_status` and `relation_type` have none on the name:
+-- their two inserts are therefore guarded by NOT EXISTS on the name, which is
+-- what keeps a repeat from declaring every status and relation type twice.
+--
+-- REFERENCES BY KEY, NOT BY UUID. Since V20 (ADR-0042) a support row carries
+-- no uuid: a counter names its selector, and an option its definition, by the
+-- target's surrogate `pk`, and the statements below join on it. From outside,
+-- the vocabulary rows are named by what always named them: token, key, name.
 --
 -- WHAT IT DELIBERATELY DOES NOT DO
 --
@@ -146,7 +154,7 @@ SET high_water_mark = GREATEST(ns.high_water_mark, 1)
 FROM worklist.selector s
 WHERE ns.tenant_id   = :'tenant_id'
   AND ns.scope_id    = :'scope_id'
-  AND ns.selector_id = s.id
+  AND ns.selector_pk = s.pk
   AND s.token        = 'workstream';
 
 -- The scope-wide counters for the item, iteration and milestone selectors.
@@ -175,8 +183,8 @@ WHERE ns.tenant_id   = :'tenant_id'
 -- iteration and milestone all open at zero, which is what the store
 -- carries for a scope with nothing in it yet.
 INSERT INTO worklist.number_space
-    (tenant_id, scope_id, selector_id, high_water_mark)
-SELECT :'tenant_id', :'scope_id', s.id, 0
+    (tenant_id, scope_id, selector_pk, high_water_mark)
+SELECT :'tenant_id', :'scope_id', s.pk, 0
 FROM worklist.selector s
 WHERE s.tenant_id = :'tenant_id'
   AND s.scope_id  = :'scope_id'
@@ -207,22 +215,29 @@ ON CONFLICT DO NOTHING;
 INSERT INTO worklist.item_status
     (tenant_id, scope_id, name, description, rank,
      actionable, in_progress, closed, successful)
-VALUES
-    (:'tenant_id', :'scope_id', 'new',
+SELECT :'tenant_id', :'scope_id', v.name, v.description, v.rank,
+       v.actionable, v.in_progress, v.closed, v.successful
+  FROM (VALUES
+    ('new',
      'Roher Eingang: aufgenommen, aber noch nicht charakterisiert.',
      10, false, false, false, false),
-    (:'tenant_id', :'scope_id', 'open',
+    ('open',
      'Charakterisierte Arbeit, die noch niemand angefangen hat.',
      20, true, false, false, false),
-    (:'tenant_id', :'scope_id', 'done',
+    ('done',
      'Ausgefuehrt. Eine Aussage ueber Ausfuehrung, die nur ein Mensch trifft.',
      30, false, false, true, true),
-    (:'tenant_id', :'scope_id', 'dropped',
+    ('dropped',
      'Verworfen: die Arbeit wird nicht gemacht.',
      40, false, false, true, false),
-    (:'tenant_id', :'scope_id', 'obsolete',
+    ('obsolete',
      'Gegenstandslos: die Arbeit trifft nicht mehr zu.',
      50, false, false, true, false)
+  ) AS v(name, description, rank, actionable, in_progress, closed, successful)
+ WHERE NOT EXISTS (
+       SELECT 1 FROM worklist.item_status x
+        WHERE x.tenant_id = :'tenant_id' AND x.scope_id = :'scope_id'
+          AND x.name = v.name)
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -264,8 +279,8 @@ ON CONFLICT DO NOTHING;
 -- Cluster, in the predecessor's strategic order. This ordering was
 -- configuration in the predecessor's code (`steering.schema.sort_key`); here
 -- it is data in the scope, and revisable without a release.
-INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_id, name, description, rank)
-SELECT :'tenant_id', :'scope_id', d.id, v.name, v.description, v.rank
+INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_pk, name, description, rank)
+SELECT :'tenant_id', :'scope_id', d.pk, v.name, v.description, v.rank
   FROM worklist.attribute_definition d
   JOIN (VALUES
         ('SEC',    'Sicherheit: Invarianten, Haertungen, Zusicherungen mit Waechter.', 10),
@@ -280,8 +295,8 @@ SELECT :'tenant_id', :'scope_id', d.id, v.name, v.description, v.rank
  WHERE d.tenant_id = :'tenant_id' AND d.scope_id = :'scope_id' AND d.key = 'cluster'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_id, name, description, rank)
-SELECT :'tenant_id', :'scope_id', d.id, v.name, v.description, v.rank
+INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_pk, name, description, rank)
+SELECT :'tenant_id', :'scope_id', d.pk, v.name, v.description, v.rank
   FROM worklist.attribute_definition d
   JOIN (VALUES
         ('feature', 'Neue Produkt- oder Plattformfunktionalitaet.', 10),
@@ -294,8 +309,8 @@ SELECT :'tenant_id', :'scope_id', d.id, v.name, v.description, v.rank
 ON CONFLICT DO NOTHING;
 
 -- P1 is absolute in the predecessor's sort order; the rank records that.
-INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_id, name, description, rank)
-SELECT :'tenant_id', :'scope_id', d.id, v.name, v.description, v.rank
+INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_pk, name, description, rank)
+SELECT :'tenant_id', :'scope_id', d.pk, v.name, v.description, v.rank
   FROM worklist.attribute_definition d
   JOIN (VALUES
         ('P1', 'Absolut: geht jeder anderen Zeile vor.', 10),
@@ -305,8 +320,8 @@ SELECT :'tenant_id', :'scope_id', d.id, v.name, v.description, v.rank
  WHERE d.tenant_id = :'tenant_id' AND d.scope_id = :'scope_id' AND d.key = 'priority'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_id, name, description, rank)
-SELECT :'tenant_id', :'scope_id', d.id, v.name, v.description, v.rank
+INSERT INTO worklist.attribute_option (tenant_id, scope_id, definition_pk, name, description, rank)
+SELECT :'tenant_id', :'scope_id', d.pk, v.name, v.description, v.rank
   FROM worklist.attribute_definition d
   JOIN (VALUES
         ('S', 'Klein.',  10),
@@ -342,10 +357,13 @@ ON CONFLICT DO NOTHING;
 -- meaning the predecessor refused to name, and it is recorded here as such.
 -- ---------------------------------------------------------------------------
 INSERT INTO worklist.relation_type (tenant_id, scope_id, name, description, rank, blocks)
-VALUES
-    (:'tenant_id', :'scope_id', 'depends_on',
-     'Die Zeile haengt von der Zielzeile ab: das Ziel muss zuerst erledigt sein.',
-     10, true)
+SELECT :'tenant_id', :'scope_id', 'depends_on',
+       'Die Zeile haengt von der Zielzeile ab: das Ziel muss zuerst erledigt sein.',
+       10, true
+ WHERE NOT EXISTS (
+       SELECT 1 FROM worklist.relation_type x
+        WHERE x.tenant_id = :'tenant_id' AND x.scope_id = :'scope_id'
+          AND x.name = 'depends_on')
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -389,9 +407,9 @@ SELECT name, actionable, in_progress, closed, successful FROM worklist.item_stat
  WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id' ORDER BY rank;
 
 \echo '--- attributes ---'
-SELECT d.key, d.type, count(o.id) AS options
+SELECT d.key, d.type, count(o.pk) AS options
   FROM worklist.attribute_definition d
-  LEFT JOIN worklist.attribute_option o ON o.definition_id = d.id
+  LEFT JOIN worklist.attribute_option o ON o.definition_pk = d.pk
  WHERE d.tenant_id = :'tenant_id' AND d.scope_id = :'scope_id'
  GROUP BY d.key, d.type, d.rank ORDER BY d.rank;
 
@@ -405,5 +423,5 @@ SELECT number, kind, title FROM worklist.milestone
 
 \echo '--- counters ---'
 SELECT s.token, n.high_water_mark
-  FROM worklist.number_space n JOIN worklist.selector s ON s.id = n.selector_id
+  FROM worklist.number_space n JOIN worklist.selector s ON s.pk = n.selector_pk
  WHERE n.tenant_id = :'tenant_id' AND n.scope_id = :'scope_id' ORDER BY s.token;
