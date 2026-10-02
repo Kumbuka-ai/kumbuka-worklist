@@ -12,7 +12,7 @@ import java.util.UUID;
  * The one fixture of the planning probes that goes around the service, and
  * the reason it does.
  *
- * <p>{@code item.milestone_id} is now settable through {@code item.update},
+ * <p>An item's milestone is now settable through {@code item.update},
  * with an existence check the item verb enforces. The probes below still
  * write it over JDBC because they plant milestones and iterations that the
  * planning cases then read: driving the assignment through the item verb
