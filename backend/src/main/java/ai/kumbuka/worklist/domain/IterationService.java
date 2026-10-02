@@ -1,6 +1,7 @@
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
+import ai.kumbuka.worklist.repository.RetiringUuidRepository;
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -60,6 +61,9 @@ public class IterationService extends PlanningService {
     @Inject SelectorRegistry selectors;
     @Inject ScopeAccessRepository scopeAccess;
     @Inject ItemRepository itemRepo;
+
+    /** The settings' own uuid for the {@code advance} answer (ADR-0042 stage R2). */
+    @Inject RetiringUuidRepository retiring;
 
     /** What the cardinality refusal and its warning call the thing being counted. */
     private static final String OPEN_ITERATIONS = "the number of open iterations in this scope";
@@ -226,12 +230,12 @@ public class IterationService extends PlanningService {
         iteration.stamp();
 
         ScopeSetting setting = requireSetting(scopeId);
-        if (iteration.id.equals(setting.currentIterationId)) {
+        if (Objects.equals(iteration.number, setting.currentIterationNumber)) {
             // The pointer cannot outlive what it points at: a closed current
             // iteration is a state where the draw has somewhere to look and
             // nothing to find, which is the empty answer the concept insists
             // must mean "plan" rather than "close".
-            setting.currentIterationId = null;
+            setting.currentIterationNumber = null;
             setting.stamp();
         }
 
@@ -282,7 +286,7 @@ public class IterationService extends PlanningService {
         setting.requireCurrentToken(conflictToken);
 
         Iteration next = planning.openIterations(scopeId).stream()
-            .filter(iteration -> !iteration.id.equals(setting.currentIterationId))
+            .filter(iteration -> !Objects.equals(iteration.number, setting.currentIterationNumber))
             .findFirst()
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.ITERATION_ABSENT,
@@ -292,11 +296,12 @@ public class IterationService extends PlanningService {
                     + "call to close it",
                 List.of(String.valueOf(scopeId))));
 
-        setting.currentIterationId = next.id;
+        setting.currentIterationNumber = next.number;
         setting.stamp();
         planning.flushAndRefresh(setting);
         LOG.infof("iteration %d promoted to current in scope %s", next.number, scopeId);
-        return ScopeSettingService.project(setting, List.of());
+        return ScopeSettingService.project(setting, retiring.settingId(scopeId), next.id,
+            List.of());
     }
 
     // ------------------------------------------------------------------
@@ -385,12 +390,13 @@ public class IterationService extends PlanningService {
      * something the reader sees back any more.
      */
     private boolean applyOrder(Iteration iteration, Object value) {
-        List<IterationMembership> living = planning.membershipsOf(iteration.id);
+        List<IterationMembership> living =
+            planning.membershipsOf(iteration.scopeId, iteration.number);
         List<String> wanted = ItemFields.tokensInOrder(Field.ORDER, value);
 
         String scopeSlug = slugOf(iteration.scopeId);
         List<String> held = living.stream()
-            .map(m -> itemAddressOf(scopeSlug, m.itemId))
+            .map(m -> itemAddressOf(scopeSlug, m.itemNumber))
             .toList();
         if (!wanted.containsAll(held) || !held.containsAll(wanted)) {
             List<String> difference = new ArrayList<>(wanted);
@@ -417,7 +423,7 @@ public class IterationService extends PlanningService {
     }
 
     private String moveToAddress(String scopeSlug, IterationMembership membership) {
-        return itemAddressOf(scopeSlug, membership.itemId);
+        return itemAddressOf(scopeSlug, membership.itemNumber);
     }
 
     private boolean moveTo(List<IterationMembership> living, String scopeSlug,
@@ -460,9 +466,10 @@ public class IterationService extends PlanningService {
      * right there.
      */
     private void refuseLiveMemberships(Iteration iteration) {
-        List<String> live = planning.membershipsOf(iteration.id).stream()
+        List<String> live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()
             .filter(IterationMembership::live)
-            .map(membership -> String.valueOf(membership.itemId))
+            .map(membership -> String.valueOf(
+                itemRepo.byAddress(iteration.scopeId, membership.itemNumber).id))
             .toList();
         if (live.isEmpty()) {
             return;
@@ -525,8 +532,8 @@ public class IterationService extends PlanningService {
      */
     private List<String> order(Iteration iteration, String scopeSlug) {
         String slug = scopeSlug == null ? String.valueOf(iteration.scopeId) : scopeSlug;
-        return planning.membershipsOf(iteration.id).stream()
-            .map(membership -> itemAddressOf(slug, membership.itemId))
+        return planning.membershipsOf(iteration.scopeId, iteration.number).stream()
+            .map(membership -> itemAddressOf(slug, membership.itemNumber))
             .toList();
     }
 
@@ -548,16 +555,13 @@ public class IterationService extends PlanningService {
 
     /**
      * The canonical address of an item as {@code worklist://<slug>/item/<number>},
-     * or null when either half is unavailable.
+     * or null when either half is unavailable. A membership holds the item's
+     * number (ADR-0042), so the address needs no lookup.
      */
-    private String itemAddressOf(String scopeSlug, UUID itemId) {
-        if (itemId == null || scopeSlug == null) {
+    private static String itemAddressOf(String scopeSlug, Long itemNumber) {
+        if (itemNumber == null || scopeSlug == null) {
             return null;
         }
-        Item target = itemRepo.byId(itemId);
-        if (target == null || target.number == null) {
-            return null;
-        }
-        return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + target.number;
+        return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + itemNumber;
     }
 }

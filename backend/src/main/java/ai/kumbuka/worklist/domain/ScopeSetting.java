@@ -1,9 +1,8 @@
 package ai.kumbuka.worklist.domain;
 
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
@@ -63,25 +62,30 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "scope_setting", schema = "worklist")
+@AttributeOverride(name = "scopeId",
+    column = @Column(name = "scope_id", nullable = false, insertable = false, updatable = false))
 public class ScopeSetting extends AggregateRoot {
 
     /**
-     * The row's identity, and deliberately not its key.
+     * The row's identity: its scope. The table's primary key is
+     * {@code (tenant_id, scope_id)} — one row per scope — and the tenant is
+     * the session's, so the scope alone names the row without drawing the
+     * tenancy axis into the entity's key.
      *
-     * <p>The table's primary key is {@code (tenant_id, scope_id)} and stays
-     * that way — one row per scope is what the key says. This column exists
-     * so that the entity has a key that does not draw in the tenancy axis,
-     * which the shared superclass owns and no caller names. See V5 for the
-     * measurement.
+     * <p>The same column as the inherited {@link #scopeId}, mapped twice and
+     * written once, here; the inherited mapping is overridden read-only so
+     * every other class keeps reading {@code scopeId} as on every other table.
+     * The uuid column {@code id}, which V5 added as a key free of the tenancy
+     * axis, is no longer mapped: the next release drops it (ADR-0042), and an
+     * image that mapped it could not start against that schema.
      */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    public UUID id;
+    @Column(name = "scope_id", nullable = false, updatable = false)
+    public UUID scopeKey;
 
     /** The iteration being worked, or null. A pointer, unambiguous by construction. */
-    @Column(name = "current_iteration_id")
-    public UUID currentIterationId;
+    @Column(name = "current_iteration_number")
+    public Long currentIterationNumber;
 
     /** The hard limit on iterations that are open at once. Refuses. */
     @Column(name = "max_planned_iterations", nullable = false)

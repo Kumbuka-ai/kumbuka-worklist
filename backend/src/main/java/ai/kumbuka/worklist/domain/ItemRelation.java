@@ -53,7 +53,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "item_relation", schema = "worklist")
 @IdClass(ItemRelation.Key.class)
-public class ItemRelation extends TenantScoped {
+public class ItemRelation extends ScopeKeyed {
 
     /** The edge is asserted. */
     public static final String ASSERTED = "asserted";
@@ -61,16 +61,16 @@ public class ItemRelation extends TenantScoped {
     public static final String WITHDRAWN = "withdrawn";
 
     @Id
-    @Column(name = "from_item_id", nullable = false)
-    public UUID fromItemId;
+    @Column(name = "from_item_number", nullable = false)
+    public Long fromItemNumber;
 
     @Id
-    @Column(name = "to_item_id", nullable = false)
-    public UUID toItemId;
+    @Column(name = "to_item_number", nullable = false)
+    public Long toItemNumber;
 
     @Id
-    @Column(name = "relation_type_id", nullable = false)
-    public UUID relationTypeId;
+    @Column(name = "relation_type_pk", nullable = false)
+    public Long relationTypePk;
 
     @Column(name = "status", nullable = false)
     public String status = ASSERTED;
@@ -99,18 +99,20 @@ public class ItemRelation extends TenantScoped {
 
         private static final long serialVersionUID = 1L;
 
-        public UUID fromItemId;
-        public UUID toItemId;
-        public UUID relationTypeId;
+        public UUID scopeId;
+        public Long fromItemNumber;
+        public Long toItemNumber;
+        public Long relationTypePk;
 
         public Key() {
             // Required by the persistence provider.
         }
 
-        public Key(UUID fromItemId, UUID toItemId, UUID relationTypeId) {
-            this.fromItemId = fromItemId;
-            this.toItemId = toItemId;
-            this.relationTypeId = relationTypeId;
+        public Key(UUID scopeId, Long fromItemNumber, Long toItemNumber, Long relationTypePk) {
+            this.scopeId = scopeId;
+            this.fromItemNumber = fromItemNumber;
+            this.toItemNumber = toItemNumber;
+            this.relationTypePk = relationTypePk;
         }
 
         @Override
@@ -121,14 +123,15 @@ public class ItemRelation extends TenantScoped {
             if (!(other instanceof Key key)) {
                 return false;
             }
-            return Objects.equals(fromItemId, key.fromItemId)
-                && Objects.equals(toItemId, key.toItemId)
-                && Objects.equals(relationTypeId, key.relationTypeId);
+            return Objects.equals(scopeId, key.scopeId)
+                && Objects.equals(fromItemNumber, key.fromItemNumber)
+                && Objects.equals(toItemNumber, key.toItemNumber)
+                && Objects.equals(relationTypePk, key.relationTypePk);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(fromItemId, toItemId, relationTypeId);
+            return Objects.hash(scopeId, fromItemNumber, toItemNumber, relationTypePk);
         }
     }
 }

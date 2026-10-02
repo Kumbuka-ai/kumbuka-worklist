@@ -65,16 +65,16 @@ class PlanningDomainIT {
     @Inject ScopeSettingService settings;
 
     private UUID scope;
-    private UUID actionableStatus;
-    private UUID restingStatus;
+    private Long actionableStatus;
+    private Long restingStatus;
 
     @BeforeEach
     void aScopeOfItsOwn() {
         scope = UUID.randomUUID();
         actionableStatus = vocabulary.declareStatus(scope, "open", 1,
-            true, false, false, false).id;
+            true, false, false, false).pk;
         restingStatus = vocabulary.declareStatus(scope, "on hold", 2,
-            false, false, false, false).id;
+            false, false, false, false).pk;
         settings.create(scope, Map.of(
             "max_planned_iterations", 10,
             "warn_planned_iterations", 9,
@@ -741,7 +741,7 @@ class PlanningDomainIT {
         return item(title, actionableStatus);
     }
 
-    private UUID item(String title, UUID statusId) {
+    private UUID item(String title, Long statusId) {
         // The item view, declared before anything is created under it: an item
         // acquires its address at creation, so the view it is addressed under
         // has to exist by then. Declaring is idempotent.

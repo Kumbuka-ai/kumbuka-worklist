@@ -9,7 +9,6 @@ import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /**
  * A declared value: an identity, a display name, a rank and an optional
@@ -67,10 +66,19 @@ public abstract class DeclaredValue extends TenantScoped {
     public static final String WITHDRAWN = "withdrawn";
 
     /** What an item stores. Stable across every rename of the name. */
+    /**
+     * The row's identity inside this service: the surrogate every key onto it
+     * targets (ADR-0042), allocated by the store, never part of an answer.
+     *
+     * <p>The uuid column {@code id} the store still carries is not mapped. The
+     * image before this one reads it, and the store fills it by default; the
+     * next release drops it, and an image that mapped it could not start
+     * against that schema.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    public UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "pk", nullable = false, updatable = false)
+    public Long pk;
 
     /** What a reader sees. Changeable at will. */
     @Column(name = "name", nullable = false)

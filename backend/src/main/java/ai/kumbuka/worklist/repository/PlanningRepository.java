@@ -171,18 +171,20 @@ public class PlanningRepository {
 
     /** One membership, or null. */
     @Transactional
-    public IterationMembership membership(UUID iterationId, UUID itemId) {
+    public IterationMembership membership(UUID scopeId, long iterationNumber, long itemNumber) {
         return em.find(IterationMembership.class,
-            new IterationMembership.Key(iterationId, itemId));
+            new IterationMembership.Key(scopeId, iterationNumber, itemNumber));
     }
 
     /** Every membership of an iteration, in its sequence. */
     @Transactional
-    public List<IterationMembership> membershipsOf(UUID iterationId) {
+    public List<IterationMembership> membershipsOf(UUID scopeId, long iterationNumber) {
         return em.createQuery(
-                "SELECT m FROM IterationMembership m WHERE m.iterationId = :iteration "
-                    + "ORDER BY m.position, m.itemId", IterationMembership.class)
-            .setParameter(P_ITERATION, iterationId)
+                "SELECT m FROM IterationMembership m WHERE m.scopeId = :scope "
+                    + "AND m.iterationNumber = :iteration "
+                    + "ORDER BY m.position, m.itemNumber", IterationMembership.class)
+            .setParameter(P_SCOPE, scopeId)
+            .setParameter(P_ITERATION, iterationNumber)
             .getResultList();
     }
 
@@ -202,13 +204,13 @@ public class PlanningRepository {
      * predecessor, where planned was a status value.
      */
     @Transactional
-    public List<UUID> plannedItemIds(UUID scopeId) {
+    public List<Long> plannedItemNumbers(UUID scopeId) {
         return em.createQuery(
-                "SELECT DISTINCT m.itemId FROM IterationMembership m, Iteration i "
+                "SELECT DISTINCT m.itemNumber FROM IterationMembership m, Iteration i "
                     + "WHERE m.scopeId = :scope "
-                    + "AND i.id = m.iterationId "
+                    + "AND i.scopeId = m.scopeId AND i.number = m.iterationNumber "
                     + "AND i.closedAt IS NULL "
-                    + "AND m.status NOT IN :terminal", UUID.class)
+                    + "AND m.status NOT IN :terminal", Long.class)
             .setParameter(P_SCOPE, scopeId)
             .setParameter("terminal", IterationMembership.TERMINAL)
             .getResultList();

@@ -74,15 +74,13 @@ public class AddressRegistry {
     /**
      * The item at that number, or a typed refusal.
      *
-     * <p>The view is resolved to its selector row and passed into the lookup,
-     * so that identity is read as the triple scope, selector and number.
-     * Every view has its own counter, so two selectors legitimately share a
-     * number and only the triple names one object.
+     * <p>The view must be declared in the scope; the number then names one
+     * item, because an item's number is unique within its scope (V18).
      */
     @Transactional
     public UUID itemAt(UUID scopeId, long number) {
-        Selector view = selectors.require(scopeId, Selector.ITEM);
-        Item item = items.byAddress(scopeId, view.id, number);
+        selectors.require(scopeId, Selector.ITEM);
+        Item item = items.byAddress(scopeId, number);
         if (item == null) {
             throw absent(WorklistException.Reason.ITEM_UNKNOWN, Selector.ITEM, number, scopeId);
         }
@@ -148,7 +146,9 @@ public class AddressRegistry {
     public UUID currentIteration(UUID scopeId) {
         selectors.require(scopeId, Selector.ITERATION);
         ScopeSetting setting = planning.settingOf(scopeId);
-        UUID current = setting == null ? null : setting.currentIterationId;
+        Long currentNumber = setting == null ? null : setting.currentIterationNumber;
+        UUID current = currentNumber == null ? null
+            : planning.iterationByNumber(scopeId, currentNumber).id;
 
         if (current == null) {
             throw new WorklistException(

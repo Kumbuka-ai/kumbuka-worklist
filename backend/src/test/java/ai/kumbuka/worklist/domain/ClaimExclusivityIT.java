@@ -2,6 +2,7 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.platform.PlatformFixture;
 import ai.kumbuka.worklist.repository.ClaimRepository;
+import ai.kumbuka.worklist.repository.ItemRepository;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -65,11 +66,12 @@ class ClaimExclusivityIT {
      * rather than as an absent guarantee.
      */
     private UUID scope;
-    private UUID openStatus;
+    private Long openStatus;
 
     @Inject ItemService items;
     @Inject ClaimService claims;
     @Inject ClaimRepository claimRows;
+    @Inject ItemRepository itemRows;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
 
@@ -78,7 +80,7 @@ class ClaimExclusivityIT {
         scope = UUID.randomUUID();
         selectors.declare(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
-            true, false, false, false).id;
+            true, false, false, false).pk;
     }
 
     // ==================================================================
@@ -106,7 +108,7 @@ class ClaimExclusivityIT {
         // second claim would go through, overwriting the row. The receipt in
         // the row afterwards would be the second writer's, and the first
         // caller's would name a lease nothing holds any more.
-        Claim stored = claimRows.byItem(item);
+        Claim stored = claimOf(item);
         assertThat(stored).isNotNull();
         assertThat(stored.receipt)
             .as("RED STATE, observed by its absence: with the exclusivity check gone the "
@@ -155,7 +157,7 @@ class ClaimExclusivityIT {
                 + "the row was overwritten rather than resurrected")
             .isNotEqualTo(firstReceipt);
 
-        Claim stored = claimRows.byItem(item);
+        Claim stored = claimOf(item);
         assertThat(stored.receipt).isEqualTo(refresh.get(ClaimService.F_RECEIPT));
         assertThat(stored.liveAt(Instant.now()))
             .as("and the fresh row is a live lease again — the counter-probe against "
@@ -185,13 +187,13 @@ class ClaimExclusivityIT {
 
         // The row is still held under the same lease — a wrong receipt did
         // not clear it.
-        Claim stillHeld = claimRows.byItem(item);
+        Claim stillHeld = claimOf(item);
         assertThat(stillHeld.receipt).isEqualTo(receipt);
         assertThat(stillHeld.liveAt(Instant.now())).isTrue();
 
         // The right receipt does end it, and a fresh claim afterwards succeeds.
         claims.release(scope, item, "holder", receipt);
-        Claim released = claimRows.byItem(item);
+        Claim released = claimOf(item);
         assertThat(released.liveAt(Instant.now()))
             .as("release moves the expiry back to the granting instant. The row remains, "
                 + "the store learns the lease is over, and the next claim overwrites it")
@@ -235,7 +237,7 @@ class ClaimExclusivityIT {
      * travel through Hibernate at all.
      */
     void expireByRow(UUID itemId) {
-        assertThat(claimRows.byItem(itemId))
+        assertThat(claimOf(itemId))
             .as("the row this probe is about to expire must already exist")
             .isNotNull();
         PlatformFixture.run(
@@ -272,5 +274,10 @@ class ClaimExclusivityIT {
     private static void keep(List<UUID> ignore) {
         // Only kept to hold the List<UUID> import in one place if the file
         // grows a case that needs it. Deliberately no body.
+    }
+
+    /** The claim row of an item; a claim is keyed by the item's place in its scope. */
+    private Claim claimOf(UUID itemId) {
+        return claimRows.byItem(itemRows.byId(itemId));
     }
 }

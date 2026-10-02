@@ -421,20 +421,23 @@ class ItemFieldsTest {
      */
     @Test
     void the_relation_key_identifies_an_edge_by_both_ends_and_its_type() {
-        UUID from = UUID.randomUUID();
-        UUID to = UUID.randomUUID();
-        UUID type = UUID.randomUUID();
+        UUID scope = UUID.randomUUID();
+        Long from = 1L;
+        Long to = 2L;
+        Long type = 7L;
 
-        ItemRelation.Key key = new ItemRelation.Key(from, to, type);
+        ItemRelation.Key key = new ItemRelation.Key(scope, from, to, type);
 
         assertThat(key)
-            .isEqualTo(new ItemRelation.Key(from, to, type))
-            .hasSameHashCodeAs(new ItemRelation.Key(from, to, type))
-            .isNotEqualTo(new ItemRelation.Key(to, from, type))
+            .isEqualTo(new ItemRelation.Key(scope, from, to, type))
+            .hasSameHashCodeAs(new ItemRelation.Key(scope, from, to, type))
+            .isNotEqualTo(new ItemRelation.Key(scope, to, from, type))
             .as("direction is part of the identity: A blocks B is not B blocks A")
-            .isNotEqualTo(new ItemRelation.Key(from, UUID.randomUUID(), type))
+            .isNotEqualTo(new ItemRelation.Key(scope, from, 3L, type))
             .as("and so is the type: two items may carry two edges of different types")
-            .isNotEqualTo(new ItemRelation.Key(from, to, UUID.randomUUID()))
+            .isNotEqualTo(new ItemRelation.Key(scope, from, to, 8L))
+            .as("and so is the scope: an item number names an item only within its scope")
+            .isNotEqualTo(new ItemRelation.Key(UUID.randomUUID(), from, to, type))
             .isNotEqualTo(null)
             .isNotEqualTo("not a key");
         assertThat(key).isEqualTo(key);

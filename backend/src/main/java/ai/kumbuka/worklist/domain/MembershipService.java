@@ -77,7 +77,9 @@ public class MembershipService extends PlanningService {
      */
     @Transactional
     public List<UUID> query(UUID scopeId) {
-        return planning.plannedItemIds(scopeId);
+        return planning.plannedItemNumbers(scopeId).stream()
+            .map(number -> itemIdOf(scopeId, number))
+            .toList();
     }
 
     /** One membership, as the canonical field map. */
@@ -114,9 +116,9 @@ public class MembershipService extends PlanningService {
             String conflictToken) {
         Iteration iteration = requireIteration(scopeId, iterationId);
         iteration.requireCurrentToken(conflictToken);
-        refuseUnplannable(scopeId, itemId);
+        Item item = refuseUnplannable(scopeId, itemId);
 
-        if (planning.membership(iterationId, itemId) != null) {
+        if (planning.membership(scopeId, iteration.number, item.number) != null) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_PRESENT,
                 "item " + itemId + " is already in iteration " + iteration.number
@@ -126,14 +128,14 @@ public class MembershipService extends PlanningService {
         }
 
         ScopeSetting setting = requireSetting(scopeId);
-        List<IterationMembership> living = planning.membershipsOf(iterationId);
+        List<IterationMembership> living = planning.membershipsOf(scopeId, iteration.number);
         int afterwards = living.size() + 1;
         refuseBeyond(afterwards, setting.maxMembershipsPerIteration, MEMBERSHIPS);
 
         IterationMembership membership = new IterationMembership();
         membership.scopeId = scopeId;
-        membership.iterationId = iterationId;
-        membership.itemId = itemId;
+        membership.iterationNumber = iteration.number;
+        membership.itemNumber = item.number;
         membership.position = living.size();
         planning.insert(membership);
 
@@ -175,7 +177,7 @@ public class MembershipService extends PlanningService {
         }
 
         membership.status = IterationMembership.DROPPED;
-        closeUpBehind(iterationId, membership.position);
+        closeUpBehind(iteration, membership.position);
 
         iteration.stamp();
         planning.flushAndRefresh(membership);
@@ -230,7 +232,7 @@ public class MembershipService extends PlanningService {
         }
 
         if (IterationMembership.ACTIVE.equals(status)) {
-            demoteTheActiveMembership(iterationId, itemId);
+            demoteTheActiveMembership(iteration, membership.itemNumber);
         }
         membership.status = status;
 
@@ -259,7 +261,7 @@ public class MembershipService extends PlanningService {
      * {@link Field#MILESTONE_ID}, and the item verb runs the existence check
      * — same scope, milestone not closed.
      */
-    private void refuseUnplannable(UUID scopeId, UUID itemId) {
+    private Item refuseUnplannable(UUID scopeId, UUID itemId) {
         Item item = items.byId(itemId);
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
@@ -268,7 +270,7 @@ public class MembershipService extends PlanningService {
                 List.of(String.valueOf(itemId)));
         }
 
-        ItemStatus status = vocabulary.requireStatus(scopeId, item.statusId);
+        ItemStatus status = vocabulary.requireStatus(scopeId, item.statusPk);
         if (!status.actionable) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
@@ -279,7 +281,7 @@ public class MembershipService extends PlanningService {
                 List.of(status.name));
         }
 
-        if (item.milestoneId == null) {
+        if (item.milestoneNumber == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
                 "item " + itemId + " carries no milestone, so nothing says which goal "
@@ -289,7 +291,7 @@ public class MembershipService extends PlanningService {
                 List.of(String.valueOf(itemId)));
         }
 
-        Milestone milestone = planning.milestoneById(item.milestoneId);
+        Milestone milestone = planning.milestoneByNumber(scopeId, item.milestoneNumber);
         if (milestone == null || !milestone.onTheProductPath()) {
             String found = milestone == null ? "a milestone that does not resolve"
                 : milestone.kind;
@@ -301,6 +303,7 @@ public class MembershipService extends PlanningService {
                     + "been assessed, and neither is something to spend an iteration on",
                 List.of(found));
         }
+        return item;
     }
 
     /**
@@ -311,10 +314,11 @@ public class MembershipService extends PlanningService {
      * rows carrying {@code active} at flush time is what it refuses, and it
      * would refuse the write that was removing the condition.
      */
-    private void demoteTheActiveMembership(UUID iterationId, UUID exceptItemId) {
-        for (IterationMembership other : planning.membershipsOf(iterationId)) {
+    private void demoteTheActiveMembership(Iteration iteration, Long exceptItemNumber) {
+        for (IterationMembership other
+                : planning.membershipsOf(iteration.scopeId, iteration.number)) {
             if (IterationMembership.ACTIVE.equals(other.status)
-                    && !other.itemId.equals(exceptItemId)) {
+                    && !other.itemNumber.equals(exceptItemNumber)) {
                 other.status = IterationMembership.TODO;
                 planning.flush();
             }
@@ -331,8 +335,9 @@ public class MembershipService extends PlanningService {
      * was — the same reasoning the item domain applies to a withdrawn
      * reference's ordinal.
      */
-    private void closeUpBehind(UUID iterationId, int vacated) {
-        for (IterationMembership membership : planning.membershipsOf(iterationId)) {
+    private void closeUpBehind(Iteration iteration, int vacated) {
+        for (IterationMembership membership
+                : planning.membershipsOf(iteration.scopeId, iteration.number)) {
             if (membership.live() && membership.position > vacated) {
                 membership.position = membership.position - 1;
             }
@@ -359,7 +364,10 @@ public class MembershipService extends PlanningService {
     }
 
     private IterationMembership require(Iteration iteration, UUID itemId) {
-        IterationMembership membership = planning.membership(iteration.id, itemId);
+        Item item = items.byId(itemId);
+        IterationMembership membership = item == null || !item.scopeId.equals(iteration.scopeId)
+            ? null
+            : planning.membership(iteration.scopeId, iteration.number, item.number);
         if (membership == null) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_UNKNOWN,
@@ -381,10 +389,11 @@ public class MembershipService extends PlanningService {
     private Map<String, Object> project(Iteration iteration,
             IterationMembership membership, List<String> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put(Field.ID.canonicalName(), membership.itemId);
+        UUID itemId = itemIdOf(membership.scopeId, membership.itemNumber);
+        fields.put(Field.ID.canonicalName(), itemId);
         fields.put(Field.SCOPE.canonicalName(), slugOf(membership.scopeId));
         fields.put(Field.ITERATION_ID.canonicalName(), iteration.number);
-        fields.put(Field.ITEM_ID.canonicalName(), membership.itemId);
+        fields.put(Field.ITEM_ID.canonicalName(), itemId);
         fields.put(Field.POSITION.canonicalName(), membership.position);
         fields.put(Field.MEMBERSHIP_STATUS.canonicalName(), membership.status);
         fields.put(Field.CREATED_AT.canonicalName(), membership.createdAt);
@@ -392,6 +401,15 @@ public class MembershipService extends PlanningService {
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken);
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
+    }
+
+    /**
+     * The identity of the item a membership holds by number. The answer still
+     * names the item by its identity; only the stored reference changed form.
+     */
+    private UUID itemIdOf(UUID scopeId, Long itemNumber) {
+        Item item = items.byAddress(scopeId, itemNumber);
+        return item == null ? null : item.id;
     }
 
     /** The slug of a scope, or the scope's id when the access row is absent. */

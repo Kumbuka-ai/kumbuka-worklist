@@ -91,7 +91,7 @@ public class SelectorRegistry {
         // try to create, and the loser sees a constraint violation rather
         // than a number.
         NumberSpace space = new NumberSpace();
-        space.selectorId = selector.id;
+        space.selectorPk = selector.pk;
         space.scopeId = scopeId;
         space.highWaterMark = 0L;
         selectors.insert(space);
@@ -180,7 +180,7 @@ public class SelectorRegistry {
                 List.of(selector.token));
         }
 
-        NumberSpace space = selectors.lockSpace(selector.id);
+        NumberSpace space = selectors.lockSpace(selector.pk);
         if (space == null) {
             // A selector without its space is a row that predates the
             // declaration path above, or one written around it. Reported
@@ -222,7 +222,7 @@ public class SelectorRegistry {
     @Transactional
     public long carryMarkForward(UUID scopeId, String token, long mark) {
         Selector selector = require(scopeId, token);
-        NumberSpace space = selectors.lockSpace(selector.id);
+        NumberSpace space = selectors.lockSpace(selector.pk);
 
         long standing = space.highWaterMark;
         if (mark < standing) {
@@ -257,7 +257,7 @@ public class SelectorRegistry {
     @Transactional
     public long markOf(UUID scopeId, String token) {
         Selector selector = require(scopeId, token);
-        return selectors.space(selector.id).highWaterMark;
+        return selectors.space(selector.pk).highWaterMark;
     }
 
     private Selector find(UUID scopeId, String token) {

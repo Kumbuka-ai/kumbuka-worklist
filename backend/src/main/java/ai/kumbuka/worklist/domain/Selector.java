@@ -11,7 +11,6 @@ import org.hibernate.generator.EventType;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * The declared head of an address — the {@code item} of
@@ -129,10 +128,19 @@ public class Selector extends TenantScoped {
     public static final java.util.regex.Pattern TOKEN_PATTERN =
         java.util.regex.Pattern.compile("^[a-z][a-z0-9]*+(?:-[a-z0-9]++)*+$");
 
+    /**
+     * The row's identity inside this service: the surrogate every key onto it
+     * targets (ADR-0042), allocated by the store, never part of an answer.
+     *
+     * <p>The uuid column {@code id} the store still carries is not mapped. The
+     * image before this one reads it, and the store fills it by default; the
+     * next release drops it, and an image that mapped it could not start
+     * against that schema.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    public UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "pk", nullable = false, updatable = false)
+    public Long pk;
 
 
     /** One of the tokens in {@link #VIEWS}. Immutable. */

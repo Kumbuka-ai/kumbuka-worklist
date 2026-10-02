@@ -4,7 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
-import java.util.UUID;
 
 /**
  * One option of a {@code choice} or {@code multi_choice} attribute.
@@ -29,6 +28,6 @@ import java.util.UUID;
 public class AttributeOption extends DeclaredValue {
 
     /** The declaration this option belongs to. Immutable: an option does not migrate. */
-    @Column(name = "definition_id", nullable = false, updatable = false)
-    public UUID definitionId;
+    @Column(name = "definition_pk", nullable = false, updatable = false)
+    public Long definitionPk;
 }

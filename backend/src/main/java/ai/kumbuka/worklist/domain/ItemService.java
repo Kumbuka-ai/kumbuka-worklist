@@ -2,6 +2,7 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
 import ai.kumbuka.worklist.repository.PlanningRepository;
+import ai.kumbuka.worklist.repository.RetiringUuidRepository;
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -114,6 +115,9 @@ public class ItemService {
     @Inject WorkstreamRepository workstreamRepository;
     @Inject ScopeAccessRepository scopeAccess;
 
+    /** The vocabulary's uuids, while the store still carries them (ADR-0042 stage R2). */
+    @Inject RetiringUuidRepository retiring;
+
     // ------------------------------------------------------------------
     // Reading.
     // ------------------------------------------------------------------
@@ -196,7 +200,7 @@ public class ItemService {
         return parsed;
     }
 
-    private UUID resolveStatusFilter(UUID scopeId, Object raw) {
+    private Long resolveStatusFilter(UUID scopeId, Object raw) {
         if (raw == null) {
             return null;
         }
@@ -215,10 +219,10 @@ public class ItemService {
                     + "as a refusal is what tells a typo from a legitimate empty",
                 List.of("status"));
         }
-        return status.id;
+        return status.pk;
     }
 
-    private UUID resolveMilestoneFilter(UUID scopeId, Object raw) {
+    private Long resolveMilestoneFilter(UUID scopeId, Object raw) {
         Long number = milestoneNumberOrRefuse(Field.MILESTONE_ID, raw);
         if (number == null) {
             return null;
@@ -231,7 +235,7 @@ public class ItemService {
                     + "milestone of scope " + scopeId + " carries",
                 List.of("milestone"));
         }
-        return milestone.id;
+        return milestone.number;
     }
 
     /**
@@ -328,10 +332,9 @@ public class ItemService {
         Item item = new Item();
         item.scopeId = scopeId;
         item.title = title;
-        item.statusId = initialStatus.id;
-        item.selectorId = view.id;
+        item.statusPk = initialStatus.pk;
         item.number = number;
-        item.workstreamId = workstream.id;
+        item.workstreamNumber = workstream.number;
         items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
@@ -524,8 +527,8 @@ public class ItemService {
         Item item = require(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
-        UUID toItemId = resolveItemAddress(scopeId, toItemAddress);
-        if (itemId.equals(toItemId)) {
+        Item target = resolveItemAddress(scopeId, toItemAddress);
+        if (item.id.equals(target.id)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "an item cannot relate to itself. That is the one cycle a single row can "
@@ -534,14 +537,14 @@ public class ItemService {
         }
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName);
 
-        ItemRelation edge = findEdge(item.id, toItemId, type.id);
+        ItemRelation edge = findEdge(item, target.number, type.pk);
         boolean changed;
         if (edge == null) {
             edge = new ItemRelation();
-            edge.fromItemId = item.id;
-            edge.toItemId = toItemId;
-            edge.relationTypeId = type.id;
             edge.scopeId = scopeId;
+            edge.fromItemNumber = item.number;
+            edge.toItemNumber = target.number;
+            edge.relationTypePk = type.pk;
             items.insertEdge(edge);
             changed = true;
         } else if (!ItemRelation.ASSERTED.equals(edge.status)) {
@@ -554,7 +557,7 @@ public class ItemService {
         if (changed) {
             item.stamp();
             items.flushAndRefresh(item);
-            LOG.infof("relation asserted from %s to %s in scope %s", itemId, toItemId, scopeId);
+            LOG.infof("relation asserted from %s to %s in scope %s", itemId, target.id, scopeId);
         }
         return project(item);
     }
@@ -578,10 +581,10 @@ public class ItemService {
         Item item = require(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
-        UUID toItemId = resolveItemAddress(scopeId, toItemAddress);
+        Item target = resolveItemAddress(scopeId, toItemAddress);
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName);
 
-        ItemRelation edge = findEdge(item.id, toItemId, type.id);
+        ItemRelation edge = findEdge(item, target.number, type.pk);
         if (edge == null || ItemRelation.WITHDRAWN.equals(edge.status)) {
             throw new WorklistException(
                 WorklistException.Reason.RELATION_UNKNOWN,
@@ -595,13 +598,14 @@ public class ItemService {
         edge.status = ItemRelation.WITHDRAWN;
         item.stamp();
         items.flushAndRefresh(item);
-        LOG.infof("relation withdrawn from %s to %s in scope %s", itemId, toItemId, scopeId);
+        LOG.infof("relation withdrawn from %s to %s in scope %s", itemId, target.id, scopeId);
         return project(item);
     }
 
-    private ItemRelation findEdge(UUID fromItemId, UUID toItemId, UUID relationTypeId) {
-        for (ItemRelation edge : items.edgesOf(fromItemId)) {
-            if (edge.toItemId.equals(toItemId) && edge.relationTypeId.equals(relationTypeId)) {
+    private ItemRelation findEdge(Item from, Long toItemNumber, Long relationTypePk) {
+        for (ItemRelation edge : items.edgesOf(from)) {
+            if (edge.toItemNumber.equals(toItemNumber)
+                    && edge.relationTypePk.equals(relationTypePk)) {
                 return edge;
             }
         }
@@ -678,25 +682,35 @@ public class ItemService {
      * discovered from three starting points is one finding and not three.
      */
     private List<List<UUID>> blockingCycles(UUID scopeId) {
-        List<List<UUID>> cycles = new ArrayList<>();
-        java.util.Set<java.util.Set<UUID>> seen = new java.util.HashSet<>();
-
+        List<List<Item>> cycles = new ArrayList<>();
+        java.util.Set<java.util.Set<Item>> seen = new java.util.HashSet<>();
+        Map<Long, Item> byNumber = new java.util.HashMap<>();
         for (Item item : items.inScope(scopeId)) {
-            walkForCycles(item.id, new ArrayList<>(), new java.util.HashSet<>(),
+            byNumber.put(item.number, item);
+        }
+
+        for (Item item : byNumber.values().stream()
+                .sorted(java.util.Comparator.comparing(i -> i.number)).toList()) {
+            walkForCycles(item, byNumber, new ArrayList<>(), new java.util.HashSet<>(),
                 cycles, seen);
         }
-        return cycles;
+        // The finding names the items by their identity, as it always has; the
+        // walk runs over the edges, which hold numbers (ADR-0042).
+        return cycles.stream()
+            .map(ring -> ring.stream().map(item -> item.id).toList())
+            .toList();
     }
 
-    private void walkForCycles(UUID here, List<UUID> path, java.util.Set<UUID> onStack,
-            List<List<UUID>> cycles, java.util.Set<java.util.Set<UUID>> seen) {
+    private void walkForCycles(Item here, Map<Long, Item> byNumber, List<Item> path,
+            java.util.Set<Item> onStack, List<List<Item>> cycles,
+            java.util.Set<java.util.Set<Item>> seen) {
         if (onStack.contains(here)) {
             int at = path.indexOf(here);
             if (at < 0) {
                 return;
             }
-            List<UUID> ring = new ArrayList<>(path.subList(at, path.size()));
-            java.util.Set<UUID> key = new java.util.HashSet<>(ring);
+            List<Item> ring = new ArrayList<>(path.subList(at, path.size()));
+            java.util.Set<Item> key = new java.util.HashSet<>(ring);
             if (seen.add(key)) {
                 cycles.add(ring);
             }
@@ -705,9 +719,10 @@ public class ItemService {
         path.add(here);
         onStack.add(here);
         for (ItemRelation edge : items.assertedRelations(here)) {
-            RelationType type = vocabulary.relationTypeById(edge.relationTypeId);
-            if (type != null && type.blocks) {
-                walkForCycles(edge.toItemId, path, onStack, cycles, seen);
+            RelationType type = vocabulary.relationTypeByPk(edge.relationTypePk);
+            Item next = byNumber.get(edge.toItemNumber);
+            if (type != null && type.blocks && next != null) {
+                walkForCycles(next, byNumber, path, onStack, cycles, seen);
             }
         }
         onStack.remove(here);
@@ -845,7 +860,7 @@ public class ItemService {
             return false;
         }
         if (milestoneNumber == null) {
-            item.milestoneId = null;
+            item.milestoneNumber = null;
             return true;
         }
         Milestone milestone = planning.milestoneByNumber(item.scopeId, milestoneNumber);
@@ -871,7 +886,7 @@ public class ItemService {
         // milestone is unconstrained by the item's workstream — several
         // workstreams reach one milestone together, and that is the
         // normal case.
-        item.milestoneId = milestone.id;
+        item.milestoneNumber = milestone.number;
         return true;
     }
 
@@ -951,7 +966,7 @@ public class ItemService {
         }
         workstreams.refuseWithdrawn(workstream);
 
-        item.workstreamId = workstream.id;
+        item.workstreamNumber = workstream.number;
         return true;
     }
 
@@ -1012,7 +1027,7 @@ public class ItemService {
                     + "status before setting it on an item",
                 List.of(field.canonicalName()));
         }
-        item.statusId = status.id;
+        item.statusPk = status.pk;
         return true;
     }
 
@@ -1060,12 +1075,13 @@ public class ItemService {
      * never declared.
      */
     private boolean applyAttributes(Item item, Map<String, Object> wanted) {
+        AttributeForms forms = attributeForms(item.scopeId);
         Map<String, Object> stored = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : wanted.entrySet()) {
             AttributeDefinition definition =
                 vocabulary.requireAttribute(item.scopeId, entry.getKey());
-            stored.put(String.valueOf(definition.id),
-                storedValue(definition, entry.getValue()));
+            stored.put(forms.storedKey(definition),
+                storedValue(definition, entry.getValue(), forms));
         }
 
         if (Objects.equals(item.attributes, stored)) {
@@ -1076,7 +1092,8 @@ public class ItemService {
     }
 
     /** One attribute value, in the form the column holds. */
-    private Object storedValue(AttributeDefinition definition, Object given) {
+    private Object storedValue(AttributeDefinition definition, Object given,
+            AttributeForms forms) {
         if (AttributeDefinition.TEXT_LIST.equals(definition.type)) {
             return textListValue(definition, given);
         }
@@ -1084,19 +1101,113 @@ public class ItemService {
             return given;
         }
         if (AttributeDefinition.CHOICE.equals(definition.type)) {
-            return String.valueOf(
-                vocabulary.requireOption(definition, ItemFields.id(Field.ATTRIBUTES, given)).id);
+            return forms.storedOption(optionGiven(definition, given, forms));
         }
 
         List<String> options = new ArrayList<>();
         for (String token : ItemFields.tokens(Field.ATTRIBUTES, given)) {
-            String optionId = String.valueOf(
-                vocabulary.requireOption(definition, ItemFields.id(Field.ATTRIBUTES, token)).id);
-            if (!options.contains(optionId)) {
-                options.add(optionId);
+            String option = forms.storedOption(optionGiven(definition, token, forms));
+            if (!options.contains(option)) {
+                options.add(option);
             }
         }
         return List.copyOf(options);
+    }
+
+    /**
+     * The option a caller named, by its name or by its uuid.
+     *
+     * <p>The name is the outward form (ADR-0042): unique within its
+     * definition since V18, so a name says which option it is. The uuid is
+     * still accepted while the store carries one, because a read answer of
+     * the image before this one carried it and has to round-trip.
+     */
+    private AttributeOption optionGiven(AttributeDefinition definition, Object given,
+            AttributeForms forms) {
+        String token = given == null ? null : ItemFields.text(Field.ATTRIBUTES, String.valueOf(given));
+        if (token == null) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                "attribute " + definition.key + " takes one of its declared options, by "
+                    + "name, and no value arrived",
+                List.of(definition.key));
+        }
+        UUID uuid = uuidOrNull(token);
+        if (uuid == null) {
+            return vocabulary.requireOptionNamed(definition, token);
+        }
+        return vocabulary.requireOption(definition, forms.optionPkByUuid().get(uuid), token);
+    }
+
+    private static UUID uuidOrNull(String token) {
+        try {
+            return UUID.fromString(token);
+        } catch (IllegalArgumentException notAUuid) {
+            return null;
+        }
+    }
+
+    private AttributeForms attributeForms(UUID scopeId) {
+        return new AttributeForms(retiring.definitionPksByUuid(scopeId),
+            retiring.optionPksByUuid(scopeId));
+    }
+
+    /**
+     * The two forms {@code item.attributes} may hold while ADR-0042 stage R2
+     * runs, and the translation between them.
+     *
+     * <p>The column was keyed by definition uuid with option uuids as values;
+     * stage R3 rewrites it to the surrogates. This image reads both, and
+     * writes the uuid form while the vocabulary row still carries a uuid —
+     * the form the image before it reads — and the surrogate form once it no
+     * longer does, which is the schema after stage R3.
+     */
+    private record AttributeForms(Map<UUID, Long> definitionPkByUuid,
+            Map<UUID, Long> optionPkByUuid) {
+
+        String storedKey(AttributeDefinition definition) {
+            UUID uuid = uuidOf(definitionPkByUuid, definition.pk);
+            return uuid == null ? String.valueOf(definition.pk) : uuid.toString();
+        }
+
+        String storedOption(AttributeOption option) {
+            UUID uuid = uuidOf(optionPkByUuid, option.pk);
+            return uuid == null ? String.valueOf(option.pk) : uuid.toString();
+        }
+
+        /** The surrogate a stored key or value names, in either form, or null. */
+        Long definitionPk(String stored) {
+            return pkOf(definitionPkByUuid, stored);
+        }
+
+        Long optionPk(String stored) {
+            return pkOf(optionPkByUuid, stored);
+        }
+
+        UUID optionUuid(Long pk) {
+            return uuidOf(optionPkByUuid, pk);
+        }
+
+        private static Long pkOf(Map<UUID, Long> byUuid, String stored) {
+            UUID uuid = uuidOrNull(stored);
+            if (uuid != null) {
+                return byUuid.get(uuid);
+            }
+            try {
+                return Long.valueOf(stored);
+            } catch (NumberFormatException neither) {
+                return null;
+            }
+        }
+
+        private static UUID uuidOf(Map<UUID, Long> byUuid, Long pk) {
+            for (Map.Entry<UUID, Long> entry : byUuid.entrySet()) {
+                if (entry.getValue().equals(pk)) {
+                    return entry.getKey();
+                }
+            }
+            return null;
+        }
     }
 
     /**
@@ -1215,7 +1326,7 @@ public class ItemService {
      * index never sees the two rows at once.
      */
     private boolean applyReferences(Item item, List<Map<String, Object>> wanted) {
-        List<ItemReference> living = items.assertedReferences(item.id);
+        List<ItemReference> living = items.assertedReferences(item);
         boolean changed = false;
 
         for (int position = 0; position < wanted.size(); position++) {
@@ -1225,7 +1336,7 @@ public class ItemService {
 
             if (position >= living.size()) {
                 ItemReference row = new ItemReference();
-                row.itemId = item.id;
+                row.itemNumber = item.number;
                 row.scopeId = item.scopeId;
                 row.ordinal = position;
                 row.label = label;
@@ -1284,23 +1395,23 @@ public class ItemService {
             String typeName = (String) entry.get(ItemFields.TYPE);
             String itemAddress = (String) entry.get(ItemFields.ITEM);
             RelationType type = resolveRelationTypeByName(item.scopeId, typeName);
-            UUID toItemId = resolveItemAddress(item.scopeId, itemAddress);
-            if (item.id.equals(toItemId)) {
+            Item target = resolveItemAddress(item.scopeId, itemAddress);
+            if (item.id.equals(target.id)) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
                     "an item cannot relate to itself. That is the one cycle a single row "
                         + "can express, and the only one a constraint can see",
                     List.of(Field.RELATIONS.canonicalName()));
             }
-            resolved.add(new ResolvedEdge(type.id, toItemId));
+            resolved.add(new ResolvedEdge(type.pk, target.number));
         }
 
-        List<ItemRelation> edges = items.edgesOf(item.id);
+        List<ItemRelation> edges = items.edgesOf(item);
         boolean changed = false;
 
         List<ResolvedEdge> present = new ArrayList<>();
         for (ItemRelation edge : edges) {
-            ResolvedEdge key = new ResolvedEdge(edge.relationTypeId, edge.toItemId);
+            ResolvedEdge key = new ResolvedEdge(edge.relationTypePk, edge.toItemNumber);
             present.add(key);
             String target = resolved.contains(key)
                 ? ItemRelation.ASSERTED : ItemRelation.WITHDRAWN;
@@ -1315,10 +1426,10 @@ public class ItemService {
                 continue;
             }
             ItemRelation edge = new ItemRelation();
-            edge.fromItemId = item.id;
-            edge.toItemId = entry.toItemId();
-            edge.relationTypeId = entry.typeId();
             edge.scopeId = item.scopeId;
+            edge.fromItemNumber = item.number;
+            edge.toItemNumber = entry.toItemNumber();
+            edge.relationTypePk = entry.typePk();
             items.insertEdge(edge);
             changed = true;
         }
@@ -1330,7 +1441,7 @@ public class ItemService {
     }
 
     /** One resolved edge, keyed for set membership. */
-    private record ResolvedEdge(UUID typeId, UUID toItemId) {
+    private record ResolvedEdge(Long typePk, Long toItemNumber) {
     }
 
     /**
@@ -1373,7 +1484,7 @@ public class ItemService {
      * dangling. The number is looked up against the item's own address
      * space; a number that names nothing is a not-found and not a form error.
      */
-    private UUID resolveItemAddress(UUID scopeId, String address) {
+    private Item resolveItemAddress(UUID scopeId, String address) {
         if (address == null || address.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
@@ -1422,8 +1533,8 @@ public class ItemService {
                     + "is refused rather than stored dangling",
                 List.of(Field.RELATIONS.canonicalName()));
         }
-        Selector view = selectors.require(scopeId, Selector.ITEM);
-        Item target = items.byAddress(scopeId, view.id, number);
+        selectors.require(scopeId, Selector.ITEM);
+        Item target = items.byAddress(scopeId, number);
         if (target == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
@@ -1432,7 +1543,7 @@ public class ItemService {
                     + "row here, and the foreign key is the check",
                 List.of(Field.RELATIONS.canonicalName()));
         }
-        return target.id;
+        return target;
     }
 
     private Item require(UUID scopeId, UUID itemId) {
@@ -1466,17 +1577,17 @@ public class ItemService {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), item.id);
         fields.put(Field.SCOPE.canonicalName(), scopeSlug);
-        fields.put(Field.SELECTOR.canonicalName(), tokenOfSelector(item));
+        fields.put(Field.SELECTOR.canonicalName(), Selector.ITEM);
         fields.put(Field.NUMBER.canonicalName(), item.number);
         fields.put(Field.TITLE.canonicalName(), item.title);
         fields.put(Field.DESCRIPTION.canonicalName(), item.description);
-        fields.put(Field.STATUS.canonicalName(), statusNameOf(item.statusId));
+        fields.put(Field.STATUS.canonicalName(), statusNameOf(item.statusPk));
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
-        fields.put(Field.MILESTONE_ID.canonicalName(), milestoneNumberOf(item.milestoneId));
+        fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneNumber);
         fields.put(Field.WORKSTREAM_ID.canonicalName(),
-            workstreamTokenOf(item.scopeId, item.workstreamId));
+            workstreamTokenOf(item.scopeId, item.workstreamNumber));
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken);
@@ -1504,41 +1615,21 @@ public class ItemService {
     }
 
     /** The display name of a declared status, or null. */
-    private String statusNameOf(UUID statusId) {
-        if (statusId == null) {
+    private String statusNameOf(Long statusPk) {
+        if (statusPk == null) {
             return null;
         }
-        ItemStatus status = vocabulary.statusById(statusId);
+        ItemStatus status = vocabulary.statusByPk(statusPk);
         return status == null ? null : status.name;
     }
 
-    /** The number of a milestone, or null. */
-    private Long milestoneNumberOf(UUID milestoneId) {
-        if (milestoneId == null) {
-            return null;
-        }
-        Milestone milestone = planning.milestoneById(milestoneId);
-        return milestone == null ? null : milestone.number;
-    }
-
     /** The token of a workstream in a scope, or null. */
-    private String workstreamTokenOf(UUID scopeId, UUID workstreamId) {
-        if (workstreamId == null) {
+    private String workstreamTokenOf(UUID scopeId, Long workstreamNumber) {
+        if (workstreamNumber == null) {
             return null;
         }
-        try {
-            return workstreams.require(scopeId, workstreamId).token;
-        } catch (WorklistException absent) {
-            return null;
-        }
-    }
-
-    private String tokenOfSelector(Item item) {
-        if (item.selectorId == null) {
-            return null;
-        }
-        Selector selector = items.selectorById(item.selectorId);
-        return selector == null ? null : selector.token;
+        Workstream workstream = workstreamRepository.findByNumber(scopeId, workstreamNumber);
+        return workstream == null ? null : workstream.token;
     }
 
     /**
@@ -1554,28 +1645,52 @@ public class ItemService {
      * it would put a key in the answer that no declaration can name.
      */
     private Map<String, Object> declaredAttributes(Item item) {
+        if (item.attributes.isEmpty()) {
+            return ItemFields.attributes(Map.of());
+        }
+        AttributeForms forms = attributeForms(item.scopeId);
         Map<String, Object> answer = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : item.attributes.entrySet()) {
-            AttributeDefinition definition = definitionOf(entry.getKey());
+            AttributeDefinition definition =
+                vocabulary.attributeByPk(forms.definitionPk(entry.getKey()));
             if (definition != null) {
-                answer.put(definition.key, entry.getValue());
+                answer.put(definition.key, answeredValue(definition, entry.getValue(), forms));
             }
         }
         return ItemFields.attributes(answer);
     }
 
-    private AttributeDefinition definitionOf(String storedKey) {
-        try {
-            return vocabulary.attributeById(UUID.fromString(storedKey));
-        } catch (IllegalArgumentException notAnId) {
-            return null;
+    /**
+     * A stored value as the answer carries it. An option travels as its uuid
+     * while the vocabulary row carries one — the form the image before this
+     * one answered with — and as its name once it does not. Every other type
+     * is answered as stored.
+     */
+    private Object answeredValue(AttributeDefinition definition, Object stored,
+            AttributeForms forms) {
+        if (!AttributeDefinition.ENUMERATED.contains(definition.type)) {
+            return stored;
         }
+        if (stored instanceof java.util.Collection<?> many) {
+            return many.stream().map(one -> answeredOption(one, forms)).toList();
+        }
+        return answeredOption(stored, forms);
+    }
+
+    private Object answeredOption(Object stored, AttributeForms forms) {
+        Long pk = forms.optionPk(String.valueOf(stored));
+        UUID uuid = forms.optionUuid(pk);
+        if (uuid != null) {
+            return uuid.toString();
+        }
+        AttributeOption option = vocabulary.optionByPk(pk);
+        return option == null ? stored : option.name;
     }
 
     /** The asserted pointers, in the reader's order. */
     private List<Map<String, Object>> assertedReferences(Item item) {
         List<Map<String, Object>> answer = new ArrayList<>();
-        for (ItemReference reference : items.assertedReferences(item.id)) {
+        for (ItemReference reference : items.assertedReferences(item)) {
             // Unmodifiable rather than Map.copyOf, because the label is
             // optional and Map.copyOf refuses a null value. The read answer
             // and the normalised write value have to be the same shape or the
@@ -1598,36 +1713,34 @@ public class ItemService {
      */
     private List<Map<String, Object>> assertedRelations(Item item, String scopeSlug) {
         List<Map<String, Object>> answer = new ArrayList<>();
-        for (ItemRelation relation : items.assertedRelations(item.id)) {
+        for (ItemRelation relation : items.assertedRelations(item)) {
             Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put(ItemFields.TYPE, relationTypeNameOf(relation.relationTypeId));
-            entry.put(ItemFields.ITEM, itemAddressOf(scopeSlug, relation.toItemId));
+            entry.put(ItemFields.TYPE, relationTypeNameOf(relation.relationTypePk));
+            entry.put(ItemFields.ITEM, itemAddressOf(scopeSlug, relation.toItemNumber));
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);
     }
 
     /** The display name of a declared relation type, or null. */
-    private String relationTypeNameOf(UUID typeId) {
-        if (typeId == null) {
+    private String relationTypeNameOf(Long typePk) {
+        if (typePk == null) {
             return null;
         }
-        RelationType type = vocabulary.relationTypeById(typeId);
+        RelationType type = vocabulary.relationTypeByPk(typePk);
         return type == null ? null : type.name;
     }
 
     /**
      * The canonical address of an item as {@code worklist://<slug>/item/<number>},
-     * or null when either half is unavailable.
+     * or null when either half is unavailable. An edge holds the other item's
+     * number (ADR-0042), and an edge cannot leave its scope, so the address
+     * needs no lookup.
      */
-    private String itemAddressOf(String scopeSlug, UUID toItemId) {
-        if (toItemId == null) {
+    private static String itemAddressOf(String scopeSlug, Long toItemNumber) {
+        if (toItemNumber == null || scopeSlug == null) {
             return null;
         }
-        Item target = items.byId(toItemId);
-        if (target == null || target.number == null || scopeSlug == null) {
-            return null;
-        }
-        return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + target.number;
+        return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + toItemNumber;
     }
 }

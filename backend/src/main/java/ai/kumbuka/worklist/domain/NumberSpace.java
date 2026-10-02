@@ -10,7 +10,6 @@ import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /**
  * The high-water mark of one address space.
@@ -57,10 +56,19 @@ import java.util.UUID;
 @Table(name = "number_space", schema = "worklist")
 public class NumberSpace extends TenantScoped {
 
+    /**
+     * The row's identity inside this service: the surrogate every key onto it
+     * targets (ADR-0042), allocated by the store, never part of an answer.
+     *
+     * <p>The uuid column {@code id} the store still carries is not mapped. The
+     * image before this one reads it, and the store fills it by default; the
+     * next release drops it, and an image that mapped it could not start
+     * against that schema.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    public UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "pk", nullable = false, updatable = false)
+    public Long pk;
 
     /**
      * The selector whose address space this is.
@@ -68,8 +76,8 @@ public class NumberSpace extends TenantScoped {
      * <p>Immutable and never null: a counter belongs to one selector and
      * does not migrate between address spaces.
      */
-    @Column(name = "selector_id", updatable = false, nullable = false)
-    public UUID selectorId;
+    @Column(name = "selector_pk", updatable = false, nullable = false)
+    public Long selectorPk;
 
     // No workstream. There was one counter shape per (scope, workstream) for
     // the `milestone` selector between 2026-09-08 and V12; V12 moved every
