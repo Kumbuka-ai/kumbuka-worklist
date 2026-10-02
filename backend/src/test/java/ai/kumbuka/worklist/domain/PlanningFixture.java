@@ -38,7 +38,8 @@ final class PlanningFixture {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, boundTenant());
             try (var st = c.prepareStatement(
-                    "UPDATE worklist.item SET milestone_id = ? WHERE id = ?")) {
+                    "UPDATE worklist.item SET milestone_number = "
+                        + "(SELECT number FROM worklist.milestone WHERE id = ?) WHERE id = ?")) {
                 st.setObject(1, milestoneId);
                 st.setObject(2, itemId);
                 st.executeUpdate();
@@ -56,8 +57,10 @@ final class PlanningFixture {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, boundTenant());
             try (var st = c.prepareStatement(
-                    "SELECT count(*) FROM worklist.iteration_membership "
-                        + "WHERE iteration_id = ?")) {
+                    "SELECT count(*) FROM worklist.iteration_membership m "
+                        + "JOIN worklist.iteration i ON i.tenant_id = m.tenant_id "
+                        + "AND i.scope_id = m.scope_id AND i.number = m.iteration_number "
+                        + "WHERE i.id = ?")) {
                 st.setObject(1, iterationId);
                 try (ResultSet rows = st.executeQuery()) {
                     rows.next();

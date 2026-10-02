@@ -389,11 +389,10 @@ public class MembershipService extends PlanningService {
     private Map<String, Object> project(Iteration iteration,
             IterationMembership membership, List<String> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
-        UUID itemId = itemIdOf(membership.scopeId, membership.itemNumber);
-        fields.put(Field.ID.canonicalName(), itemId);
         fields.put(Field.SCOPE.canonicalName(), slugOf(membership.scopeId));
         fields.put(Field.ITERATION_ID.canonicalName(), iteration.number);
-        fields.put(Field.ITEM_ID.canonicalName(), itemId);
+        fields.put(Field.ITEM_ID.canonicalName(),
+            itemIdOf(membership.scopeId, membership.itemNumber));
         fields.put(Field.POSITION.canonicalName(), membership.position);
         fields.put(Field.MEMBERSHIP_STATUS.canonicalName(), membership.status);
         fields.put(Field.CREATED_AT.canonicalName(), membership.createdAt);

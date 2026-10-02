@@ -162,7 +162,7 @@ public class Item extends AggregateRoot {
 
     /**
      * Every declared attribute of this item, keyed by the DEFINITION'S
-     * IDENTITY.
+     * SURROGATE, with an option stored as the option's surrogate (ADR-0042).
      *
      * <p>Not by its key: a rename of a declaration would otherwise be a data
      * migration, which the separation of identity from name exists to

@@ -315,25 +315,6 @@ public class VocabularyRegistry {
     }
 
     /**
-     * The option of that surrogate under that declaration, or a typed refusal
-     * naming the value the caller gave.
-     */
-    @Transactional
-    public AttributeOption requireOption(AttributeDefinition definition, Long optionPk,
-            String given) {
-        AttributeOption option = vocabulary.optionByPk(optionPk);
-        if (option == null || !option.definitionPk.equals(definition.pk)) {
-            throw new WorklistException(
-                WorklistException.Reason.VALUE_UNDECLARED,
-                "no option " + given + " is declared under attribute " + definition.key
-                    + ". The options of an attribute are the scope's declaration, and a "
-                    + "value outside it is one nothing can render",
-                List.of(definition.key, given));
-        }
-        return option;
-    }
-
-    /**
      * The option of that name under that declaration, or a typed refusal.
      *
      * <p>The outward form of an option is its name: unique within its

@@ -19,11 +19,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * No function in this schema runs with its owner's rights, and every function
  * that resolves or guards a reference pins its search path.
  *
- * <p>The sync triggers of ADR-0042 stage R1 resolve a parent on behalf of the
- * writer of a child row. As SECURITY INVOKER they see what the writer sees:
- * the writer's tenant, under the writer's row-level-security binding. As
- * SECURITY DEFINER they would see what their owner sees, and the isolation
- * would then rest on who owns them. A pinned {@code search_path} keeps a
+ * <p>A trigger function runs on behalf of the writer of a row. As SECURITY
+ * INVOKER it sees what the writer sees: the writer's tenant, under the
+ * writer's row-level-security binding. As SECURITY DEFINER it would see what
+ * its owner sees, and the isolation would then rest on who owns it. A pinned {@code search_path} keeps a
  * caller from substituting a table of the same name ahead of {@code worklist}.
  *
  * <p>Read from the catalogue as the administrator, so a function the service
@@ -33,20 +32,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
 class TriggerFunctionSecurityGuardIT {
 
-    /** The functions V18 introduces, named here rather than read from the schema. */
+    /**
+     * The functions ADR-0042 leaves in the schema, named here rather than read
+     * from it. The sync functions of V18 were scaffolding and went with V20;
+     * the immutability guard of a primary object's address stays.
+     */
     private static final List<String> REFERENCE_FUNCTIONS = List.of(
-        "primary_address_is_immutable",
-        "row_is_refused_by_the_policy",
-        "sync_number_reference",
-        "sync_pk_reference",
-        "item_sync_references",
-        "attribute_option_sync_references",
-        "number_space_sync_references",
-        "item_reference_sync_references",
-        "item_relation_sync_references",
-        "iteration_membership_sync_references",
-        "claim_sync_references",
-        "scope_setting_sync_references");
+        "primary_address_is_immutable");
 
     private static final String PINNED_PATH = "search_path=worklist, pg_temp";
 

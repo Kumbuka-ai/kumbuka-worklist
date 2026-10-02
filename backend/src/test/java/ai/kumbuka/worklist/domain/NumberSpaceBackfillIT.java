@@ -158,8 +158,8 @@ class NumberSpaceBackfillIT {
             Db.bindTenant(c, tenant);
             try (var st = c.prepareStatement("""
                     DELETE FROM worklist.number_space
-                    WHERE selector_id IN (
-                        SELECT id FROM worklist.selector
+                    WHERE selector_pk IN (
+                        SELECT pk FROM worklist.selector
                         WHERE tenant_id = ? AND scope_id = ? AND token = ?)
                     """)) {
                 st.setObject(1, tenant);
@@ -176,8 +176,8 @@ class NumberSpaceBackfillIT {
             Db.bindTenant(c, tenant);
             try (var st = c.prepareStatement("""
                     INSERT INTO worklist.number_space
-                        (tenant_id, scope_id, selector_id, high_water_mark)
-                    SELECT ?, ?, s.id, ?
+                        (tenant_id, scope_id, selector_pk, high_water_mark)
+                    SELECT ?, ?, s.pk, ?
                     FROM worklist.selector s
                     WHERE s.tenant_id = ? AND s.scope_id = ? AND s.token = 'milestone'
                     """)) {
@@ -216,7 +216,8 @@ class NumberSpaceBackfillIT {
      * the migration walks them: for each, the scope-wide row is inserted
      * with the carried-forward mark when missing.
      *
-     * <p>The replay runs against the schema after V17, which dropped
+     * <p>The replay runs against the schema after V20, where a counter row
+     * names its selector by surrogate (ADR-0042) and V17 had already dropped
      * {@code number_space.workstream_id}. Every counter row is scope-wide
      * there, so "the scope-wide row" is simply the selector's row, and
      * V15's closing DELETE of per-workstream duplicates has no shape left to
@@ -229,7 +230,7 @@ class NumberSpaceBackfillIT {
         try (Connection c = Db.asMigrator()) {
             Db.bindTenant(c, tenant);
             for (String selectorToken : new String[]{Selector.ITERATION, Selector.MILESTONE}) {
-                UUID selectorId = selectorIdOf(c, targetScope, selectorToken);
+                Long selectorId = selectorIdOf(c, targetScope, selectorToken);
                 if (selectorId == null) {
                     continue;
                 }
@@ -244,24 +245,24 @@ class NumberSpaceBackfillIT {
         }
     }
 
-    private UUID selectorIdOf(Connection c, UUID targetScope, String token) throws SQLException {
+    private Long selectorIdOf(Connection c, UUID targetScope, String token) throws SQLException {
         try (var st = c.prepareStatement(
-                "SELECT id FROM worklist.selector "
+                "SELECT pk FROM worklist.selector "
                     + "WHERE tenant_id = ? AND scope_id = ? AND token = ?")) {
             st.setObject(1, tenant);
             st.setObject(2, targetScope);
             st.setString(3, token);
             try (var rs = st.executeQuery()) {
-                return rs.next() ? (UUID) rs.getObject(1) : null;
+                return rs.next() ? rs.getLong(1) : null;
             }
         }
     }
 
-    private boolean scopeWidePresent(Connection c, UUID targetScope, UUID selectorId)
+    private boolean scopeWidePresent(Connection c, UUID targetScope, Long selectorId)
             throws SQLException {
         try (var st = c.prepareStatement("""
                 SELECT 1 FROM worklist.number_space
-                WHERE tenant_id = ? AND scope_id = ? AND selector_id = ?
+                WHERE tenant_id = ? AND scope_id = ? AND selector_pk = ?
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, targetScope);
@@ -272,11 +273,11 @@ class NumberSpaceBackfillIT {
         }
     }
 
-    private long maxCounterMark(Connection c, UUID targetScope, UUID selectorId)
+    private long maxCounterMark(Connection c, UUID targetScope, Long selectorId)
             throws SQLException {
         try (var st = c.prepareStatement("""
                 SELECT COALESCE(MAX(high_water_mark), 0) FROM worklist.number_space
-                WHERE tenant_id = ? AND scope_id = ? AND selector_id = ?
+                WHERE tenant_id = ? AND scope_id = ? AND selector_pk = ?
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, targetScope);
@@ -305,11 +306,11 @@ class NumberSpaceBackfillIT {
         }
     }
 
-    private void insertScopeWideRow(Connection c, UUID targetScope, UUID selectorId, long mark)
+    private void insertScopeWideRow(Connection c, UUID targetScope, Long selectorId, long mark)
             throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.number_space
-                    (tenant_id, scope_id, selector_id, high_water_mark)
+                    (tenant_id, scope_id, selector_pk, high_water_mark)
                 VALUES (?, ?, ?, ?)
                 """)) {
             st.setObject(1, tenant);
