@@ -37,7 +37,8 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
  * write has. Expectations are literal numbers chosen here, never read back
  * from the parent rows the trigger resolves against.
  *
- * <p>The backfill is exercised by running the DO-blocks of V18 itself, read
+ * <p>The backfill is exercised by running the DO-blocks of the migration
+ * itself (V19, which carries V18's backfill again as its safety net), read
  * from the classpath, rather than a re-implementation of them: a copy would
  * agree with itself whatever the migration says.
  */
@@ -47,7 +48,7 @@ class ReferenceSiblingSyncIT {
 
     private static final UUID TENANT = UUID.fromString(SubstrateDatabaseResource.TENANT_ID);
     private static final UUID OTHER_TENANT = UUID.fromString("00000000-0000-0000-0000-0000000000f2");
-    private static final String V18 = "db/migration/V18__adr0042_expand_number_and_surrogate_keys.sql";
+    private static final String V19 = "db/migration/V19__adr0042_switch_to_number_and_surrogate_keys.sql";
 
     private UUID scope;
     private UUID selector;
@@ -270,67 +271,55 @@ class ReferenceSiblingSyncIT {
     }
 
     // ------------------------------------------------------------------
-    // The backfill of V18 itself.
+    // The backfill, as V19 runs it again.
     // ------------------------------------------------------------------
 
     @Test
     void the_backfill_fills_a_row_written_without_its_sibling_and_is_idempotent() throws Exception {
+        UUID milestone = milestone(scope, 2);
         UUID item;
-        try (Connection c = service()) {
-            item = item(c, 21);
-            c.commit();
-        }
         try (Connection m = Db.asMigrator()) {
             Db.bindTenant(m, TENANT);
-            // The shape before V18: a row whose sibling was never filled. Only
-            // the owner can switch the trigger off to plant it.
-            execute(m, "ALTER TABLE worklist.claim DISABLE TRIGGER claim_sync_references");
-            execute(m, "INSERT INTO worklist.claim (tenant_id, scope_id, item_id, receipt, actor, "
-                + "expires_at) VALUES (?, ?, ?, 'r', 'a', now() + interval '1 hour')", TENANT, scope, item);
-            execute(m, "ALTER TABLE worklist.claim ENABLE TRIGGER claim_sync_references");
+            // The shape before V18: an item whose milestone sibling was never
+            // filled. The milestone is the one edge that stays nullable once
+            // V19 closes the others, so it is the one that can still be
+            // planted; only the owner can switch the trigger off to do it.
+            execute(m, "ALTER TABLE worklist.item DISABLE TRIGGER item_sync_references");
+            item = plantItemWithMilestone(m, 21, milestone);
+            execute(m, "ALTER TABLE worklist.item ENABLE TRIGGER item_sync_references");
             m.commit();
 
-            runBackfillOfV18(m);
+            runBackfill(m);
             m.commit();
-            assertThat(longOf(m, "SELECT item_number FROM worklist.claim WHERE item_id = ?", item))
-                .as("the backfill must fill item_number of a claim planted without it")
-                .isEqualTo(21L);
+            assertThat(longOf(m, "SELECT milestone_number FROM worklist.item WHERE id = ?", item))
+                .as("the backfill must fill milestone_number of an item planted without it")
+                .isEqualTo(2L);
 
-            runBackfillOfV18(m);
+            runBackfill(m);
             m.commit();
-            assertThat(longOf(m, "SELECT item_number FROM worklist.claim WHERE item_id = ?", item))
+            assertThat(longOf(m, "SELECT milestone_number FROM worklist.item WHERE id = ?", item))
                 .as("a second run of the backfill must leave the filled row as it is")
-                .isEqualTo(21L);
+                .isEqualTo(2L);
         }
     }
 
     @Test
     void the_backfill_stops_on_a_reference_into_another_scope() throws Exception {
-        UUID otherScope = UUID.randomUUID();
-        UUID foreignStatus;
-        try (Connection c = service()) {
-            foreignStatus = status(c, otherScope, "elsewhere");
-            c.commit();
-        }
+        UUID foreignMilestone = milestone(UUID.randomUUID(), 3);
         try (Connection m = Db.asMigrator()) {
             Db.bindTenant(m, TENANT);
-            UUID otherWorkstream = insertReturningId(m, "INSERT INTO worklist.workstream "
-                + "(tenant_id, scope_id, number, token, description) VALUES (?, ?, 1, 'main', 'd') "
-                + "RETURNING id", TENANT, otherScope);
             execute(m, "ALTER TABLE worklist.item DISABLE TRIGGER item_sync_references");
-            // An item of THIS scope whose workstream is one of ANOTHER scope:
+            // An item of THIS scope whose milestone is one of ANOTHER scope:
             // the uuid key accepts it, a (tenant, scope, number) key cannot.
-            execute(m, "INSERT INTO worklist.item (tenant_id, scope_id, title, selector_id, number, "
-                + "status_id, workstream_id) VALUES (?, ?, 't', ?, 31, ?, ?)",
-                TENANT, scope, selector, foreignStatus, otherWorkstream);
+            plantItemWithMilestone(m, 31, foreignMilestone);
 
-            Throwable stopped = catchThrowableOfType(SQLException.class, () -> runBackfillOfV18(m));
+            Throwable stopped = catchThrowableOfType(SQLException.class, () -> runBackfill(m));
             m.rollback();
             assertThat(stopped)
-                .as("the item's workstream lives in another scope; the backfill must name it and "
-                    + "stop rather than leave workstream_number NULL")
+                .as("the item's milestone lives in another scope; the backfill must name it "
+                    + "and stop rather than leave milestone_number NULL")
                 .isNotNull();
-            assertThat(stopped.getMessage()).contains("item.workstream=1");
+            assertThat(stopped.getMessage()).contains("item.milestone=1");
         }
     }
 
@@ -377,17 +366,43 @@ class ReferenceSiblingSyncIT {
         }
     }
 
-    /** The two DO-blocks of V18 that follow its "7. Backfill" heading. */
-    private static void runBackfillOfV18(Connection m) throws SQLException, IOException {
+    /** A milestone at that number in that scope, written as the service role. */
+    private static UUID milestone(UUID inScope, long number) throws SQLException {
+        try (Connection c = service()) {
+            UUID id = insertReturningId(c, "INSERT INTO worklist.milestone (tenant_id, scope_id, "
+                + "number, title) VALUES (?, ?, ?, 'm') RETURNING id", TENANT, inScope, number);
+            c.commit();
+            return id;
+        }
+    }
+
+    /**
+     * An item planted with its sync trigger off, carrying every sibling but
+     * the milestone's: the shape a row had before V18.
+     */
+    private UUID plantItemWithMilestone(Connection m, long number, UUID milestone)
+            throws SQLException {
+        return insertReturningId(m, "INSERT INTO worklist.item (tenant_id, scope_id, title, "
+            + "selector_id, number, status_id, status_pk, workstream_id, workstream_number, "
+            + "milestone_id) VALUES (?, ?, 't', ?, ?, ?, "
+            + "(SELECT pk FROM worklist.item_status WHERE id = ?), ?, 4, ?) RETURNING id",
+            TENANT, scope, selector, number, statusOpen, statusOpen, workstream, milestone);
+    }
+
+    /**
+     * The backfill and its completeness check, as the latest migration that
+     * carries them (V19) runs them.
+     */
+    private static void runBackfill(Connection m) throws SQLException, IOException {
         String sql;
-        try (InputStream in = ReferenceSiblingSyncIT.class.getClassLoader().getResourceAsStream(V18)) {
-            assertThat(in).as("V18 must be on the classpath").isNotNull();
+        try (InputStream in = ReferenceSiblingSyncIT.class.getClassLoader().getResourceAsStream(V19)) {
+            assertThat(in).as("V19 must be on the classpath").isNotNull();
             sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
-        String backfill = sql.substring(sql.indexOf("-- 7. Backfill"));
+        String backfill = sql.substring(sql.indexOf("-- 1. The backfill of V18 again"));
         int first = backfill.indexOf("DO $$");
         int second = backfill.indexOf("DO $$", first + 1);
-        assertThat(second).as("V18 carries the backfill and its completeness check").isPositive();
+        assertThat(second).as("V19 carries the backfill and its completeness check").isPositive();
         try (Statement s = m.createStatement()) {
             s.execute(blockAt(backfill, first));
             s.execute(blockAt(backfill, second));

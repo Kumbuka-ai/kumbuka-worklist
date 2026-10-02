@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 class ClaimAndGraphSemanticsIT {
 
     private UUID scope;
-    private UUID openStatus;
+    private Long openStatus;
 
     @Inject ItemService items;
     @Inject ClaimService claims;
@@ -44,7 +44,7 @@ class ClaimAndGraphSemanticsIT {
         scope = UUID.randomUUID();
         selectors.declare(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
-            true, false, false, false).id;
+            true, false, false, false).pk;
     }
 
     // ====================================================================

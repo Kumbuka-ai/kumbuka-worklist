@@ -63,8 +63,8 @@ class QueryFilterProbeIT {
     @Inject ScopeSettingService settings;
 
     private UUID scope;
-    private UUID openStatus;
-    private UUID doneStatus;
+    private Long openStatus;
+    private Long doneStatus;
 
     @BeforeEach
     void aFreshScopeWithTwoStatuses() {
@@ -76,9 +76,9 @@ class QueryFilterProbeIT {
             "warn_memberships_per_iteration", 9));
 
         openStatus = vocabulary.declareStatus(scope, "open", 1,
-            true, false, false, false).id;
+            true, false, false, false).pk;
         doneStatus = vocabulary.declareStatus(scope, "done", 2,
-            false, false, true, true).id;
+            false, false, true, true).pk;
     }
 
     // ==================================================================
@@ -260,7 +260,7 @@ class QueryFilterProbeIT {
     // Fixtures
     // ==================================================================
 
-    private UUID createItem(String title, UUID statusId) {
+    private UUID createItem(String title, Long statusId) {
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(),

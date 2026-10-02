@@ -66,7 +66,7 @@ class ScopeOpeningProbeIT {
     @Inject VocabularyRegistry vocabulary;
 
     private UUID scope;
-    private UUID openStatus;
+    private Long openStatus;
 
     @BeforeEach
     void aFreshScope() {
@@ -75,7 +75,7 @@ class ScopeOpeningProbeIT {
         // the case below defends.
         scope = UUID.randomUUID();
         openStatus = vocabulary.declareStatus(scope, "open", 1,
-            true, false, false, false).id;
+            true, false, false, false).pk;
     }
 
     // ==================================================================

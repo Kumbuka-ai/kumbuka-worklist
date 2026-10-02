@@ -96,11 +96,15 @@ public class Item extends AggregateRoot {
 
     // --- the address ------------------------------------------------------
 
-    /** The declared selector, or null on a raw call-in. Set once, at acceptance. */
-    @Column(name = "selector_id")
-    public UUID selectorId;
-
-    /** The number allocated in that selector's space, or null. Set once. */
+    /**
+     * The number allocated in the scope's item space. Set once, never moved:
+     * every key onto an item is (tenant, scope, number), and the store refuses
+     * a change below the domain.
+     *
+     * <p>The selector this number was drawn under is not mapped. Every item
+     * hangs on the view selector {@code item}; the store keeps the column for
+     * the image before this one and fills it itself until it is dropped.
+     */
     @Column(name = "number")
     public Long number;
 
@@ -125,8 +129,8 @@ public class Item extends AggregateRoot {
      * The declared status. Mandatory: an item always has one, and which
      * statuses exist is the scope's declaration rather than this service's.
      */
-    @Column(name = "status_id", nullable = false)
-    public UUID statusId;
+    @Column(name = "status_pk", nullable = false)
+    public Long statusPk;
 
     /**
      * The goal axis, including the three marker rows, or null.
@@ -136,8 +140,8 @@ public class Item extends AggregateRoot {
      * work; the column is here because a milestone reference that resolves is
      * a property of the schema and not of whoever writes that verb.
      */
-    @Column(name = "milestone_id")
-    public UUID milestoneId;
+    @Column(name = "milestone_number")
+    public Long milestoneNumber;
 
     /**
      * The workstream this item belongs to. Mandatory, once V10 lands.
@@ -153,8 +157,8 @@ public class Item extends AggregateRoot {
      * keep the entity forward-compatible with a service that runs against a
      * schema at V9 (backfilled but not narrowed).
      */
-    @Column(name = "workstream_id")
-    public UUID workstreamId;
+    @Column(name = "workstream_number")
+    public Long workstreamNumber;
 
     /**
      * Every declared attribute of this item, keyed by the DEFINITION'S

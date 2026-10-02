@@ -10,7 +10,6 @@ import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /**
  * One external pointer of an item, at its position in the list.
@@ -61,19 +60,22 @@ public class ItemReference extends TenantScoped {
     public static final String WITHDRAWN = "withdrawn";
 
     /**
-     * The entry's own identity, and the only thing that addresses it.
+     * The row's identity inside this service: the surrogate every key onto it
+     * targets (ADR-0042), allocated by the store, never part of an answer.
      *
-     * <p>Not the ordinal, and not the pair of item and ordinal. See the class
-     * comment: a positional key cannot coexist with a tombstone.
+     * <p>The uuid column {@code id} the store still carries is not mapped. The
+     * image before this one reads it, and the store fills it by default; the
+     * next release drops it, and an image that mapped it could not start
+     * against that schema.
      */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    public UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "pk", nullable = false, updatable = false)
+    public Long pk;
 
     /** The item this pointer hangs off. Immutable: an entry does not migrate. */
-    @Column(name = "item_id", nullable = false, updatable = false)
-    public UUID itemId;
+    @Column(name = "item_number", nullable = false, updatable = false)
+    public Long itemNumber;
 
     /**
      * The reader's order. Dense across the LIVING entries and meaningless on a
