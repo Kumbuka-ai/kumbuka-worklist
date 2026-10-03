@@ -3,11 +3,14 @@ package ai.kumbuka.worklist.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
+import java.io.Serializable;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -63,12 +66,13 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "claim", schema = "worklist")
-public class Claim extends TenantScoped {
+@IdClass(Claim.Key.class)
+public class Claim extends ScopeKeyed {
 
     /** One row per item. Not per (item, holder) — that would admit a second lease. */
     @Id
-    @Column(name = "item_id", nullable = false)
-    public UUID itemId;
+    @Column(name = "item_number", nullable = false)
+    public Long itemNumber;
 
     /**
      * Opaque, by contract. A caller reads it, presents it back with
@@ -118,5 +122,34 @@ public class Claim extends TenantScoped {
      */
     public boolean liveAt(Instant now) {
         return now.isBefore(expiresAt);
+    }
+
+    /** A claim is the item's: one per item, keyed by the item's place in its scope. */
+    public static class Key implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        public UUID scopeId;
+        public Long itemNumber;
+
+        public Key() {
+        }
+
+        public Key(UUID scopeId, Long itemNumber) {
+            this.scopeId = scopeId;
+            this.itemNumber = itemNumber;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Key key
+                && Objects.equals(scopeId, key.scopeId)
+                && Objects.equals(itemNumber, key.itemNumber);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(scopeId, itemNumber);
+        }
     }
 }

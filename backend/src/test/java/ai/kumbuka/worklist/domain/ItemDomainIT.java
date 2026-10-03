@@ -65,8 +65,8 @@ class ItemDomainIT {
      * declaration back would then be reading whichever one they happened to
      * make.
      */
-    private static UUID openStatusId;
-    private static UUID closedStatusId;
+    static Long openStatusId;
+    static Long closedStatusId;
 
     @Inject ItemService items;
     @Inject SelectorRegistry selectors;
@@ -257,7 +257,7 @@ class ItemDomainIT {
         UUID first = createdId("set semantics probe");
         UUID second = createdId("set semantics target 1");
         UUID third = createdId("set semantics target 2");
-        UUID type = relationType("blocks", true);
+        Long type = relationType("blocks", true);
 
         updateField(first, "relations", List.of(
             relation(type, second), relation(type, third)));
@@ -637,23 +637,30 @@ class ItemDomainIT {
     void an_enumerated_attribute_takes_a_declared_option_and_nothing_else() {
         String size = attribute("choice");
         String other = attribute("choice");
-        UUID small = vocabulary.declareOption(SCOPE, size, "S", 1).id;
-        UUID foreign = vocabulary.declareOption(SCOPE, other, "S", 1).id;
+        vocabulary.declareOption(SCOPE, size, "S", 1);
+        vocabulary.declareOption(SCOPE, other, "XL", 1);
 
         UUID id = createdId("option probe");
-        Map<String, Object> after =
-            updateField(id, "attributes", Map.of(size, String.valueOf(small)));
-        assertThat(attributesOf(after))
-            .as("what an item stores is the option's identity, so the option can be "
-                + "renamed without touching a single item")
-            .containsEntry(size, String.valueOf(small));
+        Map<String, Object> after = updateField(id, "attributes", Map.of(size, "S"));
+        Object answered = attributesOf(after).get(size);
+        assertThat(String.valueOf(answered))
+            .as("the option is named by its name on the way in (ADR-0042); while the "
+                + "store still carries the option's uuid, the answer carries that uuid, "
+                + "as the image before this one answered")
+            .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
+        Map<String, Object> again =
+            updateField(id, "attributes", Map.of(size, String.valueOf(answered)));
+        assertThat(attributesOf(again))
+            .as("a read answer sent back unchanged is accepted: the uuid it carries "
+                + "still names the option")
+            .containsEntry(size, answered);
 
         WorklistException refusal = catchWorklistException(() ->
-            updateField(id, "attributes", Map.of(size, String.valueOf(foreign))));
+            updateField(id, "attributes", Map.of(size, "XL")));
         assertThat(refusal.reason())
-            .as("an option of another declaration is not an option of this one, however "
-                + "identically it is spelled — which is exactly why the name is not the "
-                + "identity")
+            .as("an option of another declaration is not an option of this one: the name "
+                + "is resolved within the attribute it is written under")
             .isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
     }
 
@@ -881,7 +888,7 @@ class ItemDomainIT {
         UUID first = createdId("relation probe 1");
         UUID second = createdId("relation probe 2");
         UUID third = createdId("relation probe 3");
-        UUID type = relationType("blocks", true);
+        Long type = relationType("blocks", true);
 
         Map<String, Object> withBoth = updateField(first, "relations",
             List.of(relation(type, second), relation(type, third)));
@@ -916,8 +923,8 @@ class ItemDomainIT {
     void two_items_may_carry_two_edges_of_different_types() {
         UUID first = createdId("two types probe 1");
         UUID second = createdId("two types probe 2");
-        UUID blocks = relationType("blocks", true);
-        UUID relates = relationType("relates to", false);
+        Long blocks = relationType("blocks", true);
+        Long relates = relationType("relates to", false);
 
         Map<String, Object> after = updateField(first, "relations",
             List.of(relation(blocks, second), relation(relates, second)));
@@ -932,7 +939,7 @@ class ItemDomainIT {
     void re_asserting_the_same_relations_is_not_a_change() {
         UUID first = createdId("relation no-op 1");
         UUID second = createdId("relation no-op 2");
-        UUID type = relationType("blocks", true);
+        Long type = relationType("blocks", true);
 
         updateField(first, "relations", List.of(relation(type, second)));
         Map<String, Object> before = items.read(SCOPE, first);
@@ -948,7 +955,7 @@ class ItemDomainIT {
     @Test
     void an_item_cannot_relate_to_itself() {
         UUID id = createdId("self relation probe");
-        UUID type = relationType("blocks", true);
+        Long type = relationType("blocks", true);
 
         WorklistException refusal = catchWorklistException(() ->
             updateField(id, "relations", List.of(relation(type, id))));
@@ -990,7 +997,7 @@ class ItemDomainIT {
     @Test
     void a_relation_to_an_item_that_does_not_exist_cannot_be_written() {
         UUID id = createdId("dangling probe");
-        UUID type = relationType("blocks", true);
+        Long type = relationType("blocks", true);
 
         assertThat(catchThrowable(() ->
             updateField(id, "relations", List.of(relation(type, UUID.randomUUID())))))
@@ -1310,9 +1317,9 @@ class ItemDomainIT {
     @Test
     void declaring_a_view_twice_returns_the_one_that_exists() {
         UUID freshScope = UUID.randomUUID();
-        UUID first = selectors.declare(freshScope, Selector.MILESTONE).id;
+        Long first = selectors.declare(freshScope, Selector.MILESTONE).pk;
 
-        assertThat(selectors.declare(freshScope, Selector.MILESTONE).id)
+        assertThat(selectors.declare(freshScope, Selector.MILESTONE).pk)
             .as("declaration states that the space should exist, and a retry after a "
                 + "timeout should not have to tell 'created' from 'already there'")
             .isEqualTo(first);
@@ -1590,8 +1597,23 @@ class ItemDomainIT {
     @Test
     void declaring_an_attribute_twice_returns_the_one_that_exists() {
         String key = "k" + shortId().toLowerCase();
-        UUID first = vocabulary.declareAttribute(SCOPE, key, "First", "text", 1, false).id;
-        assertThat(vocabulary.declareAttribute(SCOPE, key, "Second", "number", 9, true).id)
+        Long first = vocabulary.declareAttribute(SCOPE, key, "First", "text", 1, false).pk;
+        assertThat(vocabulary.declareAttribute(SCOPE, key, "Second", "number", 9, true).pk)
+            .isEqualTo(first);
+    }
+
+    /**
+     * Declaring an option twice under one attribute returns the one that
+     * exists: its name is unique within the attribute (V18), so the name says
+     * which option it is.
+     */
+    @Test
+    void declaring_an_option_twice_under_one_attribute_returns_the_one_that_exists() {
+        String size = attribute("choice");
+        Long first = vocabulary.declareOption(SCOPE, size, "M", 1).pk;
+        assertThat(vocabulary.declareOption(SCOPE, size, "M", 5).pk)
+            .as("a second option of the same name would make the name ambiguous, and "
+                + "the name is how an option travels")
             .isEqualTo(first);
     }
 
@@ -1642,25 +1664,25 @@ class ItemDomainIT {
      * order the design has, and a service that invented a status here would be
      * deciding what a scope's list means.
      */
-    private UUID openStatus() {
+    private Long openStatus() {
         if (openStatusId == null) {
             openStatusId =
-                vocabulary.declareStatus(SCOPE, "open", 1, true, false, false, false).id;
+                vocabulary.declareStatus(SCOPE, "open", 1, true, false, false, false).pk;
         }
         return openStatusId;
     }
 
     /** The scope's terminal status, for the withdrawal probes. */
-    private UUID closedStatus() {
+    private Long closedStatus() {
         if (closedStatusId == null) {
             closedStatusId =
-                vocabulary.declareStatus(SCOPE, "done", 9, false, false, true, true).id;
+                vocabulary.declareStatus(SCOPE, "done", 9, false, false, true, true).pk;
         }
         return closedStatusId;
     }
 
     /** The display name of a declared status, looked up by identity. */
-    private String statusNameOf(UUID statusId) {
+    private String statusNameOf(Long statusId) {
         return vocabulary.requireStatus(SCOPE, statusId).name;
     }
 
@@ -1676,16 +1698,16 @@ class ItemDomainIT {
      * fixtures can look up its display name for the wire form of a relation
      * entry.
      */
-    private UUID relationType(String name, boolean blocks) {
-        return vocabulary.declareRelationType(SCOPE, name, blocks, 1).id;
+    private Long relationType(String name, boolean blocks) {
+        return vocabulary.declareRelationType(SCOPE, name, blocks, 1).pk;
     }
 
     /**
      * One relation entry as a caller writes it: the type as its display name
      * and the item as its canonical address.
      */
-    private Map<String, Object> relation(UUID typeId, UUID target) {
-        String typeName = vocabulary.relationTypeById(typeId).name;
+    private Map<String, Object> relation(Long typeId, UUID target) {
+        String typeName = vocabulary.relationTypeByPk(typeId).name;
         return Map.of("type", typeName, "item", addressOfItem(target));
     }
 

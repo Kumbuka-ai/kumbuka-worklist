@@ -111,12 +111,12 @@ public class WorkstreamRepository {
      * dead value pointing nowhere is not something that can break.
      */
     @Transactional
-    public boolean hasReferences(UUID scopeId, UUID workstreamId) {
+    public boolean hasReferences(UUID scopeId, long workstreamNumber) {
         Long items = em.createQuery(
                 "SELECT COUNT(i) FROM Item i "
-                    + "WHERE i.scopeId = :scope AND i.workstreamId = :ws", Long.class)
+                    + "WHERE i.scopeId = :scope AND i.workstreamNumber = :ws", Long.class)
             .setParameter(P_SCOPE, scopeId)
-            .setParameter("ws", workstreamId)
+            .setParameter("ws", workstreamNumber)
             .getSingleResult();
         return items != null && items > 0;
     }

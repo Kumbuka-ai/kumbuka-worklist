@@ -230,7 +230,7 @@ public class WorkstreamService {
                 "workstream token " + newToken + " is already in use in scope " + scopeId,
                 List.of(newToken));
         }
-        if (workstreams.hasReferences(scopeId, workstreamId)) {
+        if (workstreams.hasReferences(scopeId, workstream.number)) {
             throw new WorklistException(
                 WorklistException.Reason.WORKSTREAM_HAS_REFERENCES,
                 "workstream " + workstream.token + " in scope " + scopeId
