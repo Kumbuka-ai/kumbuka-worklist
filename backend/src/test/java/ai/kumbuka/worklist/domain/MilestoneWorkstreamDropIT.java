@@ -18,8 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>V12 retracted the milestone-workstream edge (TAR-0002 section 4) and
  * marked {@code milestone.workstream_id} and {@code number_space.workstream_id}
  * DEAD; V17 drops both together with their composite foreign keys. The
- * item's {@code workstream_id} expresses a different invariant — an item
- * belongs to exactly one workstream — and must survive. A drop that took it
+ * item's workstream reference expresses a different invariant — an item
+ * belongs to exactly one workstream — and must survive; since V20 it is held
+ * by {@code item.workstream_number} alone. A drop that took it
  * along would leave every item without its workstream, and nothing else in
  * the suite reads the catalogue to notice.
  *
@@ -31,13 +32,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MilestoneWorkstreamDropIT {
 
     @Test
-    void the_item_keeps_its_workstream_column() throws SQLException {
-        assertThat(hasColumn("item", "workstream_id"))
-            .as("item.workstream_id carries the edge TAR-0002 section 4 keeps; "
-                + "V17 must not drop it")
+    void the_item_keeps_its_workstream_reference() throws SQLException {
+        assertThat(hasColumn("item", "workstream_number"))
+            .as("the item's workstream carries the edge TAR-0002 section 4 keeps; V17 "
+                + "must not drop it, and since V20 it is held by number (ADR-0042)")
             .isTrue();
-        assertThat(hasConstraint("item", "fk_item_workstream"))
-            .as("the item's workstream reference stays tenant-bound")
+        assertThat(hasConstraint("item", "fk_item_workstream_number"))
+            .as("the item's workstream reference stays a tenant-bound key")
             .isTrue();
     }
 

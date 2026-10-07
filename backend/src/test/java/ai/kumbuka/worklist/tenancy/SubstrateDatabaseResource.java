@@ -1,14 +1,20 @@
 package ai.kumbuka.worklist.tenancy;
 
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
+import org.testcontainers.containers.Container;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.images.builder.Transferable;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Boots the database the probes actually need: a real PostgreSQL, with the
@@ -346,6 +352,32 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
             + "WHERE NOT EXISTS (SELECT 1 FROM public.user_account "
             + "WHERE subject = '" + PROBE_SUBJECT + "')");
         s.execute("RESET app.tenant_id");
+    }
+
+    /**
+     * Runs a psql script inside the database container, connected as the
+     * migrator, with the given {@code -v name=value} variables.
+     *
+     * <p>Through psql itself rather than JDBC, because a script written for
+     * psql uses its meta-commands and variable interpolation, which a JDBC
+     * statement would not parse. The client is the container's own, so the
+     * probe needs nothing installed on the machine running it.
+     */
+    public static Container.ExecResult psqlAsMigrator(String script, String... variables)
+            throws IOException, InterruptedException {
+        String path = "/tmp/probe-" + UUID.randomUUID() + ".sql";
+        postgres.copyFileToContainer(Transferable.of(script), path);
+        List<String> command = new ArrayList<>(List.of(
+            "env", "PGPASSWORD=" + MIGRATOR_PASSWORD,
+            "psql", "-X", "-h", "localhost", "-U", MIGRATOR_ROLE,
+            "-d", postgres.getDatabaseName()));
+        for (String variable : variables) {
+            command.add("-v");
+            command.add(variable);
+        }
+        command.add("-f");
+        command.add(path);
+        return postgres.execInContainer(command.toArray(String[]::new));
     }
 
     private Connection adminConnection() throws SQLException {

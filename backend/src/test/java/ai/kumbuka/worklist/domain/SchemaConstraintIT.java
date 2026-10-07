@@ -177,41 +177,35 @@ class SchemaConstraintIT {
     // ==================================================================
 
     /**
-     * An item's number is unique within its scope, whatever its selector.
+     * An item's number is unique within its scope.
      *
      * <p>ADR-0042 makes {@code (tenant_id, scope_id, number)} the target of
      * every key onto an item, so the number alone has to name one item in a
-     * scope. The selector no longer takes part: every item hangs on the view
-     * selector {@code item}, and an index on the triple alone would admit two
-     * items under one number as soon as a second selector existed — exactly
-     * the case the half marked RED STATE plants. V18 replaced the rule this
-     * probe asserted before, that two selectors may share a number.
+     * scope. V18 replaced the rule this probe asserted before, that two
+     * selectors may share a number; V20 dropped the item's selector.
      */
     @Test
-    void an_items_number_is_unique_in_its_scope_whatever_its_selector()
+    void an_items_number_is_unique_in_its_scope()
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
-            UUID feat = insertSelector(c);
-            UUID chore = insertSelector(c);
-            insertItemAt(c, "address 1", feat, 51);
+            insertItemAt(c, "address 1", 51);
             c.commit();
 
-            assertThatThrownBy(() -> insertItemAt(c, "address 2", chore, 51))
-                .as("RED STATE, observed: number 51 under a second selector of the same scope "
-                    + "must be refused. A key onto (tenant, scope, number) would otherwise "
-                    + "name two items at once, with no error anywhere")
+            assertThatThrownBy(() -> insertItemAt(c, "address 2", 51))
+                .as("RED STATE, observed: number 51 a second time in the same scope must be "
+                    + "refused. A key onto (tenant, scope, number) would otherwise name two "
+                    + "items at once, with no error anywhere")
                 .isInstanceOf(SQLException.class)
                 .hasMessageContaining("uq_item_number");
             c.rollback();
 
             Db.bindTenant(c, tenant);
-            insertItemAt(c, "address 3", chore, 52);
+            insertItemAt(c, "address 3", 52);
             c.commit();
 
             assertThat(numbersAt(c, 51) + numbersAt(c, 52))
-                .as("another number under the other selector is admitted; the rule is about "
-                    + "the number, not about the selector")
+                .as("another number is admitted; the rule is about the number")
                 .isEqualTo(2);
             c.commit();
         }
@@ -276,7 +270,7 @@ class SchemaConstraintIT {
     void an_item_may_not_relate_to_itself_and_may_relate_to_another() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
-            UUID type = insertRelationType(c);
+            Long type = insertRelationType(c);
             UUID first = insertItem(c, "relation source");
             UUID second = insertItem(c, "relation target");
             c.commit();
@@ -476,7 +470,7 @@ class SchemaConstraintIT {
      *
      * <p>The uniqueness rule is expressed directly by
      * {@code uq_number_space_selector} over {@code (tenant_id, scope_id,
-     * selector_id)}; {@code selector_id NOT NULL} makes that ordinary rather
+     * selector_pk)}; {@code selector_pk NOT NULL} makes that ordinary rather
      * than partial. A row without a selector is refused at the column, and a
      * second row for the same selector is refused at the index.
      */
@@ -484,8 +478,8 @@ class SchemaConstraintIT {
     void a_scope_holds_exactly_one_counter_per_selector() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
-            UUID first = insertSelector(c);
-            UUID second = insertSelector(c);
+            Long first = insertSelector(c);
+            Long second = insertSelector(c);
             insertNumberSpace(c, first);
             insertNumberSpace(c, second);
             c.commit();
@@ -505,7 +499,7 @@ class SchemaConstraintIT {
                     + "There is no scope-wide row beside the per-selector ones; every "
                     + "counter belongs to a view")
                 .isInstanceOf(SQLException.class)
-                .hasMessageContaining("selector_id");
+                .hasMessageContaining("selector_pk");
             c.rollback();
 
             Db.bindTenant(c, tenant);
@@ -521,90 +515,39 @@ class SchemaConstraintIT {
     // ==================================================================
 
     /**
-     * An item written without a selector stands on its scope's view selector
-     * {@code item}; in a scope that declares no such selector it is refused.
+     * An item's address is its number in its scope, and the store holds no
+     * selector beside it.
      *
-     * <p>Through V18 the column was a plain NOT NULL and this probe watched it
-     * refuse a missing selector. Since V19 the image no longer writes the
-     * column: every item hangs on the view selector {@code item}, and the
-     * store fills it on insert so the image before keeps reading a complete
-     * address (ADR-0042 stage R2). What is still refused is an item whose
-     * scope has no such selector, because it has no address space to stand in.
+     * <p>Through V18 an item carried the selector its number was drawn under,
+     * and this probe watched a missing one refused; V19 filled it from the
+     * view selector {@code item}, the only one any verb ever gave an item.
+     * V20 drops the column (ADR-0042 stage R3): the number is unique within
+     * the scope and is the address, so a selector beside it would be a second
+     * statement of the same fact.
      */
     @Test
-    void an_item_without_a_selector_stands_on_the_item_view_or_is_refused()
-            throws SQLException {
+    void an_items_address_is_its_number_and_no_selector_is_stored() throws SQLException {
+        try (Connection c = Db.asAdmin();
+             var st = c.prepareStatement("""
+                 SELECT count(*) FROM information_schema.columns
+                 WHERE table_schema = 'worklist' AND table_name = 'item'
+                   AND column_name IN ('selector_id', 'number')
+                 """);
+             ResultSet rs = st.executeQuery()) {
+            rs.next();
+            assertThat(rs.getInt(1))
+                .as("item carries its number and no selector column")
+                .isEqualTo(1);
+        }
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
-            UUID status = anyStatus(c);
-            UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
-            c.commit();
-
-            Db.bindTenant(c, tenant);
-            UUID bareScope = UUID.randomUUID();
-            assertThatThrownBy(() -> {
-                try (var st = c.prepareStatement("""
-                        INSERT INTO worklist.item
-                            (tenant_id, scope_id, title, status_id, number, workstream_id)
-                        VALUES (?, ?, 'no view', ?, 1, ?)
-                        """)) {
-                    st.setObject(1, tenant);
-                    st.setObject(2, bareScope);
-                    st.setObject(3, status);
-                    st.setObject(4, workstream);
-                    st.executeUpdate();
-                }
-            })
-                .as("RED STATE, observed: an item in a scope that declares no item view "
-                    + "must be refused. Half an address names nothing the caller can hold "
-                    + "on to")
-                .isInstanceOf(SQLException.class)
-                .hasMessageContaining("declares no selector item");
-            c.rollback();
-
-            Db.bindTenant(c, tenant);
-            UUID itemView = itemView(c);
             long number = NEXT_NUMBER.getAndIncrement();
-            insertItemWithAddress(c, "no selector given", status, null, number);
+            insertItemWithAddress(c, "an address is a number", anyStatus(c), number);
             c.commit();
-
-            assertThat(selectorOfItemNumbered(c, number))
-                .as("an item written without a selector stands on the scope's item view, "
-                    + "which is the only selector any verb ever gave an item")
-                .isEqualTo(itemView);
+            assertThat(numbersAt(c, number))
+                .as("an item stands at its number in its scope, with nothing else to name")
+                .isEqualTo(1);
             c.commit();
-        }
-    }
-
-    /** The scope's item view, declared here if this class has not yet done so. */
-    private UUID itemView(Connection c) throws SQLException {
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.selector (tenant_id, scope_id, token)
-                VALUES (?, ?, 'item') ON CONFLICT (tenant_id, scope_id, token) DO NOTHING
-                """)) {
-            st.setObject(1, tenant);
-            st.setObject(2, SCOPE);
-            st.executeUpdate();
-        }
-        try (var st = c.prepareStatement(
-                "SELECT id FROM worklist.selector WHERE scope_id = ? AND token = 'item'")) {
-            st.setObject(1, SCOPE);
-            try (ResultSet rs = st.executeQuery()) {
-                rs.next();
-                return rs.getObject(1, UUID.class);
-            }
-        }
-    }
-
-    private UUID selectorOfItemNumbered(Connection c, long number) throws SQLException {
-        try (var st = c.prepareStatement(
-                "SELECT selector_id FROM worklist.item WHERE scope_id = ? AND number = ?")) {
-            st.setObject(1, SCOPE);
-            st.setLong(2, number);
-            try (ResultSet rs = st.executeQuery()) {
-                rs.next();
-                return rs.getObject(1, UUID.class);
-            }
         }
     }
 
@@ -620,13 +563,11 @@ class SchemaConstraintIT {
     void an_item_without_a_number_is_refused() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
-            UUID status = anyStatus(c);
-            UUID selector = insertSelector(c);
+            Long status = anyStatus(c);
             c.commit();
 
             Db.bindTenant(c, tenant);
-            assertThatThrownBy(() -> insertItemWithAddress(c, "no number",
-                    status, selector, null))
+            assertThatThrownBy(() -> insertItemWithAddress(c, "no number", status, null))
                 .as("RED STATE, observed: an item without a number must be refused. "
                     + "The counter is the mechanism that keeps two objects from sharing "
                     + "an address, and a row without one is the state that would let "
@@ -649,14 +590,11 @@ class SchemaConstraintIT {
     void an_item_title_of_201_is_refused_and_200_go_through() throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
-            UUID status = anyStatus(c);
-            UUID atCap = insertSelector(c);
-            UUID overCap = insertSelector(c);
+            Long status = anyStatus(c);
             c.commit();
 
             Db.bindTenant(c, tenant);
-            assertThatThrownBy(() -> insertItemWithTitle(c, repeat('a', 201),
-                    status, overCap))
+            assertThatThrownBy(() -> insertItemWithTitle(c, repeat('a', 201), status))
                 .as("RED STATE, observed: a title one character over the cap must be "
                     + "refused. A cap that admits 201 is a cap the reader has to guess "
                     + "at, and the predecessor's cap drifted from 150 to whatever the "
@@ -666,7 +604,7 @@ class SchemaConstraintIT {
             c.rollback();
 
             Db.bindTenant(c, tenant);
-            insertItemWithTitle(c, repeat('a', 200), status, atCap);
+            insertItemWithTitle(c, repeat('a', 200), status);
             c.commit();
 
             assertThat(count(c, "item"))
@@ -856,146 +794,133 @@ class SchemaConstraintIT {
             boolean sortable) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.attribute_definition
-                    (id, tenant_id, scope_id, key, name, type, sortable)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (tenant_id, scope_id, key, name, type, sortable)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """)) {
-            st.setObject(1, UUID.randomUUID());
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setString(4, key);
-            st.setString(5, "Attribute " + key);
-            st.setString(6, type);
-            st.setBoolean(7, sortable);
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setString(3, key);
+            st.setString(4, "Attribute " + key);
+            st.setString(5, type);
+            st.setBoolean(6, sortable);
             st.executeUpdate();
         }
     }
 
-    private UUID insertSelector(Connection c) throws SQLException {
-        UUID id = UUID.randomUUID();
+    private Long insertSelector(Connection c) throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.selector (id, tenant_id, scope_id, token)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO worklist.selector (tenant_id, scope_id, token)
+                VALUES (?, ?, ?)
+                RETURNING pk
                 """)) {
-            st.setObject(1, id);
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
             // Lower case, because the form constraint says so since V6, and
             // deliberately not one of the three views: this class plants rows to
             // prove a constraint on, and the constraint checks form only.
-            st.setString(4, "t" + UUID.randomUUID().toString().replace("-", "")
+            st.setString(3, "t" + UUID.randomUUID().toString().replace("-", "")
                 .substring(0, 12));
-            st.executeUpdate();
-        }
-        return id;
-    }
-
-    private void insertNumberSpace(Connection c, UUID selectorId) throws SQLException {
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.number_space (id, selector_id, tenant_id, scope_id)
-                VALUES (?, ?, ?, ?)
-                """)) {
-            st.setObject(1, UUID.randomUUID());
-            st.setObject(2, selectorId);
-            st.setObject(3, tenant);
-            st.setObject(4, SCOPE);
-            st.executeUpdate();
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
         }
     }
 
-    private UUID insertStatus(Connection c) throws SQLException {
-        UUID id = UUID.randomUUID();
+    private void insertNumberSpace(Connection c, Long selectorPk) throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item_status
-                    (id, tenant_id, scope_id, name, actionable, in_progress, closed,
-                     successful)
-                VALUES (?, ?, ?, 'open', true, false, false, false)
+                INSERT INTO worklist.number_space (selector_pk, tenant_id, scope_id)
+                VALUES (?, ?, ?)
                 """)) {
-            st.setObject(1, id);
+            if (selectorPk == null) {
+                st.setNull(1, java.sql.Types.BIGINT);
+            } else {
+                st.setLong(1, selectorPk);
+            }
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
             st.executeUpdate();
         }
-        return id;
+    }
+
+    private Long insertStatus(Connection c) throws SQLException {
+        try (var st = c.prepareStatement("""
+                INSERT INTO worklist.item_status
+                    (tenant_id, scope_id, name, actionable, in_progress, closed, successful)
+                VALUES (?, ?, 'open', true, false, false, false)
+                RETURNING pk
+                """)) {
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
     }
 
     /**
      * An item, with the tenant's status — declared once and reused — and a
-     * fresh address per insert.
-     *
-     * <p>Since V7 both halves of the address are NOT NULL at the column, so an
-     * item without them is refused. A fresh selector per insert keeps the
-     * number at 1 for every planted row without threading a counter through
-     * every caller.
+     * fresh number per insert, which is its address (ADR-0042).
      */
     private UUID insertItem(Connection c, String title) throws SQLException {
         UUID id = UUID.randomUUID();
-        UUID selector = insertSelector(c);
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (id, tenant_id, scope_id, title, status_id, selector_id, number,
-                     workstream_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, title, status_pk, number, workstream_number)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, id);
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
             st.setString(4, title);
-            st.setObject(5, anyStatus(c));
-            st.setObject(6, selector);
-            st.setLong(7, NEXT_NUMBER.getAndIncrement());
-            st.setObject(8, workstream);
+            st.setLong(5, anyStatus(c));
+            st.setLong(6, NEXT_NUMBER.getAndIncrement());
+            st.setLong(7, defaultWorkstream(c));
             st.executeUpdate();
         }
         return id;
     }
 
-    /** An item at a chosen selector and number, inserted directly. */
-    private void insertItemAt(Connection c, String title, UUID selector, long number)
-            throws SQLException {
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
+    /** An item at a chosen number, inserted directly. */
+    private void insertItemAt(Connection c, String title, long number) throws SQLException {
+        insertItemWithAddress(c, title, anyStatus(c), number);
+    }
+
+    /** The number of the scope's default workstream, planted on first use. */
+    private long defaultWorkstream(Connection c) throws SQLException {
+        return Db.workstreamNumber(c, Db.ensureDefaultWorkstream(c, tenant, SCOPE));
+    }
+
+    private Long insertRelationType(Connection c) throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.item
-                    (tenant_id, scope_id, title, status_id, selector_id, number, workstream_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO worklist.relation_type (tenant_id, scope_id, name, blocks)
+                VALUES (?, ?, 'blocks', true)
+                RETURNING pk
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
-            st.setString(3, title);
-            st.setObject(4, anyStatus(c));
-            st.setObject(5, selector);
-            st.setLong(6, number);
-            st.setObject(7, workstream);
-            st.executeUpdate();
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
         }
     }
 
-    private UUID insertRelationType(Connection c) throws SQLException {
-        UUID id = UUID.randomUUID();
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.relation_type (id, tenant_id, scope_id, name, blocks)
-                VALUES (?, ?, ?, 'blocks', true)
-                """)) {
-            st.setObject(1, id);
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.executeUpdate();
-        }
-        return id;
-    }
-
-    private void insertRelation(Connection c, UUID from, UUID to, UUID type)
+    /** An edge between two items, named by their identities and stored by their numbers. */
+    private void insertRelation(Connection c, UUID from, UUID to, Long type)
             throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item_relation
-                    (tenant_id, scope_id, from_item_id, to_item_id, relation_type_id)
-                VALUES (?, ?, ?, ?, ?)
+                    (tenant_id, scope_id, from_item_number, to_item_number, relation_type_pk)
+                VALUES (?, ?, (SELECT number FROM worklist.item WHERE id = ?),
+                        (SELECT number FROM worklist.item WHERE id = ?), ?)
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
             st.setObject(3, from);
             st.setObject(4, to);
-            st.setObject(5, type);
+            st.setLong(5, type);
             st.executeUpdate();
         }
     }
@@ -1004,16 +929,15 @@ class SchemaConstraintIT {
             String status) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item_reference
-                    (id, tenant_id, scope_id, item_id, ordinal, target, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (tenant_id, scope_id, item_number, ordinal, target, status)
+                VALUES (?, ?, (SELECT number FROM worklist.item WHERE id = ?), ?, ?, ?)
                 """)) {
-            st.setObject(1, UUID.randomUUID());
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
-            st.setObject(4, item);
-            st.setInt(5, ordinal);
-            st.setString(6, target);
-            st.setString(7, status);
+            st.setObject(1, tenant);
+            st.setObject(2, SCOPE);
+            st.setObject(3, item);
+            st.setInt(4, ordinal);
+            st.setString(5, target);
+            st.setString(6, status);
             st.executeUpdate();
         }
     }
@@ -1023,7 +947,8 @@ class SchemaConstraintIT {
             throws SQLException {
         try (var st = c.prepareStatement("""
                 UPDATE worklist.item_reference SET status = 'withdrawn'
-                WHERE item_id = ? AND ordinal >= ? AND status = 'asserted'
+                WHERE item_number = (SELECT number FROM worklist.item WHERE id = ?)
+                  AND ordinal >= ? AND status = 'asserted'
                 """)) {
             st.setObject(1, item);
             st.setInt(2, from);
@@ -1036,7 +961,8 @@ class SchemaConstraintIT {
         List<Integer> out = new ArrayList<>();
         try (var st = c.prepareStatement("""
                 SELECT ordinal FROM worklist.item_reference
-                WHERE item_id = ? AND status = 'asserted' ORDER BY ordinal
+                WHERE item_number = (SELECT number FROM worklist.item WHERE id = ?)
+                  AND status = 'asserted' ORDER BY ordinal
                 """)) {
             st.setObject(1, item);
             try (ResultSet rs = st.executeQuery()) {
@@ -1053,7 +979,8 @@ class SchemaConstraintIT {
         List<String> out = new ArrayList<>();
         try (var st = c.prepareStatement("""
                 SELECT target FROM worklist.item_reference
-                WHERE item_id = ? AND status = 'withdrawn' ORDER BY ordinal
+                WHERE item_number = (SELECT number FROM worklist.item WHERE id = ?)
+                  AND status = 'withdrawn' ORDER BY ordinal
                 """)) {
             st.setObject(1, item);
             try (ResultSet rs = st.executeQuery()) {
@@ -1103,8 +1030,9 @@ class SchemaConstraintIT {
             String status) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.iteration_membership
-                    (tenant_id, scope_id, iteration_id, item_id, position, status)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (tenant_id, scope_id, iteration_number, item_number, position, status)
+                VALUES (?, ?, (SELECT number FROM worklist.iteration WHERE id = ?),
+                        (SELECT number FROM worklist.item WHERE id = ?), ?, ?)
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
@@ -1128,8 +1056,9 @@ class SchemaConstraintIT {
     private void insertClaim(Connection c, UUID item, String duration) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.claim
-                    (tenant_id, scope_id, item_id, receipt, actor, granted_at, expires_at)
-                VALUES (?, ?, ?, 'a receipt', 'an actor', now(), now() + ?::interval)
+                    (tenant_id, scope_id, item_number, receipt, actor, granted_at, expires_at)
+                VALUES (?, ?, (SELECT number FROM worklist.item WHERE id = ?),
+                        'a receipt', 'an actor', now(), now() + ?::interval)
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
@@ -1140,13 +1069,13 @@ class SchemaConstraintIT {
     }
 
     /** The tenant's declared status, or a fresh one when it has none yet. */
-    private UUID anyStatus(Connection c) throws SQLException {
+    private Long anyStatus(Connection c) throws SQLException {
         try (var st = c.prepareStatement(
-                "SELECT id FROM worklist.item_status WHERE tenant_id = ? LIMIT 1")) {
+                "SELECT pk FROM worklist.item_status WHERE tenant_id = ? LIMIT 1")) {
             st.setObject(1, tenant);
             try (ResultSet rs = st.executeQuery()) {
                 if (rs.next()) {
-                    return UUID.fromString(rs.getString(1));
+                    return rs.getLong(1);
                 }
             }
         }
@@ -1179,44 +1108,35 @@ class SchemaConstraintIT {
     }
 
     /**
-     * An item at the address given, or with either half deliberately unset —
-     * used by the two probes that watch a column NOT NULL refuse an insert.
-     * Every other insert path in this class uses {@link #insertItem}, which
-     * always supplies both halves.
+     * An item at the number given, or with it deliberately unset — used by
+     * the probe that watches the column NOT NULL refuse an insert.
      */
-    private void insertItemWithAddress(Connection c, String title, UUID status,
-            UUID selector, Long number) throws SQLException {
-        UUID workstream = Db.ensureDefaultWorkstream(c, tenant, SCOPE);
+    private void insertItemWithAddress(Connection c, String title, Long status, Long number)
+            throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (id, tenant_id, scope_id, title, status_id, selector_id, number,
-                     workstream_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, tenant_id, scope_id, title, status_pk, number, workstream_number)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """)) {
             st.setObject(1, UUID.randomUUID());
             st.setObject(2, tenant);
             st.setObject(3, SCOPE);
             st.setString(4, title);
-            st.setObject(5, status);
-            st.setObject(6, selector);
+            st.setLong(5, status);
             if (number == null) {
-                st.setNull(7, java.sql.Types.BIGINT);
+                st.setNull(6, java.sql.Types.BIGINT);
             } else {
-                st.setLong(7, number);
+                st.setLong(6, number);
             }
-            st.setObject(8, workstream);
+            st.setLong(7, defaultWorkstream(c));
             st.executeUpdate();
         }
     }
 
-    /**
-     * An item at a title of the given length — the address is a fresh valid
-     * pair so the refusal, when one comes, names the length check and nothing
-     * else.
-     */
-    private void insertItemWithTitle(Connection c, String title, UUID status,
-            UUID selector) throws SQLException {
-        insertItemWithAddress(c, title, status, selector, NEXT_NUMBER.getAndIncrement());
+    /** An item at a title of the given length and a fresh number. */
+    private void insertItemWithTitle(Connection c, String title, Long status)
+            throws SQLException {
+        insertItemWithAddress(c, title, status, NEXT_NUMBER.getAndIncrement());
     }
 
     /**

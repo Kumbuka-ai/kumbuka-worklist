@@ -2,7 +2,6 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
 import ai.kumbuka.worklist.repository.PlanningRepository;
-import ai.kumbuka.worklist.repository.RetiringUuidRepository;
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -115,8 +114,6 @@ public class ItemService {
     @Inject WorkstreamRepository workstreamRepository;
     @Inject ScopeAccessRepository scopeAccess;
 
-    /** The vocabulary's uuids, while the store still carries them (ADR-0042 stage R2). */
-    @Inject RetiringUuidRepository retiring;
 
     // ------------------------------------------------------------------
     // Reading.
@@ -1062,9 +1059,9 @@ public class ItemService {
     /**
      * Set the declared attributes to exactly the given map.
      *
-     * <p>Keyed by the declaration's KEY on the way in and by its IDENTITY in
-     * the column, so a scope may rename a key and an item's stored value does
-     * not move. Every key is resolved against the scope's declarations, and an
+     * <p>Keyed by the declaration's KEY on the way in and by its surrogate in
+     * the column (ADR-0042), so a scope may rename a key and an item's stored
+     * value does not move. Every key is resolved against the scope's declarations, and an
      * undeclared one is a typed refusal rather than a value nothing can read
      * back.
      *
@@ -1075,13 +1072,11 @@ public class ItemService {
      * never declared.
      */
     private boolean applyAttributes(Item item, Map<String, Object> wanted) {
-        AttributeForms forms = attributeForms(item.scopeId);
         Map<String, Object> stored = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : wanted.entrySet()) {
             AttributeDefinition definition =
                 vocabulary.requireAttribute(item.scopeId, entry.getKey());
-            stored.put(forms.storedKey(definition),
-                storedValue(definition, entry.getValue(), forms));
+            stored.put(String.valueOf(definition.pk), storedValue(definition, entry.getValue()));
         }
 
         if (Objects.equals(item.attributes, stored)) {
@@ -1091,9 +1086,11 @@ public class ItemService {
         return true;
     }
 
-    /** One attribute value, in the form the column holds. */
-    private Object storedValue(AttributeDefinition definition, Object given,
-            AttributeForms forms) {
+    /**
+     * One attribute value, in the form the column holds: an option as its
+     * surrogate (ADR-0042), every other type as given.
+     */
+    private Object storedValue(AttributeDefinition definition, Object given) {
         if (AttributeDefinition.TEXT_LIST.equals(definition.type)) {
             return textListValue(definition, given);
         }
@@ -1101,12 +1098,12 @@ public class ItemService {
             return given;
         }
         if (AttributeDefinition.CHOICE.equals(definition.type)) {
-            return forms.storedOption(optionGiven(definition, given, forms));
+            return String.valueOf(optionNamed(definition, given).pk);
         }
 
         List<String> options = new ArrayList<>();
         for (String token : ItemFields.tokens(Field.ATTRIBUTES, given)) {
-            String option = forms.storedOption(optionGiven(definition, token, forms));
+            String option = String.valueOf(optionNamed(definition, token).pk);
             if (!options.contains(option)) {
                 options.add(option);
             }
@@ -1115,99 +1112,21 @@ public class ItemService {
     }
 
     /**
-     * The option a caller named, by its name or by its uuid.
-     *
-     * <p>The name is the outward form (ADR-0042): unique within its
-     * definition since V18, so a name says which option it is. The uuid is
-     * still accepted while the store carries one, because a read answer of
-     * the image before this one carried it and has to round-trip.
+     * The option a caller named. The name is an option's outward form
+     * (ADR-0042), unique within its attribute since V18; a uuid is a form
+     * refusal that names the field, as it is for a status or a workstream.
      */
-    private AttributeOption optionGiven(AttributeDefinition definition, Object given,
-            AttributeForms forms) {
-        String token = given == null ? null : ItemFields.text(Field.ATTRIBUTES, String.valueOf(given));
-        if (token == null) {
+    private AttributeOption optionNamed(AttributeDefinition definition, Object given) {
+        String name = given == null ? null : ItemFields.text(Field.ATTRIBUTES, String.valueOf(given));
+        if (name == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "attribute " + definition.key + " takes one of its declared options, by "
                     + "name, and no value arrived",
                 List.of(definition.key));
         }
-        UUID uuid = uuidOrNull(token);
-        if (uuid == null) {
-            return vocabulary.requireOptionNamed(definition, token);
-        }
-        return vocabulary.requireOption(definition, forms.optionPkByUuid().get(uuid), token);
-    }
-
-    private static UUID uuidOrNull(String token) {
-        try {
-            return UUID.fromString(token);
-        } catch (IllegalArgumentException notAUuid) {
-            return null;
-        }
-    }
-
-    private AttributeForms attributeForms(UUID scopeId) {
-        return new AttributeForms(retiring.definitionPksByUuid(scopeId),
-            retiring.optionPksByUuid(scopeId));
-    }
-
-    /**
-     * The two forms {@code item.attributes} may hold while ADR-0042 stage R2
-     * runs, and the translation between them.
-     *
-     * <p>The column was keyed by definition uuid with option uuids as values;
-     * stage R3 rewrites it to the surrogates. This image reads both, and
-     * writes the uuid form while the vocabulary row still carries a uuid —
-     * the form the image before it reads — and the surrogate form once it no
-     * longer does, which is the schema after stage R3.
-     */
-    private record AttributeForms(Map<UUID, Long> definitionPkByUuid,
-            Map<UUID, Long> optionPkByUuid) {
-
-        String storedKey(AttributeDefinition definition) {
-            UUID uuid = uuidOf(definitionPkByUuid, definition.pk);
-            return uuid == null ? String.valueOf(definition.pk) : uuid.toString();
-        }
-
-        String storedOption(AttributeOption option) {
-            UUID uuid = uuidOf(optionPkByUuid, option.pk);
-            return uuid == null ? String.valueOf(option.pk) : uuid.toString();
-        }
-
-        /** The surrogate a stored key or value names, in either form, or null. */
-        Long definitionPk(String stored) {
-            return pkOf(definitionPkByUuid, stored);
-        }
-
-        Long optionPk(String stored) {
-            return pkOf(optionPkByUuid, stored);
-        }
-
-        UUID optionUuid(Long pk) {
-            return uuidOf(optionPkByUuid, pk);
-        }
-
-        private static Long pkOf(Map<UUID, Long> byUuid, String stored) {
-            UUID uuid = uuidOrNull(stored);
-            if (uuid != null) {
-                return byUuid.get(uuid);
-            }
-            try {
-                return Long.valueOf(stored);
-            } catch (NumberFormatException neither) {
-                return null;
-            }
-        }
-
-        private static UUID uuidOf(Map<UUID, Long> byUuid, Long pk) {
-            for (Map.Entry<UUID, Long> entry : byUuid.entrySet()) {
-                if (entry.getValue().equals(pk)) {
-                    return entry.getKey();
-                }
-            }
-            return null;
-        }
+        ItemFields.refuseUuidShape(Field.ATTRIBUTES, name, "an option's name");
+        return vocabulary.requireOptionNamed(definition, name);
     }
 
     /**
@@ -1645,46 +1564,42 @@ public class ItemService {
      * it would put a key in the answer that no declaration can name.
      */
     private Map<String, Object> declaredAttributes(Item item) {
-        if (item.attributes.isEmpty()) {
-            return ItemFields.attributes(Map.of());
-        }
-        AttributeForms forms = attributeForms(item.scopeId);
         Map<String, Object> answer = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : item.attributes.entrySet()) {
-            AttributeDefinition definition =
-                vocabulary.attributeByPk(forms.definitionPk(entry.getKey()));
+            AttributeDefinition definition = vocabulary.attributeByPk(surrogateOrNull(entry.getKey()));
             if (definition != null) {
-                answer.put(definition.key, answeredValue(definition, entry.getValue(), forms));
+                answer.put(definition.key, answeredValue(definition, entry.getValue()));
             }
         }
         return ItemFields.attributes(answer);
     }
 
     /**
-     * A stored value as the answer carries it. An option travels as its uuid
-     * while the vocabulary row carries one — the form the image before this
-     * one answered with — and as its name once it does not. Every other type
-     * is answered as stored.
+     * A stored value as the answer carries it: an option by its name, every
+     * other type as stored. An option that no declaration renders any more is
+     * answered as stored rather than dropped, so the value stays visible.
      */
-    private Object answeredValue(AttributeDefinition definition, Object stored,
-            AttributeForms forms) {
+    private Object answeredValue(AttributeDefinition definition, Object stored) {
         if (!AttributeDefinition.ENUMERATED.contains(definition.type)) {
             return stored;
         }
         if (stored instanceof java.util.Collection<?> many) {
-            return many.stream().map(one -> answeredOption(one, forms)).toList();
+            return many.stream().map(this::answeredOption).toList();
         }
-        return answeredOption(stored, forms);
+        return answeredOption(stored);
     }
 
-    private Object answeredOption(Object stored, AttributeForms forms) {
-        Long pk = forms.optionPk(String.valueOf(stored));
-        UUID uuid = forms.optionUuid(pk);
-        if (uuid != null) {
-            return uuid.toString();
-        }
-        AttributeOption option = vocabulary.optionByPk(pk);
+    private Object answeredOption(Object stored) {
+        AttributeOption option = vocabulary.optionByPk(surrogateOrNull(String.valueOf(stored)));
         return option == null ? stored : option.name;
+    }
+
+    private static Long surrogateOrNull(String stored) {
+        try {
+            return Long.valueOf(stored);
+        } catch (NumberFormatException notASurrogate) {
+            return null;
+        }
     }
 
     /** The asserted pointers, in the reader's order. */

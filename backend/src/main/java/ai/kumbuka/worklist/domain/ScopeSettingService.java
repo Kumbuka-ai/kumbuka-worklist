@@ -1,6 +1,5 @@
 package ai.kumbuka.worklist.domain;
 
-import ai.kumbuka.worklist.repository.RetiringUuidRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -61,9 +60,6 @@ public class ScopeSettingService extends PlanningService {
      * that opens a scope end to end.
      */
     @Inject SelectorRegistry selectors;
-
-    /** The settings' own uuid, read while the store still carries it (ADR-0042 stage R2). */
-    @Inject RetiringUuidRepository retiring;
 
     /** One scope's settings, as the canonical field map. */
     @Transactional
@@ -256,8 +252,7 @@ public class ScopeSettingService extends PlanningService {
     private Map<String, Object> projectOf(ScopeSetting setting, List<String> warnings) {
         Iteration current = setting.currentIterationNumber == null ? null
             : planning.iterationByNumber(setting.scopeId, setting.currentIterationNumber);
-        return project(setting, retiring.settingId(setting.scopeId),
-            current == null ? null : current.id, warnings);
+        return project(setting, current == null ? null : current.id, warnings);
     }
 
     /**
@@ -270,10 +265,9 @@ public class ScopeSettingService extends PlanningService {
      * would invite a write that carried them, and a mark a caller can carry
      * is a mark that can be carried backwards.
      */
-    static Map<String, Object> project(ScopeSetting setting, UUID settingId,
-            UUID currentIterationId, List<String> warnings) {
+    static Map<String, Object> project(ScopeSetting setting, UUID currentIterationId,
+            List<String> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put(Field.ID.canonicalName(), settingId);
         fields.put(Field.SCOPE.canonicalName(), setting.scopeId);
         fields.put(Field.CURRENT_ITERATION.canonicalName(), currentIterationId);
         fields.put(Field.MAX_PLANNED_ITERATIONS.canonicalName(),

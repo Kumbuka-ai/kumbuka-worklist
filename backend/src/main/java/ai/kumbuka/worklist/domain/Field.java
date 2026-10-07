@@ -94,8 +94,14 @@ public enum Field {
 
     // --- carried by everything -------------------------------------------
 
-    /** The row's identity, from the insert onward. Never set by a caller. */
-    ID("id", Set.of(ITEM, MILESTONE, ITERATION, MEMBERSHIP, SETTING), Set.of()),
+    /**
+     * The row's identity, from the insert onward. Never set by a caller.
+     *
+     * <p>Carried by the primary objects only (ADR-0042): a membership is named
+     * by its iteration and item, the settings by their scope, and neither has
+     * an identity of its own to show.
+     */
+    ID("id", Set.of(ITEM, MILESTONE, ITERATION), Set.of()),
 
     /** The tenancy unit the row belongs to. Fixed when the row is created. */
     SCOPE("scope", Set.of(ITEM, MILESTONE, ITERATION, MEMBERSHIP, SETTING), Set.of()),

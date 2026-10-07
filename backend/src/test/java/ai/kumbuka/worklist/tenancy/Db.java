@@ -143,33 +143,45 @@ public final class Db {
      * has a vocabulary before it has an item, and a fixture that faked its way
      * past that would be planting a row the service could not have written.
      *
-     * <p>A selector is declared next, and the address is set with the insert.
-     * V7 made {@code selector_id} and {@code number} both NOT NULL, so an
-     * item without them is refused at the column — a fixture that inserted
-     * without them would be planting a row the service could not have written
-     * either.
+     * <p>The address is the next free number in the scope, set with the
+     * insert: an item's number is unique within its scope and is the target
+     * of every key onto it (ADR-0042), so a fixture that reused one would be
+     * planting a row the service could not have written.
      */
     static UUID insertItem(Connection c, UUID tenant, String title) throws SQLException {
-        UUID status = declaredStatus(c, tenant);
-        UUID selector = insertSelector(c, tenant);
-        UUID workstream = ensureDefaultWorkstream(c, tenant);
+        long status = declaredStatus(c, tenant);
+        UUID scope = UUID.fromString(SubstrateDatabaseResource.SCOPE_ID);
+        long workstream = workstreamNumber(c, ensureDefaultWorkstream(c, tenant, scope));
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.item
-                    (tenant_id, scope_id, title, status_id, selector_id, number,
-                     workstream_id)
-                VALUES (?::uuid, ?::uuid, ?, ?::uuid, ?::uuid, ?, ?::uuid)
+                    (tenant_id, scope_id, title, status_pk, number, workstream_number)
+                VALUES (?::uuid, ?::uuid, ?, ?,
+                    (SELECT coalesce(max(number), 0) + 1 FROM worklist.item
+                      WHERE tenant_id = ?::uuid AND scope_id = ?::uuid), ?)
                 RETURNING id
                 """)) {
             st.setString(1, tenant.toString());
-            st.setString(2, SubstrateDatabaseResource.SCOPE_ID);
+            st.setString(2, scope.toString());
             st.setString(3, title);
-            st.setString(4, status.toString());
-            st.setString(5, selector.toString());
-            st.setLong(6, 1L);
-            st.setString(7, workstream.toString());
+            st.setLong(4, status);
+            st.setString(5, tenant.toString());
+            st.setString(6, scope.toString());
+            st.setLong(7, workstream);
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
                 return UUID.fromString(rs.getString(1));
+            }
+        }
+    }
+
+    /** The number of a workstream, by its identity. */
+    public static long workstreamNumber(Connection c, UUID workstream) throws SQLException {
+        try (var st = c.prepareStatement(
+                "SELECT number FROM worklist.workstream WHERE id = ?::uuid")) {
+            st.setString(1, workstream.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
             }
         }
     }
@@ -178,7 +190,7 @@ public final class Db {
      * The tenant's default workstream, planted on first use exactly the way
      * {@link #declaredStatus} plants a status.
      *
-     * <p>V10 makes {@code workstream_id} NOT NULL on {@code item}. A
+     * <p>V10 makes an item's workstream NOT NULL. A
      * fixture that inserts an item without it would be planting a row the
      * service could not have written; this helper is what keeps the
      * fixtures shaped like the service. (V10 narrowed the milestone's column
@@ -208,17 +220,15 @@ public final class Db {
                 }
             }
         }
-        UUID workstreamSelector;
+        Long workstreamSelector = null;
         try (var st = c.prepareStatement(
-                "SELECT id FROM worklist.selector "
+                "SELECT pk FROM worklist.selector "
                     + "WHERE tenant_id = ?::uuid AND scope_id = ?::uuid AND token = 'workstream'")) {
             st.setString(1, tenant.toString());
             st.setString(2, scope.toString());
             try (ResultSet rs = st.executeQuery()) {
                 if (rs.next()) {
-                    workstreamSelector = UUID.fromString(rs.getString(1));
-                } else {
-                    workstreamSelector = null;
+                    workstreamSelector = rs.getLong(1);
                 }
             }
         }
@@ -226,26 +236,26 @@ public final class Db {
             try (var st = c.prepareStatement("""
                     INSERT INTO worklist.selector (tenant_id, scope_id, token)
                     VALUES (?::uuid, ?::uuid, 'workstream')
-                    RETURNING id
+                    RETURNING pk
                     """)) {
                 st.setString(1, tenant.toString());
                 st.setString(2, scope.toString());
                 try (ResultSet rs = st.executeQuery()) {
                     rs.next();
-                    workstreamSelector = UUID.fromString(rs.getString(1));
+                    workstreamSelector = rs.getLong(1);
                 }
             }
         }
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.number_space
-                    (tenant_id, scope_id, selector_id, high_water_mark)
-                VALUES (?::uuid, ?::uuid, ?::uuid, 1)
-                ON CONFLICT (tenant_id, scope_id, selector_id)
+                    (tenant_id, scope_id, selector_pk, high_water_mark)
+                VALUES (?::uuid, ?::uuid, ?, 1)
+                ON CONFLICT (tenant_id, scope_id, selector_pk)
                 DO UPDATE SET high_water_mark = GREATEST(worklist.number_space.high_water_mark, 1)
                 """)) {
             st.setString(1, tenant.toString());
             st.setString(2, scope.toString());
-            st.setString(3, workstreamSelector.toString());
+            st.setLong(3, workstreamSelector);
             st.execute();
         }
         try (var st = c.prepareStatement("""
@@ -266,45 +276,19 @@ public final class Db {
     }
 
     /**
-     * A fresh selector for this tenant, so an item inserted afterwards can
-     * carry its address at the column NOT NULL requires it.
-     *
-     * <p>One selector per insert, because two items using the same selector
-     * would need distinct numbers per {@code uq_item_address}, and threading a
-     * counter through every caller of {@link #insertItem} would put allocation
-     * logic in a helper whose only job is to plant one row.
-     */
-    private static UUID insertSelector(Connection c, UUID tenant) throws SQLException {
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.selector (tenant_id, scope_id, token)
-                VALUES (?::uuid, ?::uuid, ?)
-                RETURNING id
-                """)) {
-            st.setString(1, tenant.toString());
-            st.setString(2, SubstrateDatabaseResource.SCOPE_ID);
-            st.setString(3, "t" + UUID.randomUUID().toString().replace("-", "")
-                .substring(0, 12));
-            try (ResultSet rs = st.executeQuery()) {
-                rs.next();
-                return UUID.fromString(rs.getString(1));
-            }
-        }
-    }
-
-    /**
      * The tenant's own actionable status, declared on first use.
      *
      * <p>Looked up before it is created, because these probes plant several
      * items under one tenant and a status per item would leave the scope
      * carrying a vocabulary of duplicates that mean the same thing.
      */
-    static UUID declaredStatus(Connection c, UUID tenant) throws SQLException {
+    static long declaredStatus(Connection c, UUID tenant) throws SQLException {
         try (var st = c.prepareStatement(
-                "SELECT id FROM worklist.item_status WHERE tenant_id = ?::uuid LIMIT 1")) {
+                "SELECT pk FROM worklist.item_status WHERE tenant_id = ?::uuid LIMIT 1")) {
             st.setString(1, tenant.toString());
             try (ResultSet rs = st.executeQuery()) {
                 if (rs.next()) {
-                    return UUID.fromString(rs.getString(1));
+                    return rs.getLong(1);
                 }
             }
         }
@@ -312,13 +296,13 @@ public final class Db {
                 INSERT INTO worklist.item_status
                     (tenant_id, scope_id, name, actionable, in_progress, closed, successful)
                 VALUES (?::uuid, ?::uuid, 'open', true, false, false, false)
-                RETURNING id
+                RETURNING pk
                 """)) {
             st.setString(1, tenant.toString());
             st.setString(2, SubstrateDatabaseResource.SCOPE_ID);
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
-                return UUID.fromString(rs.getString(1));
+                return rs.getLong(1);
             }
         }
     }
