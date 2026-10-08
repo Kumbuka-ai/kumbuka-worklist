@@ -236,26 +236,27 @@ class ItemFieldsTest {
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
     }
 
-    /** An identity accepts a uuid or its rendering, and refuses what is neither. */
+    /**
+     * An option travels by its name, not by an identity (ADR-0042 stage R3):
+     * a uuid where an option's name is expected is a form refusal, as it is
+     * for a status, a workstream or a relation type. This case replaces the
+     * one that accepted an option's identity in either shape, which went with
+     * the uuid path it tested.
+     */
     @Test
-    void an_identity_accepts_both_shapes_and_refuses_what_is_not_one() {
-        UUID one = UUID.fromString("00000000-0000-0000-0000-00000000000a");
-
-        assertThat(ItemFields.id(Field.STATUS, one)).isEqualTo(one);
-        assertThat(ItemFields.id(Field.STATUS, one.toString()))
-            .as("whichever shape it arrived in — a caller echoing a read answer may have "
-                + "carried the uuid through JSON as a string")
-            .isEqualTo(one);
-        assertThat(ItemFields.id(Field.STATUS, null)).isNull();
-
+    void a_uuid_where_an_option_name_is_expected_is_refused_and_a_name_passes() {
         WorklistException refusal = (WorklistException) catchThrowable(() ->
-            ItemFields.id(Field.STATUS, "47"));
+            ItemFields.refuseUuidShape(Field.ATTRIBUTES,
+                "00000000-0000-0000-0000-00000000000a", "an option's name"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
-            .as("and the message says why: a declared value has an identity separate from "
-                + "its name, and the identity is what an item stores")
-            .contains("47");
+            .as("the refusal says what the field takes instead")
+            .contains("an option's name");
+        assertThat(catchThrowable(() ->
+            ItemFields.refuseUuidShape(Field.ATTRIBUTES, "S", "an option's name")))
+            .as("and a name is not a uuid, so it passes")
+            .isNull();
     }
 
     // ------------------------------------------------------------------

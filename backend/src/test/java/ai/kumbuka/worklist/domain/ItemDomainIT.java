@@ -642,19 +642,11 @@ class ItemDomainIT {
 
         UUID id = createdId("option probe");
         Map<String, Object> after = updateField(id, "attributes", Map.of(size, "S"));
-        Object answered = attributesOf(after).get(size);
-        assertThat(String.valueOf(answered))
-            .as("the option is named by its name on the way in (ADR-0042); while the "
-                + "store still carries the option's uuid, the answer carries that uuid, "
-                + "as the image before this one answered")
-            .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-
-        Map<String, Object> again =
-            updateField(id, "attributes", Map.of(size, String.valueOf(answered)));
-        assertThat(attributesOf(again))
-            .as("a read answer sent back unchanged is accepted: the uuid it carries "
-                + "still names the option")
-            .containsEntry(size, answered);
+        assertThat(attributesOf(after))
+            .as("an option travels by its name in both directions (ADR-0042); the store "
+                + "keeps the option's surrogate, so the option can be renamed without "
+                + "touching a single item")
+            .containsEntry(size, "S");
 
         WorklistException refusal = catchWorklistException(() ->
             updateField(id, "attributes", Map.of(size, "XL")));
@@ -662,6 +654,13 @@ class ItemDomainIT {
             .as("an option of another declaration is not an option of this one: the name "
                 + "is resolved within the attribute it is written under")
             .isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
+
+        WorklistException byUuid = catchWorklistException(() ->
+            updateField(id, "attributes", Map.of(size, UUID.randomUUID().toString())));
+        assertThat(byUuid.reason())
+            .as("a uuid where an option's name is expected is a form refusal, as it is for "
+                + "a status: the identity is not what a reader sees")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
     }
 
     // ==================================================================
@@ -1867,7 +1866,8 @@ class ItemDomainIT {
             Db.bindTenant(c, boundTenant());
             try (var st = c.prepareStatement("""
                     SELECT ordinal, status, target FROM worklist.item_reference
-                    WHERE item_id = ? ORDER BY ordinal, status
+                    WHERE item_number = (SELECT number FROM worklist.item WHERE id = ?)
+                    ORDER BY ordinal, status
                     """)) {
                 st.setObject(1, id);
                 try (ResultSet rs = st.executeQuery()) {
@@ -1885,7 +1885,7 @@ class ItemDomainIT {
     /** The per-view counter, read around the ORM for the red states above. */
     private long perViewMark() {
         return markFromCatalog("SELECT n.high_water_mark FROM worklist.number_space n "
-            + "JOIN worklist.selector s ON s.id = n.selector_id "
+            + "JOIN worklist.selector s ON s.pk = n.selector_pk "
             + "WHERE n.scope_id = ? AND s.token = '" + Selector.ITEM + "'");
     }
 

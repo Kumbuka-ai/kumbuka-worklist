@@ -393,9 +393,7 @@ class McpProjectionIT {
         ai.kumbuka.worklist.platform.PlatformFixture.run(
             "SELECT set_config('app.tenant_id', '"
                 + SubstrateDatabaseResource.TENANT_ID + "', false)",
-            "UPDATE worklist.item SET milestone_id = ("
-                + "  SELECT id FROM worklist.milestone WHERE scope_id = '" + SCOPE_ID
-                + "' AND number = " + numberOf(milestoneAddress) + ")"
+            "UPDATE worklist.item SET milestone_number = " + numberOf(milestoneAddress)
                 + " WHERE scope_id = '" + SCOPE_ID + "' AND number = "
                 + numberOf(itemAddress));
     }

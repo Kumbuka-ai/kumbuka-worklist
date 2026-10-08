@@ -244,7 +244,8 @@ class ClaimExclusivityIT {
             "UPDATE worklist.claim SET "
                 + "granted_at = now() - interval '2 seconds', "
                 + "expires_at = now() - interval '1 second' "
-                + "WHERE item_id = '" + itemId + "'");
+                + "WHERE item_number = (SELECT number FROM worklist.item WHERE id = '"
+                + itemId + "')");
     }
 
     private static WorklistException refusalFrom(ThrowingRunnable call) {
