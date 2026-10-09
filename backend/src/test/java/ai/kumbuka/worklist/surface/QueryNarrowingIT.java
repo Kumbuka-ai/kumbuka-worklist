@@ -331,6 +331,9 @@ class QueryNarrowingIT {
             assertThat(page.addresses()).hasSizeLessThanOrEqualTo(1);
             seen.addAll(page.addresses());
             cursor = page.next();
+            assertThat(seen)
+                .as("the pages end — a cursor that is ignored answers the first page forever")
+                .hasSizeLessThanOrEqualTo(staged.openItems().size());
         }
         assertThat(seen).containsExactlyElementsOf(staged.openItems());
     }
