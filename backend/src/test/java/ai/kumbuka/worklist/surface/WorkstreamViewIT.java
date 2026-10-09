@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -39,8 +46,8 @@ import static org.hamcrest.Matchers.is;
  * <h2>Three answer classes, and a probe against the recurrence</h2>
  *
  * <p><strong>Read and query answer</strong> — a workstream is addressable like
- * any other declared view; a filter on the query is typed-refused for the same
- * reason iteration and milestone refuse one.
+ * any other declared view; a filter the view does not declare is refused by
+ * name, as on every view.
  *
  * <p><strong>Write on the view is typed-refused</strong> — {@code create} and
  * {@code update} answer {@code SELECTOR_DECLARED_NOT_WRITTEN}. This is not
@@ -163,19 +170,18 @@ class WorkstreamViewIT {
     }
 
     /**
-     * The filter refusal has the same shape as the one iteration and milestone
-     * carry: PAYLOAD_MALFORMED (400), with a message that says the view takes
-     * no filter today. The reason is what a caller reads to know retry will
-     * not help.
+     * A filter the workstream view does not declare is refused by name, the
+     * same refusal every view gives one. The view declares {@code status} and
+     * nothing else; {@code token} is free text and is not a filter.
      */
     @Test
-    void query_on_the_workstream_view_refuses_a_filter() {
+    void query_on_the_workstream_view_refuses_an_undeclared_filter() {
         given()
             .when().get(SurfaceFixture.collection(Selector.WORKSTREAM) + "?filter.token=x")
             .then()
-            .statusCode(400)
-            .body("reason", is("PAYLOAD_MALFORMED"))
-            .body("message", containsString("takes no filter today"));
+            .statusCode(422)
+            .body("reason", is("UNKNOWN_FIELD"))
+            .body("data.offenders", org.hamcrest.Matchers.contains("filter.token"));
     }
 
     // =======================================================================

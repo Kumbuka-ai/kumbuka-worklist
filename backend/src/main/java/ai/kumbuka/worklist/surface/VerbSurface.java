@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.AddressRegistry;
@@ -7,6 +14,8 @@ import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
 import ai.kumbuka.worklist.domain.MilestoneService;
+import ai.kumbuka.worklist.domain.Narrowing;
+import ai.kumbuka.worklist.domain.QueryAnswer;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.WorkstreamService;
@@ -193,57 +202,38 @@ public class VerbSurface {
     }
 
     /**
-     * The objects of one view, narrowed by a filter and capped at a limit.
+     * One page of the objects of one view, narrowed by the filters the view
+     * declares.
      *
-     * <p>The filter is carried through raw — see {@link QuerySpec} — and the
-     * domain refuses what it does not know by name. That refusal is the whole
-     * of the surface guarantee against the "silent narrowing to the whole
-     * set" defect: an unknown filter here becomes an {@code UNKNOWN_FIELD}
-     * from the domain, not an answer that reads correct.
+     * <p>The check order continues the one in {@link #entry}: grammar, scope
+     * visibility and the view's vocabulary first, then the narrowing against
+     * {@link ai.kumbuka.worklist.domain.QueryFilter} — a filter name the view
+     * does not declare, a value in the wrong form, or a cursor this view did
+     * not hand out — and only then the store, where the view's service resolves
+     * the values the scope must have declared. It runs here and not in either
+     * adapter, so both transports refuse the same call the same way and an
+     * invisible scope still answers 404 however wrong the narrowing is.
      *
-     * <p><strong>Only the item view carries a filter today.</strong> The three
-     * other views are queryable end-to-end without one — their whole-set answer
-     * is bounded by construction, because a scope has few iterations, few
-     * milestones and few workstreams — and building filter shapes for them now
-     * would guess at fields nobody asked to narrow on. When they are needed,
-     * they arrive with the same shape and pass through here.
+     * <p>Every refusal names the argument; nothing that fails a check is
+     * answered with the collection (REQ-0156).
      */
     @Transactional
     public Listing query(String subject, String rawScope, String rawView, QuerySpec spec) {
         Entry in = entry(subject, rawScope, rawView, Access.READ);
         addresses.requireView(in.scopeId(), in.view());
+        Narrowing narrowing = spec.narrowFor(in.view());
 
-        if (!Selector.ITEM.equals(in.view())) {
-            if (!spec.filter().isEmpty()) {
-                throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                    "'query' on the " + in.view() + " view takes no filter today. The three "
-                        + "non-item views are queryable end-to-end without one, and a filter "
-                        + "accepted and dropped would answer the whole set while looking like "
-                        + "a correct narrow one");
-            }
-            // Pass-through of the whole-set query, so a limit still applies
-            // to the axis. Truncation is reported the same way.
-            List<Map<String, Object>> found = switch (in.view()) {
-                case Selector.ITERATION -> iterations.query(in.scopeId());
-                case Selector.MILESTONE -> milestones.query(in.scopeId());
-                case Selector.WORKSTREAM -> workstreams.query(in.scopeId());
-                default -> throw unreachableView(in.view());
-            };
-            boolean truncated = found.size() > spec.limit();
-            List<Map<String, Object>> capped = truncated
-                ? found.subList(0, spec.limit())
-                : found;
-            LOG.debugf("query %s in scope %s: %d hit(s) truncated=%s",
-                in.view(), in.scopeId(), capped.size(), truncated);
-            return new Listing(capped.stream().map(row -> at(in.view(), row)).toList(),
-                truncated);
-        }
-
-        ItemService.QueryAnswer answered = items.query(in.scopeId(), spec);
-        LOG.debugf("query item in scope %s: %d hit(s) truncated=%s",
-            in.scopeId(), answered.items().size(), answered.truncated());
-        return new Listing(answered.items().stream().map(row -> at(in.view(), row)).toList(),
-            answered.truncated());
+        QueryAnswer answered = switch (in.view()) {
+            case Selector.ITEM -> items.query(in.scopeId(), narrowing);
+            case Selector.ITERATION -> iterations.query(in.scopeId(), narrowing);
+            case Selector.MILESTONE -> milestones.query(in.scopeId(), narrowing);
+            case Selector.WORKSTREAM -> workstreams.query(in.scopeId(), narrowing);
+            default -> throw unreachableView(in.view());
+        };
+        LOG.debugf("query %s in scope %s: %d hit(s) truncated=%s",
+            in.view(), in.scopeId(), answered.objects().size(), answered.truncated());
+        return new Listing(answered.objects().stream().map(row -> at(in.view(), row)).toList(),
+            answered.next());
     }
 
     // ======================================================================
@@ -973,21 +963,24 @@ public class VerbSurface {
      * changed shape. A bare array cannot grow a sibling field, and this
      * surface is a published contract from the day it answers.
      *
-     * <p>{@code truncated} is a fact about the write, not about the row: the
-     * store carried more than the caller asked to see, and the caller is told
-     * so. A silent ceiling is the sprint-169 defect one layer up — an answer
-     * that reads complete and is not.
+     * <p>{@code next} is the cursor to the rest, null exactly when nothing
+     * follows; {@link #truncated()} says the same as a flag. A silent ceiling is
+     * the sprint-169 defect one layer up — an answer that reads complete and is
+     * not.
      *
      * <p>The whole-set signature that takes no {@link QuerySpec} answers
-     * {@code truncated = false} by construction: without a limit, "the whole
-     * set" is what came back and there is no ceiling to trip. Callers that
-     * want a bounded read call {@link #query(String, String, String, QuerySpec)}
-     * with a limit they name.
+     * without a cursor by construction: without a limit, "the whole set" is what
+     * came back and there is no ceiling to trip.
      */
-    public record Listing(List<Result> objects, boolean truncated) {
+    public record Listing(List<Result> objects, String next) {
 
         public Listing(List<Result> objects) {
-            this(objects, false);
+            this(objects, null);
+        }
+
+        /** Whether the store carried more than this answer holds. */
+        public boolean truncated() {
+            return next != null;
         }
     }
 

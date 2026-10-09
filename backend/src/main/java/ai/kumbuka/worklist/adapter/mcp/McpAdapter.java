@@ -1,7 +1,16 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.adapter.mcp;
 
 import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
+import ai.kumbuka.worklist.domain.QueryFilter;
+import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
@@ -85,8 +94,13 @@ public class McpAdapter {
     private static final String ARG_TYPE = "type";
 
     /** The query's filter and cap, as arguments rather than address parts. */
-    private static final String ARG_FILTER = "filter";
-    private static final String ARG_LIMIT = "limit";
+    private static final String ARG_FILTER = QueryFilter.ARGUMENT;
+    private static final String ARG_LIMIT = QuerySpec.LIMIT;
+    private static final String ARG_CURSOR = QuerySpec.CURSOR;
+
+    /** Every argument {@code query} takes; anything else is refused by name. */
+    private static final java.util.Set<String> QUERY_ARGUMENTS =
+        java.util.Set.of(ARG_SCOPE, ARG_SELECTOR, ARG_FILTER, ARG_LIMIT, ARG_CURSOR);
 
     /** JSON-RPC's own codes. Protocol faults only — a refused verb is not one. */
     private static final int METHOD_NOT_FOUND = -32601;
@@ -248,20 +262,18 @@ public class McpAdapter {
         String scope = required(in, ARG_SCOPE);
         String selector = required(in, ARG_SELECTOR);
 
-        // The filter and the limit arrive as arguments, not as address parts:
-        // an address without an id part is reserved, so a segment for a
-        // filter would either collapse into the selector or reserve a form
-        // no address can grow into. The arguments layer is where a caller
-        // narrows a read.
-        @SuppressWarnings("unchecked")
-        Map<String, Object> rawFilter = in.get(ARG_FILTER) instanceof Map
-            ? (Map<String, Object>) in.get(ARG_FILTER)
-            : Map.of();
-        int limit = in.get(ARG_LIMIT) instanceof Number number
-            ? number.intValue()
-            : ai.kumbuka.worklist.domain.QuerySpec.DEFAULT_LIMIT;
-
-        var spec = new ai.kumbuka.worklist.domain.QuerySpec(rawFilter, limit);
+        // The filter, the limit and the cursor arrive as arguments, not as
+        // address parts: an address without an id part is reserved. They are
+        // handed on raw and read by the verb surface, the same reading the REST
+        // query string gets — an instanceof here that fell through to "no
+        // filter" is exactly how a filter sent as a JSON string used to answer
+        // the whole set. An argument that is none of them is handed on too and
+        // refused by name.
+        List<String> untaken = in.keySet().stream()
+            .filter(name -> !QUERY_ARGUMENTS.contains(name))
+            .toList();
+        QuerySpec spec = QuerySpec.of(in.get(ARG_FILTER), in.get(ARG_LIMIT),
+            in.get(ARG_CURSOR), untaken);
         return Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec));
     }

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
@@ -11,6 +18,7 @@ import org.jboss.logging.Logger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -66,6 +74,19 @@ public class WorkstreamService {
         return workstreams.inScope(scopeId).stream()
             .map(this::project)
             .toList();
+    }
+
+    /**
+     * One page of a scope's workstreams, by number, narrowed by the filters the
+     * workstream view declares.
+     */
+    @Transactional
+    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
+        Optional<Object> status = narrowing.value(QueryFilter.WORKSTREAM_STATUS);
+        return QueryAnswer.page(narrowing, workstreams.inScope(scopeId),
+            workstream -> status.map(workstream.status::equals).orElse(true),
+            workstream -> workstream.number,
+            this::project);
     }
 
     /**

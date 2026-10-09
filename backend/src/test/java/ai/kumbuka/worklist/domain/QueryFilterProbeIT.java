@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -40,15 +47,15 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * <h2>The red state, and how it was observed</h2>
  *
  * The filter's mechanism is one branch in
- * {@link ai.kumbuka.worklist.repository.ItemRepository#inScope(UUID, Map, int)}.
- * Dropping the {@code AND i.statusId = :param} makes
+ * {@link ai.kumbuka.worklist.repository.ItemRepository#inScope(UUID, Map, Item, int)}.
+ * Dropping the {@code AND i.statusPk = :param} makes
  * {@link #a_status_filter_narrows_the_answer} fail: the query answers with
  * every item in the scope regardless of the status filter, and the count
  * afterwards matches the scope's total instead of the filtered subset.
  * Measured on 2026-09-05 against the current build.
  *
  * <p>The unknown-field refusal is one branch in
- * {@link ItemService#query(UUID, QuerySpec)}'s filter parser. Dropping it
+ * {@link QueryFilter}'s declaration. Dropping it
  * makes {@link #an_unknown_filter_is_refused_by_name} fail: an unknown field
  * is dropped rather than refused, and the answer reads narrow while the
  * filter did nothing.
@@ -94,17 +101,17 @@ class QueryFilterProbeIT {
         createItem("third done item", doneStatus);
 
         String openName = vocabulary.requireStatus(scope, openStatus).name;
-        ItemService.QueryAnswer narrowed = items.query(scope,
-            new QuerySpec(Map.of("status", openName), 100));
+        QueryAnswer narrowed = items.query(scope, new QuerySpec(Map.of("status", openName), 100)
+            .narrowFor(Selector.ITEM));
 
-        assertThat(narrowed.items())
+        assertThat(narrowed.objects())
             .as("the caller asked for items with the 'open' status. Exactly the two "
                 + "created under that status come back, and neither of the three under "
                 + "'done'. A dropped filter would answer with all five, and the answer "
                 + "would read as a correct narrow one")
             .hasSize(2);
 
-        for (Map<String, Object> item : narrowed.items()) {
+        for (Map<String, Object> item : narrowed.objects()) {
             assertThat(item.get(Field.STATUS.canonicalName()))
                 .as("and every item in the answer carries the status the filter named — "
                     + "not just as many rows as the count, but the RIGHT rows. A "
@@ -117,8 +124,8 @@ class QueryFilterProbeIT {
         // it, the assertion above would hold against a repository that
         // refused every query — the failure mode of a filter written one
         // predicate too broadly.
-        ItemService.QueryAnswer whole = items.query(scope, QuerySpec.all());
-        assertThat(whole.items())
+        QueryAnswer whole = items.query(scope, QuerySpec.all().narrowFor(Selector.ITEM));
+        assertThat(whole.objects())
             .as("the whole set is five items, so the narrow answer is genuinely a "
                 + "subset rather than the whole thing on a smaller scope")
             .hasSize(5);
@@ -133,7 +140,8 @@ class QueryFilterProbeIT {
         createItem("an item", openStatus);
 
         Throwable refused = catchThrowable(() ->
-            items.query(scope, new QuerySpec(Map.of("title_contains", "test"), 100)));
+            items.query(scope, new QuerySpec(Map.of("title_contains", "test"), 100)
+                .narrowFor(Selector.ITEM)));
 
         assertThat(refused)
             .as("the domain refuses a filter it does not read rather than dropping it. "
@@ -144,7 +152,7 @@ class QueryFilterProbeIT {
 
         WorklistException typed = (WorklistException) refused;
         assertThat(typed.reason()).isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
-        assertThat(typed.offenders()).contains("title_contains");
+        assertThat(typed.offenders()).containsExactly("filter.title_contains");
         assertThat(typed.getMessage())
             .as("and the message names what WAS narrowable, so a caller can act on it "
                 + "without a second call to find out")
@@ -160,7 +168,8 @@ class QueryFilterProbeIT {
         createItem("an item", openStatus);
 
         Throwable refused = catchThrowable(() ->
-            items.query(scope, new QuerySpec(Map.of("status", "no-such-status"), 100)));
+            items.query(scope, new QuerySpec(Map.of("status", "no-such-status"), 100)
+                .narrowFor(Selector.ITEM)));
 
         assertThat(refused)
             .as("a value the scope has not declared is refused rather than answered "
@@ -169,7 +178,7 @@ class QueryFilterProbeIT {
             .isInstanceOf(WorklistException.class);
         WorklistException typed = (WorklistException) refused;
         assertThat(typed.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
-        assertThat(typed.offenders()).containsExactly("status");
+        assertThat(typed.offenders()).containsExactly("filter.status");
     }
 
     @Test
@@ -177,49 +186,57 @@ class QueryFilterProbeIT {
         createItem("an item", openStatus);
 
         Throwable refused = catchThrowable(() ->
-            items.query(scope, new QuerySpec(Map.of("milestone", 999_999L), 100)));
+            items.query(scope, new QuerySpec(Map.of("milestone", 999_999L), 100)
+                .narrowFor(Selector.ITEM)));
 
         assertThat(refused)
             .as("a milestone number that names nothing is refused rather than "
-                + "answered with the empty set — the same rule the write path runs, "
-                + "moved to the read")
+                + "answered with the empty set, and as a value the scope does not hold "
+                + "naming the filter — not as the not-found of an address, whose answer "
+                + "carries no offender and a sentence about membership")
             .isInstanceOf(WorklistException.class);
         WorklistException typed = (WorklistException) refused;
-        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
-        assertThat(typed.offenders()).containsExactly("milestone");
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
+        assertThat(typed.offenders()).containsExactly("filter.milestone");
+    }
+
+    /**
+     * An empty value is refused, not read as "no filter".
+     *
+     * <p>This reverses what the class held until sprint 194.10, and the earlier
+     * claim was wrong twice over. The test asserted only that nothing was
+     * refused; what the read actually did with the normalised value was compare
+     * the column to null, which matches no row — so an empty status answered
+     * the empty set while the comment called it "no filter". Neither reading
+     * is one REQ-0156 admits: a value of a declared filter the read cannot
+     * interpret is refused with a typed refusal.
+     */
+    @Test
+    void an_empty_status_filter_value_is_refused() {
+        createItem("an item", openStatus);
+
+        Throwable refused = catchThrowable(() ->
+            items.query(scope, new QuerySpec(Map.of("status", "   "), 100)
+                .narrowFor(Selector.ITEM)));
+
+        assertThat(refused).isInstanceOf(WorklistException.class);
+        WorklistException typed = (WorklistException) refused;
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(typed.offenders()).containsExactly("filter.status");
     }
 
     @Test
-    void an_empty_status_filter_value_is_normalised_to_no_filter_value() {
+    void an_empty_milestone_filter_value_is_refused() {
         createItem("an item", openStatus);
 
-        // Whitespace trims to empty; the parser normalises that to a null filter
-        // value rather than raising a VALUE_UNDECLARED — the empty absence is
-        // not the same fact as a name nobody declared.
         Throwable refused = catchThrowable(() ->
-            items.query(scope, new QuerySpec(Map.of("status", "   "), 100)));
+            items.query(scope, new QuerySpec(Map.of("milestone", ""), 100)
+                .narrowFor(Selector.ITEM)));
 
-        assertThat(refused)
-            .as("empty and whitespace-only are the same as no value; the query is "
-                + "not refused here, because 'nothing' is not a value the scope has "
-                + "or has not declared")
-            .isNull();
-    }
-
-    @Test
-    void an_empty_milestone_filter_value_is_normalised_to_no_filter_value() {
-        createItem("an item", openStatus);
-
-        // Same rule, on the milestone axis: the empty string parses to null and
-        // the query does not refuse the filter — the empty absence is not the
-        // same fact as a number pointing at nothing.
-        Throwable refused = catchThrowable(() ->
-            items.query(scope, new QuerySpec(Map.of("milestone", ""), 100)));
-
-        assertThat(refused)
-            .as("an empty milestone value is the empty absence, not a not-found — "
-                + "the parser normalises it away rather than refusing")
-            .isNull();
+        assertThat(refused).isInstanceOf(WorklistException.class);
+        WorklistException typed = (WorklistException) refused;
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(typed.offenders()).containsExactly("filter.milestone");
     }
 
     // ==================================================================
@@ -232,10 +249,10 @@ class QueryFilterProbeIT {
             createItem("item " + i, openStatus);
         }
 
-        ItemService.QueryAnswer capped = items.query(scope,
-            new QuerySpec(Map.of(), 3));
+        QueryAnswer capped = items.query(scope, new QuerySpec(Map.of(), 3)
+            .narrowFor(Selector.ITEM));
 
-        assertThat(capped.items())
+        assertThat(capped.objects())
             .as("the caller asked for at most three, and got three. A silent ceiling "
                 + "would answer with more or fewer without saying, and the same "
                 + "sprint-169 defect against the read path")
@@ -247,9 +264,9 @@ class QueryFilterProbeIT {
                 + "limit means end' has no way to check")
             .isTrue();
 
-        ItemService.QueryAnswer whole = items.query(scope,
-            new QuerySpec(Map.of(), 100));
-        assertThat(whole.items()).hasSize(5);
+        QueryAnswer whole = items.query(scope, new QuerySpec(Map.of(), 100)
+            .narrowFor(Selector.ITEM));
+        assertThat(whole.objects()).hasSize(5);
         assertThat(whole.truncated())
             .as("a limit above the total size is not truncation — the store did not "
                 + "carry more than the caller asked to see")

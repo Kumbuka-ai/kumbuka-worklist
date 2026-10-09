@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.adapter.mcp;
 
+import ai.kumbuka.worklist.domain.QueryFilter;
+import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 
 import java.util.ArrayList;
@@ -44,6 +53,15 @@ public final class McpTools {
     }
 
     /** The JSON Schema types this surface's arguments take. */
+    /** The filters, per view, written from their one declaration. */
+    private static final String FILTER_DOC =
+        "An object from filter name to one value, e.g. {\"status\": \"open\"}. The "
+            + "filters per view: " + String.join("; ", Selector.VIEWS
+                .stream()
+                .map(view -> view + " — " + QueryFilter.describe(view))
+                .toList())
+            + ". A missing filter answers the whole view, page by page.";
+
     private static final String STRING = "string";
     private static final String OBJECT = "object";
 
@@ -133,26 +151,25 @@ public final class McpTools {
                     required(ARG_FIELDS, OBJECT, FIELDS_DOC))),
 
             new Tool("query",
-                "The objects of one view, oldest first for items and in the axis's own "
-                    + "order for the other two. A limit caps the answer; a filter narrows "
-                    + "it over enumerated columns of the addressed view (item view only "
-                    + "today: 'status' and 'milestone' as declared ids). The answer names "
-                    + "'truncated' when the store carried more than the caller asked to "
-                    + "see — a silent ceiling would be the sprint-169 defect one layer "
-                    + "up.",
+                "One page of the objects of one view, oldest first for items, in the "
+                    + "axis's own order for iterations and milestones and by number for "
+                    + "workstreams. A filter narrows it, a limit bounds it, and the "
+                    + "answer's 'next_cursor' — passed back as 'cursor' — continues after "
+                    + "its last object; it is null exactly when nothing follows. A filter "
+                    + "name the view does not declare, a value a filter cannot read, a "
+                    + "value the scope does not hold, and any other argument are refused "
+                    + "by name and never answered with the whole set.",
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING, SELECTOR_DOC),
-                    optional("filter", OBJECT,
-                        "A map from an enumerated field name to a declared identity — "
-                            + "'{\"status\": \"<uuid>\"}'. Refused by name if the "
-                            + "addressed view does not narrow on it. A missing filter "
-                            + "returns the whole set, capped at the limit."),
-                    optional("limit", INTEGER,
-                        "The upper bound on this answer, up to "
-                            + ai.kumbuka.worklist.domain.QuerySpec.MAX_LIMIT
+                    optional(QueryFilter.ARGUMENT, OBJECT, FILTER_DOC),
+                    optional(QuerySpec.LIMIT, INTEGER,
+                        "The upper bound on this answer, from 1 to " + QuerySpec.MAX_LIMIT
                             + ". A missing limit uses the default of "
-                            + ai.kumbuka.worklist.domain.QuerySpec.DEFAULT_LIMIT + "."))),
+                            + QuerySpec.DEFAULT_LIMIT + "."),
+                    optional(QuerySpec.CURSOR, STRING,
+                        "The 'next_cursor' of the previous answer of the same query, as "
+                            + "it came. A missing cursor answers the first page."))),
 
             new Tool("accept",
                 "The intake gate. It refuses today and says why: the address it used to "

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
@@ -11,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -88,6 +96,21 @@ public class MilestoneService extends PlanningService {
         return planning.milestonesInScope(scopeId).stream()
             .map(milestone -> project(milestone, List.of()))
             .toList();
+    }
+
+    /**
+     * One page of a scope's milestones, in the axis's own order, narrowed by
+     * the filters the milestone view declares.
+     */
+    @Transactional
+    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
+        Optional<Object> status = narrowing.value(QueryFilter.MILESTONE_STATUS);
+        Optional<Object> kind = narrowing.value(QueryFilter.MILESTONE_KIND);
+        return QueryAnswer.page(narrowing, planning.milestonesInScope(scopeId),
+            milestone -> status.map(milestone.status::equals).orElse(true)
+                && kind.map(milestone.kind::equals).orElse(true),
+            milestone -> milestone.number,
+            milestone -> project(milestone, List.of()));
     }
 
     // ------------------------------------------------------------------

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
@@ -14,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -87,6 +95,20 @@ public class IterationService extends PlanningService {
         return planning.iterationsInScope(scopeId).stream()
             .map(iteration -> project(iteration, List.of()))
             .toList();
+    }
+
+    /**
+     * One page of a scope's iterations, in the axis's own order, narrowed by
+     * the filters the iteration view declares.
+     */
+    @Transactional
+    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
+        Optional<Object> closed = narrowing.value(QueryFilter.ITERATION_CLOSED);
+        return QueryAnswer.page(narrowing, planning.iterationsInScope(scopeId),
+            iteration -> closed.map(wanted -> wanted.equals(iteration.closedAt != null))
+                .orElse(true),
+            iteration -> iteration.number,
+            iteration -> project(iteration, List.of()));
     }
 
     // ------------------------------------------------------------------

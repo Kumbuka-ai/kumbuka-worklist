@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
@@ -141,109 +148,67 @@ public class ItemService {
             .toList();
     }
 
-    /** A subset of a scope's items, narrowed by the spec, capped at its limit. */
-    @Transactional
-    public QueryAnswer query(UUID scopeId, QuerySpec spec) {
-        Map<String, Object> parsed = parseItemFilter(scopeId, spec.filter());
-
-        List<Item> rows = items.inScope(scopeId, parsed, spec.limit());
-        boolean truncated = rows.size() > spec.limit();
-        if (truncated) {
-            rows = rows.subList(0, spec.limit());
-        }
-        return new QueryAnswer(rows.stream().map(this::project).toList(), truncated);
-    }
-
     /**
-     * The item's own enumerated filter fields, parsed for the repository.
+     * One page of a scope's items, narrowed by the filters the item view
+     * declares, oldest first.
      *
-     * <p>Only {@code status} and {@code milestone} are narrowable today. The
-     * status filter takes the declared status NAME (the same wire form the
-     * projection returns) and the milestone filter takes the milestone
-     * NUMBER — both are resolved to the stored key here, because the
-     * repository query is an equality on {@code status_pk} / {@code
-     * milestone_number}. A free text — title, description — is refused rather
-     * than accepted with whatever matching rule seemed reasonable, because
-     * the shape of a substring query is a surface commitment this build does
-     * not take.
+     * <p>The filter names and value forms were checked against
+     * {@link QueryFilter} before this is entered; what is left here is the
+     * scope's vocabulary — whether the status, milestone and workstream the
+     * caller named exist in this scope. Each one that does not is refused with
+     * {@code VALUE_UNDECLARED} naming the filter, and not answered as an empty
+     * set: an empty answer cannot be told from a typo.
      *
-     * <p>An unknown field is refused by name here rather than at the
-     * repository. That is the same rule {@link Field#resolve} runs on the
-     * write path, moved to the read: a filter field this service does not
-     * offer would silently narrow to the whole set if the repository dropped
-     * it, and the whole-set answer looks like a correct narrow one — the
-     * exact defect against which {@link ai.kumbuka.worklist.surface.VerbSurface#query}
-     * refused to grow a filter at all until this iteration.
+     * <p>The page continues after the item the cursor names, by its position in
+     * the order and not by whether it still passes the filter, so a walk over
+     * pages is neither broken nor repeated by an item whose status changed in
+     * between.
      */
-    private Map<String, Object> parseItemFilter(UUID scopeId, Map<String, Object> raw) {
-        Map<String, Object> parsed = new java.util.LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : raw.entrySet()) {
-            String name = entry.getKey();
-            Object value = entry.getValue();
-            switch (name) {
-                case "status" -> parsed.put(name, resolveStatusFilter(scopeId, value));
-                case "milestone" -> parsed.put(name, resolveMilestoneFilter(scopeId, value));
-                default -> throw new WorklistException(
-                    WorklistException.Reason.UNKNOWN_FIELD,
-                    "no filter of an item names '" + name + "'. Its narrowable fields are "
-                        + "'status' (by declared name) and 'milestone' (by number) — a "
-                        + "free text or a declared attribute is not narrowable through "
-                        + "this verb today. Nothing was answered: a filter this service "
-                        + "does not read would be dropped, and a dropped filter makes "
-                        + "the whole set look like a correct narrow answer",
-                    List.of(name));
+    @Transactional
+    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
+        Map<String, Object> filter = new LinkedHashMap<>();
+        narrowing.value(QueryFilter.ITEM_STATUS).ifPresent(name ->
+            filter.put(ItemRepository.BY_STATUS, statusFilter(scopeId, (String) name)));
+        narrowing.value(QueryFilter.ITEM_MILESTONE).ifPresent(number ->
+            filter.put(ItemRepository.BY_MILESTONE, milestoneFilter(scopeId, (Long) number)));
+        narrowing.value(QueryFilter.ITEM_WORKSTREAM).ifPresent(token ->
+            filter.put(ItemRepository.BY_WORKSTREAM,
+                workstreamByToken(scopeId, (String) token,
+                    QueryFilter.ITEM_WORKSTREAM.argument()).number));
+
+        Item after = null;
+        if (narrowing.after() != null) {
+            after = items.byAddress(scopeId, narrowing.after());
+            if (after == null) {
+                throw PageCursor.unplaced(Selector.ITEM, narrowing.after());
             }
         }
-        return parsed;
+        List<Item> admitted = items.inScope(scopeId, filter, after, narrowing.limit());
+        return QueryAnswer.bounded(narrowing, admitted, item -> item.number, this::project);
     }
 
-    private Long resolveStatusFilter(UUID scopeId, Object raw) {
-        if (raw == null) {
-            return null;
-        }
-        String name = String.valueOf(raw).trim();
-        if (name.isEmpty()) {
-            return null;
-        }
-        ItemFields.refuseUuidShape(Field.STATUS, name, A_STATUS_NAME);
+    private Long statusFilter(UUID scopeId, String name) {
         ItemStatus status = vocabulary.statusByName(scopeId, name);
         if (status == null) {
-            throw new WorklistException(
-                WorklistException.Reason.VALUE_UNDECLARED,
-                "the filter 'status' names '" + name + "', which no scope declaration "
-                    + "carries in " + scopeId + ". A filter over a value this scope "
-                    + "does not declare would answer the empty set, and answering it "
-                    + "as a refusal is what tells a typo from a legitimate empty",
-                List.of("status"));
+            throw undeclaredFilterValue(QueryFilter.ITEM_STATUS, "'" + name + "'");
         }
         return status.pk;
     }
 
-    private Long resolveMilestoneFilter(UUID scopeId, Object raw) {
-        Long number = milestoneNumberOrRefuse(Field.MILESTONE_ID, raw);
-        if (number == null) {
-            return null;
+    private Long milestoneFilter(UUID scopeId, long number) {
+        if (planning.milestoneByNumber(scopeId, number) == null) {
+            throw undeclaredFilterValue(QueryFilter.ITEM_MILESTONE, "number " + number);
         }
-        Milestone milestone = planning.milestoneByNumber(scopeId, number);
-        if (milestone == null) {
-            throw new WorklistException(
-                WorklistException.Reason.MILESTONE_UNKNOWN,
-                "the filter 'milestone' names number " + number + ", which no "
-                    + "milestone of scope " + scopeId + " carries",
-                List.of("milestone"));
-        }
-        return milestone.number;
+        return number;
     }
 
-    /**
-     * What a filtered query answers with.
-     *
-     * <p>{@code truncated} is a fact about the WRITE: the store carried more
-     * rows than the caller asked to see, and the caller is told so — a hidden
-     * ceiling is the same silent-truncation defect the sprint-169 read had
-     * one layer down.
-     */
-    public record QueryAnswer(List<Map<String, Object>> items, boolean truncated) {
+    private static WorklistException undeclaredFilterValue(QueryFilter filter, String named) {
+        return new WorklistException(
+            WorklistException.Reason.VALUE_UNDECLARED,
+            "the filter '" + filter.filterName() + "' names " + named + ", which this scope "
+                + "does not hold. Nothing was answered: an empty answer would read as a "
+                + "legitimate empty one, and a refusal is what tells a typo from it",
+            List.of(filter.argument()));
     }
 
     // ------------------------------------------------------------------
@@ -952,15 +917,7 @@ public class ItemService {
         if (ItemFields.unchangedAsText(held, token)) {
             return false;
         }
-        Workstream workstream = workstreamRepository.findByToken(item.scopeId, token);
-        if (workstream == null) {
-            throw new WorklistException(
-                WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                "no workstream '" + token + "' in scope " + item.scopeId + ". The value "
-                    + "travels as the token the scope declared it under, which is what "
-                    + "the read answer named",
-                List.of(field.canonicalName()));
-        }
+        Workstream workstream = workstreamByToken(item.scopeId, token, field.canonicalName());
         workstreams.refuseWithdrawn(workstream);
 
         item.workstreamNumber = workstream.number;
@@ -981,15 +938,37 @@ public class ItemService {
             return workstreams.requireDefault(scopeId);
         }
         ItemFields.refuseUuidShape(Field.WORKSTREAM_ID, token, "a workstream token");
+        Workstream workstream = workstreamByToken(scopeId, token,
+            Field.WORKSTREAM_ID.canonicalName());
+        workstreams.refuseWithdrawn(workstream);
+        return workstream;
+    }
+
+    /**
+     * The workstream a token names, for a write and for a filter alike.
+     *
+     * <p>A token that names no workstream is refused as {@code VALUE_UNDECLARED}
+     * naming the argument, and not as {@code WORKSTREAM_UNKNOWN}. The token is
+     * a value the caller supplied, not an address: {@code WORKSTREAM_UNKNOWN}
+     * belongs to the not-found class, whose answer carries no data and a
+     * sentence about membership, so a mistyped token used to come back as
+     * "check that you are a member of the scope" with nothing naming the field.
+     * An address that names no workstream still answers {@code NOT_FOUND}; that
+     * refusal is {@link AddressRegistry}'s and is unchanged.
+     *
+     * @param argument the argument a refusal names — the field on a write,
+     *                 {@code filter.workstream} on a query
+     */
+    private Workstream workstreamByToken(UUID scopeId, String token, String argument) {
         Workstream workstream = workstreamRepository.findByToken(scopeId, token);
         if (workstream == null) {
             throw new WorklistException(
-                WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                "no workstream '" + token + "' in scope " + scopeId + ". The value "
-                    + "travels as the token the scope declared it under",
-                List.of(Field.WORKSTREAM_ID.canonicalName()));
+                WorklistException.Reason.VALUE_UNDECLARED,
+                "no workstream '" + token + "' is declared in this scope. The value travels "
+                    + "as the token the scope declared it under, which is what the read "
+                    + "answer named",
+                List.of(argument));
         }
-        workstreams.refuseWithdrawn(workstream);
         return workstream;
     }
 
