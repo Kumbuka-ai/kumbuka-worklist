@@ -81,8 +81,33 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and the full stock answered, a limit of 0 or below answered the default
  * silently, an empty status value answered nothing at all, a milestone
  * number nobody holds answered {@code NOT_FOUND} without naming the filter,
- * and no answer carried a way to the rest. The individual removals that were
- * run after the change are listed on each probe group below.
+ * and no answer carried a way to the rest.
+ *
+ * <p>After the change, each rule was removed on its own and this class run
+ * again (2026-10-09); every removal turned the named probes red on both
+ * transports, and nothing else:
+ *
+ * <ul>
+ * <li>axis filter ignored in {@code QueryAnswer.page} — the iteration,
+ *     milestone and workstream narrowing probes;</li>
+ * <li>item filter dropped in {@code ItemRepository.inScope} — the three item
+ *     narrowing probes and the filtered page walk;</li>
+ * <li>untaken arguments ignored — the REST parameter and MCP argument
+ *     probes;</li>
+ * <li>a non-object filter read as none — the MCP filter-as-string probe;</li>
+ * <li>a limit below 1 read as the default — the limit range probe;</li>
+ * <li>the cursor ignored — the cursor refusal and every page walk;</li>
+ * <li>no {@code next_cursor} handed out — every page walk and the default
+ *     limit probe;</li>
+ * <li>the item keyset dropped — the item page walks;</li>
+ * <li>an undeclared filter name skipped — the two undeclared-name
+ *     probes;</li>
+ * <li>a lenient boolean form — the uninterpretable-value probe;</li>
+ * <li>an undeclared status answered as empty — the undeclared-value
+ *     probe;</li>
+ * <li>a workstream token refused as not-found — the create probe and the
+ *     undeclared-value probe.</li>
+ * </ul>
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
