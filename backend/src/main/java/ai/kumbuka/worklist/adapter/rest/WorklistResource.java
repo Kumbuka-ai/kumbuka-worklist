@@ -187,12 +187,12 @@ public class WorklistResource {
                 : info.getQueryParameters().entrySet()) {
             String name = entry.getKey();
             Object value = entry.getValue().size() == 1 ? entry.getValue().get(0) : entry.getValue();
-            String filterPrefix = QueryFilter.ARGUMENT + ".";
+            String filterPrefix = QueryFilter.FILTER_ARGUMENT + ".";
             if (name.startsWith(filterPrefix) && name.length() > filterPrefix.length()) {
                 filter.put(name.substring(filterPrefix.length()), value);
-            } else if (QuerySpec.LIMIT.equals(name)) {
+            } else if (QuerySpec.LIMIT_ARGUMENT.equals(name)) {
                 limit = value;
-            } else if (QuerySpec.CURSOR.equals(name)) {
+            } else if (QuerySpec.CURSOR_ARGUMENT.equals(name)) {
                 cursor = value;
             } else {
                 untaken.add(name);

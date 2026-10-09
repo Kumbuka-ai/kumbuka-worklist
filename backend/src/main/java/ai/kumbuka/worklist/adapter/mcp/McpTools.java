@@ -53,6 +53,9 @@ public final class McpTools {
     }
 
     /** The JSON Schema types this surface's arguments take. */
+    private static final String STRING = "string";
+    private static final String OBJECT = "object";
+
     /** The filters, per view, written from their one declaration. */
     private static final String FILTER_DOC =
         "An object from filter name to one value, e.g. {\"status\": \"open\"}. The "
@@ -61,9 +64,6 @@ public final class McpTools {
                 .map(view -> view + " — " + QueryFilter.describe(view))
                 .toList())
             + ". A missing filter answers the whole view, page by page.";
-
-    private static final String STRING = "string";
-    private static final String OBJECT = "object";
 
     /** The argument every verb acting on an existing object takes. */
     private static final String ARG_ADDRESS = "address";
@@ -162,12 +162,12 @@ public final class McpTools {
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING, SELECTOR_DOC),
-                    optional(QueryFilter.ARGUMENT, OBJECT, FILTER_DOC),
-                    optional(QuerySpec.LIMIT, INTEGER,
+                    optional(QueryFilter.FILTER_ARGUMENT, OBJECT, FILTER_DOC),
+                    optional(QuerySpec.LIMIT_ARGUMENT, INTEGER,
                         "The upper bound on this answer, from 1 to " + QuerySpec.MAX_LIMIT
                             + ". A missing limit uses the default of "
                             + QuerySpec.DEFAULT_LIMIT + "."),
-                    optional(QuerySpec.CURSOR, STRING,
+                    optional(QuerySpec.CURSOR_ARGUMENT, STRING,
                         "The 'next_cursor' of the previous answer of the same query, as "
                             + "it came. A missing cursor answers the first page."))),
 

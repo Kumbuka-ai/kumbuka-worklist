@@ -63,8 +63,8 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
     public static final int MAX_LIMIT = 1000;
 
     /** The argument names a query takes besides its address. */
-    public static final String LIMIT = "limit";
-    public static final String CURSOR = "cursor";
+    public static final String LIMIT_ARGUMENT = "limit";
+    public static final String CURSOR_ARGUMENT = "cursor";
 
     public QuerySpec {
         untaken = untaken == null ? List.of() : List.copyOf(untaken);
@@ -131,7 +131,7 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
                 "the filter is an object from filter name to value, and arrived as "
                     + kindOf(raw) + ". Nothing was answered: a filter this read cannot "
                     + "read would otherwise be dropped",
-                List.of(QueryFilter.ARGUMENT));
+                List.of(QueryFilter.FILTER_ARGUMENT));
         }
         Map<String, Object> filter = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : map.entrySet()) {
@@ -143,7 +143,7 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
                     "the filter '" + name + "' takes one value, and arrived as "
                         + kindOf(value) + ". Each filter narrows on one value; a set of "
                         + "them is a shape this read does not apply",
-                    List.of(QueryFilter.ARGUMENT + "." + name));
+                    List.of(QueryFilter.FILTER_ARGUMENT + "." + name));
             }
             filter.put(name, value);
         }
@@ -163,7 +163,7 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
                     + "caller wanting more follows the cursor of the answer, and a limit "
                     + "read as a ceiling or a default without saying so would give an "
                     + "answer that looks complete and is not",
-                List.of(LIMIT));
+                List.of(LIMIT_ARGUMENT));
         }
         return number.intValue();
     }
@@ -177,7 +177,7 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
                 WorklistException.Reason.INVALID_VALUE,
                 "the cursor is the 'next_cursor' of a previous answer, passed back as it "
                     + "came, and arrived as " + kindOf(raw),
-                List.of(CURSOR));
+                List.of(CURSOR_ARGUMENT));
         }
         return text;
     }

@@ -35,7 +35,7 @@ import java.util.regex.Pattern;
 public enum QueryFilter {
 
     /** An item's status, by the display name the scope declared it under. */
-    ITEM_STATUS(Selector.ITEM, "status", Form.NAME, "a status name the scope declared"),
+    ITEM_STATUS(Selector.ITEM, Names.STATUS, Form.NAME, "a status name the scope declared"),
 
     /** An item's milestone, by the milestone's number. */
     ITEM_MILESTONE(Selector.ITEM, "milestone", Form.NUMBER, "a milestone number"),
@@ -47,19 +47,19 @@ public enum QueryFilter {
     ITERATION_CLOSED(Selector.ITERATION, "closed", Form.BOOLEAN, "true or false"),
 
     /** A milestone's status, one of the platform's fixed set. */
-    MILESTONE_STATUS(Selector.MILESTONE, "status", Form.oneOf(Milestone.STATUSES),
-        "one of " + Milestone.STATUSES),
+    MILESTONE_STATUS(Selector.MILESTONE, Names.STATUS, Form.oneOf(Milestone.STATUSES),
+        Names.ONE_OF + Milestone.STATUSES),
 
     /** A milestone's kind, the goal or one of the markers. */
     MILESTONE_KIND(Selector.MILESTONE, "kind", Form.oneOf(Milestone.KINDS),
-        "one of " + Milestone.KINDS),
+        Names.ONE_OF + Milestone.KINDS),
 
     /** A workstream's status, one of the platform's fixed set. */
-    WORKSTREAM_STATUS(Selector.WORKSTREAM, "status", Form.oneOf(Workstream.STATUSES),
-        "one of " + Workstream.STATUSES);
+    WORKSTREAM_STATUS(Selector.WORKSTREAM, Names.STATUS, Form.oneOf(Workstream.STATUSES),
+        Names.ONE_OF + Workstream.STATUSES);
 
     /** The prefix every filter argument is named under in a refusal and on REST. */
-    public static final String ARGUMENT = "filter";
+    public static final String FILTER_ARGUMENT = "filter";
 
     private final String view;
     private final String filterName;
@@ -89,8 +89,8 @@ public enum QueryFilter {
     }
 
     /** The argument a refusal names: {@code filter.<name>}. */
-    public String argument() {
-        return ARGUMENT + "." + filterName;
+    public String offenderName() {
+        return FILTER_ARGUMENT + "." + filterName;
     }
 
     /** Every filter one view declares, in declaration order. */
@@ -125,7 +125,7 @@ public enum QueryFilter {
                 "the " + view + " view declares no filter '" + name + "'. It narrows on "
                     + describe(view) + ". Nothing was answered: a filter this read does "
                     + "not apply would make the whole set look like a correct narrow one",
-                List.of(ARGUMENT + "." + name)));
+                List.of(FILTER_ARGUMENT + "." + name)));
     }
 
     /** The filters of one view, as a caller reads them in a refusal or a tool description. */
@@ -137,6 +137,19 @@ public enum QueryFilter {
         return String.join(", ", declared.stream()
             .map(f -> "'" + f.filterName + "' (" + f.takes + ")")
             .toList());
+    }
+
+    /**
+     * Literals the constants above share. A nested holder, because an enum's
+     * own static fields are not yet initialised when its constants are built.
+     */
+    private static final class Names {
+        static final String STATUS = "status";
+        static final String ONE_OF = "one of ";
+        static final String TAKES = "the filter takes ";
+
+        private Names() {
+        }
     }
 
     /** The value forms a filter takes. */
@@ -152,7 +165,7 @@ public enum QueryFilter {
                 String text = text(filter, raw);
                 if (UUID_SHAPE.matcher(text).matches()) {
                     throw refused(filter, raw, "it is the platform's own identity, and "
-                        + "the filter takes " + filter.takes);
+                        + Names.TAKES + filter.takes);
                 }
                 return text;
             }
@@ -164,7 +177,7 @@ public enum QueryFilter {
             Object read(QueryFilter filter, Object raw) {
                 Long number = QuerySpec.wholeNumber(raw);
                 if (number == null || number < 1) {
-                    throw refused(filter, raw, "the filter takes " + filter.takes
+                    throw refused(filter, raw, Names.TAKES + filter.takes
                         + ", a positive whole number");
                 }
                 return number;
@@ -181,7 +194,7 @@ public enum QueryFilter {
                 if ("true".equals(raw) || "false".equals(raw)) {
                     return Boolean.valueOf((String) raw);
                 }
-                throw refused(filter, raw, "the filter takes " + filter.takes);
+                throw refused(filter, raw, Names.TAKES + filter.takes);
             }
         };
 
@@ -191,7 +204,7 @@ public enum QueryFilter {
                 Object read(QueryFilter filter, Object raw) {
                     String text = text(filter, raw);
                     if (!admitted.contains(text)) {
-                        throw refused(filter, raw, "the filter takes " + filter.takes);
+                        throw refused(filter, raw, Names.TAKES + filter.takes);
                     }
                     return text;
                 }
@@ -202,7 +215,7 @@ public enum QueryFilter {
 
         private static String text(QueryFilter filter, Object raw) {
             if (!(raw instanceof String text) || text.isBlank()) {
-                throw refused(filter, raw, "the filter takes " + filter.takes
+                throw refused(filter, raw, Names.TAKES + filter.takes
                     + ", and an empty value names nothing to narrow on");
             }
             return text.strip();
@@ -214,7 +227,7 @@ public enum QueryFilter {
                 "the filter '" + filter.filterName + "' cannot read " + shown(raw) + ": " + why
                     + ". Nothing was answered: a value this read cannot interpret is not "
                     + "a narrowing it can apply",
-                List.of(filter.argument()));
+                List.of(filter.offenderName()));
         }
 
         private static String shown(Object raw) {

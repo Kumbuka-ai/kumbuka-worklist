@@ -94,9 +94,9 @@ public class McpAdapter {
     private static final String ARG_TYPE = "type";
 
     /** The query's filter and cap, as arguments rather than address parts. */
-    private static final String ARG_FILTER = QueryFilter.ARGUMENT;
-    private static final String ARG_LIMIT = QuerySpec.LIMIT;
-    private static final String ARG_CURSOR = QuerySpec.CURSOR;
+    private static final String ARG_FILTER = QueryFilter.FILTER_ARGUMENT;
+    private static final String ARG_LIMIT = QuerySpec.LIMIT_ARGUMENT;
+    private static final String ARG_CURSOR = QuerySpec.CURSOR_ARGUMENT;
 
     /** Every argument {@code query} takes; anything else is refused by name. */
     private static final java.util.Set<String> QUERY_ARGUMENTS =

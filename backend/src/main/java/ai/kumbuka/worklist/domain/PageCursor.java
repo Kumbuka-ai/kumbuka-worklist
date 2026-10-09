@@ -76,6 +76,6 @@ public final class PageCursor {
             WorklistException.Reason.INVALID_VALUE,
             "the cursor '" + cursor + "' cannot be read: " + why + ". Pass back the "
                 + "'next_cursor' of the previous answer as it came, on the same view",
-            List.of(QuerySpec.CURSOR));
+            List.of(QuerySpec.CURSOR_ARGUMENT));
     }
 }

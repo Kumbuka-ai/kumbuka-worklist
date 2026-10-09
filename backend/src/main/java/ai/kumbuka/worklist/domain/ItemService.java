@@ -174,7 +174,7 @@ public class ItemService {
         narrowing.value(QueryFilter.ITEM_WORKSTREAM).ifPresent(token ->
             filter.put(ItemRepository.BY_WORKSTREAM,
                 workstreamByToken(scopeId, (String) token,
-                    QueryFilter.ITEM_WORKSTREAM.argument()).number));
+                    QueryFilter.ITEM_WORKSTREAM.offenderName()).number));
 
         Item after = null;
         if (narrowing.after() != null) {
@@ -208,7 +208,7 @@ public class ItemService {
             "the filter '" + filter.filterName() + "' names " + named + ", which this scope "
                 + "does not hold. Nothing was answered: an empty answer would read as a "
                 + "legitimate empty one, and a refusal is what tells a typo from it",
-            List.of(filter.argument()));
+            List.of(filter.offenderName()));
     }
 
     // ------------------------------------------------------------------
