@@ -1,6 +1,14 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.adapter.payload.Payloads;
+import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.SurfaceException;
@@ -19,7 +27,6 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -158,35 +165,40 @@ public class WorklistResource {
      * layer for arguments a caller narrows a read with, and its parameters do
      * not become part of the address the answer is at.
      *
-     * <p>A filter is written as {@code ?filter.<name>=<value>} — the leading
-     * segment names the collection of arguments, and every one after it
-     * names an enumerated field on the addressed view. An unknown filter name
-     * reaches the domain and is refused by name; the surface does not know
-     * the field set of the addressed view and cannot refuse ahead of it.
+     * <p>A filter is written as {@code ?filter.<name>=<value>}, the bound as
+     * {@code ?limit=} and the continuation as {@code ?cursor=}. Every parameter
+     * is handed to {@link QuerySpec#of} as it arrived — text, or a list when it
+     * was repeated — and read by the verb surface, by the same parse the MCP
+     * adapter's arguments get; a parameter that is none of the three is refused
+     * by name, after scope visibility like every other refusal of the call. The JAX-RS
+     * conversion of {@code limit} to an integer is deliberately not used: it
+     * answers an unreadable value with a bare 404 before any refusal of ours.
      */
     @GET
     @Path("{selector}")
     public Response collectionGet(@PathParam("scope") String scope,
                                   @PathParam("selector") String selector,
-                                  @QueryParam("limit") Integer limit,
                                   jakarta.ws.rs.core.UriInfo info) {
         Map<String, Object> filter = new LinkedHashMap<>();
-        for (Map.Entry<String, java.util.List<String>> entry : info.getQueryParameters().entrySet()) {
+        Object limit = null;
+        Object cursor = null;
+        java.util.List<String> untaken = new java.util.ArrayList<>();
+        for (Map.Entry<String, java.util.List<String>> entry
+                : info.getQueryParameters().entrySet()) {
             String name = entry.getKey();
-            if (!name.startsWith("filter.")) {
-                continue;
+            Object value = entry.getValue().size() == 1 ? entry.getValue().get(0) : entry.getValue();
+            String filterPrefix = QueryFilter.FILTER_ARGUMENT + ".";
+            if (name.startsWith(filterPrefix) && name.length() > filterPrefix.length()) {
+                filter.put(name.substring(filterPrefix.length()), value);
+            } else if (QuerySpec.LIMIT_ARGUMENT.equals(name)) {
+                limit = value;
+            } else if (QuerySpec.CURSOR_ARGUMENT.equals(name)) {
+                cursor = value;
+            } else {
+                untaken.add(name);
             }
-            java.util.List<String> values = entry.getValue();
-            if (values.size() > 1) {
-                throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                    "the filter '" + name + "' arrived with " + values.size() + " values. "
-                        + "Each enumerated field takes one value; ORing two would be a "
-                        + "shape the domain does not read");
-            }
-            filter.put(name.substring("filter.".length()), values.get(0));
         }
-
-        QuerySpec spec = new QuerySpec(filter, limit == null ? QuerySpec.DEFAULT_LIMIT : limit);
+        QuerySpec spec = QuerySpec.of(filter, limit, cursor, untaken);
         return Response.ok(Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec))).build();
     }

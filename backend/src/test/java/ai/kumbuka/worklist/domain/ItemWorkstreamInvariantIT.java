@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -92,7 +99,11 @@ class ItemWorkstreamInvariantIT {
             Field.TITLE.canonicalName(), "orphan item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(), "no-such-workstream")));
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.WORKSTREAM_UNKNOWN);
+        // A token is a value the caller supplied, not an address: refused as a
+        // value the scope does not hold, naming the field — not as the not-found
+        // of an address, whose answer names nothing and talks about membership.
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
+        assertThat(refusal.offenders()).containsExactly(Field.WORKSTREAM_ID.canonicalName());
     }
 
     @Test

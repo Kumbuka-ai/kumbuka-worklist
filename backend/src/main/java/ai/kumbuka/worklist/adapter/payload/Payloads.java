@@ -1,8 +1,16 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
 import java.util.Map;
@@ -85,7 +93,7 @@ public final class Payloads {
     public static Listing of(String scope, VerbSurface.Listing listing) {
         return new Listing(listing.objects().stream()
             .map(result -> of(scope, result))
-            .toList(), listing.truncated());
+            .toList(), listing.truncated(), listing.next());
     }
 
     /**
@@ -163,8 +171,13 @@ public final class Payloads {
      * name a limit sees {@code false}; a caller whose limit was reached sees
      * {@code true} — the same silent-ceiling defect the sprint-169 read had
      * one layer down, refused at the surface.
+     *
+     * <p>{@code next_cursor} is the way to the rest: passed back as the
+     * {@code cursor} argument of the same query, it answers the objects after
+     * the last one here. Null exactly when {@code truncated} is false.
      */
-    public record Listing(List<ObjectResponse> objects, boolean truncated) {
+    public record Listing(List<ObjectResponse> objects, boolean truncated,
+                          @JsonProperty("next_cursor") String nextCursor) {
     }
 
     /**

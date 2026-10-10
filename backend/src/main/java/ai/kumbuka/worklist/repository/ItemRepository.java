@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Item;
@@ -45,6 +52,11 @@ public class ItemRepository {
 
     private static final String P_STATUS = "status";
 
+    /** The filter keys {@link #inScope(UUID, java.util.Map, Item, int)} narrows on. */
+    public static final String BY_STATUS = "status_pk";
+    public static final String BY_MILESTONE = "milestone_number";
+    public static final String BY_WORKSTREAM = "workstream_number";
+
     @Inject EntityManager em;
 
     // ------------------------------------------------------------------
@@ -60,40 +72,48 @@ public class ItemRepository {
      * property every attribute has for free — the containment index answers
      * filters and does not order. A partial implementation of a documented
      * order is worse than an obviously different one.
+     *
+     * <p>Ties on the creation instant are broken by the number, which is unique
+     * in a scope and allocated in creation order — not by the id, which is
+     * random and would order an imported batch sharing one instant at random.
+     * The paged read below orders the same way, so a walk over its pages and
+     * this whole-set read answer the same sequence.
      */
     @Transactional
     public List<Item> inScope(UUID scopeId) {
         return em.createQuery(
-                "SELECT i FROM Item i WHERE i.scopeId = :scope ORDER BY i.createdAt, i.id",
+                "SELECT i FROM Item i WHERE i.scopeId = :scope ORDER BY i.createdAt, i.number",
                 Item.class)
             .setParameter(P_SCOPE, scopeId)
             .getResultList();
     }
 
     /**
-     * Every item of a scope that matches the given filter, oldest first,
-     * capped at the given limit.
+     * One page of the items of a scope that match the given filter, oldest
+     * first, continuing after a given item.
      *
      * <p>Kept separate from {@link #inScope(UUID)} so the calling paths are
-     * obviously two: one for the whole set and one for a narrowed set. The
-     * two share nothing but a table name, and folding them would put an
-     * optional filter in a signature every internal caller now has to think
-     * about.
+     * obviously two: one for the whole set and one for a narrowed page.
      *
-     * <p><strong>Enumerated fields only.</strong> {@code status_pk} and
-     * {@code milestone_number} are the two the item domain exposes to a query —
-     * both compared as equalities, neither leaking a
-     * scope's vocabulary into the JPQL. A filter over a declared attribute
-     * is a natural next step and does NOT sit here today: the containment
-     * index answers it and the surface has no shape for one yet.
+     * <p><strong>Enumerated columns only</strong>, each an equality on a key the
+     * domain resolved from the caller's name, number or token:
+     * {@link #BY_STATUS}, {@link #BY_MILESTONE}, {@link #BY_WORKSTREAM}. A key
+     * not among them is a defect of the caller above and fails loudly rather
+     * than being dropped, because a dropped filter answers the whole set.
      *
-     * <p>A limit of {@code n} returns at most {@code n + 1} rows. The extra
-     * row is not surfaced; it is what the domain reads to answer
-     * "is there more" without a second query. That is a query-per-answer
-     * discipline, not a cursor.
+     * <p>The continuation is a keyset on the order itself, {@code (created_at,
+     * number)}: the page starts strictly after the given item's position,
+     * whether or not that item still passes the filter.
+     *
+     * <p>At most {@code limit + 1} rows are returned. The extra row is not
+     * answered; it is what the domain reads to know that more follows, without
+     * a second query.
+     *
+     * @param after the last item of the previous page, or null for the first
      */
     @Transactional
-    public List<Item> inScope(UUID scopeId, java.util.Map<String, Object> filter, int limit) {
+    public List<Item> inScope(UUID scopeId, java.util.Map<String, Object> filter, Item after,
+                              int limit) {
         StringBuilder jpql = new StringBuilder(
             "SELECT i FROM Item i WHERE i.scopeId = :scope");
         java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
@@ -101,22 +121,25 @@ public class ItemRepository {
 
         for (java.util.Map.Entry<String, Object> entry : filter.entrySet()) {
             String param = "f_" + params.size();
-            switch (entry.getKey()) {
-                case P_STATUS -> {
-                    jpql.append(" AND i.statusPk = :").append(param);
-                    params.put(param, entry.getValue());
-                }
-                case "milestone" -> {
-                    jpql.append(" AND i.milestoneNumber = :").append(param);
-                    params.put(param, entry.getValue());
-                }
+            String column = switch (entry.getKey()) {
+                case BY_STATUS -> "i.statusPk";
+                case BY_MILESTONE -> "i.milestoneNumber";
+                case BY_WORKSTREAM -> "i.workstreamNumber";
                 default -> throw new IllegalArgumentException(
-                    "the filter field '" + entry.getKey() + "' is not one this query "
-                        + "narrows on — the surface must refuse it above rather than "
+                    "the filter key '" + entry.getKey() + "' is not one this query "
+                        + "narrows on — the domain must refuse it above rather than "
                         + "sending it here");
-            }
+            };
+            jpql.append(" AND ").append(column).append(" = :").append(param);
+            params.put(param, entry.getValue());
         }
-        jpql.append(" ORDER BY i.createdAt, i.id");
+        if (after != null) {
+            jpql.append(" AND (i.createdAt > :afterAt"
+                + " OR (i.createdAt = :afterAt AND i.number > :afterNumber))");
+            params.put("afterAt", after.createdAt);
+            params.put("afterNumber", after.number);
+        }
+        jpql.append(" ORDER BY i.createdAt, i.number");
 
         var query = em.createQuery(jpql.toString(), Item.class);
         params.forEach(query::setParameter);
