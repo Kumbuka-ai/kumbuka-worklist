@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.realm;
 
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
@@ -7,7 +14,6 @@ import org.testcontainers.utility.MountableFile;
 
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,9 +34,12 @@ import java.util.Map;
  * open these doors. So this is not a generic issuer check; it is the
  * migration, observed.
  *
- * <p>The port is fixed rather than mapped at random. The issuer URL must be
- * known at build time so the test profile can point the identity tenant at
- * this container, and a random port is not known then.
+ * <p>The port is mapped at random. The issuer URLs are derived from the
+ * mapped port once the container is up and handed to Quarkus as runtime
+ * configuration, together with {@code quarkus.oidc.auth-server-url}. Keycloak
+ * derives a token's {@code iss} from the host and port the token was
+ * requested through, so the test requests its tokens through exactly these
+ * URLs, which are also the ones the service discovers its tenant through.
  */
 public class TwoRealmKeycloakResource implements QuarkusTestResourceLifecycleManager {
 
@@ -47,20 +56,10 @@ public class TwoRealmKeycloakResource implements QuarkusTestResourceLifecycleMan
     public static final String OPERATOR_USER = "probe-operator";
     public static final String USER_PASSWORD = "probe-password";
 
-    /**
-     * A fixed port, and a different one from the sibling service's 38180.
-     *
-     * <p>Fixed because the issuer URL must be known at build time so the test
-     * profile can point the identity tenant at this container, and a randomly
-     * mapped port is not known then. Different because the two repositories
-     * are built from the same template and a developer checking one against
-     * the other would otherwise have two suites fighting over one port, with
-     * a failure that reads as a broken realm import.
-     */
-    public static final int HOST_PORT = 38280;
-    public static final String BASE_URL = "http://localhost:" + HOST_PORT;
-    public static final String TENANT_ISSUER = BASE_URL + "/realms/" + TENANT_REALM;
-    public static final String OPERATOR_ISSUER = BASE_URL + "/realms/" + OPERATOR_REALM;
+    /** Config key under which {@link #start()} reports the tenant realm's issuer. */
+    public static final String TENANT_ISSUER_KEY = "test.keycloak.tenant-issuer";
+    /** Config key under which {@link #start()} reports the operator realm's issuer. */
+    public static final String OPERATOR_ISSUER_KEY = "test.keycloak.operator-issuer";
 
     private static GenericContainer<?> keycloak;
 
@@ -83,12 +82,15 @@ public class TwoRealmKeycloakResource implements QuarkusTestResourceLifecycleMan
             // missing realm as if it were the boundary holding.
             .waitingFor(Wait.forHttp("/realms/" + OPERATOR_REALM + "/.well-known/openid-configuration")
                 .withStartupTimeout(Duration.ofMinutes(3)));
-        keycloak.setPortBindings(List.of(HOST_PORT + ":8080"));
         keycloak.start();
 
+        String baseUrl = "http://" + keycloak.getHost() + ":" + keycloak.getMappedPort(8080);
+        String tenantIssuer = baseUrl + "/realms/" + TENANT_REALM;
+
         Map<String, String> cfg = new HashMap<>();
-        cfg.put("test.keycloak.tenant-issuer", TENANT_ISSUER);
-        cfg.put("test.keycloak.operator-issuer", OPERATOR_ISSUER);
+        cfg.put("quarkus.oidc.auth-server-url", tenantIssuer);
+        cfg.put(TENANT_ISSUER_KEY, tenantIssuer);
+        cfg.put(OPERATOR_ISSUER_KEY, baseUrl + "/realms/" + OPERATOR_REALM);
         return cfg;
     }
 
