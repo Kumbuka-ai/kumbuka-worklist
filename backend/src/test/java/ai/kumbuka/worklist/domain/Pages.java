@@ -23,6 +23,9 @@ import java.util.function.BiFunction;
  */
 public final class Pages {
 
+    /** More pages than any test scope holds; a walk past it is not ending. */
+    private static final int MAX_PAGES = 100;
+
     private Pages() {
     }
 
@@ -37,7 +40,13 @@ public final class Pages {
                                                 BiFunction<UUID, PageRequest, Page> query) {
         List<Map<String, Object>> objects = new ArrayList<>();
         String after = null;
+        int pages = 0;
         do {
+            if (++pages > MAX_PAGES) {
+                throw new AssertionError("the walk over the " + view + " view did not end after "
+                    + MAX_PAGES + " pages: a cursor that does not move answers the same page "
+                    + "forever");
+            }
             PageRequest request = new QuerySpec(null, QuerySpec.MAX_PAGE_SIZE, after,
                 sort.wireName(), null, List.of(), SortKey.ALL).pageFor(scope, view);
             Page page = query.apply(scope, request);
