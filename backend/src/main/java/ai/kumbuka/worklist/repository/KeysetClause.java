@@ -10,9 +10,7 @@ package ai.kumbuka.worklist.repository;
 import ai.kumbuka.worklist.domain.PageCursor;
 import ai.kumbuka.worklist.domain.PageRequest;
 import ai.kumbuka.worklist.domain.SortKey;
-import jakarta.persistence.EntityManager;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,9 +24,10 @@ import java.util.Map;
  * after the position the cursor carries — and never an offset, so an object
  * inserted ahead of the position shifts nothing that was already answered.
  *
- * <p>At most {@code pageSize + 1} rows are read. The extra row is not answered;
- * it is what the domain reads to know that more follows, without a second
- * query.
+ * <p>At most {@link #bound} rows are read, {@code pageSize + 1}. The extra row
+ * is not answered; it is what the domain reads to know that more follows,
+ * without a second query. The query itself is created by the repository that
+ * built it, so that its text never leaves the method it is written in.
  */
 final class KeysetClause {
 
@@ -39,15 +38,16 @@ final class KeysetClause {
     }
 
     /**
-     * The page of the query so far: continued after the request's position,
-     * ordered by its sort, bounded by its size.
+     * Continue the query so far after the request's position and order it by
+     * the request's sort. Everything appended is this class's own text; every
+     * value travels as a parameter.
      *
      * @param jpql   a query over {@code alias} whose WHERE clause is open for
      *               {@code AND}
      * @param params the parameters of the query so far
      */
-    static <T> List<T> page(EntityManager em, StringBuilder jpql, Map<String, Object> params,
-                            String alias, PageRequest request, Class<T> type) {
+    static void continueAndOrder(StringBuilder jpql, Map<String, Object> params, String alias,
+                                 PageRequest request) {
         String number = alias + ".number";
         String lead = switch (request.sort()) {
             case ID -> number;
@@ -76,9 +76,10 @@ final class KeysetClause {
             jpql.append(lead).append(direction).append(", ");
         }
         jpql.append(number).append(direction);
+    }
 
-        var query = em.createQuery(jpql.toString(), type);
-        params.forEach(query::setParameter);
-        return query.setMaxResults(request.pageSize() + 1).getResultList();
+    /** The bound of one page: its size and the one row that says more follows. */
+    static int bound(PageRequest request) {
+        return request.pageSize() + 1;
     }
 }

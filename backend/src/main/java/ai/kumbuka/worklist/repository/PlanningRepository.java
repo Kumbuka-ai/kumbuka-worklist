@@ -107,7 +107,10 @@ public class PlanningRepository {
             jpql.append(" AND m.kind = :kind");
             params.put("kind", kind);
         });
-        return KeysetClause.page(em, jpql, params, "m", request, Milestone.class);
+        KeysetClause.continueAndOrder(jpql, params, "m", request);
+        var query = em.createQuery(jpql.toString(), Milestone.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
     /**
@@ -170,7 +173,10 @@ public class PlanningRepository {
         request.value(QueryFilter.ITERATION_CLOSED).ifPresent(closed ->
             jpql.append(Boolean.TRUE.equals(closed)
                 ? " AND i.closedAt IS NOT NULL" : " AND i.closedAt IS NULL"));
-        return KeysetClause.page(em, jpql, params, "i", request, Iteration.class);
+        KeysetClause.continueAndOrder(jpql, params, "i", request);
+        var query = em.createQuery(jpql.toString(), Iteration.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
     /**

@@ -129,7 +129,10 @@ public class ItemRepository {
             jpql.append(" AND ").append(column).append(" = :").append(param);
             params.put(param, entry.getValue());
         }
-        return KeysetClause.page(em, jpql, params, "i", request, Item.class);
+        KeysetClause.continueAndOrder(jpql, params, "i", request);
+        var query = em.createQuery(jpql.toString(), Item.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
     /** The item of that id, or null. Scope membership is checked by the caller. */

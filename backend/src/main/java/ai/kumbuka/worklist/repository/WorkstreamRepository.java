@@ -114,7 +114,10 @@ public class WorkstreamRepository {
             jpql.append(" AND w.status = :status");
             params.put("status", status);
         });
-        return KeysetClause.page(em, jpql, params, "w", request, Workstream.class);
+        KeysetClause.continueAndOrder(jpql, params, "w", request);
+        var query = em.createQuery(jpql.toString(), Workstream.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
     /**
