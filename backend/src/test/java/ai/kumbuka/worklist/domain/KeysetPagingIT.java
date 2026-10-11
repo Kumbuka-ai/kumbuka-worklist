@@ -89,6 +89,12 @@ class KeysetPagingIT {
     void a_creation_tie_across_page_boundaries_loses_and_repeats_nothing() throws SQLException {
         List<Long> numbers = createItems(scope, 7);
         sameCreationInstant("item", scope);
+        assertThat(Pages.all(scope, Selector.ITEM, items::query))
+            .as("the tie the probe is about is there: one creation instant for all seven")
+            .extracting(item -> String.valueOf(item.get("created_at")))
+            .containsOnly(String.valueOf(
+                Pages.all(scope, Selector.ITEM, items::query).getFirst().get("created_at")))
+            .hasSize(7);
 
         assertThat(walk(SortKey.CREATED_AT, SortKey.Direction.ASC, Selector.ITEM, items::query))
             .as("seven items created at one instant, two per page: every one once, the "
@@ -253,6 +259,7 @@ class KeysetPagingIT {
                  + " SET created_at = timestamptz '2026-10-11 12:00:00+00' WHERE scope_id = ?")) {
             update.setObject(1, in);
             assertThat(update.executeUpdate()).isPositive();
+            admin.commit();
         }
     }
 
