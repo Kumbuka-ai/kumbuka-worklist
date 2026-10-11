@@ -393,8 +393,8 @@ class QueryNarrowingIT {
 
     /**
      * RED STATE, observed 2026-10-11 with the range check removed from
-     * {@code QuerySpec}: {@code page_size} 0 answered an empty page with a
-     * cursor and 201 answered a page of 201.
+     * {@code QuerySpec}: {@code page_size} 0 was answered with 200 instead of
+     * refused, on both transports.
      */
     @ParameterizedTest
     @EnumSource(Transport.class)
@@ -428,9 +428,10 @@ class QueryNarrowingIT {
 
     /**
      * A cursor handed out by another query, through the surface and in the one
-     * envelope. RED STATE, observed 2026-10-11 with each binding skipped in
-     * {@code PageCursor.decode}: the cursor was applied and answered a page of
-     * the other order.
+     * envelope. RED STATE, observed 2026-10-11 with every binding skipped in
+     * {@code PageCursor.decode}: an item cursor on the milestone view was
+     * answered instead of refused, on both transports. Each binding on its own
+     * is probed in {@code KeysetPagingIT}.
      */
     @ParameterizedTest
     @EnumSource(Transport.class)
@@ -521,9 +522,10 @@ class QueryNarrowingIT {
     }
 
     /**
-     * RED STATE, observed 2026-10-11 with the declaration check removed from
-     * {@code QuerySpec}: {@code sort=title} answered in number order, and
-     * {@code rank} on the assistant surface answered in rank order.
+     * RED STATE, observed 2026-10-11 with the declaration and offer checks
+     * removed from {@code QuerySpec}: {@code rank} on the item view was answered
+     * on both transports, and {@code rank} on the assistant surface was
+     * answered. A name that is no sort key at all stays refused by the parse.
      */
     @ParameterizedTest
     @EnumSource(Transport.class)
