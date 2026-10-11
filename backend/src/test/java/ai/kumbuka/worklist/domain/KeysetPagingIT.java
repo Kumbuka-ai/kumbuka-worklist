@@ -131,10 +131,12 @@ class KeysetPagingIT {
             SortKey.Direction.DESC, null));
         seen.addAll(numbers(page));
         long added = createItems(scope, 1).getFirst();
+        int pages = 1;
         while (page.next() != null) {
             page = items.query(scope, request(Selector.ITEM, SortKey.CREATED_AT,
                 SortKey.Direction.DESC, page.next()));
             seen.addAll(numbers(page));
+            assertThat(++pages).as("the pages end").isLessThanOrEqualTo(20);
         }
 
         assertThat(new LinkedHashSet<>(seen))
