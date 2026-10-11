@@ -13,6 +13,7 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.hibernate.SessionFactory;
+import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -160,13 +161,15 @@ class KeysetPagingIT {
             workstreams.declare(scope, "stream-" + i, "stream " + i);
         }
 
-        assertReadBound(Item.class, Selector.ITEM, items::query);
-        assertReadBound(Milestone.class, Selector.MILESTONE, milestones::query);
-        assertReadBound(Iteration.class, Selector.ITERATION, iterations::query);
-        assertReadBound(Workstream.class, Selector.WORKSTREAM, workstreams::query);
+        SoftAssertions.assertSoftly(soft -> {
+            assertReadBound(soft, Item.class, Selector.ITEM, items::query);
+            assertReadBound(soft, Milestone.class, Selector.MILESTONE, milestones::query);
+            assertReadBound(soft, Iteration.class, Selector.ITERATION, iterations::query);
+            assertReadBound(soft, Workstream.class, Selector.WORKSTREAM, workstreams::query);
+        });
     }
 
-    private void assertReadBound(Class<?> entity, String view,
+    private void assertReadBound(SoftAssertions soft, Class<?> entity, String view,
                                  BiFunction<UUID, PageRequest, Page> query) {
         var stats = sessions.getStatistics();
         stats.setStatisticsEnabled(true);
@@ -174,8 +177,8 @@ class KeysetPagingIT {
         Page page = query.apply(scope, request(view, SortKey.ID, SortKey.Direction.ASC, null));
         long loaded = stats.getEntityStatistics(entity.getName()).getLoadCount() - before;
 
-        assertThat(page.objects()).hasSize(2);
-        assertThat(loaded)
+        soft.assertThat(page.objects()).as(view).hasSize(2);
+        soft.assertThat(loaded)
             .as("a page of two on the %s view reads the two and the one that says more "
                 + "follows, and never the whole view", view)
             .isLessThanOrEqualTo(3);
