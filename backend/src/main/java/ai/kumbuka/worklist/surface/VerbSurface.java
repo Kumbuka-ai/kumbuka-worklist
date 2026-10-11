@@ -14,8 +14,8 @@ import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
 import ai.kumbuka.worklist.domain.MilestoneService;
-import ai.kumbuka.worklist.domain.Narrowing;
-import ai.kumbuka.worklist.domain.QueryAnswer;
+import ai.kumbuka.worklist.domain.Page;
+import ai.kumbuka.worklist.domain.PageRequest;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.WorkstreamService;
@@ -177,39 +177,15 @@ public class VerbSurface {
     // ======================================================================
 
     /**
-     * The objects of one view.
-     *
-     * <p>The whole set of a view, oldest first for items and in the axis's
-     * own order for the other two. See {@link #query(String, String, String, QuerySpec)}
-     * for a narrowed variant — this signature is the ratified whole-set
-     * form kept for callers who read a scope end to end.
-     */
-    @Transactional
-    public Listing query(String subject, String rawScope, String rawView) {
-        Entry in = entry(subject, rawScope, rawView, Access.READ);
-        addresses.requireView(in.scopeId(), in.view());
-
-        List<Map<String, Object>> found = switch (in.view()) {
-            case Selector.ITEM -> items.query(in.scopeId());
-            case Selector.ITERATION -> iterations.query(in.scopeId());
-            case Selector.MILESTONE -> milestones.query(in.scopeId());
-            case Selector.WORKSTREAM -> workstreams.query(in.scopeId());
-            default -> throw unreachableView(in.view());
-        };
-
-        LOG.debugf("query %s in scope %s: %d hit(s)", in.view(), in.scopeId(), found.size());
-        return new Listing(found.stream().map(row -> at(in.view(), row)).toList());
-    }
-
-    /**
      * One page of the objects of one view, narrowed by the filters the view
-     * declares.
+     * declares, in the sort the caller names.
      *
      * <p>The check order continues the one in {@link #entry}: grammar, scope
-     * visibility and the view's vocabulary first, then the narrowing against
-     * {@link ai.kumbuka.worklist.domain.QueryFilter} — a filter name the view
-     * does not declare, a value in the wrong form, or a cursor this view did
-     * not hand out — and only then the store, where the view's service resolves
+     * visibility and the view's vocabulary first, then the paging against
+     * {@link ai.kumbuka.worklist.domain.QueryFilter} and the view's sorts — a
+     * filter name the view does not declare, a value in the wrong form, a page
+     * size out of range, a sort the view does not declare, or a cursor this
+     * query did not hand out — and only then the store, where the view's service resolves
      * the values the scope must have declared. It runs here and not in either
      * adapter, so both transports refuse the same call the same way and an
      * invisible scope still answers 404 however wrong the narrowing is.
@@ -221,17 +197,17 @@ public class VerbSurface {
     public Listing query(String subject, String rawScope, String rawView, QuerySpec spec) {
         Entry in = entry(subject, rawScope, rawView, Access.READ);
         addresses.requireView(in.scopeId(), in.view());
-        Narrowing narrowing = spec.narrowFor(in.view());
+        PageRequest request = spec.pageFor(in.scopeId(), in.view());
 
-        QueryAnswer answered = switch (in.view()) {
-            case Selector.ITEM -> items.query(in.scopeId(), narrowing);
-            case Selector.ITERATION -> iterations.query(in.scopeId(), narrowing);
-            case Selector.MILESTONE -> milestones.query(in.scopeId(), narrowing);
-            case Selector.WORKSTREAM -> workstreams.query(in.scopeId(), narrowing);
+        Page answered = switch (in.view()) {
+            case Selector.ITEM -> items.query(in.scopeId(), request);
+            case Selector.ITERATION -> iterations.query(in.scopeId(), request);
+            case Selector.MILESTONE -> milestones.query(in.scopeId(), request);
+            case Selector.WORKSTREAM -> workstreams.query(in.scopeId(), request);
             default -> throw unreachableView(in.view());
         };
-        LOG.debugf("query %s in scope %s: %d hit(s) truncated=%s",
-            in.view(), in.scopeId(), answered.objects().size(), answered.truncated());
+        LOG.debugf("query %s in scope %s: %d hit(s), more=%s",
+            in.view(), in.scopeId(), answered.objects().size(), answered.next() != null);
         return new Listing(answered.objects().stream().map(row -> at(in.view(), row)).toList(),
             answered.next());
     }
@@ -964,24 +940,10 @@ public class VerbSurface {
      * surface is a published contract from the day it answers.
      *
      * <p>{@code next} is the cursor to the rest, null exactly when nothing
-     * follows; {@link #truncated()} says the same as a flag. A silent ceiling is
-     * the sprint-169 defect one layer up — an answer that reads complete and is
-     * not.
-     *
-     * <p>The whole-set signature that takes no {@link QuerySpec} answers
-     * without a cursor by construction: without a limit, "the whole set" is what
-     * came back and there is no ceiling to trip.
+     * follows. A silent ceiling is the sprint-169 defect one layer up — an
+     * answer that reads complete and is not.
      */
     public record Listing(List<Result> objects, String next) {
-
-        public Listing(List<Result> objects) {
-            this(objects, null);
-        }
-
-        /** Whether the store carried more than this answer holds. */
-        public boolean truncated() {
-            return next != null;
-        }
     }
 
     /** Everything one call needs once the first two stages have held. */

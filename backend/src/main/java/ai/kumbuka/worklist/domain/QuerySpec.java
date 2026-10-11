@@ -8,104 +8,111 @@
 package ai.kumbuka.worklist.domain;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 /**
- * The narrowing of one {@code query} as a caller sent it: which filters, how
- * many objects, and where to continue — raw, as the transport delivered it.
+ * The query of one {@code query} call as a caller sent it: which filters, how
+ * large a page, which sort, and where to continue — raw, as the transport
+ * delivered it.
  *
  * <h2>One reading for both transports</h2>
  *
- * Both adapters hand the raw arguments to {@link #of} and neither reads them
- * itself. That is what makes "refused on REST and on MCP alike" a property of
- * the construction: an MCP client that sends the filter as a JSON string, or a
- * limit as {@code "10"}, reaches the same reading a REST query string does,
- * rather than an {@code instanceof} that falls through to "no filter" and
+ * Both adapters hand the raw arguments to {@link #QuerySpec} and neither reads
+ * them itself. That is what makes "refused on REST and on MCP alike" a property
+ * of the construction: an MCP client that sends the filter as a JSON string, or
+ * a page size as {@code "10"}, reaches the same reading a REST query string
+ * does, rather than an {@code instanceof} that falls through to "no filter" and
  * answers the whole set (REQ-0156).
+ *
+ * <p>What differs between the transports is said by the adapter, not guessed
+ * here: {@code offered} names the sorts its surface offers, the standard pair
+ * on the assistant surface and every declared field on REST.
  *
  * <h2>Read late, on purpose</h2>
  *
  * Nothing is checked when the spec is built. The verb surface calls
- * {@link #narrowFor} once the scope is visible and the view declared, so a call
- * against a scope the caller cannot see answers 404 however wrong its narrowing
+ * {@link #pageFor} once the scope is visible and the view declared, so a call
+ * against a scope the caller cannot see answers 404 however wrong its paging
  * is — the ratified check order, which a refusal raised in an adapter would
- * break. {@code narrowFor} then reads every argument, checks the filter names
- * and value forms against {@link QueryFilter} for that view, and decodes the
- * cursor; the values the scope must have declared are resolved by the view's
- * service.
+ * break. {@code pageFor} then reads every argument, checks the filter names and
+ * value forms against {@link QueryFilter} for that view, the page size, the
+ * sort against the view and the offered set, and decodes the cursor against
+ * all of them; the values the scope must have declared are resolved by the
+ * view's service.
  *
- * <h2>Paging</h2>
- *
- * A limit bounds one answer, and a cursor continues after the last object of
- * the previous one. The cursor is handed out by the answer ({@link QueryAnswer})
- * and is opaque to a caller; see {@link PageCursor}. Without a limit the default
- * of {@value #DEFAULT_LIMIT} applies.
- *
- * @param untaken the arguments that arrived and are none of filter, limit and
- *                cursor — refused by name rather than ignored, so that a
- *                narrowing written beside the filter instead of in it does not
- *                answer the whole set
+ * @param untaken the arguments that arrived and are none of the five — refused
+ *                by name rather than ignored, so that a narrowing written
+ *                beside the filter instead of in it does not answer the whole
+ *                set, and a {@code limit} or {@code cursor} of the earlier
+ *                contract is not silently dropped
+ * @param offered the sorts the calling surface offers
  */
-public record QuerySpec(Object filter, Object limit, Object cursor, List<String> untaken) {
+public record QuerySpec(Object filter, Object pageSize, Object after, Object sort,
+                        Object direction, List<String> untaken, Set<SortKey> offered) {
 
-    /** The default upper bound on one answer, when a caller does not name one. */
-    public static final int DEFAULT_LIMIT = 100;
+    /** The page size when a caller does not name one. */
+    public static final int DEFAULT_PAGE_SIZE = 50;
 
     /**
-     * The absolute upper bound. A caller asking for more is refused rather
-     * than served the ceiling silently: the whole point of the parameter is
-     * that the caller says how much they want, and truncating without saying
-     * is what the sprint-169 defect looks like one layer out.
+     * The largest page. A caller asking for more is refused rather than served
+     * the ceiling silently: the whole point of the parameter is that the caller
+     * says how much they want, and truncating without saying so is what the
+     * sprint-169 defect looks like one layer out.
      */
-    public static final int MAX_LIMIT = 1000;
+    public static final int MAX_PAGE_SIZE = 200;
 
-    /** The argument names a query takes besides its address. */
-    public static final String LIMIT_ARGUMENT = "limit";
-    public static final String CURSOR_ARGUMENT = "cursor";
+    /** The argument names a query takes besides its address and filter. */
+    public static final String PAGE_SIZE_ARGUMENT = "page_size";
+    public static final String AFTER_ARGUMENT = "after";
+    public static final String SORT_ARGUMENT = "sort";
+    public static final String DIRECTION_ARGUMENT = "direction";
+
+    /** The sort and direction when a caller names none. */
+    public static final SortKey DEFAULT_SORT = SortKey.ID;
+    public static final SortKey.Direction DEFAULT_DIRECTION = SortKey.Direction.ASC;
 
     public QuerySpec {
         untaken = untaken == null ? List.of() : List.copyOf(untaken);
+        offered = Set.copyOf(offered);
     }
 
     /** A first page with a filter, as an in-process caller writes one. */
-    public QuerySpec(Map<String, Object> filter, int limit) {
-        this(filter, limit, null, List.of());
+    public QuerySpec(Map<String, Object> filter, int pageSize) {
+        this(filter, pageSize, null, null, null, List.of(), SortKey.ALL);
     }
 
-    /** The all-of-it spec: no filter, default limit, first page. */
+    /** The first page in the default sort: no filter, the default page size. */
     public static QuerySpec all() {
-        return new QuerySpec(null, null, null, List.of());
+        return new QuerySpec(null, null, null, null, null, List.of(), SortKey.ALL);
     }
 
     /**
-     * The narrowing as a transport delivered it, read nowhere yet.
+     * The query read and checked against one view of one scope: no untaken
+     * argument, every filter name declared, every value in its form, the page
+     * size in range, the sort declared and offered, the cursor one this query
+     * handed out.
      *
-     * @param filter  a map from filter name to a scalar value, or null for none
-     * @param limit   a whole number, decimal digits, or null for the default
-     * @param cursor  the cursor of a previous answer, or null for the first page
-     * @param untaken the arguments that are none of the three
+     * @throws WorklistException {@code UNKNOWN_FIELD}, {@code INVALID_VALUE},
+     *         {@code PAGE_SIZE_REJECTED}, {@code SORT_UNDECLARED},
+     *         {@code CURSOR_MALFORMED} or {@code CURSOR_FOREIGN}, naming the
+     *         argument under its offenders — never a silent fallback to "no
+     *         filter", to the default page size or to the first page
      */
-    public static QuerySpec of(Object filter, Object limit, Object cursor,
-                               List<String> untaken) {
-        return new QuerySpec(filter, limit, cursor, untaken);
-    }
-
-    /**
-     * The narrowing read and checked against one view: no untaken argument,
-     * every filter name declared, every value in its form, the limit in range,
-     * the cursor one this view handed out.
-     *
-     * @throws WorklistException {@code UNKNOWN_FIELD} or {@code INVALID_VALUE},
-     *         naming the argument under its offenders — never a silent fallback
-     *         to "no filter", to the default limit or to the first page
-     */
-    public Narrowing narrowFor(String view) {
+    public PageRequest pageFor(UUID scopeId, String view) {
         refuseUntaken(untaken);
-        return new Narrowing(view, QueryFilter.parse(view, filterOf(filter)), limitOf(limit),
-            PageCursor.decode(view, cursorOf(cursor)));
+        Map<QueryFilter, Object> filters = QueryFilter.parse(view, filterOf(filter));
+        int size = pageSizeOf(pageSize);
+        SortKey key = sortOf(view, sort, offered);
+        SortKey.Direction way = directionOf(direction);
+        return new PageRequest(scopeId, view, filters, size, key, way,
+            PageCursor.decode(cursorOf(after), scopeId, view, filters, key, way));
     }
 
     private static void refuseUntaken(List<String> untaken) {
@@ -114,10 +121,11 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
         }
         throw new WorklistException(
             WorklistException.Reason.UNKNOWN_FIELD,
-            "'query' takes a filter, a limit and a cursor besides its address, and "
-                + untaken + " is none of them. A filter is written inside the filter "
-                + "argument. Nothing was answered: an argument this read ignores would "
-                + "make the whole set look like a correct narrow answer",
+            "'query' takes a filter, a page_size, an after, a sort and a direction besides "
+                + "its address, and " + untaken + " is none of them. A filter is written "
+                + "inside the filter argument; a page is bounded by page_size and continued "
+                + "by after. Nothing was answered: an argument this read ignores would make "
+                + "the whole set look like a correct narrow answer",
             untaken);
     }
 
@@ -150,22 +158,59 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
         return filter;
     }
 
-    private static int limitOf(Object raw) {
+    private static int pageSizeOf(Object raw) {
         if (raw == null) {
-            return DEFAULT_LIMIT;
+            return DEFAULT_PAGE_SIZE;
         }
         Long number = wholeNumber(raw);
-        if (number == null || number < 1 || number > MAX_LIMIT) {
+        if (number == null || number < 1 || number > MAX_PAGE_SIZE) {
             throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "the limit on one answer is a whole number from 1 to " + MAX_LIMIT
-                    + ", and arrived as " + kindOf(raw) + ". Nothing was answered: a "
-                    + "caller wanting more follows the cursor of the answer, and a limit "
-                    + "read as a ceiling or a default without saying so would give an "
-                    + "answer that looks complete and is not",
-                List.of(LIMIT_ARGUMENT));
+                WorklistException.Reason.PAGE_SIZE_REJECTED,
+                "a page carries between 1 and " + MAX_PAGE_SIZE + " objects, and page_size "
+                    + "arrived as " + kindOf(raw) + ". Nothing was answered: a caller wanting "
+                    + "more follows the 'next_cursor' of the answer, and a size read as a "
+                    + "ceiling or a default without saying so would give an answer that "
+                    + "looks complete and is not",
+                List.of(PAGE_SIZE_ARGUMENT));
         }
         return number.intValue();
+    }
+
+    private static SortKey sortOf(String view, Object raw, Set<SortKey> offered) {
+        if (raw == null) {
+            return DEFAULT_SORT;
+        }
+        return (raw instanceof String text ? SortKey.named(text) : Optional.<SortKey>empty())
+            .filter(offered::contains)
+            .filter(key -> key.declaredOn(view))
+            .orElseThrow(() -> new WorklistException(
+                WorklistException.Reason.SORT_UNDECLARED,
+                "the " + view + " view sorts by " + sortsOf(view, offered) + ", and sort "
+                    + "arrived as " + kindOf(raw) + ". Nothing was answered: an order this "
+                    + "read does not apply would make another order look like the one asked for",
+                List.of(SORT_ARGUMENT)));
+    }
+
+    private static String sortsOf(String view, Set<SortKey> offered) {
+        return String.join(", ", Arrays.stream(SortKey.values())
+            .filter(offered::contains)
+            .filter(key -> key.declaredOn(view))
+            .map(key -> "'" + key.wireName() + "'")
+            .toList());
+    }
+
+    private static SortKey.Direction directionOf(Object raw) {
+        if (raw == null) {
+            return DEFAULT_DIRECTION;
+        }
+        return (raw instanceof String text ? SortKey.Direction.named(text)
+                : Optional.<SortKey.Direction>empty())
+            .orElseThrow(() -> new WorklistException(
+                WorklistException.Reason.SORT_UNDECLARED,
+                "a sort runs 'asc' or 'desc', and direction arrived as " + kindOf(raw)
+                    + ". Nothing was answered: an order this read does not apply would make "
+                    + "another order look like the one asked for",
+                List.of(DIRECTION_ARGUMENT)));
     }
 
     private static String cursorOf(Object raw) {
@@ -174,10 +219,10 @@ public record QuerySpec(Object filter, Object limit, Object cursor, List<String>
         }
         if (!(raw instanceof String text) || text.isBlank()) {
             throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "the cursor is the 'next_cursor' of a previous answer, passed back as it "
-                    + "came, and arrived as " + kindOf(raw),
-                List.of(CURSOR_ARGUMENT));
+                WorklistException.Reason.CURSOR_MALFORMED,
+                "after is the 'next_cursor' of a previous answer, passed back as it came, "
+                    + "and arrived as " + kindOf(raw),
+                List.of(AFTER_ARGUMENT));
         }
         return text;
     }

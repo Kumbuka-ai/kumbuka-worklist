@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.adapter.rest;
 import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
+import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbSurface;
@@ -90,6 +91,11 @@ public class WorklistResource {
     /** What an item URI offers when the segment names no verb. */
     private static final String ITEM_ALLOW = "GET, PATCH, POST";
 
+    /** The query parameters of {@code query} besides the filter. */
+    private static final java.util.Set<String> PAGING_ARGUMENTS = java.util.Set.of(
+        QuerySpec.PAGE_SIZE_ARGUMENT, QuerySpec.AFTER_ARGUMENT, QuerySpec.SORT_ARGUMENT,
+        QuerySpec.DIRECTION_ARGUMENT);
+
     /** The shape a JSON object body is read into. */
     private static final TypeReference<Map<String, Object>> OBJECT =
         new TypeReference<>() { };
@@ -158,21 +164,25 @@ public class WorklistResource {
      * follows from the target and the effect class rather than from the
      * verb's name.
      *
-     * <p><strong>The filter and the limit travel as query parameters, not as
+     * <p><strong>The filter and the paging travel as query parameters, not as
      * path segments.</strong> An address without an id part is reserved, so a
      * segment for a filter would either collapse into the selector or reserve
      * a form no address can grow into. The query string is the transport
      * layer for arguments a caller narrows a read with, and its parameters do
      * not become part of the address the answer is at.
      *
-     * <p>A filter is written as {@code ?filter.<name>=<value>}, the bound as
-     * {@code ?limit=} and the continuation as {@code ?cursor=}. Every parameter
-     * is handed to {@link QuerySpec#of} as it arrived — text, or a list when it
-     * was repeated — and read by the verb surface, by the same parse the MCP
-     * adapter's arguments get; a parameter that is none of the three is refused
-     * by name, after scope visibility like every other refusal of the call. The JAX-RS
-     * conversion of {@code limit} to an integer is deliberately not used: it
-     * answers an unreadable value with a bare 404 before any refusal of ours.
+     * <p>A filter is written as {@code ?filter.<name>=<value>}, the page size as
+     * {@code ?page_size=}, the continuation as {@code ?after=}, the order as
+     * {@code ?sort=} and {@code ?direction=}. Every parameter is handed to
+     * {@link QuerySpec} as it arrived — text, or a list when it was repeated —
+     * and read by the verb surface, by the same parse the MCP adapter's
+     * arguments get; a parameter that is none of these is refused by name,
+     * after scope visibility like every other refusal of the call. The JAX-RS
+     * conversion of {@code page_size} to an integer is deliberately not used:
+     * it answers an unreadable value with a bare 404 before any refusal of ours.
+     *
+     * <p>This surface offers every sort a view declares
+     * ({@link SortKey#ALL}), the assistant surface the standard pair only.
      */
     @GET
     @Path("{selector}")
@@ -180,8 +190,7 @@ public class WorklistResource {
                                   @PathParam("selector") String selector,
                                   jakarta.ws.rs.core.UriInfo info) {
         Map<String, Object> filter = new LinkedHashMap<>();
-        Object limit = null;
-        Object cursor = null;
+        Map<String, Object> paging = new LinkedHashMap<>();
         java.util.List<String> untaken = new java.util.ArrayList<>();
         for (Map.Entry<String, java.util.List<String>> entry
                 : info.getQueryParameters().entrySet()) {
@@ -190,15 +199,15 @@ public class WorklistResource {
             String filterPrefix = QueryFilter.FILTER_ARGUMENT + ".";
             if (name.startsWith(filterPrefix) && name.length() > filterPrefix.length()) {
                 filter.put(name.substring(filterPrefix.length()), value);
-            } else if (QuerySpec.LIMIT_ARGUMENT.equals(name)) {
-                limit = value;
-            } else if (QuerySpec.CURSOR_ARGUMENT.equals(name)) {
-                cursor = value;
+            } else if (PAGING_ARGUMENTS.contains(name)) {
+                paging.put(name, value);
             } else {
                 untaken.add(name);
             }
         }
-        QuerySpec spec = QuerySpec.of(filter, limit, cursor, untaken);
+        QuerySpec spec = new QuerySpec(filter, paging.get(QuerySpec.PAGE_SIZE_ARGUMENT),
+            paging.get(QuerySpec.AFTER_ARGUMENT), paging.get(QuerySpec.SORT_ARGUMENT),
+            paging.get(QuerySpec.DIRECTION_ARGUMENT), untaken, SortKey.ALL);
         return Response.ok(Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec))).build();
     }

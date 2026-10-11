@@ -174,6 +174,15 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 // milestone this call addresses is right there.
                 case FIELD_RETRACTED -> 422;
 
+                // The paging of a query is malformed: a page size out of
+                // range, a cursor this service did not hand out or one
+                // handed out by another query, a sort the view does not
+                // declare. 400 and not 422, the status the memory service
+                // already answers PAGE_SIZE_REJECTED and CURSOR_MALFORMED
+                // with, so that one paging contract refuses alike in every
+                // service it holds in.
+                case PAGE_SIZE_REJECTED, CURSOR_MALFORMED, CURSOR_FOREIGN, SORT_UNDECLARED -> 400;
+
                 // The scope is visible to this caller and this service does not
                 // serve its kind. 422 and not 404: the scope is there, the
                 // caller can see it, and saying otherwise would send them

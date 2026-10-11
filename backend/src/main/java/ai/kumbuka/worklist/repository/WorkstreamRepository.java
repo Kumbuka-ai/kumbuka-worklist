@@ -1,5 +1,7 @@
 package ai.kumbuka.worklist.repository;
 
+import ai.kumbuka.worklist.domain.PageRequest;
+import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.Workstream;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -8,7 +10,9 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -89,14 +93,21 @@ public class WorkstreamRepository {
         }
     }
 
-    /** Every workstream of a scope, in the axis's own order (by number). */
+    /**
+     * One page of a scope's workstreams, narrowed by the status the request
+     * names, in its sort and continuing after its position — in the database,
+     * by {@link KeysetClause}.
+     */
     @Transactional
-    public List<Workstream> inScope(UUID scopeId) {
-        return em.createQuery(
-                "SELECT w FROM Workstream w WHERE w.scopeId = :scope ORDER BY w.number",
-                Workstream.class)
-            .setParameter(P_SCOPE, scopeId)
-            .getResultList();
+    public List<Workstream> page(UUID scopeId, PageRequest request) {
+        StringBuilder jpql = new StringBuilder("SELECT w FROM Workstream w WHERE w.scopeId = :scope");
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put(P_SCOPE, scopeId);
+        request.value(QueryFilter.WORKSTREAM_STATUS).ifPresent(status -> {
+            jpql.append(" AND w.status = :status");
+            params.put("status", status);
+        });
+        return KeysetClause.page(em, jpql, params, "w", request, Workstream.class);
     }
 
     /**

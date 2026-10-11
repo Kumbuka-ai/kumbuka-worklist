@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.adapter.mcp;
 
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
+import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.domain.Selector;
 
 import java.util.ArrayList;
@@ -151,25 +152,33 @@ public final class McpTools {
                     required(ARG_FIELDS, OBJECT, FIELDS_DOC))),
 
             new Tool("query",
-                "One page of the objects of one view, oldest first for items, in the "
-                    + "axis's own order for iterations and milestones and by number for "
-                    + "workstreams. A filter narrows it, a limit bounds it, and the "
-                    + "answer's 'next_cursor' — passed back as 'cursor' — continues after "
-                    + "its last object; it is null exactly when nothing follows. A filter "
-                    + "name the view does not declare, a value a filter cannot read, a "
-                    + "value the scope does not hold, and any other argument are refused "
-                    + "by name and never answered with the whole set.",
+                "One page of the objects of one view. A filter narrows it, 'page_size' "
+                    + "bounds it, 'sort' and 'direction' order it, and the answer's "
+                    + "'next_cursor' — passed back as 'after' with the same scope, view, "
+                    + "filter, sort and direction — continues after its last object; it is "
+                    + "absent exactly when nothing follows. A filter name the view does not "
+                    + "declare, a value a filter cannot read, a value the scope does not "
+                    + "hold, a page size out of range, an undeclared sort, a cursor of "
+                    + "another query and any other argument are refused by name and never "
+                    + "answered with the whole set.",
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING, SELECTOR_DOC),
                     optional(QueryFilter.FILTER_ARGUMENT, OBJECT, FILTER_DOC),
-                    optional(QuerySpec.LIMIT_ARGUMENT, INTEGER,
-                        "The upper bound on this answer, from 1 to " + QuerySpec.MAX_LIMIT
-                            + ". A missing limit uses the default of "
-                            + QuerySpec.DEFAULT_LIMIT + "."),
-                    optional(QuerySpec.CURSOR_ARGUMENT, STRING,
+                    optional(QuerySpec.PAGE_SIZE_ARGUMENT, INTEGER,
+                        "How many objects one page carries, from 1 to "
+                            + QuerySpec.MAX_PAGE_SIZE + ". A missing page_size uses the "
+                            + "default of " + QuerySpec.DEFAULT_PAGE_SIZE + "."),
+                    optional(QuerySpec.AFTER_ARGUMENT, STRING,
                         "The 'next_cursor' of the previous answer of the same query, as "
-                            + "it came. A missing cursor answers the first page."))),
+                            + "it came. A missing after answers the first page."),
+                    optional(QuerySpec.SORT_ARGUMENT, STRING,
+                        "'" + SortKey.ID.wireName() + "' (the object's number, the "
+                            + "default) or '" + SortKey.CREATED_AT.wireName() + "' (when it "
+                            + "was created, then its number)."),
+                    optional(QuerySpec.DIRECTION_ARGUMENT, STRING,
+                        "'" + SortKey.Direction.ASC.wireName() + "' (the default) or '"
+                            + SortKey.Direction.DESC.wireName() + "'."))),
 
             new Tool("accept",
                 "The intake gate. It refuses today and says why: the address it used to "

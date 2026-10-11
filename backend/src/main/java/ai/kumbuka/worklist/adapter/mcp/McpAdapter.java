@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
+import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
@@ -93,14 +94,16 @@ public class McpAdapter {
     private static final String ARG_TO_ITEM = "to_item";
     private static final String ARG_TYPE = "type";
 
-    /** The query's filter and cap, as arguments rather than address parts. */
+    /** The query's filter and paging, as arguments rather than address parts. */
     private static final String ARG_FILTER = QueryFilter.FILTER_ARGUMENT;
-    private static final String ARG_LIMIT = QuerySpec.LIMIT_ARGUMENT;
-    private static final String ARG_CURSOR = QuerySpec.CURSOR_ARGUMENT;
+    private static final String ARG_PAGE_SIZE = QuerySpec.PAGE_SIZE_ARGUMENT;
+    private static final String ARG_AFTER = QuerySpec.AFTER_ARGUMENT;
+    private static final String ARG_SORT = QuerySpec.SORT_ARGUMENT;
+    private static final String ARG_DIRECTION = QuerySpec.DIRECTION_ARGUMENT;
 
     /** Every argument {@code query} takes; anything else is refused by name. */
-    private static final java.util.Set<String> QUERY_ARGUMENTS =
-        java.util.Set.of(ARG_SCOPE, ARG_SELECTOR, ARG_FILTER, ARG_LIMIT, ARG_CURSOR);
+    private static final java.util.Set<String> QUERY_ARGUMENTS = java.util.Set.of(
+        ARG_SCOPE, ARG_SELECTOR, ARG_FILTER, ARG_PAGE_SIZE, ARG_AFTER, ARG_SORT, ARG_DIRECTION);
 
     /** JSON-RPC's own codes. Protocol faults only — a refused verb is not one. */
     private static final int METHOD_NOT_FOUND = -32601;
@@ -262,18 +265,19 @@ public class McpAdapter {
         String scope = required(in, ARG_SCOPE);
         String selector = required(in, ARG_SELECTOR);
 
-        // The filter, the limit and the cursor arrive as arguments, not as
-        // address parts: an address without an id part is reserved. They are
-        // handed on raw and read by the verb surface, the same reading the REST
-        // query string gets — an instanceof here that fell through to "no
-        // filter" is exactly how a filter sent as a JSON string used to answer
-        // the whole set. An argument that is none of them is handed on too and
-        // refused by name.
+        // The filter and the paging arrive as arguments, not as address
+        // parts: an address without an id part is reserved. They are handed on
+        // raw and read by the verb surface, the same reading the REST query
+        // string gets — an instanceof here that fell through to "no filter" is
+        // exactly how a filter sent as a JSON string used to answer the whole
+        // set. An argument that is none of them is handed on too and refused by
+        // name. This surface offers the standard sorts only.
         List<String> untaken = in.keySet().stream()
             .filter(name -> !QUERY_ARGUMENTS.contains(name))
             .toList();
-        QuerySpec spec = QuerySpec.of(in.get(ARG_FILTER), in.get(ARG_LIMIT),
-            in.get(ARG_CURSOR), untaken);
+        QuerySpec spec = new QuerySpec(in.get(ARG_FILTER), in.get(ARG_PAGE_SIZE),
+            in.get(ARG_AFTER), in.get(ARG_SORT), in.get(ARG_DIRECTION), untaken,
+            SortKey.STANDARD);
         return Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec));
     }

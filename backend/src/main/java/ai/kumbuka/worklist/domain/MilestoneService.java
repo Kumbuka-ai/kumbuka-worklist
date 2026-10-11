@@ -18,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -90,26 +89,15 @@ public class MilestoneService extends PlanningService {
         return project(require(scopeId, milestoneId), List.of());
     }
 
-    /** The scope's whole axis, in the axis's own order. */
-    @Transactional
-    public List<Map<String, Object>> query(UUID scopeId) {
-        return planning.milestonesInScope(scopeId).stream()
-            .map(milestone -> project(milestone, List.of()))
-            .toList();
-    }
-
     /**
-     * One page of a scope's milestones, in the axis's own order, narrowed by
-     * the filters the milestone view declares.
+     * One page of a scope's milestones, narrowed by the filters the milestone
+     * view declares, in the request's sort.
      */
     @Transactional
-    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
-        Optional<Object> status = narrowing.value(QueryFilter.MILESTONE_STATUS);
-        Optional<Object> kind = narrowing.value(QueryFilter.MILESTONE_KIND);
-        return QueryAnswer.page(narrowing, planning.milestonesInScope(scopeId),
-            milestone -> status.map(milestone.status::equals).orElse(true)
-                && kind.map(milestone.kind::equals).orElse(true),
-            milestone -> milestone.number,
+    public Page query(UUID scopeId, PageRequest request) {
+        return Page.of(request, planning.milestonePage(scopeId, request),
+            milestone -> PageCursor.Position.of(request.sort(), milestone.number,
+                milestone.createdAt, milestone.rank),
             milestone -> project(milestone, List.of()));
     }
 

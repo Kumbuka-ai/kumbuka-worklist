@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.adapter.payload;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
@@ -93,7 +94,7 @@ public final class Payloads {
     public static Listing of(String scope, VerbSurface.Listing listing) {
         return new Listing(listing.objects().stream()
             .map(result -> of(scope, result))
-            .toList(), listing.truncated(), listing.next());
+            .toList(), listing.next());
     }
 
     /**
@@ -167,16 +168,14 @@ public final class Payloads {
      * listing later needs to say about itself is an added key rather than a
      * changed shape.
      *
-     * <p>{@code truncated} is a fact about the write. A caller who did not
-     * name a limit sees {@code false}; a caller whose limit was reached sees
-     * {@code true} — the same silent-ceiling defect the sprint-169 read had
-     * one layer down, refused at the surface.
-     *
      * <p>{@code next_cursor} is the way to the rest: passed back as the
-     * {@code cursor} argument of the same query, it answers the objects after
-     * the last one here. Null exactly when {@code truncated} is false.
+     * {@code after} argument of the same query, it answers the objects after
+     * the last one here. It is absent exactly when nothing follows — the one
+     * field that says whether more follows, so that no flag beside it can say
+     * something else.
      */
-    public record Listing(List<ObjectResponse> objects, boolean truncated,
+    public record Listing(List<ObjectResponse> objects,
+                          @JsonInclude(JsonInclude.Include.NON_NULL)
                           @JsonProperty("next_cursor") String nextCursor) {
     }
 

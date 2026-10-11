@@ -133,24 +133,8 @@ public class ItemService {
     }
 
     /**
-     * Every item of a scope, oldest first.
-     *
-     * <p>Ordering by creation and not by the sort key of the contract. That
-     * sort ranks by milestone and by a declared attribute, and ordering by a
-     * declared attribute is a capability a scope declares rather than a
-     * property every attribute has for free.
-     */
-    @Transactional
-    public List<Map<String, Object>> query(UUID scopeId) {
-        return items.inScope(scopeId)
-            .stream()
-            .map(this::project)
-            .toList();
-    }
-
-    /**
      * One page of a scope's items, narrowed by the filters the item view
-     * declares, oldest first.
+     * declares, in the request's sort.
      *
      * <p>The filter names and value forms were checked against
      * {@link QueryFilter} before this is entered; what is left here is the
@@ -159,32 +143,26 @@ public class ItemService {
      * {@code VALUE_UNDECLARED} naming the filter, and not answered as an empty
      * set: an empty answer cannot be told from a typo.
      *
-     * <p>The page continues after the item the cursor names, by its position in
-     * the order and not by whether it still passes the filter, so a walk over
-     * pages is neither broken nor repeated by an item whose status changed in
-     * between.
+     * <p>The page continues after the position the cursor carries, by the
+     * sort and not by whether the item there still passes the filter, so a
+     * walk over pages is neither broken nor repeated by an item whose status
+     * changed in between.
      */
     @Transactional
-    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
+    public Page query(UUID scopeId, PageRequest request) {
         Map<String, Object> filter = new LinkedHashMap<>();
-        narrowing.value(QueryFilter.ITEM_STATUS).ifPresent(name ->
+        request.value(QueryFilter.ITEM_STATUS).ifPresent(name ->
             filter.put(ItemRepository.BY_STATUS, statusFilter(scopeId, (String) name)));
-        narrowing.value(QueryFilter.ITEM_MILESTONE).ifPresent(number ->
+        request.value(QueryFilter.ITEM_MILESTONE).ifPresent(number ->
             filter.put(ItemRepository.BY_MILESTONE, milestoneFilter(scopeId, (Long) number)));
-        narrowing.value(QueryFilter.ITEM_WORKSTREAM).ifPresent(token ->
+        request.value(QueryFilter.ITEM_WORKSTREAM).ifPresent(token ->
             filter.put(ItemRepository.BY_WORKSTREAM,
                 workstreamByToken(scopeId, (String) token,
                     QueryFilter.ITEM_WORKSTREAM.offenderName()).number));
 
-        Item after = null;
-        if (narrowing.after() != null) {
-            after = items.byAddress(scopeId, narrowing.after());
-            if (after == null) {
-                throw PageCursor.unplaced(Selector.ITEM, narrowing.after());
-            }
-        }
-        List<Item> admitted = items.inScope(scopeId, filter, after, narrowing.limit());
-        return QueryAnswer.bounded(narrowing, admitted, item -> item.number, this::project);
+        return Page.of(request, items.page(scopeId, filter, request),
+            item -> PageCursor.Position.of(request.sort(), item.number, item.createdAt, 0),
+            this::project);
     }
 
     private Long statusFilter(UUID scopeId, String name) {

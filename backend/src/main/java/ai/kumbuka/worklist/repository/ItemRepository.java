@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.repository;
 import ai.kumbuka.worklist.domain.Item;
 import ai.kumbuka.worklist.domain.ItemReference;
 import ai.kumbuka.worklist.domain.ItemRelation;
+import ai.kumbuka.worklist.domain.PageRequest;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -89,11 +90,12 @@ public class ItemRepository {
     }
 
     /**
-     * One page of the items of a scope that match the given filter, oldest
-     * first, continuing after a given item.
+     * One page of the items of a scope that match the given filter, in the
+     * request's sort, continuing after the request's position.
      *
      * <p>Kept separate from {@link #inScope(UUID)} so the calling paths are
-     * obviously two: one for the whole set and one for a narrowed page.
+     * obviously two: one for the whole set the domain reads for itself, and
+     * one for a page a caller reads.
      *
      * <p><strong>Enumerated columns only</strong>, each an equality on a key the
      * domain resolved from the caller's name, number or token:
@@ -101,19 +103,13 @@ public class ItemRepository {
      * not among them is a defect of the caller above and fails loudly rather
      * than being dropped, because a dropped filter answers the whole set.
      *
-     * <p>The continuation is a keyset on the order itself, {@code (created_at,
-     * number)}: the page starts strictly after the given item's position,
-     * whether or not that item still passes the filter.
-     *
-     * <p>At most {@code limit + 1} rows are returned. The extra row is not
-     * answered; it is what the domain reads to know that more follows, without
-     * a second query.
-     *
-     * @param after the last item of the previous page, or null for the first
+     * <p>The continuation, the order and the bound are {@link KeysetClause}'s:
+     * the page starts strictly after the position the cursor carries, whether
+     * or not the item there still passes the filter.
      */
     @Transactional
-    public List<Item> inScope(UUID scopeId, java.util.Map<String, Object> filter, Item after,
-                              int limit) {
+    public List<Item> page(UUID scopeId, java.util.Map<String, Object> filter,
+                           PageRequest request) {
         StringBuilder jpql = new StringBuilder(
             "SELECT i FROM Item i WHERE i.scopeId = :scope");
         java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
@@ -133,17 +129,7 @@ public class ItemRepository {
             jpql.append(" AND ").append(column).append(" = :").append(param);
             params.put(param, entry.getValue());
         }
-        if (after != null) {
-            jpql.append(" AND (i.createdAt > :afterAt"
-                + " OR (i.createdAt = :afterAt AND i.number > :afterNumber))");
-            params.put("afterAt", after.createdAt);
-            params.put("afterNumber", after.number);
-        }
-        jpql.append(" ORDER BY i.createdAt, i.number");
-
-        var query = em.createQuery(jpql.toString(), Item.class);
-        params.forEach(query::setParameter);
-        return query.setMaxResults(limit + 1).getResultList();
+        return KeysetClause.page(em, jpql, params, "i", request, Item.class);
     }
 
     /** The item of that id, or null. Scope membership is checked by the caller. */

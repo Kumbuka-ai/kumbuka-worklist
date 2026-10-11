@@ -21,7 +21,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -89,25 +88,15 @@ public class IterationService extends PlanningService {
         return project(require(scopeId, iterationId), List.of());
     }
 
-    /** The scope's whole axis, in the order the iterations are to be worked. */
-    @Transactional
-    public List<Map<String, Object>> query(UUID scopeId) {
-        return planning.iterationsInScope(scopeId).stream()
-            .map(iteration -> project(iteration, List.of()))
-            .toList();
-    }
-
     /**
-     * One page of a scope's iterations, in the axis's own order, narrowed by
-     * the filters the iteration view declares.
+     * One page of a scope's iterations, narrowed by the filters the iteration
+     * view declares, in the request's sort.
      */
     @Transactional
-    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
-        Optional<Object> closed = narrowing.value(QueryFilter.ITERATION_CLOSED);
-        return QueryAnswer.page(narrowing, planning.iterationsInScope(scopeId),
-            iteration -> closed.map(wanted -> wanted.equals(iteration.closedAt != null))
-                .orElse(true),
-            iteration -> iteration.number,
+    public Page query(UUID scopeId, PageRequest request) {
+        return Page.of(request, planning.iterationPage(scopeId, request),
+            iteration -> PageCursor.Position.of(request.sort(), iteration.number,
+                iteration.createdAt, iteration.rank),
             iteration -> project(iteration, List.of()));
     }
 

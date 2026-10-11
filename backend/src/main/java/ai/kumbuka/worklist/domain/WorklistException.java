@@ -175,6 +175,23 @@ public class WorklistException extends RuntimeException {
          */
         VALUE_UNDECLARED,
 
+        /** The page size of a {@code query} is not a whole number from 1 to the maximum. */
+        PAGE_SIZE_REJECTED,
+
+        /** The cursor of a {@code query} is not one this service handed out. */
+        CURSOR_MALFORMED,
+
+        /**
+         * The cursor of a {@code query} was handed out by another query: another
+         * scope, view, filter, sort or direction. Applying it would place the
+         * walk at a position of a different order and skip or repeat objects
+         * without saying so.
+         */
+        CURSOR_FOREIGN,
+
+        /** The sort of a {@code query} names a field or direction the view does not sort by. */
+        SORT_UNDECLARED,
+
         /**
          * The intake gate was reached and this scheme has no carrier for the
          * business identifier it is supposed to allocate.

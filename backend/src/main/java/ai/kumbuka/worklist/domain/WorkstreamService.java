@@ -18,7 +18,6 @@ import org.jboss.logging.Logger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -68,24 +67,15 @@ public class WorkstreamService {
         return project(require(scopeId, workstreamId));
     }
 
-    /** The scope's whole axis, by number. */
-    @Transactional
-    public List<Map<String, Object>> query(UUID scopeId) {
-        return workstreams.inScope(scopeId).stream()
-            .map(this::project)
-            .toList();
-    }
-
     /**
-     * One page of a scope's workstreams, by number, narrowed by the filters the
-     * workstream view declares.
+     * One page of a scope's workstreams, narrowed by the filters the workstream
+     * view declares, in the request's sort.
      */
     @Transactional
-    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
-        Optional<Object> status = narrowing.value(QueryFilter.WORKSTREAM_STATUS);
-        return QueryAnswer.page(narrowing, workstreams.inScope(scopeId),
-            workstream -> status.map(workstream.status::equals).orElse(true),
-            workstream -> workstream.number,
+    public Page query(UUID scopeId, PageRequest request) {
+        return Page.of(request, workstreams.page(scopeId, request),
+            workstream -> PageCursor.Position.of(request.sort(), workstream.number,
+                workstream.createdAt, 0),
             this::project);
     }
 
