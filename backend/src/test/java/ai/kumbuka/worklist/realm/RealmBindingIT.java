@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.realm;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -5,6 +12,7 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import io.restassured.http.ContentType;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
@@ -39,7 +47,7 @@ class RealmBindingIT {
 
     @Test
     void a_token_from_the_tenant_realm_is_accepted() {
-        String token = tokenFrom(TwoRealmKeycloakResource.TENANT_ISSUER,
+        String token = tokenFrom(issuer(TwoRealmKeycloakResource.TENANT_ISSUER_KEY),
             TwoRealmKeycloakResource.TENANT_USER);
 
         given()
@@ -56,9 +64,9 @@ class RealmBindingIT {
 
     @Test
     void a_token_from_another_realm_is_refused() {
-        String tenantToken = tokenFrom(TwoRealmKeycloakResource.TENANT_ISSUER,
+        String tenantToken = tokenFrom(issuer(TwoRealmKeycloakResource.TENANT_ISSUER_KEY),
             TwoRealmKeycloakResource.TENANT_USER);
-        String operatorToken = tokenFrom(TwoRealmKeycloakResource.OPERATOR_ISSUER,
+        String operatorToken = tokenFrom(issuer(TwoRealmKeycloakResource.OPERATOR_ISSUER_KEY),
             TwoRealmKeycloakResource.OPERATOR_USER);
 
         assertThat(operatorToken)
@@ -82,6 +90,14 @@ class RealmBindingIT {
             .when().get("/api/whoami")
             .then()
             .statusCode(401);
+    }
+
+    /**
+     * The issuer URL of a realm, as reported by the running container. It is
+     * read at runtime because the container's port is only known once it is up.
+     */
+    private static String issuer(String key) {
+        return ConfigProvider.getConfig().getValue(key, String.class);
     }
 
     /**
