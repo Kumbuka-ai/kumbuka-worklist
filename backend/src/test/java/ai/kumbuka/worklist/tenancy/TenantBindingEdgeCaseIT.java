@@ -1,6 +1,15 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import ai.kumbuka.worklist.domain.ItemService;
+import ai.kumbuka.worklist.domain.Pages;
+import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import io.quarkus.hibernate.orm.PersistenceUnitExtension;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -211,7 +220,7 @@ class TenantBindingEdgeCaseIT {
                 java.util.Map.of("title", "count-probe", "status", status));
             assertThat(created.get("title")).isEqualTo("count-probe");
 
-            assertThat(items.query(scope))
+            assertThat(Pages.all(scope, Selector.ITEM, items::query))
                 .as("a write through the ORM carries the bound tenant without the caller "
                     + "supplying it — that is what the @TenantId filter is for — and the "
                     + "read gives back exactly what it wrote and only that: the scope "

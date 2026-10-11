@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -1640,7 +1647,7 @@ class ItemDomainIT {
     void a_query_returns_the_items_of_the_scope_in_the_canonical_shape() {
         UUID id = createdId("query probe " + shortId());
 
-        assertThat(items.query(SCOPE))
+        assertThat(Pages.all(SCOPE, Selector.ITEM, items::query))
             .as("the query is the same projection the single read gives, so a caller "
                 + "handles one shape rather than two")
             .anySatisfy(item -> {
@@ -1748,7 +1755,7 @@ class ItemDomainIT {
             }
             String rendered = String.valueOf(item);
             long number = Long.parseLong(rendered.substring(rendered.lastIndexOf('/') + 1));
-            out.add(items.query(SCOPE).stream()
+            out.add(Pages.all(SCOPE, Selector.ITEM, items::query).stream()
                 .filter(row -> Long.valueOf(number).equals(row.get("number")))
                 .map(row -> (UUID) row.get("id"))
                 .findFirst()
@@ -1843,7 +1850,7 @@ class ItemDomainIT {
     private long highestLiveNumber() {
         List<Long> live = new ArrayList<>();
         String closedName = vocabulary.requireStatus(SCOPE, closedStatus()).name;
-        for (Map<String, Object> item : items.query(SCOPE)) {
+        for (Map<String, Object> item : Pages.all(SCOPE, Selector.ITEM, items::query)) {
             if (!closedName.equals(item.get("status")) && item.get("number") != null) {
                 live.add((Long) item.get("number"));
             }

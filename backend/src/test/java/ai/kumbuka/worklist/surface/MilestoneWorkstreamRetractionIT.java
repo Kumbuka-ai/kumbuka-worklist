@@ -1,8 +1,16 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.MilestoneService;
+import ai.kumbuka.worklist.domain.Pages;
 import ai.kumbuka.worklist.domain.ScopeSettingService;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.SelectorRegistry;
@@ -167,7 +175,7 @@ class MilestoneWorkstreamRetractionIT {
         aMilestone("first goal");
         aMilestone("second goal");
 
-        assertThat(milestones.query(scope))
+        assertThat(Pages.all(scope, Selector.MILESTONE, milestones::query))
             .hasSize(2)
             .allSatisfy(milestone -> assertThat(milestone)
                 .as("query and read are the same projection; a field that survived in "
@@ -271,7 +279,7 @@ class MilestoneWorkstreamRetractionIT {
             Field.TITLE.canonicalName(), "a goal that must not exist",
             Field.WORKSTREAM_ID.canonicalName(), mobile.token)));
 
-        assertThat(milestones.query(scope))
+        assertThat(Pages.all(scope, Selector.MILESTONE, milestones::query))
             .as("the refusal happens while the caller's map is being resolved, before "
                 + "a row or a number is taken. A refusal that had already allocated a "
                 + "number would burn one on every typo")

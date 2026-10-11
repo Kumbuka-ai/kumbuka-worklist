@@ -37,17 +37,17 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * a filter this repository does not know would be a filter this repository
  * would drop, and the domain refuses ahead of the read to keep it that way.
  *
- * <p><strong>The limit is honoured, and truncation is reported.</strong> A
- * caller who asks for at most {@code n} items in a scope that holds
- * {@code n + m} sees {@code n} items with {@code truncated = true}, and a
- * caller reading a truncated answer is told the store carried more. A
+ * <p><strong>The page size is honoured, and more is reported.</strong> A
+ * caller who asks for a page of {@code n} items in a scope that holds
+ * {@code n + m} sees {@code n} items and a {@code next} cursor, and a caller
+ * reading a cut answer is told the store carried more. A
  * silent ceiling — the answer looking complete and not being — is the
  * sprint-169 defect this listing shape refuses.
  *
  * <h2>The red state, and how it was observed</h2>
  *
  * The filter's mechanism is one branch in
- * {@link ai.kumbuka.worklist.repository.ItemRepository#inScope(UUID, Map, Item, int)}.
+ * {@link ai.kumbuka.worklist.repository.ItemRepository#page(UUID, Map, PageRequest)}.
  * Dropping the {@code AND i.statusPk = :param} makes
  * {@link #a_status_filter_narrows_the_answer} fail: the query answers with
  * every item in the scope regardless of the status filter, and the count
@@ -101,8 +101,8 @@ class QueryFilterProbeIT {
         createItem("third done item", doneStatus);
 
         String openName = vocabulary.requireStatus(scope, openStatus).name;
-        QueryAnswer narrowed = items.query(scope, new QuerySpec(Map.of("status", openName), 100)
-            .narrowFor(Selector.ITEM));
+        Page narrowed = items.query(scope, new QuerySpec(Map.of("status", openName), 100)
+            .pageFor(scope, Selector.ITEM));
 
         assertThat(narrowed.objects())
             .as("the caller asked for items with the 'open' status. Exactly the two "
@@ -124,7 +124,7 @@ class QueryFilterProbeIT {
         // it, the assertion above would hold against a repository that
         // refused every query — the failure mode of a filter written one
         // predicate too broadly.
-        QueryAnswer whole = items.query(scope, QuerySpec.all().narrowFor(Selector.ITEM));
+        Page whole = items.query(scope, QuerySpec.all().pageFor(scope, Selector.ITEM));
         assertThat(whole.objects())
             .as("the whole set is five items, so the narrow answer is genuinely a "
                 + "subset rather than the whole thing on a smaller scope")
@@ -141,7 +141,7 @@ class QueryFilterProbeIT {
 
         Throwable refused = catchThrowable(() ->
             items.query(scope, new QuerySpec(Map.of("title_contains", "test"), 100)
-                .narrowFor(Selector.ITEM)));
+                .pageFor(scope, Selector.ITEM)));
 
         assertThat(refused)
             .as("the domain refuses a filter it does not read rather than dropping it. "
@@ -169,7 +169,7 @@ class QueryFilterProbeIT {
 
         Throwable refused = catchThrowable(() ->
             items.query(scope, new QuerySpec(Map.of("status", "no-such-status"), 100)
-                .narrowFor(Selector.ITEM)));
+                .pageFor(scope, Selector.ITEM)));
 
         assertThat(refused)
             .as("a value the scope has not declared is refused rather than answered "
@@ -187,7 +187,7 @@ class QueryFilterProbeIT {
 
         Throwable refused = catchThrowable(() ->
             items.query(scope, new QuerySpec(Map.of("milestone", 999_999L), 100)
-                .narrowFor(Selector.ITEM)));
+                .pageFor(scope, Selector.ITEM)));
 
         assertThat(refused)
             .as("a milestone number that names nothing is refused rather than "
@@ -217,7 +217,7 @@ class QueryFilterProbeIT {
 
         Throwable refused = catchThrowable(() ->
             items.query(scope, new QuerySpec(Map.of("status", "   "), 100)
-                .narrowFor(Selector.ITEM)));
+                .pageFor(scope, Selector.ITEM)));
 
         assertThat(refused).isInstanceOf(WorklistException.class);
         WorklistException typed = (WorklistException) refused;
@@ -231,7 +231,7 @@ class QueryFilterProbeIT {
 
         Throwable refused = catchThrowable(() ->
             items.query(scope, new QuerySpec(Map.of("milestone", ""), 100)
-                .narrowFor(Selector.ITEM)));
+                .pageFor(scope, Selector.ITEM)));
 
         assertThat(refused).isInstanceOf(WorklistException.class);
         WorklistException typed = (WorklistException) refused;
@@ -240,37 +240,37 @@ class QueryFilterProbeIT {
     }
 
     // ==================================================================
-    // Probe 3 — the limit caps, and truncation is reported
+    // Probe 3 — the page size bounds the answer, and more is reported
     // ==================================================================
 
     @Test
-    void the_limit_caps_the_answer_and_truncation_is_reported() {
+    void the_page_size_bounds_the_answer_and_a_cursor_reports_more() {
         for (int i = 0; i < 5; i++) {
             createItem("item " + i, openStatus);
         }
 
-        QueryAnswer capped = items.query(scope, new QuerySpec(Map.of(), 3)
-            .narrowFor(Selector.ITEM));
+        Page capped = items.query(scope, new QuerySpec(Map.of(), 3)
+            .pageFor(scope, Selector.ITEM));
 
         assertThat(capped.objects())
-            .as("the caller asked for at most three, and got three. A silent ceiling "
+            .as("the caller asked for a page of three, and got three. A silent ceiling "
                 + "would answer with more or fewer without saying, and the same "
                 + "sprint-169 defect against the read path")
             .hasSize(3);
-        assertThat(capped.truncated())
-            .as("and the answer says that the store carried more than the caller asked "
-                + "to see. Without this fact, a full listing and a truncated one look "
-                + "identical from the outside, and a caller relying on 'answer size < "
-                + "limit means end' has no way to check")
-            .isTrue();
+        assertThat(capped.next())
+            .as("and the answer hands out a cursor, which says that the store carried "
+                + "more than the caller asked to see. Without it, a full listing and a "
+                + "cut one look identical from the outside, and a caller relying on "
+                + "'answer size < page size means end' has no way to check")
+            .isNotNull();
 
-        QueryAnswer whole = items.query(scope, new QuerySpec(Map.of(), 100)
-            .narrowFor(Selector.ITEM));
+        Page whole = items.query(scope, new QuerySpec(Map.of(), 100)
+            .pageFor(scope, Selector.ITEM));
         assertThat(whole.objects()).hasSize(5);
-        assertThat(whole.truncated())
-            .as("a limit above the total size is not truncation — the store did not "
-                + "carry more than the caller asked to see")
-            .isFalse();
+        assertThat(whole.next())
+            .as("a page size above the total size hands out no cursor — the store did "
+                + "not carry more than the caller asked to see")
+            .isNull();
     }
 
     // ==================================================================

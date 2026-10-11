@@ -15,6 +15,7 @@ import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.ScopeSettingService;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.SelectorRegistry;
+import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import ai.kumbuka.worklist.domain.Workstream;
 import ai.kumbuka.worklist.domain.WorkstreamService;
@@ -58,9 +59,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  *     interpret, and a value the scope never declared are each refused with a
  *     typed refusal naming the argument under {@code data.offenders} — never
  *     answered with the collection.</li>
- * <li>A limit answers at most that many objects and a {@code next_cursor}; two
- *     or more pages followed to the end carry every object exactly once, in the
- *     unpaged order.</li>
+ * <li>A page size answers at most that many objects and a {@code next_cursor};
+ *     two or more pages followed to the end carry every object exactly once, in
+ *     the one-page order, on every view, in every sort and direction offered.</li>
+ * <li>A page size out of range, a sort the view does not declare or the
+ *     transport does not offer, and a cursor this service did not hand out or
+ *     handed out to another query are refused as the paging refusals —
+ *     {@code PAGE_SIZE_REJECTED}, {@code SORT_UNDECLARED},
+ *     {@code CURSOR_MALFORMED}, {@code CURSOR_FOREIGN} — in the one envelope,
+ *     400 on REST.</li>
  * <li>An argument the read does not take at all — a REST query parameter or an
  *     MCP argument outside the declared set — is refused, not ignored. The
  *     measured defect of 2026-09-24 ({@code filter {milestone: 6}} answering
@@ -108,6 +115,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <li>a workstream token refused as not-found — the create probe and the
  *     undeclared-value probe.</li>
  * </ul>
+ *
+ * <p>The paging contract changed on 2026-10-11: {@code limit} and
+ * {@code cursor} became {@code page_size} and {@code after}, the answer lost
+ * {@code truncated}, the axes page by keyset in the database instead of in
+ * memory, and a sort was added. The probes of that change carry their own red
+ * state where they stand; the keyset itself is probed in {@code KeysetPagingIT}.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -115,6 +128,11 @@ class QueryNarrowingIT {
 
     private static final String SCOPE = "narrowing-probe";
     private static final UUID SCOPE_ID = UUID.fromString("5b0c1d4e-6a2f-4b8e-9c3d-1e2f3a4b5c6d");
+
+    /** A second scope, so a cursor has another scope to come from. */
+    private static final String OTHER_SCOPE = "narrowing-probe-other";
+    private static final UUID OTHER_SCOPE_ID =
+        UUID.fromString("6c1d2e5f-7b3a-4c9f-8d4e-2f3a4b5c6d7e");
 
     private static final String OPEN = "open";
     private static final String DONE = "done";
@@ -332,14 +350,24 @@ class QueryNarrowingIT {
 
     @ParameterizedTest
     @EnumSource(Transport.class)
-    void the_item_pages_cover_the_whole_set_without_gap_or_double(Transport via) {
-        assertPagesCoverTheWhole(via, Selector.ITEM, 2);
+    void every_view_pages_in_every_standard_sort_without_gap_or_double(Transport via) {
+        for (String view : Selector.VIEWS) {
+            for (SortKey sort : SortKey.STANDARD) {
+                for (SortKey.Direction direction : SortKey.Direction.values()) {
+                    assertPagesCoverTheWhole(via, view, sort, direction);
+                }
+            }
+        }
     }
 
-    @ParameterizedTest
-    @EnumSource(Transport.class)
-    void the_milestone_pages_cover_the_whole_set_without_gap_or_double(Transport via) {
-        assertPagesCoverTheWhole(via, Selector.MILESTONE, 1);
+    /** The declared field beyond the standard pair, on the transport that offers it. */
+    @Test
+    void the_axes_page_by_rank_on_rest() {
+        for (String view : List.of(Selector.ITERATION, Selector.MILESTONE)) {
+            for (SortKey.Direction direction : SortKey.Direction.values()) {
+                assertPagesCoverTheWhole(Transport.REST, view, SortKey.RANK, direction);
+            }
+        }
     }
 
     @ParameterizedTest
@@ -363,39 +391,157 @@ class QueryNarrowingIT {
         assertThat(seen).containsExactlyElementsOf(staged.openItems());
     }
 
+    /**
+     * RED STATE, observed 2026-10-11 with the range check removed from
+     * {@code QuerySpec}: {@code page_size} 0 answered an empty page with a
+     * cursor and 201 answered a page of 201.
+     */
     @ParameterizedTest
     @EnumSource(Transport.class)
-    void a_limit_outside_its_range_or_form_is_refused(Transport via) {
-        for (Object limit : List.<Object>of(0, -1, QuerySpec.MAX_LIMIT + 1, "ten", 2.5)) {
-            assertRefused(via.query(Selector.ITEM, Map.of(), limit, null),
-                "INVALID_VALUE", "limit", "limit " + limit);
+    void a_page_size_outside_its_range_or_form_is_refused(Transport via) {
+        for (Object size : List.<Object>of(0, -1, QuerySpec.MAX_PAGE_SIZE + 1, "ten", 2.5)) {
+            assertRefused(via.query(Selector.ITEM, Map.of(), size, null),
+                "PAGE_SIZE_REJECTED", "page_size", "page_size " + size);
         }
     }
 
     @ParameterizedTest
     @EnumSource(Transport.class)
-    void a_cursor_this_read_did_not_hand_out_is_refused(Transport via) {
-        assertRefused(via.query(Selector.ITEM, Map.of(), 2, "not-a-cursor"),
-            "INVALID_VALUE", "cursor", "garbage cursor");
-
-        String milestoneCursor = via.query(Selector.MILESTONE, Map.of(), 1, null).next();
-        assertThat(milestoneCursor).isNotNull();
-        assertRefused(via.query(Selector.ITEM, Map.of(), 2, milestoneCursor),
-            "INVALID_VALUE", "cursor", "a milestone cursor on the item view");
+    void the_earlier_limit_and_cursor_are_refused_as_unknown(Transport via) {
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("limit", 1)),
+            "UNKNOWN_FIELD", "limit", "limit");
+        String cursor = via.query(Selector.ITEM, Map.of(), 1, null).next();
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("cursor", cursor)),
+            "UNKNOWN_FIELD", "cursor", "cursor");
     }
 
     @ParameterizedTest
     @EnumSource(Transport.class)
-    void the_default_limit_applies_without_one(Transport via) {
-        int missing = QuerySpec.DEFAULT_LIMIT + 1 - staged.allItems().size();
+    void a_cursor_this_service_did_not_hand_out_is_malformed(Transport via) {
+        assertRefused(via.query(Selector.ITEM, Map.of(), 2, "not-a-cursor"),
+            "CURSOR_MALFORMED", "after", "garbage cursor");
+        String forged = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+            "v2|a|item|b|id|asc|1|1".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertRefused(via.query(Selector.ITEM, Map.of(), 2, forged),
+            "CURSOR_MALFORMED", "after", "a cursor of another version");
+    }
+
+    /**
+     * A cursor handed out by another query, through the surface and in the one
+     * envelope. RED STATE, observed 2026-10-11 with each binding skipped in
+     * {@code PageCursor.decode}: the cursor was applied and answered a page of
+     * the other order.
+     */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void a_cursor_of_another_view_filter_sort_or_direction_is_foreign(Transport via) {
+        String itemCursor = via.query(Selector.ITEM, Map.of(), 1, null).next();
+        assertThat(itemCursor).isNotNull();
+
+        assertRefused(via.query(Selector.MILESTONE, Map.of(), 1, itemCursor),
+            "CURSOR_FOREIGN", "after", "an item cursor on the milestone view");
+        assertRefused(via.query(Selector.ITEM, Map.of("status", OPEN), 1, itemCursor),
+            "CURSOR_FOREIGN", "after", "an unfiltered cursor on a filtered query");
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("page_size", 1,
+                "after", itemCursor, "sort", "created_at")),
+            "CURSOR_FOREIGN", "after", "an id cursor on the created_at sort");
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("page_size", 1,
+                "after", itemCursor, "direction", "desc")),
+            "CURSOR_FOREIGN", "after", "an ascending cursor on a descending query");
+    }
+
+    /** A cursor of another scope, through the surface: the second staged scope. */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void a_cursor_of_another_scope_is_foreign(Transport via) {
+        String otherCursor = via.callIn(OTHER_SCOPE, Selector.ITEM, Map.of(),
+            Map.of("page_size", 1)).next();
+        assertThat(otherCursor).isNotNull();
+        assertRefused(via.query(Selector.ITEM, Map.of(), 1, otherCursor),
+            "CURSOR_FOREIGN", "after", "a cursor of another scope");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void the_default_page_size_applies_without_one(Transport via) {
+        int missing = QuerySpec.DEFAULT_PAGE_SIZE + 1 - staged.allItems().size();
         if (missing > 0) {
             stageFiller(missing);
         }
         Answer answer = via.query(Selector.ITEM, Map.of(), null, null);
         assertThat(answer.addresses())
-            .as("without a limit the documented default of %d applies", QuerySpec.DEFAULT_LIMIT)
-            .hasSize(QuerySpec.DEFAULT_LIMIT);
+            .as("without a page size the documented default of %d applies",
+                QuerySpec.DEFAULT_PAGE_SIZE)
+            .hasSize(QuerySpec.DEFAULT_PAGE_SIZE);
         assertThat(answer.next()).as("and the rest is reachable").isNotNull();
+    }
+
+    /**
+     * The answer carries the objects and {@code next_cursor}, and nothing else
+     * about the page: no {@code truncated} beside it, and on the last page no
+     * {@code next_cursor} at all rather than a null one.
+     */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void the_last_page_carries_no_cursor_and_no_page_answers_truncated(Transport via) {
+        Map<String, Object> first = via.body(Selector.MILESTONE, Map.of("page_size", 1));
+        assertThat(first).containsOnlyKeys("objects", "next_cursor");
+
+        Map<String, Object> last = via.body(Selector.MILESTONE,
+            Map.of("page_size", QuerySpec.MAX_PAGE_SIZE));
+        assertThat(last)
+            .as("the whole axis fits one page: the answer is the objects and nothing else")
+            .containsOnlyKeys("objects");
+    }
+
+    // ======================================================================
+    // Probe group 4b — the sort is declared, and it orders
+    // ======================================================================
+
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void the_default_sort_is_by_number_ascending(Transport via) {
+        for (String view : Selector.VIEWS) {
+            List<Long> numbers = numbersOf(via.query(view, Map.of(), QuerySpec.MAX_PAGE_SIZE, null));
+            assertThat(numbers).as("%s without a sort", view).isSorted();
+            assertThat(numbersOf(via.call(view, Map.of(),
+                    Map.of("direction", "desc", "page_size", QuerySpec.MAX_PAGE_SIZE))))
+                .as("%s by number descending", view)
+                .containsExactlyElementsOf(numbers.reversed());
+        }
+    }
+
+    @Test
+    void rest_sorts_the_axes_by_rank_then_number() {
+        List<Map<String, Object>> fields = Transport.REST.call(Selector.ITERATION, Map.of(),
+            Map.of("sort", "rank")).fields();
+        assertThat(fields).extracting(f -> ((Number) f.get("rank")).intValue())
+            .as("the open iteration was ranked 1, the closed one 2")
+            .isSorted();
+    }
+
+    /**
+     * RED STATE, observed 2026-10-11 with the declaration check removed from
+     * {@code QuerySpec}: {@code sort=title} answered in number order, and
+     * {@code rank} on the assistant surface answered in rank order.
+     */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void an_undeclared_sort_or_direction_is_refused(Transport via) {
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("sort", "title")),
+            "SORT_UNDECLARED", "sort", "sort by title");
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("sort", "rank")),
+            "SORT_UNDECLARED", "sort", "rank on the item view, which carries none");
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("sort", "uuid")),
+            "SORT_UNDECLARED", "sort", "sort by the platform identity");
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("direction", "up")),
+            "SORT_UNDECLARED", "direction", "direction up");
+    }
+
+    @Test
+    void the_assistant_surface_offers_the_standard_sorts_only() {
+        assertRefused(Transport.MCP.call(Selector.MILESTONE, Map.of(), Map.of("sort", "rank")),
+            "SORT_UNDECLARED", "sort", "rank on the assistant surface");
     }
 
     // ======================================================================
@@ -439,31 +585,58 @@ class QueryNarrowingIT {
     }
 
     private static void assertRefused(Answer answer, String reason, String offender, String what) {
-        assertThat(answer.status()).as("%s is refused, not answered", what).isEqualTo(422);
+        assertThat(answer.status()).as("%s is refused, not answered", what).isNotEqualTo(200);
+        if (answer.status() != Answer.MCP_REFUSAL) {
+            assertThat(answer.status()).as("%s answers the status of its class", what)
+                .isEqualTo(PAGING_REFUSALS.contains(reason) ? 400 : 422);
+        }
         assertThat(answer.reason()).as("%s refused with a typed reason", what).isEqualTo(reason);
         assertThat(answer.offenders()).as("%s names the argument", what).containsExactly(offender);
     }
 
-    private static void assertPagesCoverTheWhole(Transport via, String view, int pageSize) {
-        Answer whole = via.query(view, Map.of(), QuerySpec.MAX_LIMIT, null);
-        assertThat(whole.next()).as("the unpaged read is complete").isNull();
-        assertThat(whole.addresses()).hasSizeGreaterThan(pageSize);
+    private static void assertPagesCoverTheWhole(Transport via, String view, SortKey sort,
+                                                 SortKey.Direction direction) {
+        String what = view + " by " + sort.wireName() + " " + direction.wireName();
+        Map<String, Object> order = Map.of("sort", sort.wireName(),
+            "direction", direction.wireName());
+        Map<String, Object> wholeArgs = new LinkedHashMap<>(order);
+        wholeArgs.put("page_size", QuerySpec.MAX_PAGE_SIZE);
+        Answer whole = via.call(view, Map.of(), wholeArgs);
+        assertThat(whole.next()).as("%s: the one-page read is complete", what).isNull();
+        assertThat(whole.addresses()).as(what).hasSizeGreaterThan(1);
 
         List<String> seen = new ArrayList<>();
         String cursor = null;
         int pages = 0;
         do {
-            Answer page = via.query(view, Map.of(), pageSize, cursor);
-            assertThat(page.addresses()).as("a page holds at most the limit").hasSizeLessThanOrEqualTo(pageSize);
+            Map<String, Object> args = new LinkedHashMap<>(order);
+            args.put("page_size", 1);
+            if (cursor != null) {
+                args.put("after", cursor);
+            }
+            Answer page = via.call(view, Map.of(), args);
+            assertThat(page.status()).as(what).isEqualTo(200);
+            assertThat(page.addresses()).as("%s: a page holds at most its size", what)
+                .hasSizeLessThanOrEqualTo(1);
             seen.addAll(page.addresses());
             cursor = page.next();
             pages++;
-            assertThat(pages).as("the pages end").isLessThanOrEqualTo(whole.addresses().size());
+            assertThat(pages).as("%s: the pages end", what)
+                .isLessThanOrEqualTo(whole.addresses().size());
         } while (cursor != null);
 
-        assertThat(pages).as("the walk spans at least two pages").isGreaterThanOrEqualTo(2);
-        assertThat(new LinkedHashSet<>(seen)).as("no double").hasSize(seen.size());
-        assertThat(seen).as("no gap, in the unpaged order").containsExactlyElementsOf(whole.addresses());
+        assertThat(pages).as("%s: the walk spans at least two pages", what)
+            .isGreaterThanOrEqualTo(2);
+        assertThat(new LinkedHashSet<>(seen)).as("%s: no double", what).hasSize(seen.size());
+        assertThat(seen).as("%s: no gap, in the one-page order", what)
+            .containsExactlyElementsOf(whole.addresses());
+    }
+
+    private static List<Long> numbersOf(Answer answer) {
+        assertThat(answer.status()).isEqualTo(200);
+        return answer.addresses().stream()
+            .map(a -> Long.valueOf(a.substring(a.lastIndexOf('/') + 1)))
+            .toList();
     }
 
     private static List<String> without(List<String> all, List<String> removed) {
@@ -478,9 +651,16 @@ class QueryNarrowingIT {
     // Transports
     // ======================================================================
 
+    /** The refusals of the paging contract, answered 400 on REST. */
+    private static final java.util.Set<String> PAGING_REFUSALS = java.util.Set.of(
+        "PAGE_SIZE_REJECTED", "CURSOR_MALFORMED", "CURSOR_FOREIGN", "SORT_UNDECLARED");
+
     /** One answer, whichever transport carried it. */
     record Answer(int status, String reason, List<String> offenders, List<String> addresses,
                   List<Map<String, Object>> fields, String next) {
+
+        /** The status an MCP refusal is recorded under: it has no HTTP status of its own. */
+        static final int MCP_REFUSAL = -1;
 
         static Answer of(int status, JsonPath body) {
             if (status != 200) {
@@ -498,57 +678,94 @@ class QueryNarrowingIT {
     enum Transport {
         REST {
             @Override
-            Answer query(String view, Map<String, Object> filter, Object limit, String cursor) {
+            Answer callIn(String scope, String view, Map<String, Object> filter,
+                          Map<String, Object> paging) {
                 Map<String, Object> params = new LinkedHashMap<>();
                 filter.forEach((name, value) -> params.put("filter." + name, value));
-                if (limit != null) {
-                    params.put("limit", limit);
-                }
-                if (cursor != null) {
-                    params.put("cursor", cursor);
-                }
-                return raw(view, params);
+                params.putAll(paging);
+                return rawIn(scope, view, params);
+            }
+
+            @Override
+            Map<String, Object> body(String view, Map<String, Object> paging) {
+                return given().queryParams(paging)
+                    .when().get("/api/" + SCOPE + "/" + view)
+                    .then().statusCode(200)
+                    .extract().jsonPath().getMap("");
             }
         },
         MCP {
             @Override
-            Answer query(String view, Map<String, Object> filter, Object limit, String cursor) {
+            Answer callIn(String scope, String view, Map<String, Object> filter,
+                          Map<String, Object> paging) {
                 Map<String, Object> args = new LinkedHashMap<>();
-                args.put("scope", SCOPE);
+                args.put("scope", scope);
                 args.put("selector", view);
                 if (!filter.isEmpty()) {
                     args.put("filter", filter);
                 }
-                if (limit != null) {
-                    args.put("limit", limit);
-                }
-                if (cursor != null) {
-                    args.put("cursor", cursor);
-                }
+                args.putAll(paging);
                 return mcp(args);
+            }
+
+            @Override
+            Map<String, Object> body(String view, Map<String, Object> paging) {
+                Map<String, Object> args = new LinkedHashMap<>(paging);
+                args.put("scope", SCOPE);
+                args.put("selector", view);
+                return mcpRpc(args).getMap("result.structuredContent");
             }
         };
 
-        abstract Answer query(String view, Map<String, Object> filter, Object limit, String cursor);
+        /** One call in the staged scope, with any paging arguments. */
+        Answer call(String view, Map<String, Object> filter, Map<String, Object> paging) {
+            return callIn(SCOPE, view, filter, paging);
+        }
+
+        abstract Answer callIn(String scope, String view, Map<String, Object> filter,
+                               Map<String, Object> paging);
+
+        /** The answer of a call as the transport carried it, every key included. */
+        abstract Map<String, Object> body(String view, Map<String, Object> paging);
+
+        /** One page: the page size and the cursor, each left out when null. */
+        Answer query(String view, Map<String, Object> filter, Object pageSize, String after) {
+            Map<String, Object> paging = new LinkedHashMap<>();
+            if (pageSize != null) {
+                paging.put("page_size", pageSize);
+            }
+            if (after != null) {
+                paging.put("after", after);
+            }
+            return call(view, filter, paging);
+        }
 
         Answer raw(String view, Map<String, Object> params) {
+            return rawIn(SCOPE, view, params);
+        }
+
+        static Answer rawIn(String scope, String view, Map<String, Object> params) {
             var response = given().queryParams(params)
-                .when().get("/api/" + SCOPE + "/" + view)
+                .when().get("/api/" + scope + "/" + view)
                 .then().extract();
             return Answer.of(response.statusCode(), response.jsonPath());
         }
 
         static Answer mcp(Map<String, Object> arguments) {
-            JsonPath rpc = given()
+            JsonPath rpc = mcpRpc(arguments);
+            JsonPath content = JsonPath.from(rpc.prettify()).setRootPath("result.structuredContent");
+            boolean refused = rpc.getBoolean("result.isError");
+            return Answer.of(refused ? Answer.MCP_REFUSAL : 200, content);
+        }
+
+        private static JsonPath mcpRpc(Map<String, Object> arguments) {
+            return given()
                 .contentType(ContentType.JSON)
                 .body(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call",
                     "params", Map.of("name", "query", "arguments", arguments)))
                 .when().post("/mcp")
                 .then().statusCode(200)
                 .extract().jsonPath();
-            JsonPath content = JsonPath.from(rpc.prettify()).setRootPath("result.structuredContent");
-            boolean refused = rpc.getBoolean("result.isError");
-            return Answer.of(refused ? 422 : 200, content);
         }
     }
 
@@ -604,6 +821,8 @@ class QueryNarrowingIT {
         iterations.close(SCOPE_ID, (UUID) closedIteration.get("id"), "nothing, deliberately",
             String.valueOf(closedIteration.get("conflict_token")));
 
+        stageOtherScope();
+
         return new Staged(List.of(a, b, c, d, e), List.of(a, c, e), List.of(b, d), List.of(a, d),
             a, (Long) active.get("number"),
             address(Selector.MILESTONE, active.get("number")),
@@ -613,6 +832,22 @@ class QueryNarrowingIT {
             address(Selector.ITERATION, closedIteration.get("number")),
             address(Selector.WORKSTREAM, alpha.number),
             address(Selector.WORKSTREAM, gamma.number));
+    }
+
+    /** Two items in the second scope, enough for one page and a cursor. */
+    private void stageOtherScope() {
+        SurfaceFixture.publishScope(OTHER_SCOPE, OTHER_SCOPE_ID, "project", false);
+        settings.create(OTHER_SCOPE_ID, Map.of(
+            "max_planned_iterations", 10,
+            "warn_planned_iterations", 9,
+            "max_memberships_per_iteration", 10,
+            "warn_memberships_per_iteration", 9));
+        selectors.declare(OTHER_SCOPE_ID, Selector.ITEM);
+        vocabulary.declareStatus(OTHER_SCOPE_ID, OPEN, 1, true, false, false, false);
+        workstreams.requireDefault(OTHER_SCOPE_ID);
+        for (int i = 0; i < 2; i++) {
+            items.create(OTHER_SCOPE_ID, Map.of("title", "elsewhere " + i, "status", OPEN));
+        }
     }
 
     private String item(String title, String status, String workstream, Long milestone) {
@@ -630,7 +865,7 @@ class QueryNarrowingIT {
         return address(Selector.ITEM, created.get("number"));
     }
 
-    /** Items beyond the default limit, all done in the default stream. */
+    /** Items beyond the default page size, all done in the default stream. */
     private void stageFiller(int count) {
         List<String> added = new ArrayList<>(staged.allItems());
         List<String> done = new ArrayList<>(staged.doneItems());

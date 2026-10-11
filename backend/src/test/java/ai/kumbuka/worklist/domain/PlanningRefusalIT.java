@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -379,13 +386,13 @@ class PlanningRefusalIT {
         milestones.create(scope, Map.of(
             "title", "not assessed", "kind", Milestone.NOT_ASSESSED, "rank", 3));
 
-        assertThat(milestones.query(scope).stream().map(m -> m.get("id")).toList())
+        assertThat(Pages.all(scope, Selector.MILESTONE, SortKey.RANK, milestones::query).stream().map(m -> m.get("id")).toList())
             .as("rank orders the axis, and never the number or the alphabet")
-            .containsExactly(first, second, milestones.query(scope).get(2).get("id"));
+            .containsExactly(first, second, Pages.all(scope, Selector.MILESTONE, SortKey.RANK, milestones::query).get(2).get("id"));
 
         Map<String, Object> closed = milestones.close(scope, first, milestoneToken(first));
         assertThat(closed.get("status")).isEqualTo(Milestone.CLOSED);
-        assertThat(milestones.query(scope))
+        assertThat(Pages.all(scope, Selector.MILESTONE, SortKey.RANK, milestones::query))
             .as("a closed milestone stays in the table, so every reference still resolves "
                 + "and the allocator counts past it")
             .hasSize(3);
