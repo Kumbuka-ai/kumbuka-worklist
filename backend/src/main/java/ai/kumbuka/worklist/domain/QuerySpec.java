@@ -99,8 +99,9 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
      * size in range, the sort declared and offered, the cursor one this query
      * handed out.
      *
-     * @throws WorklistException {@code UNKNOWN_FIELD}, {@code INVALID_VALUE},
-     *         {@code PAGE_SIZE_REJECTED}, {@code SORT_UNDECLARED},
+     * @throws WorklistException {@code ARGUMENT_UNKNOWN}, {@code PREDICATE_UNKNOWN},
+     *         {@code INVALID_VALUE}, {@code PAGE_SIZE_REJECTED}, {@code SORT_UNDECLARED},
+     *         {@code ARGUMENT_INVALID},
      *         {@code CURSOR_MALFORMED} or {@code CURSOR_FOREIGN}, naming the
      *         argument under its offenders — never a silent fallback to "no
      *         filter", to the default page size or to the first page
@@ -120,7 +121,7 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
             return;
         }
         throw new WorklistException(
-            WorklistException.Reason.UNKNOWN_FIELD,
+            WorklistException.Reason.ARGUMENT_UNKNOWN,
             "'query' takes a filter, a page_size, an after, a sort and a direction besides "
                 + "its address, and " + untaken + " is none of them. A filter is written "
                 + "inside the filter argument; a page is bounded by page_size and continued "
@@ -206,7 +207,7 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         return (raw instanceof String text ? SortKey.Direction.named(text)
                 : Optional.<SortKey.Direction>empty())
             .orElseThrow(() -> new WorklistException(
-                WorklistException.Reason.SORT_UNDECLARED,
+                WorklistException.Reason.ARGUMENT_INVALID,
                 "a sort runs 'asc' or 'desc', and direction arrived as " + kindOf(raw)
                     + ". Nothing was answered: an order this read does not apply would make "
                     + "another order look like the one asked for",

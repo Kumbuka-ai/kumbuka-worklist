@@ -19,7 +19,10 @@ import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import ai.kumbuka.worklist.domain.Workstream;
 import ai.kumbuka.worklist.domain.WorkstreamService;
+import ai.kumbuka.worklist.domain.WorklistException;
+import ai.kumbuka.worklist.platform.PlatformFixture;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
+import ai.kumbuka.worklist.tenancy.TenantContext;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestIdentityAssociation;
@@ -67,11 +70,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  *     handed out to another query are refused as the paging refusals —
  *     {@code PAGE_SIZE_REJECTED}, {@code SORT_UNDECLARED},
  *     {@code CURSOR_MALFORMED}, {@code CURSOR_FOREIGN} — in the one envelope,
- *     400 on REST.</li>
+ *     400 on REST. A direction other than {@code asc} or {@code desc} is
+ *     {@code ARGUMENT_INVALID}, 400.</li>
  * <li>An argument the read does not take at all — a REST query parameter or an
- *     MCP argument outside the declared set — is refused, not ignored. The
- *     measured defect of 2026-09-24 ({@code filter {milestone: 6}} answering
- *     the full stock) is exactly a narrowing that never reached the filter.</li>
+ *     MCP argument outside the declared set — is refused, not ignored, as
+ *     {@code ARGUMENT_UNKNOWN} with 400; a filter field the view does not
+ *     declare is {@code PREDICATE_UNKNOWN} with 422, and only behind scope
+ *     visibility (DEC-0042). The measured defect of 2026-09-24
+ *     ({@code filter {milestone: 6}} answering the full stock) is exactly a
+ *     narrowing that never reached the filter.</li>
+ * <li>{@code Kumbuka-Surface: assistant} makes a REST read on the assistant
+ *     surface, and the service MCP's text content is its answer as JSON.</li>
  * </ul>
  *
  * <p>Both transports run every shared probe, because the obligation is that the
@@ -134,6 +143,14 @@ class QueryNarrowingIT {
     private static final UUID OTHER_SCOPE_ID =
         UUID.fromString("6c1d2e5f-7b3a-4c9f-8d4e-2f3a4b5c6d7e");
 
+    /** The header a hop names the caller's surface with, and its one value. */
+    private static final String SURFACE = "Kumbuka-Surface";
+    private static final String ASSISTANT = "assistant";
+
+    /** A second tenant, holding a scope of the same name as the probe scope. */
+    private static final UUID TENANT_B = UUID.fromString("7d2e3f60-8c4b-4d0a-9e5f-3a4b5c6d7e8f");
+    private static final UUID SCOPE_IN_B = UUID.fromString("8e3f4a71-9d5c-4e1b-8f60-4b5c6d7e8f90");
+
     private static final String OPEN = "open";
     private static final String DONE = "done";
 
@@ -145,6 +162,8 @@ class QueryNarrowingIT {
     @Inject MilestoneService milestones;
     @Inject IterationService iterations;
     @Inject ItemService items;
+    @Inject VerbSurface verbs;
+    @Inject TenantContext tenants;
 
     /** The staged objects, by role, as canonical addresses. Staged once. */
     private static Staged staged;
@@ -242,7 +261,7 @@ class QueryNarrowingIT {
     void an_undeclared_filter_name_is_refused_on_every_view(Transport via) {
         for (String view : Selector.VIEWS) {
             Answer answer = via.query(view, Map.of("colour", "blue"), null, null);
-            assertRefused(answer, "UNKNOWN_FIELD", "filter.colour", view);
+            assertRefused(answer, "PREDICATE_UNKNOWN", "filter.colour", view);
         }
     }
 
@@ -255,14 +274,14 @@ class QueryNarrowingIT {
     @EnumSource(Transport.class)
     void a_filter_declared_on_another_view_is_refused(Transport via) {
         Answer answer = via.query(Selector.ITERATION, Map.of("milestone", 6), null, null);
-        assertRefused(answer, "UNKNOWN_FIELD", "filter.milestone", "iteration");
+        assertRefused(answer, "PREDICATE_UNKNOWN", "filter.milestone", "iteration");
     }
 
     /** The measured shape of 2026-09-24: a narrowing beside the filter, not in it. */
     @Test
     void a_rest_parameter_the_read_does_not_take_is_refused() {
         Answer answer = Transport.REST.raw(Selector.ITEM, Map.of("milestone", "6"));
-        assertRefused(answer, "UNKNOWN_FIELD", "milestone", "item");
+        assertRefused(answer, "ARGUMENT_UNKNOWN", "milestone", "item");
     }
 
     @Test
@@ -271,7 +290,7 @@ class QueryNarrowingIT {
         args.put("scope", SCOPE);
         args.put("selector", Selector.ITEM);
         args.put("milestone", 6);
-        assertRefused(Transport.mcp(args), "UNKNOWN_FIELD", "milestone", "item");
+        assertRefused(Transport.mcp(args), "ARGUMENT_UNKNOWN", "milestone", "item");
     }
 
     // ======================================================================
@@ -405,14 +424,53 @@ class QueryNarrowingIT {
         }
     }
 
+    /**
+     * An argument the read does not take and a filter field the view does not
+     * declare are two conditions, with two codes and two statuses (DEC-0042):
+     * the first is decidable from the verb alone and answers 400, the second
+     * says something about the vocabulary of a scope and answers 422.
+     *
+     * <p>RED STATE, observed 2026-10-12 on {@code e86e373}: both were
+     * {@code UNKNOWN_FIELD} with 422, on REST and on the service MCP.
+     */
     @ParameterizedTest
     @EnumSource(Transport.class)
     void the_earlier_limit_and_cursor_are_refused_as_unknown(Transport via) {
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("limit", 1)),
-            "UNKNOWN_FIELD", "limit", "limit");
+            "ARGUMENT_UNKNOWN", "limit", "limit");
         String cursor = via.query(Selector.ITEM, Map.of(), 1, null).next();
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("cursor", cursor)),
-            "UNKNOWN_FIELD", "cursor", "cursor");
+            "ARGUMENT_UNKNOWN", "cursor", "cursor");
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("foo", "1")),
+            "ARGUMENT_UNKNOWN", "foo", "foo");
+        assertRefused(via.call(Selector.ITEM, Map.of("foo", "1"), Map.of()),
+            "PREDICATE_UNKNOWN", "filter.foo", "filter.foo");
+    }
+
+    /**
+     * An undeclared filter field is a statement about a scope's vocabulary, so
+     * it is produced only once the caller has been found to see the scope. For
+     * a scope the caller cannot see the answer is {@code NOT_FOUND}, whatever
+     * else is wrong with the call (DEC-0042) — a 422 here would confirm that
+     * the scope exists.
+     *
+     * <p>RED STATE, observed 2026-10-12 with the paging read moved in front of
+     * the scope resolution in {@code VerbSurface.query}: the stranger was
+     * answered {@code PREDICATE_UNKNOWN} with 422 on REST and on the service
+     * MCP.
+     */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void an_undeclared_filter_on_an_invisible_scope_is_not_found(Transport via) {
+        SurfaceFixture.asStranger(identity);
+        Answer answer = via.call(Selector.ITEM, Map.of("foo", "1"), Map.of("limit", 1));
+        assertThat(answer.status()).as("refused, not answered").isNotEqualTo(200);
+        if (answer.status() != Answer.MCP_REFUSAL) {
+            assertThat(answer.status()).as("the not-found status, not the vocabulary one")
+                .isEqualTo(404);
+        }
+        assertThat(answer.reason()).isEqualTo("NOT_FOUND");
+        assertThat(answer.offenders()).as("not-found carries no data").isEmpty();
     }
 
     @ParameterizedTest
@@ -529,21 +587,155 @@ class QueryNarrowingIT {
      */
     @ParameterizedTest
     @EnumSource(Transport.class)
-    void an_undeclared_sort_or_direction_is_refused(Transport via) {
+    void an_undeclared_sort_is_refused(Transport via) {
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("sort", "title")),
             "SORT_UNDECLARED", "sort", "sort by title");
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("sort", "rank")),
             "SORT_UNDECLARED", "sort", "rank on the item view, which carries none");
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("sort", "uuid")),
             "SORT_UNDECLARED", "sort", "sort by the platform identity");
+    }
+
+    /**
+     * A direction is not a sort field: a value other than {@code asc} or
+     * {@code desc} is a value the argument does not admit (ADR-0049).
+     *
+     * <p>RED STATE, observed 2026-10-12 on {@code e86e373}: both were refused
+     * {@code SORT_UNDECLARED}.
+     */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void a_direction_other_than_asc_or_desc_is_an_invalid_argument(Transport via) {
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("direction", "sideways")),
+            "ARGUMENT_INVALID", "direction", "direction sideways");
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("direction", "up")),
-            "SORT_UNDECLARED", "direction", "direction up");
+            "ARGUMENT_INVALID", "direction", "direction up");
     }
 
     @Test
     void the_assistant_surface_offers_the_standard_sorts_only() {
         assertRefused(Transport.MCP.call(Selector.MILESTONE, Map.of(), Map.of("sort", "rank")),
             "SORT_UNDECLARED", "sort", "rank on the assistant surface");
+    }
+
+    // ======================================================================
+    // Probe group 4c — the assistant surface over REST, named by the hop
+    // ======================================================================
+
+    /**
+     * A router that publishes {@code query} as an assistant tool reaches this
+     * service over REST and says so with {@code Kumbuka-Surface: assistant}.
+     * The read is then made on the assistant surface: the sort the REST surface
+     * declares beyond the standard pair is refused there too (ADR-0049).
+     *
+     * <p>RED STATE, observed 2026-10-12 with the header ignored in
+     * {@code WorklistResource.collectionGet}: {@code sort=rank} on the
+     * milestone view answered 200 with the header.
+     */
+    @Test
+    void the_assistant_header_offers_the_standard_sorts_only() {
+        Answer named = Transport.rawIn(SCOPE, Selector.MILESTONE, Map.of("sort", "rank"),
+            ASSISTANT);
+        assertRefused(named, "SORT_UNDECLARED", "sort", "rank under the assistant header");
+
+        Answer unnamed = Transport.rawIn(SCOPE, Selector.MILESTONE, Map.of("sort", "rank"), null);
+        assertThat(unnamed.status()).as("without the header REST offers rank").isEqualTo(200);
+    }
+
+    /** With the header, the REST answer is the one the service MCP gives. */
+    @Test
+    void the_assistant_header_answers_as_the_service_mcp_does() {
+        Map<String, Object> paging = Map.of("page_size", 2, "sort", "created_at",
+            "direction", "desc");
+        Map<String, Object> viaRest = given().header(SURFACE, ASSISTANT).queryParams(paging)
+            .when().get("/api/" + SCOPE + "/" + Selector.MILESTONE)
+            .then().statusCode(200)
+            .extract().jsonPath().getMap("");
+        assertThat(viaRest).isEqualTo(Transport.MCP.body(Selector.MILESTONE, paging));
+    }
+
+    /** The header takes one value; any other is refused and the read not made. */
+    @Test
+    void the_surface_header_takes_only_the_assistant() {
+        var response = given().header(SURFACE, "console")
+            .when().get("/api/" + SCOPE + "/" + Selector.MILESTONE)
+            .then().extract();
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.jsonPath().getString("reason")).isEqualTo("ARGUMENT_INVALID");
+        assertThat(response.jsonPath().getMap("$"))
+            .as("the header is not an argument of the call, so there is no offender to name")
+            .doesNotContainKey("data");
+        assertThat(response.jsonPath().getString("message")).contains(SURFACE)
+            .doesNotContain("console");
+    }
+
+    // ======================================================================
+    // Probe group 4d — the service MCP's text content is the answer as JSON
+    // ======================================================================
+
+    /**
+     * {@code content[0].text} carries the answer as JSON, the same answer as
+     * {@code structuredContent}, for a page and for a refusal alike.
+     *
+     * <p>RED STATE, observed 2026-10-12 on {@code e86e373}: the text was Java's
+     * {@code toString()} of the payload ({@code Listing[objects=[...}), which
+     * no client can parse.
+     */
+    @Test
+    void the_mcp_text_content_is_the_structured_answer_as_json() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper json =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+        for (Map<String, Object> paging : List.<Map<String, Object>>of(
+                Map.of("page_size", 1), Map.of("page_size", 0))) {
+            Map<String, Object> args = new LinkedHashMap<>(paging);
+            args.put("scope", SCOPE);
+            args.put("selector", Selector.ITEM);
+            JsonPath rpc = Transport.mcpRpc(args);
+            String text = rpc.getString("result.content[0].text");
+            assertThat(json.readValue(text, Map.class))
+                .as("the text content of %s parses and is the structured content", paging)
+                .isEqualTo(rpc.getMap("result.structuredContent"));
+        }
+    }
+
+    // ======================================================================
+    // Probe group 4e — a cursor does not cross tenants on a scope's name
+    // ======================================================================
+
+    /**
+     * A scope of the same name in another tenant is another scope: the cursor
+     * is bound to the scope's technical identity, never to its name, since a
+     * name recurs across tenants (ADR-0049). The REST surface serves one tenant
+     * per instance, so the second tenant is bound in-process and the read made
+     * through the verb surface both transports call.
+     *
+     * <p>RED STATE, observed 2026-10-12 with the scope's identity removed from
+     * the cursor's fingerprint in {@code PageCursor}: the cursor of tenant A
+     * placed the walk in tenant B's same-named scope and answered 200.
+     */
+    @Test
+    void a_cursor_of_a_same_named_scope_in_another_tenant_is_foreign() throws Exception {
+        String cursorOfA = Transport.REST.query(Selector.ITEM, Map.of(), 1, null).next();
+        assertThat(cursorOfA).isNotNull();
+
+        stageSameNamedScopeInTenantB();
+        try (AutoCloseable inB = tenants.bind(TENANT_B)) {
+            QuerySpec own = new QuerySpec(null, 1, null, null, null, List.of(), SortKey.STANDARD);
+            String cursorOfB = verbs.query(SurfaceFixture.MEMBER, SCOPE, Selector.ITEM, own)
+                .next();
+            assertThat(cursorOfB).as("the control: tenant B pages its own scope").isNotNull();
+            assertThat(verbs.query(SurfaceFixture.MEMBER, SCOPE, Selector.ITEM,
+                    new QuerySpec(null, 1, cursorOfB, null, null, List.of(), SortKey.STANDARD))
+                .objects()).as("and its own cursor continues it").hasSize(1);
+
+            Throwable refused = org.assertj.core.api.Assertions.catchThrowable(() ->
+                verbs.query(SurfaceFixture.MEMBER, SCOPE, Selector.ITEM,
+                    new QuerySpec(null, 1, cursorOfA, null, null, List.of(), SortKey.STANDARD)));
+            assertThat(refused).isInstanceOf(WorklistException.class);
+            WorklistException typed = (WorklistException) refused;
+            assertThat(typed.reason()).isEqualTo(WorklistException.Reason.CURSOR_FOREIGN);
+            assertThat(typed.offenders()).containsExactly(QuerySpec.AFTER_ARGUMENT);
+        }
     }
 
     // ======================================================================
@@ -590,7 +782,7 @@ class QueryNarrowingIT {
         assertThat(answer.status()).as("%s is refused, not answered", what).isNotEqualTo(200);
         if (answer.status() != Answer.MCP_REFUSAL) {
             assertThat(answer.status()).as("%s answers the status of its class", what)
-                .isEqualTo(PAGING_REFUSALS.contains(reason) ? 400 : 422);
+                .isEqualTo(REFUSED_WITHOUT_SCOPE.contains(reason) ? 400 : 422);
         }
         assertThat(answer.reason()).as("%s refused with a typed reason", what).isEqualTo(reason);
         assertThat(answer.offenders()).as("%s names the argument", what).containsExactly(offender);
@@ -653,9 +845,15 @@ class QueryNarrowingIT {
     // Transports
     // ======================================================================
 
-    /** The refusals of the paging contract, answered 400 on REST. */
-    private static final java.util.Set<String> PAGING_REFUSALS = java.util.Set.of(
-        "PAGE_SIZE_REJECTED", "CURSOR_MALFORMED", "CURSOR_FOREIGN", "SORT_UNDECLARED");
+    /**
+     * The refusals decidable without the vocabulary of a scope, answered 400 on
+     * REST (DEC-0042): the paging contract, an argument the read does not take,
+     * and a value an argument does not admit. Every other refusal of a query
+     * depends on the scope's vocabulary and answers 422.
+     */
+    private static final java.util.Set<String> REFUSED_WITHOUT_SCOPE = java.util.Set.of(
+        "PAGE_SIZE_REJECTED", "CURSOR_MALFORMED", "CURSOR_FOREIGN", "SORT_UNDECLARED",
+        "ARGUMENT_UNKNOWN", "ARGUMENT_INVALID");
 
     /** One answer, whichever transport carried it. */
     record Answer(int status, String reason, List<String> offenders, List<String> addresses,
@@ -747,7 +945,17 @@ class QueryNarrowingIT {
         }
 
         static Answer rawIn(String scope, String view, Map<String, Object> params) {
-            var response = given().queryParams(params)
+            return rawIn(scope, view, params, null);
+        }
+
+        /** A raw REST read, naming the caller's surface when {@code surface} is set. */
+        static Answer rawIn(String scope, String view, Map<String, Object> params,
+                            String surface) {
+            var request = given().queryParams(params);
+            if (surface != null) {
+                request = request.header(SURFACE, surface);
+            }
+            var response = request
                 .when().get("/api/" + scope + "/" + view)
                 .then().extract();
             return Answer.of(response.statusCode(), response.jsonPath());
@@ -760,7 +968,7 @@ class QueryNarrowingIT {
             return Answer.of(refused ? Answer.MCP_REFUSAL : 200, content);
         }
 
-        private static JsonPath mcpRpc(Map<String, Object> arguments) {
+        static JsonPath mcpRpc(Map<String, Object> arguments) {
             return given()
                 .contentType(ContentType.JSON)
                 .body(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call",
@@ -849,6 +1057,39 @@ class QueryNarrowingIT {
         workstreams.requireDefault(OTHER_SCOPE_ID);
         for (int i = 0; i < 2; i++) {
             items.create(OTHER_SCOPE_ID, Map.of("title", "elsewhere " + i, "status", OPEN));
+        }
+    }
+
+    /**
+     * A scope of tenant B under the probe scope's own name, the member an
+     * account of tenant B too, and two items in it. Idempotent on the scope id.
+     */
+    private void stageSameNamedScopeInTenantB() throws Exception {
+        PlatformFixture.run(
+            "SELECT set_config('app.tenant_id', '" + TENANT_B + "', false)",
+            "INSERT INTO public.scope (id, tenant_id, slug, kind) SELECT '" + SCOPE_IN_B
+                + "', '" + TENANT_B + "', '" + SCOPE + "', 'project' "
+                + "WHERE NOT EXISTS (SELECT 1 FROM public.scope WHERE id = '" + SCOPE_IN_B + "')",
+            "INSERT INTO public.user_account (tenant_id, subject) SELECT '" + TENANT_B + "', '"
+                + SurfaceFixture.MEMBER + "' WHERE NOT EXISTS (SELECT 1 FROM public.user_account "
+                + "WHERE tenant_id = '" + TENANT_B + "' AND subject = '" + SurfaceFixture.MEMBER
+                + "')",
+            "RESET app.tenant_id");
+        try (AutoCloseable inB = tenants.bind(TENANT_B)) {
+            if (!selectors.inScope(SCOPE_IN_B).isEmpty()) {
+                return;
+            }
+            settings.create(SCOPE_IN_B, Map.of(
+                "max_planned_iterations", 10,
+                "warn_planned_iterations", 9,
+                "max_memberships_per_iteration", 10,
+                "warn_memberships_per_iteration", 9));
+            selectors.declare(SCOPE_IN_B, Selector.ITEM);
+            vocabulary.declareStatus(SCOPE_IN_B, OPEN, 1, true, false, false, false);
+            workstreams.requireDefault(SCOPE_IN_B);
+            for (int i = 0; i < 2; i++) {
+                items.create(SCOPE_IN_B, Map.of("title", "in tenant B " + i, "status", OPEN));
+            }
         }
     }
 

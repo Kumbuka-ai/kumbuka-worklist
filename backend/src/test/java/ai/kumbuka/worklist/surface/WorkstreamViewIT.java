@@ -180,7 +180,7 @@ class WorkstreamViewIT {
             .when().get(SurfaceFixture.collection(Selector.WORKSTREAM) + "?filter.token=x")
             .then()
             .statusCode(422)
-            .body("reason", is("UNKNOWN_FIELD"))
+            .body("reason", is("PREDICATE_UNKNOWN"))
             .body("data.offenders", org.hamcrest.Matchers.contains("filter.token"));
     }
 

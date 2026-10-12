@@ -19,6 +19,8 @@ import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import ai.kumbuka.worklist.tenancy.TenantBound;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -130,6 +132,7 @@ public class McpAdapter {
 
     @Inject VerbSurface verbs;
     @Inject CallerActor caller;
+    @Inject ObjectMapper json;
 
     @POST
     public Response rpc(Map<String, Object> request) {
@@ -495,14 +498,30 @@ public class McpAdapter {
      *
      * <p>Both {@code content} and {@code structuredContent} carry the same answer,
      * because clients read one or the other and a surface that offered only the
-     * structured half would be unreadable to half of them.
+     * structured half would be unreadable to half of them. The text is that
+     * answer as JSON, written by the mapper that writes {@code structuredContent}
+     * — not the payload's {@code toString()}, which no client can parse.
      */
-    private static Map<String, Object> content(Object payload, boolean isError) {
+    private Map<String, Object> content(Object payload, boolean isError) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("content", List.of(Map.of("type", "text", "text", String.valueOf(payload))));
+        result.put("content", List.of(Map.of("type", "text", "text", asJson(payload))));
         result.put("structuredContent", payload);
         result.put("isError", isError);
         return result;
+    }
+
+    /**
+     * The payload as JSON. Every payload is a record or map this service built,
+     * so a failure here is ours and not the caller's: it surfaces as a 500
+     * rather than as a text that silently says something else.
+     */
+    private String asJson(Object payload) {
+        try {
+            return json.writeValueAsString(payload);
+        } catch (JsonProcessingException unwritable) {
+            throw new IllegalStateException("an MCP answer could not be written as JSON",
+                unwritable);
+        }
     }
 
     private static Response result(Object id, Object payload) {

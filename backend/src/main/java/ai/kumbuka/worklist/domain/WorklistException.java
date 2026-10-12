@@ -196,8 +196,34 @@ public class WorklistException extends RuntimeException {
          */
         CURSOR_FOREIGN,
 
-        /** The sort of a {@code query} names a field or direction the view does not sort by. */
+        /** The sort of a {@code query} names a field the view does not sort by. */
         SORT_UNDECLARED,
+
+        /**
+         * A name that is not an argument of the verb at all — on {@code query},
+         * {@code limit}, {@code cursor} or any other name beside the filter and
+         * the paging arguments.
+         *
+         * <p>Decidable from the verb alone, without knowing any scope, and
+         * therefore apart from {@link #PREDICATE_UNKNOWN}, which says something
+         * about the vocabulary of one scope (DEC-0042). The offenders are the
+         * names, never a value.
+         */
+        ARGUMENT_UNKNOWN,
+
+        /**
+         * A value an argument does not admit, decidable from the verb alone: a
+         * {@code direction} other than {@code asc} or {@code desc} (ADR-0049).
+         */
+        ARGUMENT_INVALID,
+
+        /**
+         * A filter on a field that the vocabulary of the scope does not declare
+         * for the view (DEC-0042). Raised only once the caller has been found
+         * to see the scope, so it never tells a stranger that the scope exists.
+         * The offender is the filter field as its path, {@code filter.<name>}.
+         */
+        PREDICATE_UNKNOWN,
 
         /**
          * The intake gate was reached and this scheme has no carrier for the

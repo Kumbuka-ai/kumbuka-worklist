@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -252,6 +253,25 @@ class VerbSurfaceConformanceTest {
                     tool.name())
                 .containsEntry("additionalProperties", false);
         }
+    }
+
+    /**
+     * {@code query} answers on every view, so its {@code selector} names every
+     * view. RED STATE, observed 2026-10-12 on {@code e86e373}: it named item,
+     * iteration and milestone, and a caller reading the tool would not know the
+     * workstream view can be listed at all.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void the_query_selector_names_every_view_the_service_lists() {
+        McpTools.Tool query = McpTools.declared().stream()
+            .filter(tool -> tool.name().equals("query"))
+            .findFirst().orElseThrow();
+        Map<String, Object> properties =
+            (Map<String, Object>) query.inputSchema().get("properties");
+        String selector = String.valueOf(
+            ((Map<String, Object>) properties.get("selector")).get("description"));
+        assertThat(selector).contains(ai.kumbuka.worklist.domain.Selector.VIEWS);
     }
 
     // =======================================================================

@@ -102,7 +102,7 @@ public enum QueryFilter {
      * A caller's filter, parsed for one view: every name declared, every value in
      * its form.
      *
-     * @throws WorklistException {@code UNKNOWN_FIELD} for a name the view does
+     * @throws WorklistException {@code PREDICATE_UNKNOWN} for a name the view does
      *         not declare, {@code INVALID_VALUE} for a value its filter cannot
      *         read. Either way nothing is answered, because a filter that is
      *         dropped makes the whole set look like a correct narrow answer.
@@ -121,7 +121,7 @@ public enum QueryFilter {
             .filter(f -> f.filterName.equals(name))
             .findFirst()
             .orElseThrow(() -> new WorklistException(
-                WorklistException.Reason.UNKNOWN_FIELD,
+                WorklistException.Reason.PREDICATE_UNKNOWN,
                 "the " + view + " view declares no filter '" + name + "'. It narrows on "
                     + describe(view) + ". Nothing was answered: a filter this read does "
                     + "not apply would make the whole set look like a correct narrow one",

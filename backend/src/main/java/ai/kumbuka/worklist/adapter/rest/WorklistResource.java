@@ -96,6 +96,17 @@ public class WorklistResource {
         QuerySpec.PAGE_SIZE_ARGUMENT, QuerySpec.AFTER_ARGUMENT, QuerySpec.SORT_ARGUMENT,
         QuerySpec.DIRECTION_ARGUMENT);
 
+    /**
+     * Names the surface the caller came through, where that is not this one: a
+     * router publishing {@code query} as an assistant tool says so here. The
+     * name and its one value are kumbuka-dispatch's, so a router sends one
+     * header to both services.
+     */
+    static final String SURFACE = "Kumbuka-Surface";
+
+    /** The one value {@link #SURFACE} takes: the assistant surface. */
+    static final String ASSISTANT = "assistant";
+
     /** The shape a JSON object body is read into. */
     private static final TypeReference<Map<String, Object>> OBJECT =
         new TypeReference<>() { };
@@ -183,12 +194,23 @@ public class WorklistResource {
      *
      * <p>This surface offers every sort a view declares
      * ({@link SortKey#ALL}), the assistant surface the standard pair only.
+     *
+     * <p><strong>{@code Kumbuka-Surface: assistant}</strong> makes the read on
+     * the assistant surface, as kumbuka-dispatch does: a router that publishes
+     * {@code query} as an assistant tool reaches this service over REST and
+     * says so, and the answer is then the service MCP's — the standard sorts
+     * only, so a declared REST sort such as {@code rank} is refused there too
+     * (ADR-0049). The header decides nothing else; who calls and what they may
+     * see come from the verified identity as always. Any other value is refused
+     * and the read not made. Only {@code query} reads it.
      */
     @GET
     @Path("{selector}")
     public Response collectionGet(@PathParam("scope") String scope,
                                   @PathParam("selector") String selector,
+                                  @HeaderParam(SURFACE) java.util.List<String> surface,
                                   jakarta.ws.rs.core.UriInfo info) {
+        java.util.Set<SortKey> offered = offeredOn(surface);
         Map<String, Object> filter = new LinkedHashMap<>();
         Map<String, Object> paging = new LinkedHashMap<>();
         java.util.List<String> untaken = new java.util.ArrayList<>();
@@ -207,9 +229,29 @@ public class WorklistResource {
         }
         QuerySpec spec = new QuerySpec(filter, paging.get(QuerySpec.PAGE_SIZE_ARGUMENT),
             paging.get(QuerySpec.AFTER_ARGUMENT), paging.get(QuerySpec.SORT_ARGUMENT),
-            paging.get(QuerySpec.DIRECTION_ARGUMENT), untaken, SortKey.ALL);
+            paging.get(QuerySpec.DIRECTION_ARGUMENT), untaken, offered);
         return Response.ok(Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec))).build();
+    }
+
+    /**
+     * The sorts the calling surface offers: every declared one on this
+     * surface, the standard pair when the header names the assistant.
+     *
+     * @throws SurfaceException {@code ARGUMENT_INVALID} for any other header
+     *         value, or the header sent twice
+     */
+    private static java.util.Set<SortKey> offeredOn(java.util.List<String> surface) {
+        if (surface == null || surface.isEmpty()) {
+            return SortKey.ALL;
+        }
+        if (java.util.List.of(ASSISTANT).equals(surface)) {
+            return SortKey.STANDARD;
+        }
+        throw new SurfaceException(SurfaceException.Reason.ARGUMENT_INVALID,
+            "the header " + SURFACE + " takes the one value '" + ASSISTANT + "', once, or is "
+                + "left out. Nothing was answered: a read made on a surface the caller did "
+                + "not come through would answer in the wrong vocabulary");
     }
 
     // ======================================================================

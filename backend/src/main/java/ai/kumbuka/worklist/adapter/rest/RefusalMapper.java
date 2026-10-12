@@ -172,6 +172,17 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 case UNKNOWN_FIELD, FIELD_NOT_SETTABLE, INVALID_VALUE, VALUE_UNDECLARED,
                      SELECTOR_UNDECLARED, SELECTOR_WITHDRAWN -> 422;
 
+                // A filter field the scope's vocabulary does not declare for the
+                // view. 422 because it is a statement about one scope's
+                // vocabulary, and the surface raises it only after scope
+                // visibility, so it enumerates nothing (DEC-0042).
+                case PREDICATE_UNKNOWN -> 422;
+
+                // A name that is no argument of the verb, and a value an
+                // argument does not admit: both decidable without knowing any
+                // scope, so 400 like the paging refusals below (DEC-0042).
+                case ARGUMENT_UNKNOWN, ARGUMENT_INVALID -> 400;
+
                 // A field whose relation was retracted: the same 422 as an
                 // unknown one, and deliberately so. The caller has to change
                 // the call either way, which is what the status says; what

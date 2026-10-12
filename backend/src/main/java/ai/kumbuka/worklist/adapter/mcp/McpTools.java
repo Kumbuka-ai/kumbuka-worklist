@@ -96,6 +96,15 @@ public final class McpTools {
         "The view: one of " + Selector.ITEM + ", " + Selector.ITERATION + ", "
             + Selector.MILESTONE + ". Lower case; it is not folded.";
 
+    /**
+     * The view {@code query} lists, which is every view the service serves:
+     * the workstream view is read like any other and only its writes run
+     * elsewhere, so the three {@code create} takes would hide one.
+     */
+    private static final String QUERY_SELECTOR_DOC =
+        "The view: one of " + String.join(", ", Selector.VIEWS) + ". Lower case; it is not "
+            + "folded.";
+
     private static final String ADDRESS_DOC =
         "The complete address: worklist://<scope>/<view>/<number>. An iteration may also "
             + "be addressed as 'current', which resolves to the iteration the scope is "
@@ -163,7 +172,7 @@ public final class McpTools {
                     + "answered with the whole set.",
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING, SELECTOR_DOC),
+                    required(ARG_SELECTOR, STRING, QUERY_SELECTOR_DOC),
                     optional(QueryFilter.FILTER_ARGUMENT, OBJECT, FILTER_DOC),
                     optional(QuerySpec.PAGE_SIZE_ARGUMENT, INTEGER,
                         "How many objects one page carries, from 1 to "

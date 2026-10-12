@@ -116,7 +116,17 @@ public class SurfaceException extends RuntimeException {
         CONFLICT_TOKEN_MISSING(428),
 
         /** The request body is absent or does not carry what the verb needs. */
-        PAYLOAD_MALFORMED(400);
+        PAYLOAD_MALFORMED(400),
+
+        /**
+         * The {@code Kumbuka-Surface} header names a surface other than the
+         * assistant, the one value it takes. Refused before the call is made,
+         * as kumbuka-dispatch refuses it: the header is not an argument of the
+         * call, it says which surface's vocabulary the call is made in, and a
+         * call made in a guessed one would answer in the wrong vocabulary. No
+         * {@code data}, because there is no argument to name.
+         */
+        ARGUMENT_INVALID(400);
 
         private final int status;
 
