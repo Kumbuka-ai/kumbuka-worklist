@@ -463,14 +463,17 @@ class QueryNarrowingIT {
     @EnumSource(Transport.class)
     void an_undeclared_filter_on_an_invisible_scope_is_not_found(Transport via) {
         SurfaceFixture.asStranger(identity);
-        Answer answer = via.call(Selector.ITEM, Map.of("foo", "1"), Map.of("limit", 1));
-        assertThat(answer.status()).as("refused, not answered").isNotEqualTo(200);
-        if (answer.status() != Answer.MCP_REFUSAL) {
-            assertThat(answer.status()).as("the not-found status, not the vocabulary one")
-                .isEqualTo(404);
-        }
-        assertThat(answer.reason()).isEqualTo("NOT_FOUND");
-        assertThat(answer.offenders()).as("not-found carries no data").isEmpty();
+        Map<String, Answer> calls = new LinkedHashMap<>();
+        calls.put("filter.foo", via.call(Selector.ITEM, Map.of("foo", "1"), Map.of()));
+        calls.put("limit", via.call(Selector.ITEM, Map.of(), Map.of("limit", 1)));
+        calls.forEach((what, answer) -> {
+            assertThat(answer.status()).as("%s: refused, not answered", what).isNotEqualTo(200);
+            if (answer.status() != Answer.MCP_REFUSAL) {
+                assertThat(answer.status()).as("%s: the not-found status", what).isEqualTo(404);
+            }
+            assertThat(answer.reason()).as(what).isEqualTo("NOT_FOUND");
+            assertThat(answer.offenders()).as("%s: not-found carries no data", what).isEmpty();
+        });
     }
 
     @ParameterizedTest
