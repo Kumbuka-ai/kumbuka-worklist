@@ -63,10 +63,13 @@ final class KeysetClause {
             jpql.append(" AND ").append(number).append(beyond).append(':').append(AFTER_NUMBER);
             params.put(AFTER_NUMBER, after.number());
         } else if (after != null) {
-            jpql.append(" AND (").append(lead).append(beyond).append(':').append(AFTER_LEAD)
-                .append(" OR (").append(lead).append(" = :").append(AFTER_LEAD)
-                .append(" AND ").append(number).append(beyond).append(':').append(AFTER_NUMBER)
-                .append("))");
+            // A row comparison and not "lead > a OR (lead = a AND number > n)":
+            // the two say the same, and only the first is an index condition.
+            // The second walks the index from the start of the scope and
+            // removes every row before the position by filter.
+            jpql.append(" AND (").append(lead).append(", ").append(number).append(')')
+                .append(beyond).append("(:").append(AFTER_LEAD).append(", :")
+                .append(AFTER_NUMBER).append(')');
             params.put(AFTER_LEAD, after.lead());
             params.put(AFTER_NUMBER, after.number());
         }
