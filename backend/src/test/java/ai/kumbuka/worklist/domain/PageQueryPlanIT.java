@@ -150,7 +150,7 @@ class PageQueryPlanIT {
 
         String sql = statementOf(view, request);
         String plan = explain(sql, after);
-        record(view, sort, direction, continued, sql, plan);
+        keepPlan(view, sort, direction, continued, sql, plan);
 
         assertThat(plan)
             .as("the planner sorts nothing for a page in the order of an index:%n%s", plan)
@@ -278,7 +278,7 @@ class PageQueryPlanIT {
         return touched;
     }
 
-    private static void record(String view, SortKey sort, SortKey.Direction direction,
+    private static void keepPlan(String view, SortKey sort, SortKey.Direction direction,
                                boolean continued, String sql, String plan) throws IOException {
         Files.createDirectories(PLANS);
         Files.writeString(PLANS.resolve(view + "-" + sort.wireName() + "-" + direction.wireName()
