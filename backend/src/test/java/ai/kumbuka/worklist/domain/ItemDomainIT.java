@@ -530,7 +530,9 @@ class ItemDomainIT {
                 "status", statusNameOf(openStatus()))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SELECTOR_UNDECLARED);
-        assertThat(refusal.offenders()).containsExactly(Selector.ITEM);
+        assertThat(refusal.offenders())
+            .as("the offender is the argument, never the value it carried (DEC-0042)")
+            .containsExactly("selector");
 
         // RED STATE, by its trace: had the view been created on first use, it
         // would be here now.

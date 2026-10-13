@@ -168,24 +168,31 @@ public class ItemService {
     private Long statusFilter(UUID scopeId, String name) {
         ItemStatus status = vocabulary.statusByName(scopeId, name);
         if (status == null) {
-            throw undeclaredFilterValue(QueryFilter.ITEM_STATUS, "'" + name + "'");
+            throw undeclaredFilterValue(QueryFilter.ITEM_STATUS,
+                "Use a status this scope declares, by the name a read answers it under.");
         }
         return status.pk;
     }
 
     private Long milestoneFilter(UUID scopeId, long number) {
         if (planning.milestoneByNumber(scopeId, number) == null) {
-            throw undeclaredFilterValue(QueryFilter.ITEM_MILESTONE, "number " + number);
+            throw undeclaredFilterValue(QueryFilter.ITEM_MILESTONE,
+                "Use the number of a milestone this scope holds; query the milestone view "
+                    + "to list them.");
         }
         return number;
     }
 
-    private static WorklistException undeclaredFilterValue(QueryFilter filter, String named) {
+    /**
+     * A filter value outside the scope's vocabulary: refused rather than
+     * answered as an empty set, because an empty answer cannot be told from a
+     * typo. The value is left out of the message; the caller holds it.
+     */
+    private static WorklistException undeclaredFilterValue(QueryFilter filter, String remedy) {
         return new WorklistException(
             WorklistException.Reason.VALUE_UNDECLARED,
-            "the filter '" + filter.filterName() + "' names " + named + ", which this scope "
-                + "does not hold. Nothing was answered: an empty answer would read as a "
-                + "legitimate empty one, and a refusal is what tells a typo from it",
+            "the value of " + filter.offenderName() + " is outside what this scope "
+                + "declares. " + remedy,
             List.of(filter.offenderName()));
     }
 
@@ -942,9 +949,9 @@ public class ItemService {
         if (workstream == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "no workstream '" + token + "' is declared in this scope. The value travels "
-                    + "as the token the scope declared it under, which is what the read "
-                    + "answer named",
+                "the workstream named in " + argument + " is outside the workstreams this "
+                    + "scope declares. Use the token of a declared workstream, as a read "
+                    + "answers it; query the workstream view to list them.",
                 List.of(argument));
         }
         return workstream;

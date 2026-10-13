@@ -35,6 +35,15 @@ import java.util.UUID;
  * here: {@code offered} names the sorts its surface offers, the standard pair
  * on the assistant surface and every declared field on REST.
  *
+ * <h2>What a refusal says</h2>
+ *
+ * Every refusal raised here names the argument under its offenders and in its
+ * message, says which form the argument takes, and ends on the act that
+ * corrects the call, stated as what to do (DEC-0042). None repeats the value
+ * the caller sent: a refusal is logged, a value can be content, and the caller
+ * still holds what it sent. Each message is built in one place per refusal, so
+ * it can move to a catalogue of the service's messages as it stands.
+ *
  * <h2>Read late, on purpose</h2>
  *
  * Nothing is checked when the spec is built. The verb surface calls
@@ -100,8 +109,7 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
      * handed out.
      *
      * @throws WorklistException {@code ARGUMENT_UNKNOWN}, {@code PREDICATE_UNKNOWN},
-     *         {@code INVALID_VALUE}, {@code PAGE_SIZE_REJECTED}, {@code SORT_UNDECLARED},
-     *         {@code ARGUMENT_INVALID},
+     *         {@code ARGUMENT_INVALID}, {@code PAGE_SIZE_REJECTED}, {@code SORT_UNDECLARED},
      *         {@code CURSOR_MALFORMED} or {@code CURSOR_FOREIGN}, naming the
      *         argument under its offenders — never a silent fallback to "no
      *         filter", to the default page size or to the first page
@@ -122,11 +130,9 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         }
         throw new WorklistException(
             WorklistException.Reason.ARGUMENT_UNKNOWN,
-            "'query' takes a filter, a page_size, an after, a sort and a direction besides "
-                + "its address, and " + untaken + " is none of them. A filter is written "
-                + "inside the filter argument; a page is bounded by page_size and continued "
-                + "by after. Nothing was answered: an argument this read ignores would make "
-                + "the whole set look like a correct narrow answer",
+            "query takes scope, selector, filter, page_size, after, sort and direction, and "
+                + "the arguments under offenders are outside that set. Write a narrowing "
+                + "inside filter, bound the page with page_size and continue it with after.",
             untaken);
     }
 
@@ -136,10 +142,9 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         }
         if (!(raw instanceof Map<?, ?> map)) {
             throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "the filter is an object from filter name to value, and arrived as "
-                    + kindOf(raw) + ". Nothing was answered: a filter this read cannot "
-                    + "read would otherwise be dropped",
+                WorklistException.Reason.ARGUMENT_INVALID,
+                "filter is an object that maps each filter name to one value. Send filter "
+                    + "as such an object.",
                 List.of(QueryFilter.FILTER_ARGUMENT));
         }
         Map<String, Object> filter = new LinkedHashMap<>();
@@ -147,12 +152,11 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
             String name = String.valueOf(entry.getKey());
             Object value = entry.getValue();
             if (value == null || value instanceof Map || value instanceof Collection) {
+                String path = QueryFilter.FILTER_ARGUMENT + "." + name;
                 throw new WorklistException(
-                    WorklistException.Reason.INVALID_VALUE,
-                    "the filter '" + name + "' takes one value, and arrived as "
-                        + kindOf(value) + ". Each filter narrows on one value; a set of "
-                        + "them is a shape this read does not apply",
-                    List.of(QueryFilter.FILTER_ARGUMENT + "." + name));
+                    WorklistException.Reason.ARGUMENT_INVALID,
+                    path + " takes one single value. Send " + path + " once, with one value.",
+                    List.of(path));
             }
             filter.put(name, value);
         }
@@ -167,11 +171,9 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         if (number == null || number < 1 || number > MAX_PAGE_SIZE) {
             throw new WorklistException(
                 WorklistException.Reason.PAGE_SIZE_REJECTED,
-                "a page carries between 1 and " + MAX_PAGE_SIZE + " objects, and page_size "
-                    + "arrived as " + kindOf(raw) + ". Nothing was answered: a caller wanting "
-                    + "more follows the 'next_cursor' of the answer, and a size read as a "
-                    + "ceiling or a default without saying so would give an answer that "
-                    + "looks complete and is not",
+                "page_size takes a whole number from 1 to " + MAX_PAGE_SIZE + ". Send "
+                    + "page_size in that range, and follow next_cursor of the answer for the "
+                    + "objects beyond one page.",
                 List.of(PAGE_SIZE_ARGUMENT));
         }
         return number.intValue();
@@ -186,9 +188,8 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
             .filter(key -> key.declaredOn(view))
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.SORT_UNDECLARED,
-                "the " + view + " view sorts by " + sortsOf(view, offered) + ", and sort "
-                    + "arrived as " + kindOf(raw) + ". Nothing was answered: an order this "
-                    + "read does not apply would make another order look like the one asked for",
+                "sort takes one of the sorts this view offers on this surface. Send sort as "
+                    + "one of " + sortsOf(view, offered) + ".",
                 List.of(SORT_ARGUMENT)));
     }
 
@@ -208,9 +209,7 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
                 : Optional.<SortKey.Direction>empty())
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.ARGUMENT_INVALID,
-                "a sort runs 'asc' or 'desc', and direction arrived as " + kindOf(raw)
-                    + ". Nothing was answered: an order this read does not apply would make "
-                    + "another order look like the one asked for",
+                "direction takes 'asc' or 'desc'. Send direction as 'asc' or 'desc'.",
                 List.of(DIRECTION_ARGUMENT)));
     }
 
@@ -219,11 +218,7 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
             return null;
         }
         if (!(raw instanceof String text) || text.isBlank()) {
-            throw new WorklistException(
-                WorklistException.Reason.CURSOR_MALFORMED,
-                "after is the 'next_cursor' of a previous answer, passed back as it came, "
-                    + "and arrived as " + kindOf(raw),
-                List.of(AFTER_ARGUMENT));
+            throw PageCursor.malformed();
         }
         return text;
     }
@@ -247,15 +242,5 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         } catch (ArithmeticException | NumberFormatException notWhole) {
             return null;
         }
-    }
-
-    private static String kindOf(Object raw) {
-        return switch (raw) {
-            case null -> "nothing";
-            case String s -> "the text '" + s + "'";
-            case Map<?, ?> m -> "an object";
-            case Collection<?> c -> "a list";
-            default -> String.valueOf(raw);
-        };
     }
 }

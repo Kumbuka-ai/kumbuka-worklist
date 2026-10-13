@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -93,6 +100,9 @@ public final class AddressParser {
      */
     private static final Pattern NUMBER = Pattern.compile("[1-9]\\d{0,18}");
 
+    /** The platform's views, as a refusal names them. */
+    private static final String VIEW_LIST = String.join(", ", Selector.VIEWS);
+
     private AddressParser() {
     }
 
@@ -148,9 +158,9 @@ public final class AddressParser {
     public static String scope(String raw) {
         String candidate = requirePresent(raw, "scope");
         if (!SCOPE.matcher(candidate).matches()) {
-            throw malformed("the scope '" + candidate + "' is not a DNS label. Lower case, "
-                + "digits and inner hyphens, at most 63 characters. Upper case is rejected "
-                + "rather than folded: folding would make two strings resolve to one scope.");
+            throw malformed("the scope part of the address is a DNS label: lower case "
+                + "letters, digits and inner hyphens, at most 63 characters, written exactly "
+                + "as the scope is named. Send the scope as its label.");
         }
         return candidate;
     }
@@ -165,16 +175,15 @@ public final class AddressParser {
     public static String view(String raw) {
         String candidate = requirePresent(raw, "selector");
         if (!Selector.TOKEN_PATTERN.matcher(candidate).matches()) {
-            throw malformed("the selector '" + candidate + "' is not a token: lower case, "
-                + "digits and inner hyphens, starting with a letter. Upper case is rejected "
-                + "rather than folded.");
+            throw malformed("the selector part of the address is a token: lower case "
+                + "letters, digits and inner hyphens, starting with a letter. Send the "
+                + "selector as one of the platform's views: " + VIEW_LIST + ".");
         }
         if (!Selector.VIEWS.contains(candidate)) {
-            throw malformed("the selector is the view, and the platform's views are "
-                + Selector.VIEWS + ". '" + candidate + "' is none of them. An item's family "
-                + "is a scope's own declared vocabulary and is not a view: it says something "
-                + "about the item, not about which kind of thing stands at the other end of "
-                + "the address.");
+            throw malformed("the selector is the view, one of the platform's views: "
+                + VIEW_LIST + ". An item's family belongs to the scope's declared "
+                + "vocabulary and travels as a field of the item. Send the selector as one "
+                + "of the views.");
         }
         return candidate;
     }
@@ -315,9 +324,9 @@ public final class AddressParser {
 
     private static String requirePresent(String raw, String part) {
         if (raw == null || raw.isBlank()) {
-            throw malformed("the " + part + " part of the address is empty. An address is "
-                + "recognised by which of its parts are occupied, so an empty one is not a "
-                + "shorter address but a broken one.");
+            throw malformed("the " + part + " part of the address is empty, and an address "
+                + "is recognised by which of its parts are occupied. Send the address with "
+                + "its " + part + " part filled in.");
         }
         return raw;
     }

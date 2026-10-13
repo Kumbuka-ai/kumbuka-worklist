@@ -442,7 +442,8 @@ public class McpAdapter {
         String value = optional(in, name);
         if (value == null || value.isBlank()) {
             throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the argument '" + name + "' is required and did not arrive.");
+                "the argument '" + name + "' is required, with a value. Send '" + name
+                    + "' with the call.");
         }
         return value;
     }

@@ -297,30 +297,41 @@ class QueryNarrowingIT {
     // Probe group 3 — a value the read cannot interpret is refused
     // ======================================================================
 
+    /**
+     * A value whose form a filter does not admit is decidable from the verb's
+     * declaration alone, without any scope: {@code ARGUMENT_INVALID} with 400,
+     * naming the filter as its path (DEC-0042). The fixed sets of the milestone
+     * and workstream status and of the milestone kind are the platform's, not a
+     * scope's, so a value outside them is a form fault too.
+     *
+     * <p>RED STATE, observed 2026-10-13 on {@code 4012fa1}: every case answered
+     * {@code INVALID_VALUE} with 422, on both transports.
+     */
     @ParameterizedTest
     @EnumSource(Transport.class)
     void an_uninterpretable_value_of_every_declared_filter_is_refused(Transport via) {
         assertRefused(via.query(Selector.ITEM, Map.of("milestone", "six"), null, null),
-            "INVALID_VALUE", "filter.milestone", "item milestone 'six'");
+            "ARGUMENT_INVALID", "filter.milestone", "item milestone 'six'");
         assertRefused(via.query(Selector.ITEM, Map.of("status", "  "), null, null),
-            "INVALID_VALUE", "filter.status", "item status blank");
+            "ARGUMENT_INVALID", "filter.status", "item status blank");
         assertRefused(via.query(Selector.ITEM, Map.of("workstream", ""), null, null),
-            "INVALID_VALUE", "filter.workstream", "item workstream empty");
+            "ARGUMENT_INVALID", "filter.workstream", "item workstream empty");
         assertRefused(via.query(Selector.ITERATION, Map.of("closed", "maybe"), null, null),
-            "INVALID_VALUE", "filter.closed", "iteration closed 'maybe'");
+            "ARGUMENT_INVALID", "filter.closed", "iteration closed 'maybe'");
         assertRefused(via.query(Selector.MILESTONE, Map.of("status", "finished"), null, null),
-            "INVALID_VALUE", "filter.status", "milestone status 'finished'");
+            "ARGUMENT_INVALID", "filter.status", "milestone status 'finished'");
         assertRefused(via.query(Selector.MILESTONE, Map.of("kind", "epic"), null, null),
-            "INVALID_VALUE", "filter.kind", "milestone kind 'epic'");
+            "ARGUMENT_INVALID", "filter.kind", "milestone kind 'epic'");
         assertRefused(via.query(Selector.WORKSTREAM, Map.of("status", "paused"), null, null),
-            "INVALID_VALUE", "filter.status", "workstream status 'paused'");
+            "ARGUMENT_INVALID", "filter.status", "workstream status 'paused'");
     }
 
     /**
      * Well-formed, and naming nothing this scope declared. A refusal and not an
      * empty answer, because an empty answer cannot be told from a typo; and a
      * refusal naming the filter rather than {@code NOT_FOUND}, because the value
-     * is an argument and not an address.
+     * is an argument and not an address. 422, because it is a statement about
+     * the vocabulary of one scope.
      */
     @ParameterizedTest
     @EnumSource(Transport.class)
@@ -333,13 +344,43 @@ class QueryNarrowingIT {
             "VALUE_UNDECLARED", "filter.workstream", "item workstream 'nowhere'");
     }
 
+    /**
+     * A value the vocabulary of a scope does not declare is consulted only
+     * once the caller has been found to see the scope; for a scope the caller
+     * cannot see, the answer is {@code NOT_FOUND} and confirms nothing about
+     * its vocabulary (DEC-0042). A form fault answers the same there.
+     *
+     * <p>RED STATE, observed 2026-10-13 with the scope visibility check in
+     * {@code VerbSurface.query} made to fall through for the stranger onto the
+     * probe scope: the undeclared status answered {@code VALUE_UNDECLARED}
+     * with 422 on REST and on the service MCP.
+     */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void an_undeclared_value_on_an_invisible_scope_is_not_found(Transport via) {
+        SurfaceFixture.asStranger(identity);
+        Map<String, Answer> calls = new LinkedHashMap<>();
+        calls.put("filter.status=parked", via.query(Selector.ITEM, Map.of("status", "parked"),
+            null, null));
+        calls.put("filter.milestone=six", via.query(Selector.ITEM, Map.of("milestone", "six"),
+            null, null));
+        calls.forEach((what, answer) -> {
+            assertThat(answer.status()).as("%s: refused, not answered", what).isNotEqualTo(200);
+            if (answer.status() != Answer.MCP_REFUSAL) {
+                assertThat(answer.status()).as("%s: the not-found status", what).isEqualTo(404);
+            }
+            assertThat(answer.reason()).as(what).isEqualTo("NOT_FOUND");
+            assertThat(answer.offenders()).as("%s: not-found carries no data", what).isEmpty();
+        });
+    }
+
     @Test
     void an_mcp_filter_that_is_not_an_object_is_refused() {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("scope", SCOPE);
         args.put("selector", Selector.ITEM);
         args.put("filter", "{\"milestone\": 6}");
-        assertRefused(Transport.mcp(args), "INVALID_VALUE", "filter", "filter as a string");
+        assertRefused(Transport.mcp(args), "ARGUMENT_INVALID", "filter", "filter as a string");
     }
 
     @Test
@@ -348,7 +389,7 @@ class QueryNarrowingIT {
         args.put("scope", SCOPE);
         args.put("selector", Selector.ITEM);
         args.put("filter", Map.of("status", List.of(OPEN, DONE)));
-        assertRefused(Transport.mcp(args), "INVALID_VALUE", "filter.status", "a list value");
+        assertRefused(Transport.mcp(args), "ARGUMENT_INVALID", "filter.status", "a list value");
     }
 
     @Test
@@ -357,9 +398,9 @@ class QueryNarrowingIT {
             .queryParam("filter.status", OPEN, DONE)
             .when().get(SurfaceFixture.collection(Selector.ITEM).replace(
                 SurfaceFixture.SCOPE, SCOPE))
-            .then().statusCode(422)
+            .then().statusCode(400)
             .extract().jsonPath();
-        assertThat(body.getString("reason")).isEqualTo("INVALID_VALUE");
+        assertThat(body.getString("reason")).isEqualTo("ARGUMENT_INVALID");
         assertThat(body.getList("data.offenders", String.class)).containsExactly("filter.status");
     }
 

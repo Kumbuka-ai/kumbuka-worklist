@@ -24,9 +24,12 @@ import java.util.regex.Pattern;
  * both (REQ-0156).
  *
  * <p>The parse here is the FORM: whether a value can be read as what the filter
- * takes at all. Whether a well-formed name, number or token names something the
- * scope declared is the domain's question and is answered by the view's service,
- * because it needs the scope's vocabulary.
+ * takes at all. That is decidable from this declaration alone, without any
+ * scope, so a value of the wrong form is {@code ARGUMENT_INVALID} (DEC-0042) —
+ * and so is a value outside a fixed set of the platform's own, such as the
+ * milestone statuses. Whether a well-formed name, number or token names
+ * something the scope declared is the domain's question and is answered by the
+ * view's service, because it needs the scope's vocabulary.
  *
  * <p>Only enumerated fields are filters. A free text would need a matching rule
  * the surface would have to publish; it is not offered, and a caller asking for
@@ -103,7 +106,7 @@ public enum QueryFilter {
      * its form.
      *
      * @throws WorklistException {@code PREDICATE_UNKNOWN} for a name the view does
-     *         not declare, {@code INVALID_VALUE} for a value its filter cannot
+     *         not declare, {@code ARGUMENT_INVALID} for a value its filter cannot
      *         read. Either way nothing is answered, because a filter that is
      *         dropped makes the whole set look like a correct narrow answer.
      */
@@ -122,9 +125,8 @@ public enum QueryFilter {
             .findFirst()
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.PREDICATE_UNKNOWN,
-                "the " + view + " view declares no filter '" + name + "'. It narrows on "
-                    + describe(view) + ". Nothing was answered: a filter this read does "
-                    + "not apply would make the whole set look like a correct narrow one",
+                "the filter under offenders is outside the filters this view declares. Use "
+                    + "one of the filters this view declares: " + describe(view) + ".",
                 List.of(FILTER_ARGUMENT + "." + name)));
     }
 
@@ -146,7 +148,6 @@ public enum QueryFilter {
     private static final class Names {
         static final String STATUS = "status";
         static final String ONE_OF = "one of ";
-        static final String TAKES = "the filter takes ";
 
         private Names() {
         }
@@ -164,8 +165,8 @@ public enum QueryFilter {
             Object read(QueryFilter filter, Object raw) {
                 String text = text(filter, raw);
                 if (UUID_SHAPE.matcher(text).matches()) {
-                    throw refused(filter, raw, "it is the platform's own identity, and "
-                        + Names.TAKES + filter.takes);
+                    throw refused(filter, "the name the scope declared, in place of the "
+                        + "platform's own identity");
                 }
                 return text;
             }
@@ -177,8 +178,7 @@ public enum QueryFilter {
             Object read(QueryFilter filter, Object raw) {
                 Long number = QuerySpec.wholeNumber(raw);
                 if (number == null || number < 1) {
-                    throw refused(filter, raw, Names.TAKES + filter.takes
-                        + ", a positive whole number");
+                    throw refused(filter, "a positive whole number");
                 }
                 return number;
             }
@@ -194,7 +194,7 @@ public enum QueryFilter {
                 if ("true".equals(raw) || "false".equals(raw)) {
                     return Boolean.valueOf((String) raw);
                 }
-                throw refused(filter, raw, Names.TAKES + filter.takes);
+                throw refused(filter, "true or false");
             }
         };
 
@@ -204,7 +204,7 @@ public enum QueryFilter {
                 Object read(QueryFilter filter, Object raw) {
                     String text = text(filter, raw);
                     if (!admitted.contains(text)) {
-                        throw refused(filter, raw, Names.TAKES + filter.takes);
+                        throw refused(filter, Names.ONE_OF + admitted);
                     }
                     return text;
                 }
@@ -215,23 +215,22 @@ public enum QueryFilter {
 
         private static String text(QueryFilter filter, Object raw) {
             if (!(raw instanceof String text) || text.isBlank()) {
-                throw refused(filter, raw, Names.TAKES + filter.takes
-                    + ", and an empty value names nothing to narrow on");
+                throw refused(filter, "a value with at least one visible character");
             }
             return text.strip();
         }
 
-        private static WorklistException refused(QueryFilter filter, Object raw, String why) {
+        /**
+         * A value this filter cannot read: the filter named, the form it takes
+         * said, the value itself left out — the caller holds it, and a refusal
+         * is logged.
+         */
+        private static WorklistException refused(QueryFilter filter, String form) {
+            String path = filter.offenderName();
             return new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                "the filter '" + filter.filterName + "' cannot read " + shown(raw) + ": " + why
-                    + ". Nothing was answered: a value this read cannot interpret is not "
-                    + "a narrowing it can apply",
-                List.of(filter.offenderName()));
-        }
-
-        private static String shown(Object raw) {
-            return raw instanceof String text ? "'" + text + "'" : String.valueOf(raw);
+                WorklistException.Reason.ARGUMENT_INVALID,
+                path + " takes " + filter.takes + ". Send " + path + " as " + form + ".",
+                List.of(path));
         }
     }
 }

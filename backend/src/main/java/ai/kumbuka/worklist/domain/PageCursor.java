@@ -101,14 +101,14 @@ public final class PageCursor {
         }
         String[] parts = plain(cursor).split("\\|", -1);
         if (parts.length != FIELDS || !VERSION.equals(parts[0])) {
-            throw malformed(cursor);
+            throw malformed();
         }
-        refuseForeign(cursor, "scope", parts[1], fingerprint(scopeId.toString()));
-        refuseForeign(cursor, "view", parts[2], view);
-        refuseForeign(cursor, "filter", parts[3], fingerprint(filters));
-        refuseForeign(cursor, "sort", parts[4], sort.wireName());
-        refuseForeign(cursor, "direction", parts[5], direction.wireName());
-        return position(sort, parts[6], parts[7]).orElseThrow(() -> malformed(cursor));
+        refuseForeign("scope", parts[1], fingerprint(scopeId.toString()));
+        refuseForeign("view", parts[2], view);
+        refuseForeign("filter", parts[3], fingerprint(filters));
+        refuseForeign("sort", parts[4], sort.wireName());
+        refuseForeign("direction", parts[5], direction.wireName());
+        return position(sort, parts[6], parts[7]).orElseThrow(PageCursor::malformed);
     }
 
     private static Optional<Position> position(SortKey sort, String lead, String number) {
@@ -128,23 +128,24 @@ public final class PageCursor {
         }
     }
 
-    private static void refuseForeign(String cursor, String what, String carried, String asked) {
+    private static void refuseForeign(String what, String carried, String asked) {
         if (!carried.equals(asked)) {
             throw new WorklistException(
                 WorklistException.Reason.CURSOR_FOREIGN,
-                "the cursor '" + cursor + "' was handed out by a query of another " + what
-                    + " than this one. A cursor continues only the query that handed it out; "
-                    + "pass back the 'next_cursor' of the previous answer with the same scope, "
-                    + "view, filter, sort and direction, or leave 'after' out to start again",
+                "after carries a cursor handed out by a query of another " + what + ". A "
+                    + "cursor continues the query that handed it out, with the same scope, "
+                    + "view, filter, sort and direction. Pass back the next_cursor of this "
+                    + "query, or call query again from the first page.",
                 List.of(QuerySpec.AFTER_ARGUMENT));
         }
     }
 
-    private static WorklistException malformed(String cursor) {
+    /** The refusal of a cursor this service did not hand out, or of no cursor at all. */
+    static WorklistException malformed() {
         return new WorklistException(
             WorklistException.Reason.CURSOR_MALFORMED,
-            "the cursor '" + cursor + "' cannot be read: it is not one this service handed "
-                + "out. Pass back the 'next_cursor' of the previous answer as it came",
+            "after takes the next_cursor of a previous answer, exactly as it came. Pass back "
+                + "next_cursor unchanged, or call query again from the first page.",
             List.of(QuerySpec.AFTER_ARGUMENT));
     }
 

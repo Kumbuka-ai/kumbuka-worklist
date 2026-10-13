@@ -213,7 +213,10 @@ public class WorklistException extends RuntimeException {
 
         /**
          * A value an argument does not admit, decidable from the verb alone: a
-         * {@code direction} other than {@code asc} or {@code desc} (ADR-0049).
+         * {@code direction} other than {@code asc} or {@code desc} (ADR-0049),
+         * a {@code filter} that is no object, a filter value of the wrong form
+         * or outside a fixed set of the platform's own (DEC-0042). The
+         * offender is the argument, a filter as its path; never the value.
          */
         ARGUMENT_INVALID,
 

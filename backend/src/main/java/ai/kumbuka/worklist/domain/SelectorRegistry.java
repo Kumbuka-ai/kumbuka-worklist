@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.SelectorRepository;
@@ -30,6 +37,9 @@ public class SelectorRegistry {
 
     /** An address, a scope id, a number. Never content, never an actor. */
     private static final Logger LOG = Logger.getLogger(SelectorRegistry.class);
+
+    /** The argument a refusal about the addressed view names. */
+    private static final String SELECTOR_ARGUMENT = "selector";
 
     @Inject SelectorRepository selectors;
 
@@ -139,11 +149,11 @@ public class SelectorRegistry {
         if (selector == null) {
             throw new WorklistException(
                 WorklistException.Reason.SELECTOR_UNDECLARED,
-                "selector " + token + " is not declared in scope " + scopeId
-                    + ". It is not created by using it: an address space that appeared "
-                    + "on first use would make a misspelt selector indistinguishable "
-                    + "from an intended one. Declare it first",
-                List.of(String.valueOf(token)));
+                "the view of this address is outside the views this scope declares, and a "
+                    + "view comes into being by its declaration alone, so that a misspelt "
+                    + "one stays apart from an intended one. Address a view this scope "
+                    + "declares, or declare this view in the scope first.",
+                List.of(SELECTOR_ARGUMENT));
         }
         return selector;
     }

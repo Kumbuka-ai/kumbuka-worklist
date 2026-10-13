@@ -249,9 +249,10 @@ public class WorklistResource {
             return SortKey.STANDARD;
         }
         throw new SurfaceException(SurfaceException.Reason.ARGUMENT_INVALID,
-            "the header " + SURFACE + " takes the one value '" + ASSISTANT + "', once, or is "
-                + "left out. Nothing was answered: a read made on a surface the caller did "
-                + "not come through would answer in the wrong vocabulary");
+            "the header " + SURFACE + " names the surface the caller came through, and takes "
+                + "the one value '" + ASSISTANT + "', sent once. Send " + SURFACE + ": "
+                + ASSISTANT + " for the assistant surface, or leave the header out for this "
+                + "one.");
     }
 
     // ======================================================================

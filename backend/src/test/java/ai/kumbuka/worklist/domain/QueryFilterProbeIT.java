@@ -221,7 +221,7 @@ class QueryFilterProbeIT {
 
         assertThat(refused).isInstanceOf(WorklistException.class);
         WorklistException typed = (WorklistException) refused;
-        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.ARGUMENT_INVALID);
         assertThat(typed.offenders()).containsExactly("filter.status");
     }
 
@@ -235,7 +235,7 @@ class QueryFilterProbeIT {
 
         assertThat(refused).isInstanceOf(WorklistException.class);
         WorklistException typed = (WorklistException) refused;
-        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        assertThat(typed.reason()).isEqualTo(WorklistException.Reason.ARGUMENT_INVALID);
         assertThat(typed.offenders()).containsExactly("filter.milestone");
     }
 

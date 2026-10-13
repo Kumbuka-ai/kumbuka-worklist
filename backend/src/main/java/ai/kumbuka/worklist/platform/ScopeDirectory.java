@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.platform;
 
 import ai.kumbuka.worklist.domain.WorklistException;
@@ -57,6 +64,9 @@ public class ScopeDirectory {
      * and neither needs a constant to be served.
      */
     private static final String PRIVATE_KIND = "private";
+
+    /** The argument a refusal about the addressed scope names. */
+    private static final String SCOPE_ARGUMENT = "scope";
 
     @Inject ScopeAccessRepository scopes;
 
@@ -150,11 +160,10 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_KIND_UNSUPPORTED,
-            "scope '" + scope.slug() + "' is a private scope, and the worklist does not "
-                + "serve one. A private scope is a per-tenant container for memory "
-                + "content; items, iterations, milestones and workstreams are not kept "
-                + "in it. Address a project or a global scope instead.",
-            List.of(scope.slug()));
+            "the scope is a private scope, a per-tenant container for memory content, and "
+                + "the worklist keeps its items, iterations, milestones and workstreams in "
+                + "project and global scopes. Address a project or a global scope.",
+            List.of(SCOPE_ARGUMENT));
     }
 
     /** A write into a scope whose content is frozen. */
