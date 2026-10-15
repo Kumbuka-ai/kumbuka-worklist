@@ -81,8 +81,39 @@ public final class SurfaceDeclaration {
                            Function<ArgumentDescriptions, String> description) {
     }
 
-    /** One verb: its name, the text that describes it, and its arguments in order. */
+    /**
+     * The closed set of effect classes, named exactly as the router's verb
+     * catalogue names them, so that the router reads them without a mapping
+     * (ADR-0039). Only the classes a worklist verb takes are listed; a class
+     * outside the router's set is a load error there.
+     */
+    public enum EffectClass {
+        ITEM_READ,
+        COLLECTION_READ,
+        CREATE,
+        FIELD_WRITE,
+        GRAPH_ADD_OR_REMOVE,
+        ITEM_TRANSITION,
+        COLLECTION_COMPOUND
+    }
+
+    /** The shape of a verb's answer, named as the router names it. */
+    public enum Answer {
+        /** One object: {@code address} and {@code fields}. */
+        OBJECT,
+        /** One object at 201, with {@code Location}. */
+        OBJECT_CREATED,
+        /** A page of objects and {@code next_cursor} while more follow. */
+        OBJECT_LISTING
+    }
+
+    /**
+     * One verb: its name, the text that describes it, its effect class, the
+     * shape of its answer, the reasons a refusal of it may name, and its
+     * arguments in order.
+     */
     public record Verb(VerbName name, Function<ToolDescriptions, String> description,
+                       EffectClass effectClass, Answer answer, List<RefusalCode> reasons,
                        List<Argument> arguments) {
 
         /** The names of the arguments, in order. */
@@ -146,15 +177,51 @@ public final class SurfaceDeclaration {
     }
 
     // ======================================================================
+    // The reasons a refusal of a verb may name
+    // ======================================================================
+
+    /** What any call can meet before its own work begins. */
+    private static final List<RefusalCode> COMMON = List.of(
+        RefusalCode.ADDRESS_MALFORMED, RefusalCode.NOT_FOUND, RefusalCode.SESSION_NOT_BOUND,
+        RefusalCode.SCOPE_KIND_UNSUPPORTED, RefusalCode.ARGUMENT_MISSING,
+        RefusalCode.ARGUMENT_UNKNOWN, RefusalCode.ARGUMENT_INVALID,
+        RefusalCode.PAYLOAD_MALFORMED, RefusalCode.UNEXPECTED_FAILURE);
+
+    /** What a writing call can add: the scope's state, the caller's right, the view. */
+    private static final List<RefusalCode> WRITE = List.of(
+        RefusalCode.SCOPE_LOCKED, RefusalCode.SCOPE_READ_ONLY,
+        RefusalCode.SELECTOR_UNDECLARED, RefusalCode.SELECTOR_WITHDRAWN);
+
+    /** What a write that presents a conflict token can add. */
+    private static final List<RefusalCode> TOKENED = List.of(
+        RefusalCode.CONFLICT_TOKEN_MISSING, RefusalCode.CONFLICT, RefusalCode.ADDRESS_READ_ONLY);
+
+    /** What a write of fields can add. */
+    private static final List<RefusalCode> FIELD_WRITE = List.of(
+        RefusalCode.SELECTOR_DECLARED_NOT_WRITTEN, RefusalCode.FIELD_RETRACTED,
+        RefusalCode.FIELD_NOT_SETTABLE, RefusalCode.INVALID_VALUE, RefusalCode.VALUE_UNDECLARED,
+        RefusalCode.WORKSTREAM_WITHDRAWN, RefusalCode.ITEM_WORKSTREAM_MISSING);
+
+    // ======================================================================
     // The verbs
     // ======================================================================
 
     private static final List<Verb> VERBS = List.of(
-        verb("create", ToolDescriptions::create,
+        verb("create", ToolDescriptions::create, EffectClass.CREATE, Answer.OBJECT_CREATED,
+            reasons(WRITE, FIELD_WRITE, codes(RefusalCode.SETTING_ABSENT,
+                RefusalCode.CARDINALITY_EXCEEDED)),
             SCOPE, selector(ArgumentDescriptions::selectorCreate), FIELDS),
-        verb("read", ToolDescriptions::read, ADDRESS),
-        verb("update", ToolDescriptions::update, ADDRESS, TOKEN, FIELDS),
-        verb("query", ToolDescriptions::query,
+        verb("read", ToolDescriptions::read, EffectClass.ITEM_READ, Answer.OBJECT,
+            reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.ITERATION_ABSENT)),
+            ADDRESS),
+        verb("update", ToolDescriptions::update, EffectClass.FIELD_WRITE, Answer.OBJECT,
+            reasons(WRITE, TOKENED, FIELD_WRITE, codes(RefusalCode.ITERATION_CLOSED)),
+            ADDRESS, TOKEN, FIELDS),
+        verb("query", ToolDescriptions::query, EffectClass.COLLECTION_READ, Answer.OBJECT_LISTING,
+            reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.SELECTOR_WITHDRAWN,
+                RefusalCode.PREDICATE_UNKNOWN, RefusalCode.VALUE_UNDECLARED,
+                RefusalCode.PAGE_SIZE_REJECTED, RefusalCode.CURSOR_MALFORMED,
+                RefusalCode.CURSOR_FOREIGN, RefusalCode.SORT_UNDECLARED)),
             SCOPE, selector(ArgumentDescriptions::selectorQuery),
             optional(QueryFilter.FILTER_ARGUMENT, ArgumentType.OBJECT, null,
                 ArgumentDescriptions::filter),
@@ -174,25 +241,61 @@ public final class SurfaceDeclaration {
                     new Value(SortKey.Direction.DESC.wireName(),
                         ValueDescriptions::directionDesc)),
                 ArgumentDescriptions::direction)),
-        verb("accept", ToolDescriptions::accept, ADDRESS, TOKEN),
-        verb("withdraw", ToolDescriptions::withdraw, ADDRESS, TOKEN,
+        verb("accept", ToolDescriptions::accept, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
+                RefusalCode.IDENTIFIER_UNDECIDED)),
+            ADDRESS, TOKEN),
+        verb("withdraw", ToolDescriptions::withdraw, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
+                RefusalCode.VALUE_UNDECLARED)),
+            ADDRESS, TOKEN,
             required("status", ArgumentType.STRING, ArgumentDescriptions::status)),
-        verb("close", ToolDescriptions::close, ADDRESS, TOKEN,
+        verb("close", ToolDescriptions::close, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.ITERATION_CLOSED,
+                RefusalCode.ITERATION_INCOMPLETE, RefusalCode.ITERATION_PRODUCED_MISSING)),
+            ADDRESS, TOKEN,
             optional("produced", ArgumentType.STRING, null, ArgumentDescriptions::produced)),
-        verb("advance", ToolDescriptions::advance,
+        verb("advance", ToolDescriptions::advance, EffectClass.COLLECTION_COMPOUND, Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.CONFLICT_TOKEN_MISSING, RefusalCode.CONFLICT,
+                RefusalCode.VERB_UNCARRIED, RefusalCode.ITERATION_ABSENT,
+                RefusalCode.SETTING_ABSENT)),
             SCOPE, selector(ArgumentDescriptions::selectorIteration),
             required("conflict_token", ArgumentType.STRING,
                 ArgumentDescriptions::conflictTokenSetting)),
-        verb("plan", ToolDescriptions::plan, MEMBERSHIP, TOKEN),
-        verb("unplan", ToolDescriptions::unplan, MEMBERSHIP, TOKEN),
-        verb("claim", ToolDescriptions::claim, ADDRESS, DURATION),
-        verb("release", ToolDescriptions::release, ADDRESS,
+        verb("plan", ToolDescriptions::plan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT_CREATED,
+            reasons(WRITE, TOKENED, codes(RefusalCode.MEMBERSHIP_PRESENT,
+                RefusalCode.ITERATION_CLOSED, RefusalCode.ITEM_UNPLANNABLE,
+                RefusalCode.SETTING_ABSENT, RefusalCode.CARDINALITY_EXCEEDED)),
+            MEMBERSHIP, TOKEN),
+        verb("unplan", ToolDescriptions::unplan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.ITERATION_CLOSED)),
+            MEMBERSHIP, TOKEN),
+        verb("claim", ToolDescriptions::claim, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.ADDRESS_READ_ONLY,
+                RefusalCode.INVALID_VALUE, RefusalCode.CLAIM_HELD)),
+            ADDRESS, DURATION),
+        verb("release", ToolDescriptions::release, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.ADDRESS_READ_ONLY,
+                RefusalCode.CLAIM_ABSENT, RefusalCode.CLAIM_RECEIPT_UNKNOWN)),
+            ADDRESS,
             required("receipt", ArgumentType.STRING, ArgumentDescriptions::receipt)),
-        verb("claim_next", ToolDescriptions::claimNext,
+        verb("claim_next", ToolDescriptions::claimNext, EffectClass.COLLECTION_COMPOUND,
+            Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.DRAW_EMPTY,
+                RefusalCode.CLAIM_HELD)),
             SCOPE, selector(ArgumentDescriptions::selectorItem), DURATION),
-        verb("relate", ToolDescriptions::relate, ADDRESS, TOKEN, TO_ITEM, TYPE),
-        verb("unrelate", ToolDescriptions::unrelate, ADDRESS, TOKEN, TO_ITEM, TYPE),
-        verb("validate", ToolDescriptions::validate,
+        verb("relate", ToolDescriptions::relate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
+                RefusalCode.VALUE_UNDECLARED)),
+            ADDRESS, TOKEN, TO_ITEM, TYPE),
+        verb("unrelate", ToolDescriptions::unrelate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
+                RefusalCode.VALUE_UNDECLARED)),
+            ADDRESS, TOKEN, TO_ITEM, TYPE),
+        verb("validate", ToolDescriptions::validate, EffectClass.COLLECTION_COMPOUND,
+            Answer.OBJECT,
+            reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.SELECTOR_WITHDRAWN,
+                RefusalCode.VERB_UNCARRIED)),
             SCOPE, selector(ArgumentDescriptions::selectorItem)));
 
     /**
@@ -207,8 +310,24 @@ public final class SurfaceDeclaration {
     public static final String TOOL_ARGUMENT = "name";
 
     private static Verb verb(String name, Function<ToolDescriptions, String> description,
+                             EffectClass effect, Answer answer, List<RefusalCode> reasons,
                              Argument... arguments) {
-        return new Verb(VerbName.of(name), description, List.of(arguments));
+        return new Verb(VerbName.of(name), description, effect, answer, reasons,
+            List.of(arguments));
+    }
+
+    /** The reasons every call can meet, followed by the groups given, each once. */
+    @SafeVarargs
+    private static List<RefusalCode> reasons(List<RefusalCode>... groups) {
+        LinkedHashSet<RefusalCode> all = new LinkedHashSet<>(COMMON);
+        for (List<RefusalCode> group : groups) {
+            all.addAll(group);
+        }
+        return List.copyOf(all);
+    }
+
+    private static List<RefusalCode> codes(RefusalCode... codes) {
+        return List.of(codes);
     }
 
     private static final Map<String, VerbName> VERB_NAMES = verbNames();
