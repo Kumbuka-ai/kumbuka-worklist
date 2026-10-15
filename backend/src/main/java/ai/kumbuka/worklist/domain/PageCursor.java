@@ -8,59 +8,165 @@
 package ai.kumbuka.worklist.domain;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * The way from one page of a {@code query} to the next.
  *
- * <p>It names the view and the number of the last object the page carried, and
- * the next page starts after that object in the view's order. A number rather
- * than the platform's identity, because the identity is not something a caller
- * reads back on this surface; and a number is enough, because no object of any
- * view is ever deleted, so the object a cursor names always still exists.
+ * <p>A keyset cursor: it carries the sort values of the last object the page
+ * held, and the next page starts strictly after that position in the sort. No
+ * offset, so an object inserted between two pages shifts nothing that was
+ * already answered, and no lookup of the object, so an object whose filtered
+ * field changed in between still marks the place.
  *
- * <p>Opaque to a caller on purpose: what it encodes is this service's to change,
- * and a caller who builds one by hand is a caller who breaks when it does. It is
- * read back strictly — a cursor this read did not hand out, or one handed out by
- * another view, is refused by name rather than read as "from the beginning",
- * which would answer the first page again and look like the next one.
+ * <h2>What it is bound to</h2>
+ *
+ * Version {@value #VERSION} encodes the scope, the view, a fingerprint of the
+ * filter, the sort and its direction beside the position. A cursor is only
+ * true of the query that handed it out: read against another scope it would
+ * place a walk at a position of someone else's order; against another filter
+ * or sort it would skip or repeat objects without saying so. Each of these is
+ * refused as {@code CURSOR_FOREIGN} rather than applied. What is not bound is
+ * the page size, which a walk may change at any page.
+ *
+ * <p>The scope and the filter travel as fingerprints, the first sixteen hex
+ * digits of a SHA-256, so the cursor names no identity of the platform. There
+ * is no signature and no secret: a caller who forges a cursor for their own
+ * query reaches nothing the query would not answer anyway.
+ *
+ * <p>Opaque to a caller on purpose: what it encodes is this service's to
+ * change, and a caller who builds one by hand breaks when it does.
  */
 public final class PageCursor {
 
     private static final String VERSION = "v1";
+    private static final String SEPARATOR = "|";
+    private static final int FIELDS = 8;
+    private static final int FINGERPRINT_HEX = 16;
 
     private PageCursor() {
     }
 
-    /** The cursor that continues after the object of this number. */
-    public static String encode(String view, long number) {
-        String plain = VERSION + ":" + view + ":" + number;
+    /**
+     * Where an object stands in a sort: the value of the sort's own field, and
+     * the number every sort ends on.
+     *
+     * @param lead the number itself for {@link SortKey#ID}, the creation
+     *             instant for {@link SortKey#CREATED_AT}, the rank for
+     *             {@link SortKey#RANK}
+     */
+    public record Position(Object lead, long number) {
+
+        /** The position of an object with these values, in this sort. */
+        public static Position of(SortKey sort, long number, Instant createdAt, int rank) {
+            return new Position(switch (sort) {
+                case ID -> number;
+                case CREATED_AT -> createdAt;
+                case RANK -> rank;
+            }, number);
+        }
+    }
+
+    /** The cursor that continues after this position, bound to the request. */
+    static String encode(PageRequest request, Position at) {
+        String plain = String.join(SEPARATOR, VERSION, fingerprint(request.scopeId().toString()),
+            request.view(), fingerprint(request.filters()), request.sort().wireName(),
+            request.direction().wireName(), String.valueOf(at.lead()), String.valueOf(at.number()));
         return Base64.getUrlEncoder().withoutPadding()
             .encodeToString(plain.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
-     * The number a cursor continues after, or null for no cursor.
+     * The position a cursor continues after, checked against the query it is
+     * passed back to; null for no cursor.
      *
-     * @throws WorklistException {@code INVALID_VALUE} naming {@code cursor}
+     * @throws WorklistException {@code CURSOR_MALFORMED} for a cursor this
+     *         service did not hand out, {@code CURSOR_FOREIGN} for one handed
+     *         out by a query other than this one
      */
-    static Long decode(String view, String cursor) {
+    static Position decode(String cursor, UUID scopeId, String view,
+                           Map<QueryFilter, Object> filters, SortKey sort,
+                           SortKey.Direction direction) {
         if (cursor == null) {
             return null;
         }
-        String[] parts = plain(cursor).split(":", -1);
-        if (parts.length != 3 || !VERSION.equals(parts[0]) || !view.equals(parts[1])
-                || !parts[2].matches("[1-9]\\d{0,17}")) {
-            throw refused(cursor, "it is not a cursor the " + view + " view handed out");
+        String[] parts = plain(cursor).split("\\|", -1);
+        if (parts.length != FIELDS || !VERSION.equals(parts[0])) {
+            throw malformed();
         }
-        return Long.valueOf(parts[2]);
+        refuseForeign(parts[1], fingerprint(scopeId.toString()));
+        refuseForeign(parts[2], view);
+        refuseForeign(parts[3], fingerprint(filters));
+        refuseForeign(parts[4], sort.wireName());
+        refuseForeign(parts[5], direction.wireName());
+        return position(sort, parts[6], parts[7]).orElseThrow(PageCursor::malformed);
     }
 
-    /** Refused because the view holds no object of the number a cursor names. */
-    static WorklistException unplaced(String view, long after) {
-        return refused(encode(view, after),
-            "it continues after " + view + " " + after + ", which this scope does not hold");
+    private static Optional<Position> position(SortKey sort, String lead, String number) {
+        try {
+            long n = Long.parseLong(number);
+            Object value = switch (sort) {
+                case ID -> Long.parseLong(lead);
+                case CREATED_AT -> Instant.parse(lead);
+                case RANK -> Integer.parseInt(lead);
+            };
+            if (n < 1 || sort == SortKey.ID && !value.equals(n)) {
+                return Optional.empty();
+            }
+            return Optional.of(new Position(value, n));
+        } catch (NumberFormatException | DateTimeParseException unreadable) {
+            return Optional.empty();
+        }
+    }
+
+    private static void refuseForeign(String carried, String asked) {
+        if (!carried.equals(asked)) {
+            throw new WorklistException(
+                WorklistException.Reason.CURSOR_FOREIGN,
+                List.of(QuerySpec.AFTER_ARGUMENT));
+        }
+    }
+
+    /** The refusal of a cursor this service did not hand out, or of no cursor at all. */
+    static WorklistException malformed() {
+        return new WorklistException(
+            WorklistException.Reason.CURSOR_MALFORMED,
+            List.of(QuerySpec.AFTER_ARGUMENT));
+    }
+
+    /**
+     * The filter in one canonical text, in declaration order, so that the same
+     * filter written in another order or another spelling of the same value
+     * has the same fingerprint.
+     */
+    private static String fingerprint(Map<QueryFilter, Object> filters) {
+        StringBuilder canonical = new StringBuilder();
+        for (QueryFilter filter : QueryFilter.values()) {
+            if (filters.containsKey(filter)) {
+                canonical.append(filter.name()).append('=').append(filters.get(filter)).append('\n');
+            }
+        }
+        return fingerprint(canonical.toString());
+    }
+
+    private static String fingerprint(String text) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(text.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, FINGERPRINT_HEX);
+        } catch (NoSuchAlgorithmException absent) {
+            // Every Java platform is required to provide SHA-256.
+            throw new IllegalStateException(absent);
+        }
     }
 
     private static String plain(String cursor) {
@@ -69,13 +175,5 @@ public final class PageCursor {
         } catch (IllegalArgumentException notBase64) {
             return "";
         }
-    }
-
-    private static WorklistException refused(String cursor, String why) {
-        return new WorklistException(
-            WorklistException.Reason.INVALID_VALUE,
-            "the cursor '" + cursor + "' cannot be read: " + why + ". Pass back the "
-                + "'next_cursor' of the previous answer as it came, on the same view",
-            List.of(QuerySpec.CURSOR_ARGUMENT));
     }
 }

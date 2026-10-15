@@ -180,8 +180,8 @@ class WorkstreamViewIT {
             .when().get(SurfaceFixture.collection(Selector.WORKSTREAM) + "?filter.token=x")
             .then()
             .statusCode(422)
-            .body("reason", is("UNKNOWN_FIELD"))
-            .body("data.offenders", org.hamcrest.Matchers.contains("filter.token"));
+            .body("reason", is("PREDICATE_UNKNOWN"))
+            .body("data.offenders", org.hamcrest.Matchers.contains("filter"));
     }
 
     // =======================================================================
@@ -200,7 +200,7 @@ class WorkstreamViewIT {
             // The message names the surface the act belongs on. Asserting on
             // it is what makes this a probe of the REASON rather than only of
             // a status class shared with VERB_UNCARRIED.
-            .body("message", containsString("declared"))
+            .body("message", containsString("declaration"))
             .body("message", containsString("selector-declaration surface"));
     }
 
@@ -214,7 +214,7 @@ class WorkstreamViewIT {
             .then()
             .statusCode(422)
             .body("reason", is("SELECTOR_DECLARED_NOT_WRITTEN"))
-            .body("message", containsString("declared"))
+            .body("message", containsString("declaration"))
             .body("message", containsString("selector-declaration surface"));
     }
 
@@ -248,7 +248,7 @@ class WorkstreamViewIT {
             .then()
             .statusCode(422)
             .body("reason", is("VERB_UNCARRIED"))
-            .body("message", containsString("workstream"));
+            .body("message", containsString("close"));
     }
 
     @Test
@@ -265,7 +265,7 @@ class WorkstreamViewIT {
     void claim_on_workstream_is_a_category_error() {
         given()
             .contentType(ContentType.JSON)
-            .body(Map.of("durationSeconds", 60))
+            .body(Map.of("duration_seconds", 60))
             .when().post(SurfaceFixture.item(Selector.WORKSTREAM, workstreamNumber) + ":claim")
             .then()
             .statusCode(422)

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
@@ -82,7 +89,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.ITEM);
         Item item = items.byAddress(scopeId, number);
         if (item == null) {
-            throw absent(WorklistException.Reason.ITEM_UNKNOWN, Selector.ITEM, number, scopeId);
+            throw absent(WorklistException.Reason.ITEM_UNKNOWN);
         }
         return item.id;
     }
@@ -93,8 +100,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.ITERATION);
         Iteration iteration = planning.iterationByNumber(scopeId, number);
         if (iteration == null) {
-            throw absent(WorklistException.Reason.ITERATION_UNKNOWN,
-                Selector.ITERATION, number, scopeId);
+            throw absent(WorklistException.Reason.ITERATION_UNKNOWN);
         }
         return iteration.id;
     }
@@ -105,8 +111,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.MILESTONE);
         Milestone milestone = planning.milestoneByNumber(scopeId, number);
         if (milestone == null) {
-            throw absent(WorklistException.Reason.MILESTONE_UNKNOWN,
-                Selector.MILESTONE, number, scopeId);
+            throw absent(WorklistException.Reason.MILESTONE_UNKNOWN);
         }
         return milestone.id;
     }
@@ -123,8 +128,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.WORKSTREAM);
         Workstream workstream = workstreams.findByNumber(scopeId, number);
         if (workstream == null) {
-            throw absent(WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                Selector.WORKSTREAM, number, scopeId);
+            throw absent(WorklistException.Reason.WORKSTREAM_UNKNOWN);
         }
         return workstream.id;
     }
@@ -153,20 +157,13 @@ public class AddressRegistry {
         if (current == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_ABSENT,
-                "scope " + scopeId + " is working no iteration, so 'current' addresses "
-                    + "nothing. The pointer moves when an iteration is advanced and is "
-                    + "empty between a close and the next advance",
-                List.of(Selector.ITERATION));
+                List.of("address"));
         }
         return current;
     }
 
-    private static WorklistException absent(WorklistException.Reason reason, String view,
-            long number, UUID scopeId) {
+    private static WorklistException absent(WorklistException.Reason reason) {
         return new WorklistException(reason,
-            "no " + view + " numbered " + number + " in scope " + scopeId + ". Numbers are "
-                + "never reused here, so this one was either never handed out or names "
-                + "something in another scope",
-            List.of(view + "/" + number));
+            List.of());
     }
 }

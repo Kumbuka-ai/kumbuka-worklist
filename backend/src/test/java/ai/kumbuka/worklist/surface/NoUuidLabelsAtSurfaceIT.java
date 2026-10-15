@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -179,14 +186,14 @@ class NoUuidLabelsAtSurfaceIT {
             .then().statusCode(201).extract().path("address");
         Response related = restCall("POST",
             SurfaceFixture.item(Selector.ITEM, itemNumber) + ":relate", itemToken,
-            Map.of("toItem", secondItemAddress, "type", blocksTypeName));
+            Map.of("to_item", secondItemAddress, "type", blocksTypeName));
         related.then().statusCode(200);
         assertNoUuid("relate", related);
         itemToken = related.jsonPath().getString("fields.conflict_token");
 
         Response unrelated = restCall("POST",
             SurfaceFixture.item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
-            Map.of("toItem", secondItemAddress, "type", blocksTypeName));
+            Map.of("to_item", secondItemAddress, "type", blocksTypeName));
         unrelated.then().statusCode(200);
         assertNoUuid("unrelate", unrelated);
         itemToken = unrelated.jsonPath().getString("fields.conflict_token");

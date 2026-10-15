@@ -10,8 +10,11 @@ package ai.kumbuka.worklist.adapter.rest;
 import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
+import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.surface.CallerActor;
+import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
+import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -90,6 +93,22 @@ public class WorklistResource {
     /** What an item URI offers when the segment names no verb. */
     private static final String ITEM_ALLOW = "GET, PATCH, POST";
 
+    /** The query parameters of {@code query} besides the filter. */
+    private static final java.util.Set<String> PAGING_ARGUMENTS = java.util.Set.of(
+        QuerySpec.PAGE_SIZE_ARGUMENT, QuerySpec.AFTER_ARGUMENT, QuerySpec.SORT_ARGUMENT,
+        QuerySpec.DIRECTION_ARGUMENT);
+
+    /**
+     * Names the surface the caller came through, where that is not this one: a
+     * router publishing {@code query} as an assistant tool says so here. The
+     * name and its one value are kumbuka-dispatch's, so a router sends one
+     * header to both services.
+     */
+    static final String SURFACE = "Kumbuka-Surface";
+
+    /** The one value {@link #SURFACE} takes: the assistant surface. */
+    static final String ASSISTANT = "assistant";
+
     /** The shape a JSON object body is read into. */
     private static final TypeReference<Map<String, Object>> OBJECT =
         new TypeReference<>() { };
@@ -131,20 +150,22 @@ public class WorklistResource {
             // Every other verb acts at item depth. Depth is declared per verb and
             // undeclared means complete address only, so a range capability never
             // comes into existence by omission.
-            throw new SurfaceException(SurfaceException.Reason.WRITE_ON_TRUNCATED_ADDRESS,
-                "'" + at.verb() + "' does not act on a truncated address. The only "
-                    + "declarable set semantics is exactly one, which create has and "
-                    + "advance has and no other verb of this scheme does.",
+            throw new SurfaceException(RefusalCode.WRITE_ON_TRUNCATED_ADDRESS,
                 COLLECTION_ALLOW);
         }
 
         return switch (at.method()) {
-            case ADVANCE -> ok(scope, verbs.advance(caller.subject(), scope, at.address(),
-                unquote(ifMatch)));
+            case ADVANCE -> {
+                arguments(scope, body);
+                yield ok(scope, verbs.advance(caller.subject(), scope, at.address(),
+                    unquote(ifMatch)));
+            }
             case CLAIM_NEXT -> ok(scope, verbs.claimNext(caller.subject(), scope,
-                at.address(),
-                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
-            case VALIDATE -> ok(scope, verbs.validate(caller.subject(), scope, at.address()));
+                at.address(), lease(scope, arguments(scope, body, DURATION))));
+            case VALIDATE -> {
+                arguments(scope, body);
+                yield ok(scope, verbs.validate(caller.subject(), scope, at.address()));
+            }
             case DIGEST -> uncarried(scope, at.address(), null, at.verb());
             default -> throw new IllegalStateException(
                 "'" + at.verb() + "' is declared at collection depth and has no arm here");
@@ -158,30 +179,44 @@ public class WorklistResource {
      * follows from the target and the effect class rather than from the
      * verb's name.
      *
-     * <p><strong>The filter and the limit travel as query parameters, not as
+     * <p><strong>The filter and the paging travel as query parameters, not as
      * path segments.</strong> An address without an id part is reserved, so a
      * segment for a filter would either collapse into the selector or reserve
      * a form no address can grow into. The query string is the transport
      * layer for arguments a caller narrows a read with, and its parameters do
      * not become part of the address the answer is at.
      *
-     * <p>A filter is written as {@code ?filter.<name>=<value>}, the bound as
-     * {@code ?limit=} and the continuation as {@code ?cursor=}. Every parameter
-     * is handed to {@link QuerySpec#of} as it arrived — text, or a list when it
-     * was repeated — and read by the verb surface, by the same parse the MCP
-     * adapter's arguments get; a parameter that is none of the three is refused
-     * by name, after scope visibility like every other refusal of the call. The JAX-RS
-     * conversion of {@code limit} to an integer is deliberately not used: it
-     * answers an unreadable value with a bare 404 before any refusal of ours.
+     * <p>A filter is written as {@code ?filter.<name>=<value>}, the page size as
+     * {@code ?page_size=}, the continuation as {@code ?after=}, the order as
+     * {@code ?sort=} and {@code ?direction=}. Every parameter is handed to
+     * {@link QuerySpec} as it arrived — text, or a list when it was repeated —
+     * and read by the verb surface, by the same parse the MCP adapter's
+     * arguments get; a parameter that is none of these is refused by name,
+     * after scope visibility like every other refusal of the call. The JAX-RS
+     * conversion of {@code page_size} to an integer is deliberately not used:
+     * it answers an unreadable value with a bare 404 before any refusal of ours.
+     *
+     * <p>This surface offers every sort a view declares
+     * ({@link SortKey#ALL}), the assistant surface the standard pair only.
+     *
+     * <p><strong>{@code Kumbuka-Surface: assistant}</strong> makes the read on
+     * the assistant surface, as kumbuka-dispatch does: a router that publishes
+     * {@code query} as an assistant tool reaches this service over REST and
+     * says so, and the answer is then the service MCP's — the standard sorts
+     * only, so a declared REST sort such as {@code rank} is refused there too
+     * (ADR-0049). The header decides nothing else; who calls and what they may
+     * see come from the verified identity as always. Any other value is refused
+     * and the read not made. Only {@code query} reads it.
      */
     @GET
     @Path("{selector}")
     public Response collectionGet(@PathParam("scope") String scope,
                                   @PathParam("selector") String selector,
+                                  @HeaderParam(SURFACE) java.util.List<String> surface,
                                   jakarta.ws.rs.core.UriInfo info) {
+        java.util.Set<SortKey> offered = offeredOn(surface);
         Map<String, Object> filter = new LinkedHashMap<>();
-        Object limit = null;
-        Object cursor = null;
+        Map<String, Object> paging = new LinkedHashMap<>();
         java.util.List<String> untaken = new java.util.ArrayList<>();
         for (Map.Entry<String, java.util.List<String>> entry
                 : info.getQueryParameters().entrySet()) {
@@ -190,17 +225,34 @@ public class WorklistResource {
             String filterPrefix = QueryFilter.FILTER_ARGUMENT + ".";
             if (name.startsWith(filterPrefix) && name.length() > filterPrefix.length()) {
                 filter.put(name.substring(filterPrefix.length()), value);
-            } else if (QuerySpec.LIMIT_ARGUMENT.equals(name)) {
-                limit = value;
-            } else if (QuerySpec.CURSOR_ARGUMENT.equals(name)) {
-                cursor = value;
+            } else if (PAGING_ARGUMENTS.contains(name)) {
+                paging.put(name, value);
             } else {
                 untaken.add(name);
             }
         }
-        QuerySpec spec = QuerySpec.of(filter, limit, cursor, untaken);
+        QuerySpec spec = new QuerySpec(filter, paging.get(QuerySpec.PAGE_SIZE_ARGUMENT),
+            paging.get(QuerySpec.AFTER_ARGUMENT), paging.get(QuerySpec.SORT_ARGUMENT),
+            paging.get(QuerySpec.DIRECTION_ARGUMENT), untaken, offered);
         return Response.ok(Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec))).build();
+    }
+
+    /**
+     * The sorts the calling surface offers: every declared one on this
+     * surface, the standard pair when the header names the assistant.
+     *
+     * @throws SurfaceException {@code ARGUMENT_INVALID} for any other header
+     *         value, or the header sent twice
+     */
+    private static java.util.Set<SortKey> offeredOn(java.util.List<String> surface) {
+        if (surface == null || surface.isEmpty()) {
+            return SortKey.ALL;
+        }
+        if (java.util.List.of(ASSISTANT).equals(surface)) {
+            return SortKey.STANDARD;
+        }
+        throw new SurfaceException(RefusalCode.ARGUMENT_INVALID);
     }
 
     // ======================================================================
@@ -222,9 +274,9 @@ public class WorklistResource {
                            @PathParam("selector") String selector,
                            @PathParam("id") String id,
                            @HeaderParam("If-Match") String ifMatch,
-                           Map<String, Object> body) {
+                           String body) {
         return ok(scope, verbs.update(caller.subject(), scope, selector, id,
-            unquote(ifMatch), Payloads.fields(body)));
+            unquote(ifMatch), Payloads.fields(readObject(body))));
     }
 
     /**
@@ -249,11 +301,7 @@ public class WorklistResource {
         CustomMethod.Split at = CustomMethod.split(segment, CustomMethod.Depth.ITEM)
             .filter(CustomMethod.Split::isKnown)
             .orElseThrow(() -> new SurfaceException(
-                SurfaceException.Reason.WRITE_ON_TRUNCATED_ADDRESS,
-                "'" + segment + "' names no verb of this scheme at item depth. A "
-                    + "transition is written in colon notation on the item URI — "
-                    + "'<number>:close' — because a verb as a trailing path segment could "
-                    + "not be told apart from a further id segment.",
+                RefusalCode.WRITE_ON_TRUNCATED_ADDRESS,
                 ITEM_ALLOW));
 
         return dispatch(at, scope, selector, unquote(ifMatch), body);
@@ -272,20 +320,23 @@ public class WorklistResource {
         String id = at.address();
 
         return switch (at.method()) {
-            case ACCEPT -> ok(scope, verbs.accept(subject, scope, selector, id, token));
+            case ACCEPT -> {
+                arguments(scope, body);
+                yield ok(scope, verbs.accept(subject, scope, selector, id, token));
+            }
             case WITHDRAW -> ok(scope, verbs.withdraw(subject, scope, selector, id, token,
-                Payloads.withdrawal(read(body, Payloads.WithdrawRequest.class))));
+                withdrawal(scope, arguments(scope, body, STATUS))));
             case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token,
-                producedOr(read(body, Payloads.CloseRequest.class))));
+                text(scope, arguments(scope, body, PRODUCED), PRODUCED)));
 
             case CLAIM -> ok(scope, verbs.claim(subject, scope, selector, id,
-                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
+                lease(scope, arguments(scope, body, DURATION))));
             case RELEASE -> ok(scope, verbs.release(subject, scope, selector, id,
-                Payloads.releaseOf(read(body, Payloads.ReleaseRequest.class))));
+                release(scope, arguments(scope, body, RECEIPT))));
             case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
-                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+                edge(scope, arguments(scope, body, TO_ITEM, TYPE))));
             case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
-                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+                edge(scope, arguments(scope, body, TO_ITEM, TYPE))));
 
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
@@ -355,9 +406,9 @@ public class WorklistResource {
                                      @PathParam("id") String id,
                                      @PathParam("member") String member,
                                      @HeaderParam("If-Match") String ifMatch,
-                                     Map<String, Object> body) {
+                                     String body) {
         return ok(scope, verbs.updateMembership(caller.subject(), scope, selector, id, member,
-            unquote(ifMatch), Payloads.fields(body)));
+            unquote(ifMatch), Payloads.fields(readObject(body))));
     }
 
     // ======================================================================
@@ -376,12 +427,7 @@ public class WorklistResource {
      * things about one surface.
      */
     private Response uncarried(String scope, String view, String id, String verb) {
-        verbs.uncarried(caller.subject(), scope, view, id, verb,
-            "The capability declaration gives this scheme the object lifecycle, the "
-                + "planning verbs, the claim family, the graph verbs and validate. The "
-                + "commitment gate it carries is accept and not send: an item is never "
-                + "frozen, so there is nothing for an author to commit outward and nothing "
-                + "for an addendum to hang off.");
+        verbs.uncarried(caller.subject(), scope, view, id, verb);
         throw unreachable(verb);
     }
 
@@ -445,9 +491,95 @@ public class WorklistResource {
         return read(body, OBJECT);
     }
 
-    /** The `produced` field of a close body, or null if no body arrived. */
-    private static String producedOr(Payloads.CloseRequest request) {
-        return request == null ? null : request.produced();
+    // ======================================================================
+    // The arguments of a body
+    // ======================================================================
+
+    private static final String STATUS = "status";
+    private static final String PRODUCED = "produced";
+    private static final String DURATION = "duration_seconds";
+    private static final String RECEIPT = "receipt";
+    private static final String TO_ITEM = "to_item";
+    private static final String TYPE = "type";
+
+    /**
+     * The arguments of a body, under the names the verb declares.
+     *
+     * <p>The body is read as an object and checked against the declared names
+     * before anything is taken from it: a name the verb does not declare is
+     * refused as {@code ARGUMENT_UNKNOWN} with the declared names under
+     * {@code accepts} (DEC-0043 R4, R19), so nothing is accepted and dropped.
+     * A name that arrived as JSON {@code null} is left out, which makes it
+     * the same call as one that never sent it (R17). An absent body is an
+     * empty one.
+     */
+    private Map<String, Object> arguments(String scope, String body, String... declared) {
+        Map<String, Object> in = readObject(body);
+        Map<String, Object> present = new LinkedHashMap<>();
+        if (in == null) {
+            return present;
+        }
+        java.util.List<String> names = java.util.List.of(declared);
+        if (!names.containsAll(in.keySet())) {
+            // A stranger is answered NOT_FOUND whatever else is wrong with the
+            // call (DEC-0042), so the scope is checked before the names.
+            verbs.requireVisible(caller.subject(), scope);
+            throw SurfaceException.unknown(names);
+        }
+        in.forEach((name, value) -> {
+            if (value != null) {
+                present.put(name, value);
+            }
+        });
+        return present;
+    }
+
+    /** An argument that takes text, or null when it did not arrive. */
+    private String text(String scope, Map<String, Object> arguments, String name) {
+        Object value = arguments.get(name);
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof String text)) {
+            throw invalid(scope, name);
+        }
+        return text;
+    }
+
+    private VerbInput.Withdrawal withdrawal(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? null
+            : new VerbInput.Withdrawal(text(scope, arguments, STATUS));
+    }
+
+    private VerbInput.Release release(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? null
+            : new VerbInput.Release(text(scope, arguments, RECEIPT));
+    }
+
+    private VerbInput.Edge edge(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? null
+            : new VerbInput.Edge(text(scope, arguments, TO_ITEM), text(scope, arguments, TYPE));
+    }
+
+    private VerbInput.Lease lease(String scope, Map<String, Object> arguments) {
+        if (arguments.isEmpty()) {
+            return null;
+        }
+        Object value = arguments.get(DURATION);
+        if (value instanceof Integer || value instanceof Long) {
+            return new VerbInput.Lease(((Number) value).longValue());
+        }
+        throw invalid(scope, DURATION);
+    }
+
+    /**
+     * A value of the wrong form, refused only once the scope is known to be
+     * visible: a stranger is answered NOT_FOUND whatever else is wrong with
+     * the call (DEC-0042).
+     */
+    private SurfaceException invalid(String scope, String name) {
+        verbs.requireVisible(caller.subject(), scope);
+        return SurfaceException.invalid(name);
     }
 
     private <T> T read(String body, Class<T> shape) {
@@ -465,8 +597,9 @@ public class WorklistResource {
         try {
             return json.readValue(body, shape);
         } catch (JsonProcessingException e) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the request body is not the JSON this verb takes: " + e.getOriginalMessage());
+            // The parser's own message quotes the body back, so it stays in
+            // here (DEC-0043 R18).
+            throw new SurfaceException(RefusalCode.PAYLOAD_MALFORMED);
         }
     }
 

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import java.util.List;
@@ -11,8 +18,10 @@ import java.util.List;
  * do that yet" from "that does not exist" cannot map either onto its own
  * protocol without guessing.
  *
- * <p>The message is for a human and names the specifics; the reason is for a
- * caller and is stable.
+ * <p>It carries no text. What a caller reads -- the message and the remedy --
+ * is the refusal catalogue's, worded once per code in the surface's message
+ * bundles; the domain names the reason and the declared argument paths the
+ * refusal concerns, and nothing a call sent (DEC-0043 R18).
  *
  * <p>The first two below are the substrate's. The rest arrived with the item
  * domain, and each one names a refusal something in this service actually
@@ -83,18 +92,12 @@ public class WorklistException extends RuntimeException {
          */
         SCOPE_READ_ONLY,
 
-        /**
-         * An argument named a field that does not exist. The offenders are the
-         * argument names, because a refusal that does not say WHICH name it
-         * did not recognise leaves the caller to diff two vocabularies by eye.
-         */
-        UNKNOWN_FIELD,
 
         /**
          * An argument named a field the addressed object USED to carry, and
          * whose relation has since been retracted.
          *
-         * <p>Distinct from {@link #UNKNOWN_FIELD} because the remedy is
+         * <p>Distinct from {@link #ARGUMENT_UNKNOWN} because the remedy is
          * different, and that is the whole reason it exists. A caller holding
          * an unknown name is holding a typo and should check their spelling. A
          * caller holding a retracted name is holding something this service
@@ -174,6 +177,52 @@ public class WorklistException extends RuntimeException {
          * the class of refusal.
          */
         VALUE_UNDECLARED,
+
+        /** The page size of a {@code query} is not a whole number from 1 to the maximum. */
+        PAGE_SIZE_REJECTED,
+
+        /** The cursor of a {@code query} is not one this service handed out. */
+        CURSOR_MALFORMED,
+
+        /**
+         * The cursor of a {@code query} was handed out by another query: another
+         * scope, view, filter, sort or direction. Applying it would place the
+         * walk at a position of a different order and skip or repeat objects
+         * without saying so.
+         */
+        CURSOR_FOREIGN,
+
+        /** The sort of a {@code query} names a field the view does not sort by. */
+        SORT_UNDECLARED,
+
+        /**
+         * A name that is not an argument of the verb at all — on {@code query},
+         * {@code limit}, {@code cursor} or any other name beside the filter and
+         * the paging arguments.
+         *
+         * <p>Decidable from the verb alone, without knowing any scope, and
+         * therefore apart from {@link #PREDICATE_UNKNOWN}, which says something
+         * about the vocabulary of one scope (DEC-0042). The offenders are the
+         * names, never a value.
+         */
+        ARGUMENT_UNKNOWN,
+
+        /**
+         * A value an argument does not admit, decidable from the verb alone: a
+         * {@code direction} other than {@code asc} or {@code desc} (ADR-0049),
+         * a {@code filter} that is no object, a filter value of the wrong form
+         * or outside a fixed set of the platform's own (DEC-0042). The
+         * offender is the argument, a filter as its path; never the value.
+         */
+        ARGUMENT_INVALID,
+
+        /**
+         * A filter on a field that the vocabulary of the scope does not declare
+         * for the view (DEC-0042). Raised only once the caller has been found
+         * to see the scope, so it never tells a stranger that the scope exists.
+         * The offender is the filter field as its path, {@code filter.<name>}.
+         */
+        PREDICATE_UNKNOWN,
 
         /**
          * The intake gate was reached and this scheme has no carrier for the
@@ -406,15 +455,34 @@ public class WorklistException extends RuntimeException {
 
     private final transient Reason reason;
     private final transient List<String> offenders;
+    private final transient List<String> accepts;
+    private final transient String currentToken;
 
-    public WorklistException(Reason reason, String message) {
-        this(reason, message, List.of());
+    public WorklistException(Reason reason) {
+        this(reason, List.of());
     }
 
-    public WorklistException(Reason reason, String message, List<String> offenders) {
-        super(message);
+    public WorklistException(Reason reason, List<String> offenders) {
+        this(reason, offenders, List.of());
+    }
+
+    /**
+     * @param offenders the declared argument paths the refusal concerns, never
+     *                  a value the caller sent (DEC-0043 R18)
+     * @param accepts   the declared names a refusal of an undeclared name
+     *                  answers with (DEC-0043 R19)
+     */
+    public WorklistException(Reason reason, List<String> offenders, List<String> accepts) {
+        this(reason, offenders, accepts, null);
+    }
+
+    private WorklistException(Reason reason, List<String> offenders, List<String> accepts,
+                              String currentToken) {
+        super(reason.name());
         this.reason = reason;
         this.offenders = List.copyOf(offenders);
+        this.accepts = List.copyOf(accepts);
+        this.currentToken = currentToken;
     }
 
     public Reason reason() {
@@ -430,5 +498,27 @@ public class WorklistException extends RuntimeException {
      */
     public List<String> offenders() {
         return offenders;
+    }
+
+    /**
+     * The conflict token the object carries now, on a {@code CONFLICT}.
+     *
+     * <p>State, not input: it is what the caller's own read would answer at
+     * this moment (DEC-0041), and it saves the caller a second call to learn
+     * what it should have sent.
+     */
+    public String currentToken() {
+        return currentToken;
+    }
+
+    /** A {@code CONFLICT} on {@code conflict_token}, carrying the object's current token. */
+    public static WorklistException conflict(String currentToken) {
+        return new WorklistException(Reason.CONFLICT, List.of("conflict_token"), List.of(),
+            currentToken);
+    }
+
+    /** The declared names a refusal of an undeclared name answers with. */
+    public List<String> accepts() {
+        return accepts;
     }
 }

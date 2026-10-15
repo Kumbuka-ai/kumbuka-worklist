@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -93,6 +100,7 @@ public final class AddressParser {
      */
     private static final Pattern NUMBER = Pattern.compile("[1-9]\\d{0,18}");
 
+
     private AddressParser() {
     }
 
@@ -146,11 +154,9 @@ public final class AddressParser {
      *         arrived.
      */
     public static String scope(String raw) {
-        String candidate = requirePresent(raw, "scope");
+        String candidate = requirePresent(raw);
         if (!SCOPE.matcher(candidate).matches()) {
-            throw malformed("the scope '" + candidate + "' is not a DNS label. Lower case, "
-                + "digits and inner hyphens, at most 63 characters. Upper case is rejected "
-                + "rather than folded: folding would make two strings resolve to one scope.");
+            throw malformed();
         }
         return candidate;
     }
@@ -163,18 +169,12 @@ public final class AddressParser {
      * perfectly good word for something this service does not hold.
      */
     public static String view(String raw) {
-        String candidate = requirePresent(raw, "selector");
+        String candidate = requirePresent(raw);
         if (!Selector.TOKEN_PATTERN.matcher(candidate).matches()) {
-            throw malformed("the selector '" + candidate + "' is not a token: lower case, "
-                + "digits and inner hyphens, starting with a letter. Upper case is rejected "
-                + "rather than folded.");
+            throw malformed();
         }
         if (!Selector.VIEWS.contains(candidate)) {
-            throw malformed("the selector is the view, and the platform's views are "
-                + Selector.VIEWS + ". '" + candidate + "' is none of them. An item's family "
-                + "is a scope's own declared vocabulary and is not a view: it says something "
-                + "about the item, not about which kind of thing stands at the other end of "
-                + "the address.");
+            throw malformed();
         }
         return candidate;
     }
@@ -189,19 +189,16 @@ public final class AddressParser {
      */
     public static Target target(String rawView, String rawId) {
         String view = view(rawView);
-        String candidate = requirePresent(rawId, "id");
+        String candidate = requirePresent(rawId);
 
         if (CURRENT.equals(candidate)) {
             if (!Selector.ITERATION.equals(view)) {
-                throw malformed("'" + CURRENT + "' addresses the iteration a scope is "
-                    + "working, and only the iteration view has one. A scope has no current "
-                    + "item and no current milestone: the goal axis carries an active "
-                    + "milestone, which is a status on a row and is read by asking for it.");
+                throw malformed();
             }
             return new Target(view, null, null);
         }
 
-        return new Target(view, number(candidate, "id"), null);
+        return new Target(view, number(candidate), null);
     }
 
     /**
@@ -225,22 +222,15 @@ public final class AddressParser {
     public static Target membership(String rawView, String rawIteration, String rawItem) {
         String view = view(rawView);
         if (!Selector.ITERATION.equals(view)) {
-            throw malformed("a membership is addressed under an iteration — "
-                + "'iteration/<number>/<item number>' — and '" + view + "' is not the "
-                + "iteration view. Nothing else in this scheme carries a second id "
-                + "segment.");
+            throw malformed();
         }
 
-        String iteration = requirePresent(rawIteration, "id");
+        String iteration = requirePresent(rawIteration);
         if (CURRENT.equals(iteration)) {
-            throw malformed("a membership is not addressed under '" + CURRENT + "'. The "
-                + "pointer moves, so the same string would name a different membership "
-                + "after every advance — and this is the one address whose read and write "
-                + "forms are identical, so a form that cannot be written through must not "
-                + "be readable either.");
+            throw malformed();
         }
 
-        return new Target(view, number(iteration, "id"), number(rawItem, "item number"));
+        return new Target(view, number(iteration), number(rawItem));
     }
 
     /**
@@ -260,13 +250,11 @@ public final class AddressParser {
      * PARTS are occupied and never by counting separators.
      */
     public static Parts uri(String raw) {
-        String candidate = requirePresent(raw, "address");
+        String candidate = requirePresent(raw);
         String prefix = SCHEME + "://";
 
         if (!candidate.startsWith(prefix)) {
-            throw malformed("the address '" + candidate + "' does not name the worklist "
-                + "scheme. A complete address is '" + prefix + "<scope>/<view>/<id>', with "
-                + "the scheme leading and the scope in the authority position.");
+            throw malformed();
         }
 
         String rest = candidate.substring(prefix.length());
@@ -276,11 +264,7 @@ public final class AddressParser {
 
         List<String> parts = List.of(rest.split("/", -1));
         if (parts.size() < 3 || parts.size() > 4) {
-            throw malformed("the address '" + candidate + "' occupies " + parts.size()
-                + " part(s) after the scheme, and a complete address occupies three: scope, "
-                + "view and id — with the id running to a second segment where it names a "
-                + "membership. Truncation is recognised by which parts are occupied, and a "
-                + "verb acting on an existing object takes a complete address.");
+            throw malformed();
         }
 
         // Each part is validated by its own production, and the whole address is
@@ -303,26 +287,22 @@ public final class AddressParser {
      * from an exception thrown by the parser would put the refusal in the
      * catch block of a method that is supposed to decide it.
      */
-    private static long number(String raw, String part) {
-        String candidate = requirePresent(raw, part);
+    private static long number(String raw) {
+        String candidate = requirePresent(raw);
         if (!NUMBER.matcher(candidate).matches()) {
-            throw malformed("the " + part + " '" + candidate + "' is not a number in this "
-                + "address space. Counting starts at one and there are no leading zeroes: "
-                + "'07' and '7' would be two strings for one object.");
+            throw malformed();
         }
         return Long.parseLong(candidate);
     }
 
-    private static String requirePresent(String raw, String part) {
+    private static String requirePresent(String raw) {
         if (raw == null || raw.isBlank()) {
-            throw malformed("the " + part + " part of the address is empty. An address is "
-                + "recognised by which of its parts are occupied, so an empty one is not a "
-                + "shorter address but a broken one.");
+            throw malformed();
         }
         return raw;
     }
 
-    private static SurfaceException malformed(String message) {
-        return new SurfaceException(SurfaceException.Reason.ADDRESS_MALFORMED, message);
+    private static SurfaceException malformed() {
+        return new SurfaceException(RefusalCode.ADDRESS_MALFORMED);
     }
 }

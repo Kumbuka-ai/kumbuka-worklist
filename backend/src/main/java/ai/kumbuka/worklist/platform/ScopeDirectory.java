@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.platform;
 
 import ai.kumbuka.worklist.domain.WorklistException;
@@ -58,6 +65,9 @@ public class ScopeDirectory {
      */
     private static final String PRIVATE_KIND = "private";
 
+    /** The argument a refusal about the addressed scope names. */
+    private static final String SCOPE_ARGUMENT = "scope";
+
     @Inject ScopeAccessRepository scopes;
 
     /**
@@ -96,13 +106,9 @@ public class ScopeDirectory {
         if (row.isEmpty()) {
             // Reached only with both settings bound, so this genuinely means
             // "no such scope for this subject" and not "nothing was bound".
-            LOG.warnf("scope '%s' unresolved: %s", slug,
-                WorklistException.Reason.SCOPE_UNRESOLVED);
-            throw new WorklistException(WorklistException.Reason.SCOPE_UNRESOLVED,
-                "no scope '" + slug + "' is open to this subject. The directory answers "
-                    + "for the bound subject only, and existence in its answer is the "
-                    + "permission — so this is a refusal, not a missing row to be "
-                    + "worked around.");
+            // The slug is the caller's and stays out of the line (DEC-0051).
+            LOG.warnf("scope unresolved: %s", WorklistException.Reason.SCOPE_UNRESOLVED);
+            throw new WorklistException(WorklistException.Reason.SCOPE_UNRESOLVED);
         }
 
         ScopeAccessRepository.ScopeAccessRow found = row.get();
@@ -112,7 +118,7 @@ public class ScopeDirectory {
             refuseWriteWithoutTheRight(found);
         }
 
-        LOG.debugf("resolved scope '%s'", slug);
+        LOG.debugf("resolved scope %s", found.scopeId());
         return new ScopeAccess(
             found.scopeId(),
             found.tenantId(),
@@ -150,11 +156,7 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_KIND_UNSUPPORTED,
-            "scope '" + scope.slug() + "' is a private scope, and the worklist does not "
-                + "serve one. A private scope is a per-tenant container for memory "
-                + "content; items, iterations, milestones and workstreams are not kept "
-                + "in it. Address a project or a global scope instead.",
-            List.of(scope.slug()));
+            List.of(SCOPE_ARGUMENT));
     }
 
     /** A write into a scope whose content is frozen. */
@@ -163,11 +165,7 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_LOCKED,
-            "scope '" + scope.slug() + "' is locked, so it takes no writes over a "
-                + "service channel. Reading it is unaffected — freezing a scope keeps "
-                + "the record, it does not withdraw it. The lock is lifted where it was "
-                + "set, which is not here.",
-            List.of(scope.slug()));
+            List.of(SCOPE_ARGUMENT));
     }
 
     /** A write this subject may not make in a scope it may read. */
@@ -176,11 +174,7 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_READ_ONLY,
-            "this subject may read scope '" + scope.slug() + "' and may not write into "
-                + "it over a service channel. The write right is the platform's answer, "
-                + "not this service's, so it is changed where membership is "
-                + "administered.",
-            List.of(scope.slug()));
+            List.of(SCOPE_ARGUMENT));
     }
 
     /**
@@ -192,11 +186,7 @@ public class ScopeDirectory {
      */
     private void bindSubject(String subject) {
         if (subject == null || subject.isBlank()) {
-            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND,
-                "there is no subject to bind to app.subject. The directory answers for a "
-                    + "subject, so resolving without one would be asking a question with "
-                    + "no asker — and the answer would be zero rows, which reads as "
-                    + "'no such scope'.");
+            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND);
         }
         scopes.bindSubject(subject);
     }
@@ -217,13 +207,7 @@ public class ScopeDirectory {
         if (tenant == null || subject == null) {
             LOG.warnf("directory call with unbound session: %s",
                 WorklistException.Reason.SESSION_NOT_BOUND);
-            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND,
-                ("the session contract is not bound (app.tenant_id=%s, app.subject=%s), so "
-                    + "the directory would return zero rows for every scope. That reads as "
-                    + "'no such scope' and invites a repair to the privileges — which is "
-                    + "why this fails here instead of returning nothing.")
-                    .formatted(tenant == null ? "unset" : "set",
-                               subject == null ? "unset" : "set"));
+            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND);
         }
     }
 

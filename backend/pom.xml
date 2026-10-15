@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+  SPDX-License-Identifier: AGPL-3.0-only
+  This file is part of Kumbuka and is licensed under the GNU Affero
+  General Public License v3.0 only. See the LICENSE file in the
+  repository root for the full licence text.
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -49,6 +56,8 @@
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
+        <!-- Qute names a message bundle method's placeholders by its parameter names. -->
+        <maven.compiler.parameters>true</maven.compiler.parameters>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -88,6 +97,17 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+        <!--
+            Every text this service addresses to a caller lives in a Qute
+            type-safe message bundle under src/main/resources/messages/, and
+            none in Java code (code-conventions/service-construction.md, texts
+            addressed to a caller). @Message carries no value, so the build
+            fails when a properties file lacks a text.
+        -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-qute</artifactId>
         </dependency>
 
         <!-- Realm binding: a bearer resource server against the tenant realm. -->

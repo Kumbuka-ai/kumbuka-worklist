@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
@@ -6,7 +13,6 @@ import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -109,15 +115,6 @@ public abstract class AggregateRoot extends TenantScoped {
         if (presented != null && conflictToken.equals(String.valueOf(presented))) {
             return;
         }
-        throw new WorklistException(
-            WorklistException.Reason.CONFLICT,
-            (presented == null
-                ? "a write carries the conflict token it read; none was given. "
-                : "the conflict token given is not the one this " + subject()
-                    + " carries. ")
-                + "The " + subject() + " has changed since it was read, or was never "
-                + "read. Its current token is " + conflictToken
-                + " — re-read, re-apply the change and retry",
-            List.of(conflictToken));
+        throw WorklistException.conflict(conflictToken);
     }
 }

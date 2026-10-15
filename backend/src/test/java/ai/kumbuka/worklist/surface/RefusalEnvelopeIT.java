@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -13,7 +20,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -207,8 +213,8 @@ class RefusalEnvelopeIT {
             .contentType(ContentType.JSON)
             .body(Map.of("title", "a probe", "no_such_field", "a value"))
             .when().post("/api/" + SCOPE + "/" + Selector.ITEM)
-            .then().statusCode(422)
-            .body(RefusalSpecification.REASON, is("UNKNOWN_FIELD"))
+            .then().statusCode(400)
+            .body(RefusalSpecification.REASON, is("ARGUMENT_UNKNOWN"))
             .extract().body().jsonPath().getMap("$");
 
         assertThat(envelope)
@@ -219,11 +225,14 @@ class RefusalEnvelopeIT {
 
         assertThat(envelope.get(RefusalSpecification.DATA))
             .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
-            .as("and the detail is there rather than merely relocated out of sight — "
-                + "the whole value of naming the offender is that the caller does not "
-                + "have to diff two vocabularies by eye")
-            .containsEntry(RefusalSpecification.FORBIDDEN_TOP_LEVEL_MEMBER,
-                List.of("no_such_field"));
+            .as("and the detail is there rather than merely relocated out of sight: the "
+                + "declared fields under accepts, so the caller compares them with the call "
+                + "it holds, and never the name that arrived (DEC-0043 R19)")
+            .containsKey("accepts")
+            .doesNotContainKey(RefusalSpecification.FORBIDDEN_TOP_LEVEL_MEMBER);
+        assertThat(String.valueOf(envelope.get(RefusalSpecification.DATA)))
+            .contains("fields.title")
+            .doesNotContain("no_such_field");
     }
 
     /** The same on the protocol surface, which builds the envelope too. */
@@ -244,7 +253,7 @@ class RefusalEnvelopeIT {
             .getMap("result." + RefusalSpecification.MCP_STRUCTURED_CONTENT);
 
         assertThat(envelope)
-            .containsEntry(RefusalSpecification.REASON, "UNKNOWN_FIELD")
+            .containsEntry(RefusalSpecification.REASON, "ARGUMENT_UNKNOWN")
             .doesNotContainKey(RefusalSpecification.FORBIDDEN_TOP_LEVEL_MEMBER)
             .containsOnlyKeys(RefusalSpecification.PERMITTED_MEMBERS);
     }

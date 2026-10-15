@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import java.util.ArrayList;
@@ -72,26 +79,20 @@ final class ItemFields {
     }
 
     /**
-     * Refuse a caller value that renders as a UUID on a field that names its
-     * value differently now.
+     * Refuse a caller value that renders as a UUID where a declared value is
+     * named by its name, number or token.
      *
-     * @param field         the field the value arrived on
-     * @param value         the value, already normalised to text
-     * @param expectedForm  what the field takes on the wire, in prose
-     *                      ("a status name", "a milestone number", "a
-     *                      workstream token", "a relation type name")
+     * @param argument the declared argument path the value arrived on, which
+     *                 the refusal names in place of the value (DEC-0043 R18)
+     * @param value    the value, already normalised to text
      */
-    static void refuseUuidShape(Field field, Object value, String expectedForm) {
+    static void refuseUuidShape(String argument, Object value) {
         if (!looksLikeUuid(value)) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            field.canonicalName() + " takes " + expectedForm + ", not the platform's own "
-                + "identity. A uuid arrived: '" + value + "'. Declared values travel on the "
-                + "wire by their name (or number, or token), because a caller writing an "
-                + "identity would be writing something the reader never sees back",
-            List.of(field.canonicalName()));
+            List.of(argument));
     }
 
     private ItemFields() {
@@ -112,9 +113,7 @@ final class ItemFields {
         if (!(raw instanceof CharSequence)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                field.canonicalName() + " is text, and " + raw.getClass().getSimpleName()
-                    + " was given",
-                List.of(field.canonicalName()));
+                List.of(field.path()));
         }
         String value = raw.toString().trim();
         return value.isEmpty() ? null : value;
@@ -163,11 +162,7 @@ final class ItemFields {
             if (target == null) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
-                    "a reference entry carries a target. The service validates its form "
-                        + "and never resolves it — a pointer to a document, a URL and a "
-                        + "citation are all the same kind of thing here — but an entry "
-                        + "pointing at nothing is not an entry",
-                    List.of(Field.REFERENCES.canonicalName()));
+                    List.of(Field.REFERENCES.path()));
             }
             // An ordinary unmodifiable map rather than Map.copyOf: the label
             // is optional, and Map.copyOf refuses a null value outright. An
@@ -207,18 +202,10 @@ final class ItemFields {
             if (type == null || item == null) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
-                    "a relation entry carries a `" + TYPE + "` and an `" + ITEM + "`. "
-                        + "The type is the display name a scope declared it under and the "
-                        + "item is the other end's canonical address "
-                        + "(worklist://<scope>/item/<number>). A relation without a type is "
-                        + "the predecessor's untyped edge, and every machine reader of one "
-                        + "has to guess whether it blocks",
-                    List.of(Field.RELATIONS.canonicalName()));
+                    List.of(Field.RELATIONS.path()));
             }
-            refuseUuidShape(Field.RELATIONS, type,
-                "a relation type's display name");
-            refuseUuidShape(Field.RELATIONS, item,
-                "the other item's canonical address worklist://<scope>/item/<number>");
+            refuseUuidShape(Field.RELATIONS.path(), type);
+            refuseUuidShape(Field.RELATIONS.path(), item);
             Map<String, Object> normalised = new LinkedHashMap<>();
             normalised.put(TYPE, type);
             normalised.put(ITEM, item);
@@ -248,10 +235,7 @@ final class ItemFields {
         if (!(raw instanceof Map<?, ?> given)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                Field.ATTRIBUTES.canonicalName() + " is a map from a declared "
-                    + "attribute's key to its value, and "
-                    + raw.getClass().getSimpleName() + " was given",
-                List.of(Field.ATTRIBUTES.canonicalName()));
+                List.of(Field.ATTRIBUTES.path()));
         }
 
         // A sorted map rather than a sort of the keys followed by a second
@@ -306,9 +290,7 @@ final class ItemFields {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            field.canonicalName() + " is a list of entries, and "
-                + raw.getClass().getSimpleName() + " was given",
-            List.of(field.canonicalName()));
+            List.of(field.path()));
     }
 
     /** One entry of a composite list, as a map. */
@@ -318,10 +300,7 @@ final class ItemFields {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "an entry of " + field.canonicalName() + " is an object, and "
-                + (element == null ? "null" : element.getClass().getSimpleName())
-                + " was given",
-            List.of(field.canonicalName()));
+            List.of(field.path()));
     }
 
     /** Whether a value carries no entries — an empty collection or array. */

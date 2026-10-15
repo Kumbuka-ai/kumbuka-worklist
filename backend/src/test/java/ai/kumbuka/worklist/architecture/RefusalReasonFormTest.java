@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.architecture;
 
 import org.junit.jupiter.api.Test;
@@ -62,7 +69,11 @@ class RefusalReasonFormTest {
         "CONFLICT",
         "names no subject: it tells a caller that something clashed and leaves them "
             + "to guess with what — the difference from the sibling service that the "
-            + "reasoning document calls the one that is not cosmetic"));
+            + "reasoning document calls the one that is not cosmetic",
+        "NOT_FOUND",
+        "leads with the negation, and is the one code DEC-0042 fixes for the whole "
+            + "not-found class on every hop, byte for byte with the router's: a name "
+            + "of this service's own would split the class the node keeps whole"));
 
     @Test
     void every_refusal_reason_names_a_subject_and_a_state() {
@@ -70,7 +81,7 @@ class RefusalReasonFormTest {
             .as("a refusal reason is read by a caller deciding what to do next, and the "
                 + "subject is the half that tells them where to look. Spell it "
                 + "<SUBJECT>_<STATE>, name the subject, and do not lead with the "
-                + "negation. One existing reason breaks this and is listed in "
+                + "negation. The existing reasons that break this are listed in "
                 + "GRANDFATHERED with the reason it is not being renamed here — a "
                 + "reason name is part of the published refusal payload")
             .isEmpty();
@@ -126,8 +137,12 @@ class RefusalReasonFormTest {
                 continue;
             }
             Class<?> reason = reasonEnumOf(fqcn);
+            if (reason == null) {
+                reason = catalogueOf(fqcn);
+            }
             assertThat(reason)
-                .as("%s must declare a Reason enum: an exception type without one is "
+                .as("%s must declare a Reason enum or answer reason() with one: an exception type "
+                    + "without one is "
                     + "outside the typed refusal model, which is the thing this checks",
                     fqcn)
                 .isNotNull();
@@ -155,6 +170,22 @@ class RefusalReasonFormTest {
                 RefusalReasonFormTest.class.getClassLoader());
             return loaded.isEnum() ? loaded : null;
         } catch (ClassNotFoundException | LinkageError absent) {
+            return null;
+        }
+    }
+
+    /**
+     * The enum an exception type's {@code reason()} answers with, or null: an
+     * exception that carries the surface's catalogue ({@code RefusalCode}) in
+     * place of a nested enum of its own.
+     */
+    private static Class<?> catalogueOf(String fqcn) {
+        try {
+            Class<?> type = Class.forName(fqcn, false,
+                RefusalReasonFormTest.class.getClassLoader());
+            Class<?> answered = type.getMethod("reason").getReturnType();
+            return answered.isEnum() ? answered : null;
+        } catch (ClassNotFoundException | NoSuchMethodException | LinkageError absent) {
             return null;
         }
     }

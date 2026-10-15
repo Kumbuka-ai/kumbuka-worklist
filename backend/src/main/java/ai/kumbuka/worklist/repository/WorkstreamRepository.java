@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.repository;
 
+import ai.kumbuka.worklist.domain.PageRequest;
+import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.Workstream;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -8,7 +17,9 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -89,14 +100,24 @@ public class WorkstreamRepository {
         }
     }
 
-    /** Every workstream of a scope, in the axis's own order (by number). */
+    /**
+     * One page of a scope's workstreams, narrowed by the status the request
+     * names, in its sort and continuing after its position — in the database,
+     * by {@link KeysetClause}.
+     */
     @Transactional
-    public List<Workstream> inScope(UUID scopeId) {
-        return em.createQuery(
-                "SELECT w FROM Workstream w WHERE w.scopeId = :scope ORDER BY w.number",
-                Workstream.class)
-            .setParameter(P_SCOPE, scopeId)
-            .getResultList();
+    public List<Workstream> page(UUID scopeId, PageRequest request) {
+        StringBuilder jpql = new StringBuilder("SELECT w FROM Workstream w WHERE w.scopeId = :scope");
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put(P_SCOPE, scopeId);
+        request.value(QueryFilter.WORKSTREAM_STATUS).ifPresent(status -> {
+            jpql.append(" AND w.status = :status");
+            params.put("status", status);
+        });
+        KeysetClause.continueAndOrder(jpql, params, "w", request);
+        var query = em.createQuery(jpql.toString(), Workstream.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
     /**

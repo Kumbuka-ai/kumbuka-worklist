@@ -11,13 +11,17 @@ import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
+import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
+import ai.kumbuka.worklist.surface.RefusalCatalogue;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import ai.kumbuka.worklist.tenancy.TenantBound;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -26,10 +30,12 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.jboss.logging.Logger;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * The MCP exposition of the verb surface: a projection that omits and adds
@@ -93,45 +99,28 @@ public class McpAdapter {
     private static final String ARG_TO_ITEM = "to_item";
     private static final String ARG_TYPE = "type";
 
-    /** The query's filter and cap, as arguments rather than address parts. */
+    /** The query's filter and paging, as arguments rather than address parts. */
     private static final String ARG_FILTER = QueryFilter.FILTER_ARGUMENT;
-    private static final String ARG_LIMIT = QuerySpec.LIMIT_ARGUMENT;
-    private static final String ARG_CURSOR = QuerySpec.CURSOR_ARGUMENT;
-
-    /** Every argument {@code query} takes; anything else is refused by name. */
-    private static final java.util.Set<String> QUERY_ARGUMENTS =
-        java.util.Set.of(ARG_SCOPE, ARG_SELECTOR, ARG_FILTER, ARG_LIMIT, ARG_CURSOR);
+    private static final String ARG_PAGE_SIZE = QuerySpec.PAGE_SIZE_ARGUMENT;
+    private static final String ARG_AFTER = QuerySpec.AFTER_ARGUMENT;
+    private static final String ARG_SORT = QuerySpec.SORT_ARGUMENT;
+    private static final String ARG_DIRECTION = QuerySpec.DIRECTION_ARGUMENT;
 
     /** JSON-RPC's own codes. Protocol faults only — a refused verb is not one. */
     private static final int METHOD_NOT_FOUND = -32601;
+
     private static final int INVALID_PARAMS = -32602;
 
-    /**
-     * The sentences the two classes of non-acting verb are refused with.
-     *
-     * <p>Written once and handed to the surface, which owns the refusal. Two
-     * adapters explaining the same refusal in their own words is how two callers
-     * come to believe two different things about one surface.
-     */
-    private static final String UNCARRIED_WHY =
-        "The capability declaration gives this scheme the object lifecycle, the planning "
-            + "verbs, the claim family, the graph verbs and validate. The commitment gate "
-            + "it carries is accept and not send: an item is never frozen, so there is "
-            + "nothing for an author to commit outward and nothing for an addendum to hang "
-            + "off.";
-
-    private static final String UNBUILT_WHY =
-        "It is declared, it is specified, and no code answers it yet. That is a different "
-            + "sentence from 'this scheme does not have it', which is why it does not get "
-            + "the same answer: waiting for this one is reasonable.";
+    private static final Logger LOG = Logger.getLogger(McpAdapter.class);
 
     @Inject VerbSurface verbs;
     @Inject CallerActor caller;
+    @Inject ObjectMapper json;
 
     @POST
     public Response rpc(Map<String, Object> request) {
         if (request == null || !JSONRPC.equals(request.get(KEY_JSONRPC))) {
-            return error(null, INVALID_PARAMS, "a JSON-RPC 2.0 envelope is required");
+            return error(null, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolEnvelope"));
         }
 
         Object id = request.get(KEY_ID);
@@ -147,9 +136,9 @@ public class McpAdapter {
             case "initialize" -> result(id, initialize());
             case "tools/list" -> result(id, Map.of("tools", tools()));
             case "tools/call" -> result(id, call(arguments(request, "params")));
-            default -> error(id, METHOD_NOT_FOUND,
-                "'" + method + "' is not a method of this server. It speaks initialize, "
-                    + "tools/list and tools/call.");
+            // The method that arrived is the caller's and never comes back
+            // (DEC-0043 R19); the answer names the methods this server speaks.
+            default -> error(id, METHOD_NOT_FOUND, RefusalCatalogue.protocolText("protocolMethod"));
         };
     }
 
@@ -184,7 +173,7 @@ public class McpAdapter {
      */
     private Map<String, Object> call(Map<String, Object> params) {
         String tool = string(params, KEY_NAME);
-        Map<String, Object> arguments = arguments(params, "arguments");
+        Map<String, Object> arguments = present(arguments(params, "arguments"));
 
         try {
             return content(invoke(tool, arguments), false);
@@ -195,7 +184,47 @@ public class McpAdapter {
             // method — which is what makes "one envelope, whichever hop" a
             // property of the construction and not a claim about it.
             return content(RefusalPayload.of(e), true);
+        } catch (RuntimeException e) {
+            // DEC-0043 R13: a defect answers as one, with a reference the log
+            // line shares, and nothing the exception said.
+            String reference = UUID.randomUUID().toString();
+            LOG.errorf("unexpected failure %s: %s", reference, e.getClass().getName());
+            return content(RefusalPayload.unexpected(reference), true);
         }
+    }
+
+    /**
+     * The arguments that arrived with a value.
+     *
+     * <p>DEC-0043 R17: JSON {@code null} on an argument means the argument is
+     * absent. Dropping the null-valued names here, once, before any verb reads
+     * them, makes "null and absent answer alike" a property of the
+     * construction: an optional argument then takes its default and a
+     * mandatory one is refused as {@code ARGUMENT_MISSING}, on every tool.
+     */
+    private static Map<String, Object> present(Map<String, Object> arguments) {
+        Map<String, Object> present = new LinkedHashMap<>();
+        arguments.forEach((name, value) -> {
+            if (value != null) {
+                present.put(name, value);
+            }
+        });
+        return present;
+    }
+
+    /**
+     * Refuses a name the tool does not declare, at the top level of its
+     * arguments (DEC-0043 R4). The answer names the arguments the tool
+     * declares and never the name that arrived (R19); nothing is accepted and
+     * discarded.
+     */
+    private void requireDeclared(String tool, Map<String, Object> in) {
+        List<String> declared = McpTools.argumentsOf(tool);
+        if (declared.containsAll(in.keySet())) {
+            return;
+        }
+        visibleFirst(in, null);
+        throw SurfaceException.unknown(declared);
     }
 
     // ======================================================================
@@ -203,6 +232,9 @@ public class McpAdapter {
     // ======================================================================
 
     private Object invoke(String tool, Map<String, Object> in) {
+        if (McpTools.argumentsOf(tool) != null) {
+            requireDeclared(tool, in);
+        }
         return switch (tool == null ? "" : tool) {
             case "create" -> create(in);
             case "read" -> read(in);
@@ -227,9 +259,9 @@ public class McpAdapter {
             case "send", "append", "digest", "abandon", "block", "resume", "consume" ->
                 refused(in, tool, false);
 
-            default -> throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "'" + tool + "' is not a tool of this server. Its tools are the verbs of "
-                    + "the worklist scheme, and tools/list names them.");
+            // The tool name that arrived is the caller's and never comes back
+            // (DEC-0043 R19); the answer names the tools this server declares.
+            default -> throw SurfaceException.invalid(KEY_NAME, McpTools.names());
         };
     }
 
@@ -262,18 +294,16 @@ public class McpAdapter {
         String scope = required(in, ARG_SCOPE);
         String selector = required(in, ARG_SELECTOR);
 
-        // The filter, the limit and the cursor arrive as arguments, not as
-        // address parts: an address without an id part is reserved. They are
-        // handed on raw and read by the verb surface, the same reading the REST
-        // query string gets — an instanceof here that fell through to "no
-        // filter" is exactly how a filter sent as a JSON string used to answer
-        // the whole set. An argument that is none of them is handed on too and
-        // refused by name.
-        List<String> untaken = in.keySet().stream()
-            .filter(name -> !QUERY_ARGUMENTS.contains(name))
-            .toList();
-        QuerySpec spec = QuerySpec.of(in.get(ARG_FILTER), in.get(ARG_LIMIT),
-            in.get(ARG_CURSOR), untaken);
+        // The filter and the paging arrive as arguments, not as address
+        // parts: an address without an id part is reserved. They are handed on
+        // raw and read by the verb surface, the same reading the REST query
+        // string gets — an instanceof here that fell through to "no filter" is
+        // exactly how a filter sent as a JSON string used to answer the whole
+        // set. An argument that is none of them is handed on too and refused by
+        // name. This surface offers the standard sorts only.
+        QuerySpec spec = new QuerySpec(in.get(ARG_FILTER), in.get(ARG_PAGE_SIZE),
+            in.get(ARG_AFTER), in.get(ARG_SORT), in.get(ARG_DIRECTION), List.of(),
+            SortKey.STANDARD);
         return Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec));
     }
@@ -378,9 +408,9 @@ public class McpAdapter {
         String id = at == null ? null : at.id();
 
         if (unbuilt) {
-            verbs.unbuilt(caller.subject(), scope, view, id, verb, UNBUILT_WHY);
+            verbs.unbuilt(caller.subject(), scope, view, id, verb);
         } else {
-            verbs.uncarried(caller.subject(), scope, view, id, verb, UNCARRIED_WHY);
+            verbs.uncarried(caller.subject(), scope, view, id, verb);
         }
         throw new IllegalStateException("a verb that does not act returned instead of refusing");
     }
@@ -404,7 +434,7 @@ public class McpAdapter {
         }
     }
 
-    private static Address address(Map<String, Object> in) {
+    private Address address(Map<String, Object> in) {
         AddressParser.Parts parts = AddressParser.uri(required(in, ARG_ADDRESS));
         int at = parts.id().indexOf('/');
         return at < 0
@@ -422,22 +452,52 @@ public class McpAdapter {
      * change, which the domain answers by writing nothing at all.
      */
     @SuppressWarnings("unchecked")
-    private static VerbInput.Fields fields(Map<String, Object> in) {
+    private VerbInput.Fields fields(Map<String, Object> in) {
         Object raw = in.get(ARG_FIELDS);
-        return raw instanceof Map ? new VerbInput.Fields((Map<String, Object>) raw) : null;
+        if (raw == null) {
+            return null;
+        }
+        if (!(raw instanceof Map)) {
+            visibleFirst(in, ARG_FIELDS);
+            throw SurfaceException.invalid(ARG_FIELDS);
+        }
+        return new VerbInput.Fields((Map<String, Object>) raw);
     }
 
     private static Payloads.ObjectResponse dressed(String scope, VerbSurface.Result result) {
         return Payloads.of(scope, result);
     }
 
-    private static String required(Map<String, Object> in, String name) {
+    private String required(Map<String, Object> in, String name) {
         String value = optional(in, name);
         if (value == null || value.isBlank()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the argument '" + name + "' is required and did not arrive.");
+            visibleFirst(in, name);
+        }
+        if (value == null) {
+            throw SurfaceException.missing(name);
+        }
+        if (value.isBlank()) {
+            throw SurfaceException.invalid(name);
         }
         return value;
+    }
+
+    /**
+     * Resolves the scope the call names, before an argument of the call is
+     * refused: a stranger is answered NOT_FOUND whatever else is wrong with
+     * the call (DEC-0042). Where the call names no scope -- the refused
+     * argument is the address or the scope itself -- there is nothing to
+     * resolve and the argument's own refusal stands.
+     */
+    private void visibleFirst(Map<String, Object> in, String refused) {
+        Object address = ARG_ADDRESS.equals(refused) ? null : in.get(ARG_ADDRESS);
+        Object scope = ARG_SCOPE.equals(refused) ? null : in.get(ARG_SCOPE);
+        if (address instanceof String text && !text.isBlank()) {
+            scope = AddressParser.uri(text).scope();
+        }
+        if (scope instanceof String named && !named.isBlank()) {
+            verbs.requireVisible(caller.subject(), named);
+        }
     }
 
     private static String optional(Map<String, Object> in, String name) {
@@ -454,8 +514,12 @@ public class McpAdapter {
      * or non-numeric value is a typed refusal — the domain will refuse a
      * non-positive one for its own reason.
      */
-    private static long requireLong(Map<String, Object> in) {
+    private Long requireLong(Map<String, Object> in) {
         Object value = in.get(ARG_DURATION);
+        if (value == null) {
+            // Refused by the surface, behind the scope check.
+            return null;
+        }
         if (value instanceof Number number) {
             return number.longValue();
         }
@@ -466,9 +530,8 @@ public class McpAdapter {
                 // fall through to the refusal below
             }
         }
-        throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-            "the argument '" + ARG_DURATION + "' is required and reads as a whole "
-                + "number of seconds. A lease has to name how long it lasts");
+        visibleFirst(in, ARG_DURATION);
+        throw SurfaceException.invalid(ARG_DURATION);
     }
 
     @SuppressWarnings("unchecked")
@@ -491,14 +554,30 @@ public class McpAdapter {
      *
      * <p>Both {@code content} and {@code structuredContent} carry the same answer,
      * because clients read one or the other and a surface that offered only the
-     * structured half would be unreadable to half of them.
+     * structured half would be unreadable to half of them. The text is that
+     * answer as JSON, written by the mapper that writes {@code structuredContent}
+     * — not the payload's {@code toString()}, which no client can parse.
      */
-    private static Map<String, Object> content(Object payload, boolean isError) {
+    private Map<String, Object> content(Object payload, boolean isError) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("content", List.of(Map.of("type", "text", "text", String.valueOf(payload))));
+        result.put("content", List.of(Map.of("type", "text", "text", asJson(payload))));
         result.put("structuredContent", payload);
         result.put("isError", isError);
         return result;
+    }
+
+    /**
+     * The payload as JSON. Every payload is a record or map this service built,
+     * so a failure here is ours and not the caller's: it surfaces as a 500
+     * rather than as a text that silently says something else.
+     */
+    private String asJson(Object payload) {
+        try {
+            return json.writeValueAsString(payload);
+        } catch (JsonProcessingException unwritable) {
+            throw new IllegalStateException("an MCP answer could not be written as JSON",
+                unwritable);
+        }
     }
 
     private static Response result(Object id, Object payload) {

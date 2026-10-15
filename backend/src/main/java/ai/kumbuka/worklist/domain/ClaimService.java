@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ClaimRepository;
@@ -68,6 +75,11 @@ import java.util.UUID;
 @TenantBound
 public class ClaimService {
 
+    /** The argument names a refusal of this service names (DEC-0043 R18). */
+    private static final String ADDRESS = "address";
+    private static final String DURATION = "duration_seconds";
+
+
     /** An address, a scope id, a transition. Never a receipt, never the actor. */
     private static final Logger LOG = Logger.getLogger(ClaimService.class);
 
@@ -113,13 +125,7 @@ public class ClaimService {
         if (held != null && held.liveAt(now)) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_HELD,
-                "a live lease stands on item " + itemId + " in scope " + scopeId + " and "
-                    + "expires at " + held.expiresAt + ". A second claimant is refused "
-                    + "rather than queued: the point of the lease is that one holder acts "
-                    + "at a time, and a lease that ends is a lease that is over — a "
-                    + "waiter would be a promise to hand the item over without a call, "
-                    + "which the platform does not carry",
-                List.of(String.valueOf(itemId)));
+                List.of(ADDRESS));
         }
 
         Claim claim = held == null ? new Claim() : held;
@@ -163,22 +169,14 @@ public class ClaimService {
         if (claim == null || !claim.liveAt(Instant.now())) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_ABSENT,
-                "no live lease stands on item " + itemId + " in scope " + scopeId + " to "
-                    + "release. A lease that lapsed on its own is over already, and a "
-                    + "release verb over it would be a write that reports what the store "
-                    + "already knows",
-                List.of(String.valueOf(itemId)));
+                List.of(ADDRESS));
         }
 
         String presented = requireReceipt(receipt);
         if (!claim.receipt.equals(presented)) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_RECEIPT_UNKNOWN,
-                "the receipt given does not name the lease this item holds. A receipt "
-                    + "is minted per claim and is opaque; the check is on the value in "
-                    + "the row, not on the actor, so passing the receipt to another agent "
-                    + "hands the lease over — but a receipt nobody minted holds nothing",
-                List.of(String.valueOf(itemId)));
+                List.of(F_RECEIPT));
         }
 
         // Move the expiry to the smallest instant strictly greater than the
@@ -233,14 +231,7 @@ public class ClaimService {
                 anyItems
                     ? WorklistException.Reason.DRAW_EMPTY
                     : WorklistException.Reason.ITEM_UNKNOWN,
-                anyItems
-                    ? "every addressable item in scope " + scopeId + " is currently held. "
-                        + "That is a call to wait for a lease to lapse or for a holder to "
-                        + "release, and it is deliberately a different answer from an empty "
-                        + "scope — which is a call to add work"
-                    : "scope " + scopeId + " holds no addressable item. Nothing to draw, and "
-                        + "a call to add an item first",
-                List.of(String.valueOf(scopeId)));
+                List.of());
         }
 
         Claim held = claims.lockByItem(item);
@@ -251,10 +242,7 @@ public class ClaimService {
             // unclaimed row, because this one now stands claimed.
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_HELD,
-                "the item drawn was taken by another caller between the draw and the "
-                    + "lock. Retry: the next draw sees a scope in which this item is "
-                    + "held, and picks the one after it",
-                List.of(String.valueOf(item.id)));
+                List.of());
         }
 
         Claim claim = held == null ? new Claim() : held;
@@ -341,8 +329,7 @@ public class ClaimService {
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
-                "no item " + itemId + " in scope " + scopeId,
-                List.of(String.valueOf(itemId)));
+                List.of());
         }
         return item;
     }
@@ -351,10 +338,7 @@ public class ClaimService {
         if (item.number == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "item " + item.id + " has no address yet — it is a raw call-in. A claim "
-                    + "is a lease on an addressed item; something without an address in "
-                    + "its own scope has no place to be worked and cannot be leased",
-                List.of(String.valueOf(item.id)));
+                List.of(ADDRESS));
         }
     }
 
@@ -362,10 +346,7 @@ public class ClaimService {
         if (presented == null || presented.isZero() || presented.isNegative()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the duration of a lease is a positive amount of time. A zero duration "
-                    + "is a lease that is inert the moment it is granted; a negative one "
-                    + "is not a duration at all. The predecessor's exact defect",
-                List.of("duration"));
+                List.of(DURATION));
         }
         return presented;
     }
@@ -374,8 +355,6 @@ public class ClaimService {
         if (presented == null || presented.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "release names the lease it ends by the receipt that claim minted for it. "
-                    + "No receipt arrived",
                 List.of(F_RECEIPT));
         }
         return presented;
@@ -395,10 +374,7 @@ public class ClaimService {
         if (presented == null || presented.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a claim records the actor the service derived from the write channel, "
-                    + "and this call arrived without one. Authorship is server-derived on "
-                    + "this scheme without exception",
-                List.of(F_ACTOR));
+                List.of());
         }
         return presented;
     }

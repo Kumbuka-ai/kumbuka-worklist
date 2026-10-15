@@ -1,14 +1,25 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
+import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import org.jboss.logging.Logger;
+
+import java.util.UUID;
 
 /**
  * Turns the two families of typed refusal into HTTP, and keeps them apart.
@@ -109,7 +120,7 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
         @Override
         public Response toResponse(WorklistException e) {
-            int status = statusOf(e.reason());
+            int status = RefusalCode.of(e.reason()).status();
 
             // A 5xx is ours, not the caller's, and no retry of theirs fixes it.
             // That is the one refusal class this surface raises to ERROR:
@@ -127,117 +138,38 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 .build();
         }
 
-        /**
-         * One status per domain reason.
-         *
-         * <p>No {@code default}. A reason added to the domain must be given a
-         * status here, and the compiler is what asks for it — the alternative is
-         * a new refusal quietly becoming a 500 in a deployment nobody is
-         * watching.
-         */
-        private static int statusOf(WorklistException.Reason reason) {
-            return switch (reason) {
-                // Malformed, and no scope had to be known to say so. A token that
-                // names no view is decidable against the platform's own object
-                // model, so it leaks nothing and sits in the grammar stage.
-                case VIEW_UNKNOWN -> 400;
+    }
 
-                // Nothing there — or nothing this subject may know is there. The
-                // absent iteration pointer is in this group and not in the next:
-                // 'current' addressed nothing, which is a fact about the address
-                // and not about the caller's timing.
-                case SCOPE_UNRESOLVED, ITEM_UNKNOWN, MILESTONE_UNKNOWN, ITERATION_UNKNOWN,
-                     MEMBERSHIP_UNKNOWN, ITERATION_ABSENT -> 404;
+    /**
+     * Every failure nobody anticipated, in the same envelope (DEC-0043 R13).
+     *
+     * <p>Registered for {@link Exception} and therefore chosen only where no
+     * more specific mapper applies: the two typed refusals above keep theirs.
+     * The framework's own answers -- a 405 for a method the route does not
+     * take, a 415 for a body of the wrong type, a 401 with its challenge --
+     * travel as {@link WebApplicationException} and are handed back as they
+     * came, because they are the protocol's form and replacing them would
+     * make the surface non-conformant.
+     *
+     * <p>The exception's own message never reaches the caller: whatever threw
+     * it wrote it, and it can carry a value the call sent. The log line and
+     * the answer share a reference instead, and the line names the exception
+     * type only (DEC-0051).
+     */
+    @Provider
+    public static class Unexpected implements ExceptionMapper<Exception> {
 
-                // The caller's copy is stale. It travels as If-Match, so this is
-                // the precondition status and not the conflict one.
-                case CONFLICT -> 412;
-
-                // The object is real and its state says no.
-                case MEMBERSHIP_PRESENT, ITERATION_CLOSED, ITERATION_INCOMPLETE,
-                     ITEM_UNPLANNABLE, SETTING_ABSENT, SETTING_PRESENT,
-                     CARDINALITY_EXCEEDED, MARK_REGRESSION -> 409;
-
-                // Vocabulary: the call parses and names something that is not part
-                // of what this scope offers, or carries a value a field cannot
-                // take. A field this object does not have and a value nobody
-                // declared are the same class of answer.
-                case UNKNOWN_FIELD, FIELD_NOT_SETTABLE, INVALID_VALUE, VALUE_UNDECLARED,
-                     SELECTOR_UNDECLARED, SELECTOR_WITHDRAWN -> 422;
-
-                // A field whose relation was retracted: the same 422 as an
-                // unknown one, and deliberately so. The caller has to change
-                // the call either way, which is what the status says; what
-                // differs is the sentence, and that travels in the message
-                // and the reason name rather than in the status. Not 410 —
-                // that is an answer about a RESOURCE being gone, and the
-                // milestone this call addresses is right there.
-                case FIELD_RETRACTED -> 422;
-
-                // The scope is visible to this caller and this service does not
-                // serve its kind. 422 and not 404: the scope is there, the
-                // caller can see it, and saying otherwise would send them
-                // looking for something in front of them (ADR-0011's
-                // inadmissible-referent answer). 422 is the class the other
-                // "your call names something this surface does not take"
-                // refusals already sit in.
-                case SCOPE_KIND_UNSUPPORTED -> 422;
-
-                // The scope is real and its state says no — the same class as
-                // ITERATION_CLOSED and SELECTOR_WITHDRAWN above, one level up.
-                case SCOPE_LOCKED -> 409;
-
-                // The scope is real, this caller may read it, and may not
-                // write it. 403, and it is the only 403 this surface answers:
-                // the standing rule is "404 and never 403" where a 403 would
-                // ADMIT THAT SOMETHING EXISTS that the caller may not see, and
-                // this one is reachable only for a scope the read contract has
-                // already published to them. Answering 404 here would be the
-                // untrue one — the caller reads this scope every day.
-                case SCOPE_READ_ONLY -> 403;
-
-                // Ours, not the caller's, and no retry of theirs will fix it.
-                case SESSION_NOT_BOUND -> 500;
-
-                // Also ours, and a different sentence: the call is correct and
-                // the act has no carrier in this store yet. 501 says exactly
-                // that, and it is the same status the surface gives an unbuilt
-                // verb — because it is the same situation seen from the domain.
-                case IDENTIFIER_UNDECIDED -> 501;
-
-                // Claim exclusivity: the row's state says no. A live lease
-                // stands and a second claimant is refused, or a release
-                // arrived at a row nothing holds any more.
-                case CLAIM_HELD, CLAIM_ABSENT, DRAW_EMPTY -> 409;
-
-                // The receipt does not name the lease this row carries. Not
-                // a token conflict — 412 travels with If-Match — and not a
-                // 403 — the row is not hiding from this caller. The receipt
-                // is a value the surface takes; a wrong value is a 422 in
-                // the same class as VALUE_UNDECLARED.
-                case CLAIM_RECEIPT_UNKNOWN -> 422;
-
-                // The edge named does not exist. A withdrawn one reads the
-                // same as an absent one from here; the same 404 group.
-                case RELATION_UNKNOWN -> 404;
-
-                // --- the workstream ---------------------------------------
-                //
-                // Ratified 2026-09-08 as the fourth view.
-
-                // Nothing there — same class as the other three view
-                // absences.
-                case WORKSTREAM_UNKNOWN -> 404;
-
-                // The object is real and its state says no.
-                case WORKSTREAM_WITHDRAWN, WORKSTREAM_HAS_REFERENCES,
-                     WORKSTREAM_DEFAULT_LOCKED, WORKSTREAM_MILESTONE_MISMATCH -> 409;
-
-                // The call is missing a value it is required to name.
-                // Same class as INVALID_VALUE — a caller correction, not a
-                // conflict with the store.
-                case ITEM_WORKSTREAM_MISSING, ITERATION_PRODUCED_MISSING -> 422;
-            };
+        @Override
+        public Response toResponse(Exception e) {
+            if (e instanceof WebApplicationException framework) {
+                return framework.getResponse();
+            }
+            String reference = UUID.randomUUID().toString();
+            LOG.errorf("unexpected failure %s: %s", reference, e.getClass().getName());
+            return Response.status(RefusalCode.UNEXPECTED_FAILURE.status())
+                .type(MediaType.APPLICATION_JSON)
+                .entity(RefusalPayload.unexpected(reference))
+                .build();
         }
     }
 }

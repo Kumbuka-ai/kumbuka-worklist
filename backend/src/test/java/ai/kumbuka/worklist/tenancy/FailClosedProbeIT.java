@@ -1,7 +1,16 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import ai.kumbuka.worklist.domain.Item;
 import ai.kumbuka.worklist.domain.ItemService;
+import ai.kumbuka.worklist.domain.Pages;
+import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -144,7 +153,7 @@ class FailClosedProbeIT {
                     // why plantOneItemPerTenant writes them that way: with the
                     // policy off, a row of tenant B would appear here, and its
                     // title would say so.
-                    var rows = items.query(SCOPE);
+                    var rows = Pages.all(SCOPE, Selector.ITEM, items::query);
                     assertThat(rows)
                         .as("with the policy disabled, the ORM filter is the only thing "
                             + "scoping this read — and it must still scope it")

@@ -18,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -90,26 +89,15 @@ public class MilestoneService extends PlanningService {
         return project(require(scopeId, milestoneId), List.of());
     }
 
-    /** The scope's whole axis, in the axis's own order. */
-    @Transactional
-    public List<Map<String, Object>> query(UUID scopeId) {
-        return planning.milestonesInScope(scopeId).stream()
-            .map(milestone -> project(milestone, List.of()))
-            .toList();
-    }
-
     /**
-     * One page of a scope's milestones, in the axis's own order, narrowed by
-     * the filters the milestone view declares.
+     * One page of a scope's milestones, narrowed by the filters the milestone
+     * view declares, in the request's sort.
      */
     @Transactional
-    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
-        Optional<Object> status = narrowing.value(QueryFilter.MILESTONE_STATUS);
-        Optional<Object> kind = narrowing.value(QueryFilter.MILESTONE_KIND);
-        return QueryAnswer.page(narrowing, planning.milestonesInScope(scopeId),
-            milestone -> status.map(milestone.status::equals).orElse(true)
-                && kind.map(milestone.kind::equals).orElse(true),
-            milestone -> milestone.number,
+    public Page query(UUID scopeId, PageRequest request) {
+        return Page.of(request, planning.milestonePage(scopeId, request),
+            milestone -> PageCursor.Position.of(request.sort(), milestone.number,
+                milestone.createdAt, milestone.rank),
             milestone -> project(milestone, List.of()));
     }
 
@@ -136,9 +124,7 @@ public class MilestoneService extends PlanningService {
 
         Milestone milestone = new Milestone();
         milestone.scopeId = scopeId;
-        milestone.title = capped(Field.TITLE, required(Field.TITLE, given.get(Field.TITLE),
-            "a milestone carries a title. It is the axis position's handle in every "
-                + "listing, and the one field a marker needs as much as a goal does"),
+        milestone.title = capped(Field.TITLE, required(Field.TITLE, given.get(Field.TITLE)),
             TITLE_MAX);
         milestone.number = allocateNumber(scopeId);
 
@@ -251,15 +237,12 @@ public class MilestoneService extends PlanningService {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
-                String title = capped(field, required(field, value,
-                    "a milestone carries a title on every status, so it cannot be cleared"),
+                String title = capped(field, required(field, value),
                     TITLE_MAX);
                 return moved(held, title, () -> milestone.title = title);
             }
             case KIND -> {
-                String kind = oneOf(field, required(field, value,
-                    "a milestone is a goal or one of the three positions on the axis; "
-                        + "which it is cannot be cleared"), Milestone.KINDS);
+                String kind = oneOf(field, required(field, value), Milestone.KINDS);
                 return moved(held, kind, () -> milestone.kind = kind);
             }
             case STATUS -> {
@@ -292,8 +275,7 @@ public class MilestoneService extends PlanningService {
      * removing the condition.
      */
     private boolean applyStatus(Milestone milestone, Object held, Field field, Object value) {
-        String status = oneOf(field, required(field, value,
-            "a milestone carries a status on every path, so it cannot be cleared"),
+        String status = oneOf(field, required(field, value),
             Milestone.STATUSES);
         if (ItemFields.unchangedAsText(held, status)) {
             return false;
@@ -329,10 +311,7 @@ public class MilestoneService extends PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "a milestone of kind " + milestone.kind + " is a position on the axis and "
-                + "never a goal, so it carries neither a vision nor a mission. Those two "
-                + "belong to a milestone that something is being worked towards",
-            List.of(Field.KIND.canonicalName()));
+            List.of(Field.KIND.path()));
     }
 
     private static boolean moved(Object held, Object wanted, Runnable write) {
@@ -357,8 +336,7 @@ public class MilestoneService extends PlanningService {
         if (milestone == null || !milestone.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
-                "no milestone " + milestoneId + " in scope " + scopeId,
-                List.of(String.valueOf(milestoneId)));
+                List.of());
         }
         return milestone;
     }
@@ -373,7 +351,7 @@ public class MilestoneService extends PlanningService {
      * none.
      */
     private Map<String, Object> project(Milestone milestone,
-            List<String> warnings) {
+            List<Notice> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), milestone.id);
         fields.put(Field.SCOPE.canonicalName(), slugOf(milestone.scopeId));

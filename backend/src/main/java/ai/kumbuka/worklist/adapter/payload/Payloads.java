@@ -8,8 +8,10 @@
 package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.surface.AddressParser;
+import ai.kumbuka.worklist.surface.NoticeTexts;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
@@ -59,25 +61,9 @@ public final class Payloads {
         return body == null ? null : new VerbInput.Fields(body);
     }
 
-    /** The status behind a withdrawal, or null when no body arrived. */
-    public static VerbInput.Withdrawal withdrawal(WithdrawRequest request) {
-        return request == null ? null : new VerbInput.Withdrawal(request.status());
-    }
 
-    /** The lease duration behind a claim or a draw, or null when no body arrived. */
-    public static VerbInput.Lease lease(LeaseRequest request) {
-        return request == null ? null : new VerbInput.Lease(request.durationSeconds());
-    }
 
-    /** The receipt behind a release, or null when no body arrived. */
-    public static VerbInput.Release releaseOf(ReleaseRequest request) {
-        return request == null ? null : new VerbInput.Release(request.receipt());
-    }
 
-    /** The edge behind a relate or an unrelate, or null when no body arrived. */
-    public static VerbInput.Edge edge(EdgeRequest request) {
-        return request == null ? null : new VerbInput.Edge(request.toItem(), request.type());
-    }
 
     // ----------------------------------------------------------------------
     // Verb answer to wire shape
@@ -86,69 +72,25 @@ public final class Payloads {
     /** One object, at its address. */
     public static ObjectResponse of(String scope, VerbSurface.Result result) {
         return new ObjectResponse(
-            AddressParser.render(scope, result.address()), result.fields());
+            AddressParser.render(scope, result.address()), worded(result.fields()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> worded(Map<String, Object> fields) {
+        return (Map<String, Object>) NoticeTexts.worded(fields);
     }
 
     /** A set of them. */
     public static Listing of(String scope, VerbSurface.Listing listing) {
         return new Listing(listing.objects().stream()
             .map(result -> of(scope, result))
-            .toList(), listing.truncated(), listing.next());
+            .toList(), listing.next());
     }
 
-    /**
-     * What a caller supplies to withdraw an item.
-     *
-     * <p>The status is the scope's declared value, by identity. A display name
-     * would be a value the scope may change under the caller, and a withdrawal
-     * that named one would land somewhere else the day somebody renamed it.
-     */
-    public record WithdrawRequest(String status) {
-    }
 
-    /**
-     * What a caller supplies to close.
-     *
-     * <p>{@code produced} names what the iteration produced — free text,
-     * mandatory on the iteration path (ratified 2026-09-08). Presence is
-     * checked in the domain; form is not, so a specification, a concept,
-     * or a set of corpus nodes all qualify. The milestone path uses no
-     * body — the field is ignored there.
-     */
-    public record CloseRequest(String produced) {
-    }
 
-    /**
-     * What a caller supplies to claim a lease or to draw one.
-     *
-     * <p>Seconds because integers travel legibly and a duration string is a
-     * form a caller has to guess at. The domain refuses a non-positive value —
-     * a zero-duration lease is inert the moment it is granted, which is the
-     * predecessor's exact defect.
-     */
-    public record LeaseRequest(long durationSeconds) {
-    }
 
-    /**
-     * What a caller supplies to release a lease.
-     *
-     * <p>The receipt the row was minted with. Opaque here, compared as a
-     * string in the domain — a caller that parses it is a caller that breaks
-     * when the generator changes.
-     */
-    public record ReleaseRequest(String receipt) {
-    }
 
-    /**
-     * What a caller supplies to assert or withdraw one edge.
-     *
-     * <p>The source is the address the verb runs against. The target and the
-     * type both travel as ids, because a declared value has an identity
-     * separate from its name and the display name is what a scope is free to
-     * change.
-     */
-    public record EdgeRequest(String toItem, String type) {
-    }
 
     /**
      * One object as it goes out: its address, and what the domain projected.
@@ -167,16 +109,14 @@ public final class Payloads {
      * listing later needs to say about itself is an added key rather than a
      * changed shape.
      *
-     * <p>{@code truncated} is a fact about the write. A caller who did not
-     * name a limit sees {@code false}; a caller whose limit was reached sees
-     * {@code true} — the same silent-ceiling defect the sprint-169 read had
-     * one layer down, refused at the surface.
-     *
      * <p>{@code next_cursor} is the way to the rest: passed back as the
-     * {@code cursor} argument of the same query, it answers the objects after
-     * the last one here. Null exactly when {@code truncated} is false.
+     * {@code after} argument of the same query, it answers the objects after
+     * the last one here. It is absent exactly when nothing follows — the one
+     * field that says whether more follows, so that no flag beside it can say
+     * something else.
      */
-    public record Listing(List<ObjectResponse> objects, boolean truncated,
+    public record Listing(List<ObjectResponse> objects,
+                          @JsonInclude(JsonInclude.Include.NON_NULL)
                           @JsonProperty("next_cursor") String nextCursor) {
     }
 

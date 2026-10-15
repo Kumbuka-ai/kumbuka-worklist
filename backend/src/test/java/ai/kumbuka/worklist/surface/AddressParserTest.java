@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -43,17 +50,20 @@ class AddressParserTest {
     void upper_case_is_rejected_and_never_folded() {
         assertThat(malformed(() -> AddressParser.scope("Kumbuka")))
             .as("folding would make two distinct strings resolve to one scope, which is an "
-                + "identity statement arrived at by leniency")
-            .contains("not a DNS label");
+                + "identity statement arrived at by leniency; the refusal names the form and "
+                + "leaves the value out")
+            .isEqualTo("ADDRESS_MALFORMED")
+            .doesNotContain("Kumbuka");
 
         assertThat(malformed(() -> AddressParser.view("Item")))
-            .contains("not a token");
+            .isEqualTo("ADDRESS_MALFORMED")
+            .doesNotContain("Item");
     }
 
     @Test
     void a_leading_zero_is_a_second_string_for_one_object_and_is_refused() {
         assertThat(malformed(() -> AddressParser.target(Selector.ITEM, "07")))
-            .contains("no leading zeroes");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     @Test
@@ -61,7 +71,7 @@ class AddressParserTest {
         assertThat(malformed(() -> AddressParser.target(Selector.ITEM, "0")))
             .as("every counter here hands out its first number as one, so an address that "
                 + "can never resolve is better refused than looked up")
-            .contains("Counting starts at one");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     // =======================================================================
@@ -78,7 +88,7 @@ class AddressParserTest {
             .as("well formed and not a view. An item's family is a scope's own declared "
                 + "vocabulary and says something about the item, not about which kind of "
                 + "thing stands at the other end of the address")
-            .contains("the selector is the view");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     // =======================================================================
@@ -99,7 +109,7 @@ class AddressParserTest {
     @Test
     void nothing_but_an_iteration_carries_a_second_id_segment() {
         assertThat(malformed(() -> AddressParser.membership(Selector.ITEM, "1", "2")))
-            .contains("not the iteration view");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     @Test
@@ -124,7 +134,7 @@ class AddressParserTest {
         assertThat(malformed(() -> AddressParser.target(Selector.ITEM, AddressParser.CURRENT)))
             .as("a scope has no current item and no current milestone: the goal axis "
                 + "carries an ACTIVE milestone, which is a status on a row")
-            .contains("only the iteration view has one");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     @Test
@@ -134,7 +144,7 @@ class AddressParserTest {
             .as("the pointer moves, so the same string would name a different membership "
                 + "after every advance — and this is the one address whose read and write "
                 + "forms are identical")
-            .contains("not addressed under");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     // =======================================================================
@@ -144,7 +154,8 @@ class AddressParserTest {
     @Test
     void an_address_of_another_scheme_is_not_an_address_of_this_one() {
         assertThat(malformed(() -> AddressParser.uri("dispatch://kumbuka/sprint/171.1")))
-            .contains("does not name the worklist scheme");
+            .isEqualTo("ADDRESS_MALFORMED")
+            .doesNotContain("dispatch://kumbuka/sprint/171.1");
     }
 
     @Test
@@ -152,15 +163,15 @@ class AddressParserTest {
         assertThat(malformed(() -> AddressParser.uri("worklist://kumbuka/" + Selector.ITEM)))
             .as("an address without an id part is reserved, which is what stops a "
                 + "three-part string meaning 'the objects of this scope'")
-            .contains("occupies 2 part(s)");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     @Test
     void an_empty_part_is_a_broken_address_and_not_a_shorter_one() {
         assertThat(malformed(() -> AddressParser.target(Selector.ITEM, "")))
-            .contains("is empty");
+            .isEqualTo("ADDRESS_MALFORMED");
         assertThat(malformed(() -> AddressParser.scope(null)))
-            .contains("is empty");
+            .isEqualTo("ADDRESS_MALFORMED");
     }
 
     /** The message of the form refusal a call raised, asserting that it raised one. */
@@ -172,7 +183,7 @@ class AddressParserTest {
                 + "leaks nothing")
             .isInstanceOf(SurfaceException.class);
         assertThat(((SurfaceException) thrown).reason())
-            .isEqualTo(SurfaceException.Reason.ADDRESS_MALFORMED);
+            .isEqualTo(RefusalCode.ADDRESS_MALFORMED);
         return thrown.getMessage();
     }
 }

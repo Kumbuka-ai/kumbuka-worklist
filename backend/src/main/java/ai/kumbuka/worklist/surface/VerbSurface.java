@@ -14,8 +14,8 @@ import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
 import ai.kumbuka.worklist.domain.MilestoneService;
-import ai.kumbuka.worklist.domain.Narrowing;
-import ai.kumbuka.worklist.domain.QueryAnswer;
+import ai.kumbuka.worklist.domain.Page;
+import ai.kumbuka.worklist.domain.PageRequest;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.WorkstreamService;
@@ -86,7 +86,7 @@ import java.util.regex.Pattern;
  *
  * <p>The workstream view is declared, not written through this surface. A
  * caller aiming {@code create} or {@code update} at it hears a third sentence
- * ({@link SurfaceException.Reason#SELECTOR_DECLARED_NOT_WRITTEN}) that says the
+ * ({@link RefusalCode#SELECTOR_DECLARED_NOT_WRITTEN}) that says the
  * act exists and runs on the selector-declaration surface, not here. {@code read}
  * and {@code query} on the same view do act — a workstream is addressable like
  * any other declared view — and every other verb refuses on the existing view
@@ -158,7 +158,7 @@ public class VerbSurface {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         refuseWriteOnDeclaredView(in.view(), "create");
         addresses.requireView(in.scopeId(), in.view());
-        Map<String, Object> fields = required(body).values();
+        Map<String, Object> fields = required(body, FIELDS).values();
 
         Map<String, Object> created = switch (in.view()) {
             case Selector.ITEM -> items.create(in.scopeId(), fields);
@@ -177,39 +177,15 @@ public class VerbSurface {
     // ======================================================================
 
     /**
-     * The objects of one view.
-     *
-     * <p>The whole set of a view, oldest first for items and in the axis's
-     * own order for the other two. See {@link #query(String, String, String, QuerySpec)}
-     * for a narrowed variant — this signature is the ratified whole-set
-     * form kept for callers who read a scope end to end.
-     */
-    @Transactional
-    public Listing query(String subject, String rawScope, String rawView) {
-        Entry in = entry(subject, rawScope, rawView, Access.READ);
-        addresses.requireView(in.scopeId(), in.view());
-
-        List<Map<String, Object>> found = switch (in.view()) {
-            case Selector.ITEM -> items.query(in.scopeId());
-            case Selector.ITERATION -> iterations.query(in.scopeId());
-            case Selector.MILESTONE -> milestones.query(in.scopeId());
-            case Selector.WORKSTREAM -> workstreams.query(in.scopeId());
-            default -> throw unreachableView(in.view());
-        };
-
-        LOG.debugf("query %s in scope %s: %d hit(s)", in.view(), in.scopeId(), found.size());
-        return new Listing(found.stream().map(row -> at(in.view(), row)).toList());
-    }
-
-    /**
      * One page of the objects of one view, narrowed by the filters the view
-     * declares.
+     * declares, in the sort the caller names.
      *
      * <p>The check order continues the one in {@link #entry}: grammar, scope
-     * visibility and the view's vocabulary first, then the narrowing against
-     * {@link ai.kumbuka.worklist.domain.QueryFilter} — a filter name the view
-     * does not declare, a value in the wrong form, or a cursor this view did
-     * not hand out — and only then the store, where the view's service resolves
+     * visibility and the view's vocabulary first, then the paging against
+     * {@link ai.kumbuka.worklist.domain.QueryFilter} and the view's sorts — a
+     * filter name the view does not declare, a value in the wrong form, a page
+     * size out of range, a sort the view does not declare, or a cursor this
+     * query did not hand out — and only then the store, where the view's service resolves
      * the values the scope must have declared. It runs here and not in either
      * adapter, so both transports refuse the same call the same way and an
      * invisible scope still answers 404 however wrong the narrowing is.
@@ -221,17 +197,17 @@ public class VerbSurface {
     public Listing query(String subject, String rawScope, String rawView, QuerySpec spec) {
         Entry in = entry(subject, rawScope, rawView, Access.READ);
         addresses.requireView(in.scopeId(), in.view());
-        Narrowing narrowing = spec.narrowFor(in.view());
+        PageRequest request = spec.pageFor(in.scopeId(), in.view());
 
-        QueryAnswer answered = switch (in.view()) {
-            case Selector.ITEM -> items.query(in.scopeId(), narrowing);
-            case Selector.ITERATION -> iterations.query(in.scopeId(), narrowing);
-            case Selector.MILESTONE -> milestones.query(in.scopeId(), narrowing);
-            case Selector.WORKSTREAM -> workstreams.query(in.scopeId(), narrowing);
+        Page answered = switch (in.view()) {
+            case Selector.ITEM -> items.query(in.scopeId(), request);
+            case Selector.ITERATION -> iterations.query(in.scopeId(), request);
+            case Selector.MILESTONE -> milestones.query(in.scopeId(), request);
+            case Selector.WORKSTREAM -> workstreams.query(in.scopeId(), request);
             default -> throw unreachableView(in.view());
         };
-        LOG.debugf("query %s in scope %s: %d hit(s) truncated=%s",
-            in.view(), in.scopeId(), answered.objects().size(), answered.truncated());
+        LOG.debugf("query %s in scope %s: %d hit(s), more=%s",
+            in.view(), in.scopeId(), answered.objects().size(), answered.next() != null);
         return new Listing(answered.objects().stream().map(row -> at(in.view(), row)).toList(),
             answered.next());
     }
@@ -273,7 +249,7 @@ public class VerbSurface {
         requireWritable(target);
         UUID id = resolve(in, target);
 
-        Map<String, Object> fields = required(body)
+        Map<String, Object> fields = required(body, FIELDS)
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
@@ -348,7 +324,7 @@ public class VerbSurface {
         UUID id = resolve(in, target);
 
         Result result = at(target, items.withdraw(in.scopeId(), id,
-            requireStatusName(required(body).status()), requireToken(conflictToken)));
+            requireLabel(STATUS, required(body, STATUS).status()), requireToken(conflictToken)));
         LOG.infof("withdraw %s in scope %s", target.id(), in.scopeId());
         return result;
     }
@@ -389,19 +365,10 @@ public class VerbSurface {
         Result result = at(target, switch (in.view()) {
             case Selector.ITERATION -> iterations.close(in.scopeId(), id, produced, token);
             case Selector.MILESTONE -> milestones.close(in.scopeId(), id, token);
-            case Selector.ITEM -> throw new SurfaceException(
-                SurfaceException.Reason.VERB_UNCARRIED,
-                "'close' is not addressed at an item. An item's terminality is a status "
-                    + "its scope declared as closed, reached through 'update' — so closing "
-                    + "one is an ordinary change of a declared value and not a transition "
-                    + "of its own. On this scheme 'close' addresses the iteration or the "
-                    + "milestone, both of which have a terminal transition at form level.");
-            case Selector.WORKSTREAM -> throw new SurfaceException(
-                SurfaceException.Reason.VERB_UNCARRIED,
-                "'close' is not addressed at a workstream. A workstream has no terminal "
-                    + "transition — it is declared, and its retirement is 'withdraw' on the "
-                    + "selector-declaration surface, not a close here. Aiming 'close' at it "
-                    + "is a category error and not a spelling.");
+            case Selector.ITEM -> throw SurfaceException.of(
+                RefusalCode.VERB_UNCARRIED, CLOSE);
+            case Selector.WORKSTREAM -> throw SurfaceException.of(
+                RefusalCode.VERB_UNCARRIED, CLOSE);
             default -> throw unreachableView(in.view());
         });
         LOG.infof("close %s in scope %s", target.id(), in.scopeId());
@@ -427,11 +394,7 @@ public class VerbSurface {
                           String conflictToken) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITERATION.equals(in.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'advance' promotes an iteration and is addressed at the iteration view. "
-                    + "The goal axis has no order to advance through: a milestone becomes "
-                    + "active by being set active, which is a declared status and an "
-                    + "ordinary update.");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "advance");
         }
 
         Map<String, Object> setting = iterations.advance(in.scopeId(),
@@ -496,7 +459,7 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
-        Map<String, Object> fields = required(body)
+        Map<String, Object> fields = required(body, FIELDS)
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
@@ -546,7 +509,7 @@ public class VerbSurface {
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "release");
         UUID id = resolve(in, target);
 
-        String receipt = required(body).receipt();
+        String receipt = requireText(RECEIPT, required(body, RECEIPT).receipt());
         Map<String, Object> answered = claims.release(in.scopeId(), id, subject, receipt);
         LOG.infof("release on %s in scope %s", target.id(), in.scopeId());
         return at(target, answered);
@@ -566,11 +529,7 @@ public class VerbSurface {
                             VerbInput.Lease body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITEM.equals(in.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'claim_next' draws an item and is addressed at the item view. The "
-                    + "iteration and milestone views have no draw of their own — an "
-                    + "iteration is promoted with 'advance', and a milestone is set "
-                    + "active by ordinary update against its scope-declared status");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "claim_next");
         }
         addresses.requireView(in.scopeId(), in.view());
 
@@ -606,10 +565,9 @@ public class VerbSurface {
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "relate");
         UUID from = resolve(in, target);
 
-        VerbInput.Edge edge = required(body);
-        String typeName = requireLabel("type", edge.type(), "a relation type's display name");
-        String toAddress = requireLabel("to_item", edge.toItem(),
-            "the other item's canonical address worklist://<scope>/item/<number>");
+        VerbInput.Edge edge = required(body, TO_ITEM, TYPE);
+        String toAddress = requireLabel(TO_ITEM, edge.toItem());
+        String typeName = requireLabel(TYPE, edge.type());
 
         Map<String, Object> answered = items.relate(in.scopeId(), from, toAddress, typeName,
             requireToken(conflictToken));
@@ -625,10 +583,9 @@ public class VerbSurface {
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "unrelate");
         UUID from = resolve(in, target);
 
-        VerbInput.Edge edge = required(body);
-        String typeName = requireLabel("type", edge.type(), "a relation type's display name");
-        String toAddress = requireLabel("to_item", edge.toItem(),
-            "the other item's canonical address worklist://<scope>/item/<number>");
+        VerbInput.Edge edge = required(body, TO_ITEM, TYPE);
+        String toAddress = requireLabel(TO_ITEM, edge.toItem());
+        String typeName = requireLabel(TYPE, edge.type());
 
         Map<String, Object> answered = items.unrelate(in.scopeId(), from, toAddress, typeName,
             requireToken(conflictToken));
@@ -659,11 +616,7 @@ public class VerbSurface {
     public Result validate(String subject, String rawScope, String rawView) {
         Entry in = entry(subject, rawScope, rawView, Access.READ);
         if (!Selector.ITEM.equals(in.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'validate' walks the scope's cross-item consistencies and is addressed "
-                    + "at the item view. Its ratified target is the scope; the nearest "
-                    + "truncation this surface offers is the item collection, and the "
-                    + "iteration and milestone views have no cross-item graph to walk");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "validate");
         }
         addresses.requireView(in.scopeId(), in.view());
 
@@ -690,13 +643,12 @@ public class VerbSurface {
      */
     @Transactional
     public void uncarried(String subject, String rawScope, String rawView, String at,
-                          String verb, String why) {
+                          String verb) {
         entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
             AddressParser.target(rawView, at);
         }
-        throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-            "'" + verb + "' is not part of the worklist scheme. " + why);
+        throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, verb);
     }
 
     /**
@@ -709,14 +661,26 @@ public class VerbSurface {
      */
     @Transactional
     public void unbuilt(String subject, String rawScope, String rawView, String at,
-                        String verb, String why) {
+                        String verb) {
         entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
             AddressParser.target(rawView, at);
         }
-        throw new SurfaceException(SurfaceException.Reason.VERB_UNBUILT,
-            "'" + verb + "' is a verb of the worklist scheme and this service has not "
-                + "built it. " + why);
+        throw SurfaceException.of(RefusalCode.VERB_UNBUILT, verb);
+    }
+
+    /**
+     * Stage 1 and stage 2 alone: the scope parses and this subject sees it.
+     *
+     * <p>Called by an adapter before it refuses an argument the call does not
+     * declare. That refusal is decidable from the verb alone, and DEC-0042
+     * still answers {@code NOT_FOUND} for a scope the caller cannot see
+     * "whatever else is wrong with the call": an unknown argument must not
+     * tell a stranger that the scope exists.
+     */
+    @Transactional
+    public void requireVisible(String subject, String rawScope) {
+        scopes.resolve(subject, AddressParser.scope(rawScope), Access.READ);
     }
 
     // ======================================================================
@@ -789,11 +753,7 @@ public class VerbSurface {
      */
     private static void requireWritable(AddressParser.Target target) {
         if (target.isCurrent()) {
-            throw new SurfaceException(SurfaceException.Reason.ADDRESS_READ_ONLY,
-                "'" + AddressParser.CURRENT + "' is a pointer the scope moves, so a write "
-                    + "through it would land on whichever iteration happened to be current "
-                    + "when the call arrived. Read it to find out which one that is, then "
-                    + "write at its number.",
+            throw new SurfaceException(RefusalCode.ADDRESS_READ_ONLY,
                 "GET");
         }
     }
@@ -811,13 +771,7 @@ public class VerbSurface {
         if (!Selector.WORKSTREAM.equals(view)) {
             return;
         }
-        throw new SurfaceException(SurfaceException.Reason.SELECTOR_DECLARED_NOT_WRITTEN,
-            "'" + verb + "' is not addressed at the workstream view. A workstream is "
-                + "declared, and a declaration is a different act from acting on an object: "
-                + "it runs on the selector-declaration surface, not through this verb. This "
-                + "surface reads workstreams — 'read' and 'query' answer as they do on any "
-                + "other view — and refuses writes on them so that a caller does not learn "
-                + "to declare through the wrong door.");
+        throw SurfaceException.of(RefusalCode.SELECTOR_DECLARED_NOT_WRITTEN, verb);
     }
 
     /** A verb that only one view carries, addressed at another. */
@@ -825,11 +779,7 @@ public class VerbSurface {
                                                     String expected, String verb) {
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         if (!expected.equals(target.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'" + verb + "' is addressed at the " + expected + " view and this address "
-                    + "names the " + target.view() + " view. The verb is one word across "
-                    + "the platform and the ADDRESS says what it acts on, so aiming it at "
-                    + "the wrong kind of thing is a category error rather than a typo.");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, verb);
         }
         requireWritable(target);
         return target;
@@ -837,82 +787,68 @@ public class VerbSurface {
 
     private static String requireToken(String presented) {
         if (presented == null || presented.isBlank()) {
-            throw new SurfaceException(SurfaceException.Reason.CONFLICT_TOKEN_MISSING,
-                "this write declares conflict-token repetition, so it carries one. The "
-                    + "token is the one handed out with the last read. Without it a retry "
-                    + "across a network cannot be told from a second, different write.");
+            throw new SurfaceException(RefusalCode.CONFLICT_TOKEN_MISSING);
         }
         return presented;
     }
 
-    /**
-     * The status name a withdrawal moves the item into.
-     *
-     * <p>Sprint 180.4: the wire form of a status is the display name the
-     * scope declared it under, and a uuid is refused as malformed here
-     * rather than passed on to the domain — the surface converts the wire
-     * shape to what the domain reads, and this is that conversion.
-     */
-    private static String requireStatusName(String raw) {
-        if (raw == null || raw.isBlank()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "a withdrawal names the status it moves the item into. No value arrived.");
-        }
-        String candidate = raw.strip();
-        if (UUID_SHAPE.matcher(candidate).matches()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "a withdrawal names the status it moves the item into by its declared "
-                    + "display name, not by the platform's identity. Refused: '" + candidate
-                    + "'.");
-        }
-        return candidate;
-    }
 
-    private static <T> T required(T body) {
+    /**
+     * The body a verb needs, refused by the names of its mandatory arguments
+     * when nothing arrived (DEC-0043 R17: an absent body and a body of nulls
+     * are the same call).
+     */
+    private static <T> T required(T body, String... arguments) {
         if (body == null) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "this verb takes arguments and none arrived.");
+            throw SurfaceException.missing(arguments);
         }
         return body;
     }
 
     /** A lease duration, refused when the body arrives without a positive one. */
     private static Duration requireLease(VerbInput.Lease body) {
-        VerbInput.Lease lease = required(body);
+        VerbInput.Lease lease = required(body, DURATION);
+        if (lease.durationSeconds() == null) {
+            throw SurfaceException.missing(DURATION);
+        }
         if (lease.durationSeconds() <= 0) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the duration of a lease is a positive number of seconds. A zero "
-                    + "duration is a lease that is inert the moment it is granted, and a "
-                    + "negative one is not a duration at all — the predecessor's exact "
-                    + "defect, refused here rather than passed on to a domain that would "
-                    + "refuse it too");
+            throw SurfaceException.invalid(DURATION);
         }
         return Duration.ofSeconds(lease.durationSeconds());
     }
 
     /**
-     * A label-shaped argument (a name, a token, an address), refused when it
-     * did not arrive or when it renders as a uuid.
-     *
-     * <p>Sprint 180.4: the wire form of every declared value is what the
-     * reader saw — a name, a number, a token — and the platform's identity
-     * is not something a caller reads back any more. A uuid on any of these
-     * arguments is a form refusal that names the argument and what it takes
-     * instead.
+     * A mandatory text argument that names a declared value or an address,
+     * refused by its declared name and never by what arrived.
      */
-    private static String requireLabel(String name, String raw, String expectedForm) {
-        if (raw == null || raw.isBlank()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the argument '" + name + "' is required and did not arrive.");
-        }
-        String candidate = raw.strip();
+    private static String requireLabel(String name, String raw) {
+        String candidate = requireText(name, raw);
         if (UUID_SHAPE.matcher(candidate).matches()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the argument '" + name + "' takes " + expectedForm + ", not the "
-                    + "platform's own identity. A uuid arrived: '" + candidate + "'.");
+            throw SurfaceException.invalid(name);
         }
         return candidate;
     }
+
+    /** A mandatory text argument, refused by its declared name when absent or empty. */
+    private static String requireText(String name, String raw) {
+        if (raw == null) {
+            throw SurfaceException.missing(name);
+        }
+        String candidate = raw.strip();
+        if (candidate.isEmpty()) {
+            throw SurfaceException.invalid(name);
+        }
+        return candidate;
+    }
+
+    /** The argument names this class refuses by. */
+    private static final String FIELDS = "fields";
+    private static final String STATUS = "status";
+    private static final String RECEIPT = "receipt";
+    private static final String TO_ITEM = "to_item";
+    private static final String TYPE = "type";
+    private static final String DURATION = "duration_seconds";
+    private static final String CLOSE = "close";
 
     /**
      * The switch arm that cannot be reached.
@@ -964,24 +900,10 @@ public class VerbSurface {
      * surface is a published contract from the day it answers.
      *
      * <p>{@code next} is the cursor to the rest, null exactly when nothing
-     * follows; {@link #truncated()} says the same as a flag. A silent ceiling is
-     * the sprint-169 defect one layer up — an answer that reads complete and is
-     * not.
-     *
-     * <p>The whole-set signature that takes no {@link QuerySpec} answers
-     * without a cursor by construction: without a limit, "the whole set" is what
-     * came back and there is no ceiling to trip.
+     * follows. A silent ceiling is the sprint-169 defect one layer up — an
+     * answer that reads complete and is not.
      */
     public record Listing(List<Result> objects, String next) {
-
-        public Listing(List<Result> objects) {
-            this(objects, null);
-        }
-
-        /** Whether the store carried more than this answer holds. */
-        public boolean truncated() {
-            return next != null;
-        }
     }
 
     /** Everything one call needs once the first two stages have held. */

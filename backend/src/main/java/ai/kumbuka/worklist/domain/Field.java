@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import java.util.ArrayList;
@@ -7,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static ai.kumbuka.worklist.domain.Addressed.ITEM;
 import static ai.kumbuka.worklist.domain.Addressed.ITERATION;
@@ -425,17 +431,12 @@ public enum Field {
      * WorklistException.Reason#UNKNOWN_FIELD}, which is the right answer once
      * the name has been gone long enough to be a typo again.
      */
-    private static final Map<Addressed, Map<String, String>> RETRACTED = Map.of(
-        MILESTONE, Map.of("workstream",
-            "a milestone belongs to no workstream, and several workstreams reach one "
-                + "milestone together — that is the normal case rather than a tolerated "
-                + "one (TAR-0002 section 4, accepted; REQ-0148 obsolete). The edge was "
-                + "retracted in the database by V12 on 2026-09-09 and is now off the "
-                + "surface too, which is what this refusal is: between the two, the "
-                + "field was still answered and still taken, and a write on it landed "
-                + "nowhere without saying so. The edge that stands is the item's: an "
-                + "item belongs to exactly one workstream, so a milestone's work is "
-                + "filed through the items that aim at it"));
+    // A milestone belongs to no workstream, and several workstreams reach one
+    // milestone together (TAR-0002 section 4). The edge was retracted in the
+    // database by V12 and is off the surface too; the edge that stands is the
+    // item's. The sentence a caller reads is the catalogue's FIELD_RETRACTED.
+    private static final Map<Addressed, Set<String>> RETRACTED = Map.of(
+        MILESTONE, Set.of("workstream"));
 
     private final String canonicalName;
     private final Set<Addressed> carriedBy;
@@ -450,6 +451,19 @@ public enum Field {
     /** The one name this field has, in both directions. */
     public String canonicalName() {
         return canonicalName;
+    }
+
+    /** The argument every field travels under on the verb surface. */
+    public static final String FIELDS_ARGUMENT = "fields";
+
+    /** This field as an argument path, {@code fields.<name>}. */
+    public String path() {
+        return path(canonicalName);
+    }
+
+    /** A declared field name as an argument path, {@code fields.<name>}. */
+    public static String path(String canonicalName) {
+        return FIELDS_ARGUMENT + "." + canonicalName;
     }
 
     /** Whether the addressed object has this field at all. */
@@ -512,7 +526,7 @@ public enum Field {
      */
     public static Map<Field, Object> resolve(Addressed addressed, Map<String, ?> arguments) {
         Map<Field, Object> resolved = new LinkedHashMap<>();
-        Map<String, String> retractedHere = RETRACTED.getOrDefault(addressed, Map.of());
+        Set<String> retractedHere = RETRACTED.getOrDefault(addressed, Set.of());
         List<String> retracted = new ArrayList<>();
         List<String> unknown = new ArrayList<>();
 
@@ -520,7 +534,7 @@ public enum Field {
             Optional<Field> field = byCanonicalName(addressed, entry.getKey());
             if (field.isPresent()) {
                 resolved.put(field.get(), entry.getValue());
-            } else if (retractedHere.containsKey(entry.getKey())) {
+            } else if (retractedHere.contains(entry.getKey())) {
                 retracted.add(entry.getKey());
             } else {
                 unknown.add(entry.getKey());
@@ -535,29 +549,17 @@ public enum Field {
         if (!retracted.isEmpty()) {
             throw new WorklistException(
                 WorklistException.Reason.FIELD_RETRACTED,
-                "a " + addressed.description() + " no longer carries " + retracted
-                    + ". " + retracted.stream()
-                        .map(name -> name + " — " + retractedHere.get(name))
-                        .collect(Collectors.joining("; "))
-                    + ". Nothing was written: a field whose relation was retracted is "
-                    + "refused rather than taken, because a write that is accepted and "
-                    + "lands nowhere is the defect the retraction is undoing",
-                retracted);
+                retracted.stream().map(Field::path).toList());
         }
 
         if (!unknown.isEmpty()) {
+            // The names that arrived are the caller's input and never come
+            // back (DEC-0043 R19): the answer is the fields this object
+            // declares, as their argument paths.
             throw new WorklistException(
-                WorklistException.Reason.UNKNOWN_FIELD,
-                "no field of a " + addressed.description() + " is named " + unknown
-                    + ". Its fields are "
-                    + of(addressed).stream().map(Field::canonicalName).toList()
-                    + ", of which " + settableNames(addressed) + " may be set. A scope's "
-                    + "own attributes are not fields: they travel inside `attributes`, "
-                    + "under the key they were declared with. Nothing was written: "
-                    + "an argument this service does not recognise is refused rather "
-                    + "than dropped, because a dropped argument makes a write that "
-                    + "changed nothing look like one that succeeded",
-                unknown);
+                WorklistException.Reason.ARGUMENT_UNKNOWN,
+                List.of(),
+                of(addressed).stream().map(Field::path).toList());
         }
         return resolved;
     }

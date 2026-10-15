@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
+import io.quarkus.qute.i18n.MessageBundles;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
@@ -18,7 +19,6 @@ import org.jboss.logging.Logger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -51,6 +51,11 @@ import java.util.UUID;
 @TenantBound
 public class WorkstreamService {
 
+    /** The names a refusal of a workstream declaration names (DEC-0043 R18). */
+    private static final String TOKEN = "token";
+    private static final String DESCRIPTION = "description";
+
+
     /** An address, a scope id, a token, a transition. Never a description, never an actor. */
     private static final Logger LOG = Logger.getLogger(WorkstreamService.class);
 
@@ -68,24 +73,15 @@ public class WorkstreamService {
         return project(require(scopeId, workstreamId));
     }
 
-    /** The scope's whole axis, by number. */
-    @Transactional
-    public List<Map<String, Object>> query(UUID scopeId) {
-        return workstreams.inScope(scopeId).stream()
-            .map(this::project)
-            .toList();
-    }
-
     /**
-     * One page of a scope's workstreams, by number, narrowed by the filters the
-     * workstream view declares.
+     * One page of a scope's workstreams, narrowed by the filters the workstream
+     * view declares, in the request's sort.
      */
     @Transactional
-    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
-        Optional<Object> status = narrowing.value(QueryFilter.WORKSTREAM_STATUS);
-        return QueryAnswer.page(narrowing, workstreams.inScope(scopeId),
-            workstream -> status.map(workstream.status::equals).orElse(true),
-            workstream -> workstream.number,
+    public Page query(UUID scopeId, PageRequest request) {
+        return Page.of(request, workstreams.page(scopeId, request),
+            workstream -> PageCursor.Position.of(request.sort(), workstream.number,
+                workstream.createdAt, 0),
             this::project);
     }
 
@@ -123,8 +119,8 @@ public class WorkstreamService {
         defaultRow.scopeId     = scopeId;
         defaultRow.number      = number;
         defaultRow.token       = Workstream.DEFAULT_TOKEN;
-        defaultRow.description = "The default workstream. Everything that names no other "
-            + "lands here; its identity is fixed and only the description is settable.";
+        defaultRow.description = MessageBundles.get(StoredTexts.class)
+            .defaultWorkstreamDescription();
         defaultRow.status      = Workstream.DECLARED;
         defaultRow.isDefault   = true;
         workstreams.insert(defaultRow);
@@ -160,22 +156,13 @@ public class WorkstreamService {
         if (token == null || !Selector.TOKEN_PATTERN.matcher(token).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a workstream token is a leading lower-case letter followed by lower-case "
-                    + "alphanumerics and interior hyphens. Upper case is refused rather "
-                    + "than folded, because folding would make two strings resolve to one "
-                    + "workstream. Refused: " + token,
-                List.of(String.valueOf(token)));
+                List.of(TOKEN));
         }
-        String cleaned = requireNonBlank(description,
-            "a workstream carries a mandatory description. A workstream without one is a "
-                + "violation and not a report");
+        String cleaned = requireNonBlank(description);
         if (workstreams.findByToken(scopeId, token) != null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "workstream token " + token + " is already declared in scope " + scopeId
-                    + ". A withdrawn workstream keeps its token, so redeclaring under a "
-                    + "known name is refused rather than folded",
-                List.of(token));
+                List.of(TOKEN));
         }
 
         Selector workstreamSelector = selectors.require(scopeId, Selector.WORKSTREAM);
@@ -208,8 +195,7 @@ public class WorkstreamService {
             String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        String cleaned = requireNonBlank(description,
-            "a workstream description is mandatory; it may not be cleared");
+        String cleaned = requireNonBlank(description);
         if (cleaned.equals(workstream.description)) {
             return workstream;
         }
@@ -232,15 +218,11 @@ public class WorkstreamService {
             String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        refuseIfDefault(workstream, "renamed",
-            "The default's token is fixed — its identity is what things point at from "
-                + "outside the store, and renaming it would break every such pointer at once");
+        refuseIfDefault(workstream);
         if (newToken == null || !Selector.TOKEN_PATTERN.matcher(newToken).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a workstream token is a leading lower-case letter followed by lower-case "
-                    + "alphanumerics and interior hyphens. Refused: " + newToken,
-                List.of(String.valueOf(newToken)));
+                List.of(TOKEN));
         }
         if (newToken.equals(workstream.token)) {
             return workstream;
@@ -248,17 +230,12 @@ public class WorkstreamService {
         if (workstreams.findByToken(scopeId, newToken) != null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "workstream token " + newToken + " is already in use in scope " + scopeId,
-                List.of(newToken));
+                List.of(TOKEN));
         }
         if (workstreams.hasReferences(scopeId, workstream.number)) {
             throw new WorklistException(
                 WorklistException.Reason.WORKSTREAM_HAS_REFERENCES,
-                "workstream " + workstream.token + " in scope " + scopeId
-                    + " is renamable only while nothing points at it. An item or a "
-                    + "milestone does; declare a new workstream and move the pointers "
-                    + "if the name has to change",
-                List.of(workstream.token));
+                List.of(TOKEN));
         }
         String oldToken = workstream.token;
         workstream.token = newToken;
@@ -276,10 +253,7 @@ public class WorkstreamService {
     public Workstream withdraw(UUID scopeId, UUID workstreamId, String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        refuseIfDefault(workstream, "withdrawn",
-            "The default is the intake landing for every item and milestone that names no "
-                + "other. Withdrawing it would refuse a create that carried no explicit "
-                + "workstream, and the frame says the default takes those in");
+        refuseIfDefault(workstream);
         if (Workstream.WITHDRAWN.equals(workstream.status)) {
             return workstream;
         }
@@ -303,8 +277,7 @@ public class WorkstreamService {
         if (workstream == null) {
             throw new WorklistException(
                 WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                "no workstream " + workstreamId + " in scope " + scopeId,
-                List.of(String.valueOf(workstreamId)));
+                List.of());
         }
         return workstream;
     }
@@ -316,28 +289,23 @@ public class WorkstreamService {
         }
         throw new WorklistException(
             WorklistException.Reason.WORKSTREAM_WITHDRAWN,
-            "workstream " + workstream.token + " is withdrawn. Nothing new is accepted "
-                + "under it; what was already accepted keeps resolving",
-            List.of(workstream.token));
+            List.of(Field.WORKSTREAM_ID.path()));
     }
 
-    private static void refuseIfDefault(Workstream workstream, String verb, String reason) {
+    private static void refuseIfDefault(Workstream workstream) {
         if (!workstream.isDefault) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.WORKSTREAM_DEFAULT_LOCKED,
-            "the default workstream of scope " + workstream.scopeId + " may not be " + verb
-                + ". " + reason,
-            List.of(workstream.token));
+            List.of());
     }
 
-    private static String requireNonBlank(String value, String reason) {
+    private static String requireNonBlank(String value) {
         if (value == null || value.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                reason + " — empty and whitespace-only are refused",
-                List.of("description"));
+                List.of(DESCRIPTION));
         }
         return value.strip();
     }
@@ -347,8 +315,8 @@ public class WorkstreamService {
         fields.put("id", workstream.id);
         fields.put("scope", slugOf(workstream.scopeId));
         fields.put("number", workstream.number);
-        fields.put("token", workstream.token);
-        fields.put("description", workstream.description);
+        fields.put(TOKEN, workstream.token);
+        fields.put(DESCRIPTION, workstream.description);
         fields.put("status", workstream.status);
         fields.put("is_default", workstream.isDefault);
         fields.put("created_at", workstream.createdAt);

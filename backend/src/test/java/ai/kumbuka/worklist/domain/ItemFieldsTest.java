@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import org.junit.jupiter.api.Test;
@@ -32,8 +39,9 @@ class ItemFieldsTest {
         WorklistException refusal = (WorklistException) catchThrowable(() ->
             Field.resolve(Addressed.ITEM, Map.of("Titel", "the predecessor's spelling")));
 
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
-        assertThat(refusal.offenders()).containsExactly("Titel");
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ARGUMENT_UNKNOWN);
+        assertThat(refusal.offenders()).isEmpty();
+        assertThat(refusal.accepts()).contains("fields.title").doesNotContain("Titel");
     }
 
     /**
@@ -100,7 +108,7 @@ class ItemFieldsTest {
             ItemFields.text(Field.TITLE, 42));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("title");
+        assertThat(refusal.offenders()).containsExactly("fields.title");
     }
 
     // ------------------------------------------------------------------
@@ -128,7 +136,7 @@ class ItemFieldsTest {
             ItemFields.tokens(Field.RELATIONS, "not a list"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("relations");
+        assertThat(refusal.offenders()).containsExactly("fields.relations");
     }
 
     /**
@@ -154,7 +162,7 @@ class ItemFieldsTest {
         WorklistException refusal = (WorklistException) catchThrowable(() ->
             ItemFields.attributes(List.of("not a map")));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("attributes");
+        assertThat(refusal.offenders()).containsExactly("fields.attributes");
     }
 
     /**
@@ -184,7 +192,7 @@ class ItemFieldsTest {
         WorklistException refusal = (WorklistException) catchThrowable(() ->
             ItemFields.references(List.of(Map.of("label", "no target"))));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("references");
+        assertThat(refusal.offenders()).containsExactly("fields.references");
     }
 
     /**
@@ -246,15 +254,16 @@ class ItemFieldsTest {
     @Test
     void a_uuid_where_an_option_name_is_expected_is_refused_and_a_name_passes() {
         WorklistException refusal = (WorklistException) catchThrowable(() ->
-            ItemFields.refuseUuidShape(Field.ATTRIBUTES,
-                "00000000-0000-0000-0000-00000000000a", "an option's name"));
+            ItemFields.refuseUuidShape(Field.ATTRIBUTES.path(),
+                "00000000-0000-0000-0000-00000000000a"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.getMessage())
-            .as("the refusal says what the field takes instead")
-            .contains("an option's name");
+        assertThat(refusal.offenders())
+            .as("the refusal names the argument the value arrived on, and never the value")
+            .containsExactly("fields.attributes");
+        assertThat(refusal.getMessage()).doesNotContain("00000000-0000-0000-0000-00000000000a");
         assertThat(catchThrowable(() ->
-            ItemFields.refuseUuidShape(Field.ATTRIBUTES, "S", "an option's name")))
+            ItemFields.refuseUuidShape(Field.ATTRIBUTES.path(), "S")))
             .as("and a name is not a uuid, so it passes")
             .isNull();
     }

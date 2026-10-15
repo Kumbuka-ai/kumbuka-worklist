@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.adapter.mcp.McpTools;
@@ -15,6 +22,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -230,7 +238,7 @@ class VerbSurfaceConformanceTest {
     void the_mcp_exposition_declares_exactly_the_carried_verbs() {
         Set<String> carried = VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED);
 
-        Set<String> declared = McpTools.declared().stream()
+        Set<String> declared = tools().stream()
             .map(McpTools.Tool::name)
             .collect(Collectors.toCollection(LinkedHashSet::new));
 
@@ -244,7 +252,7 @@ class VerbSurfaceConformanceTest {
 
     @Test
     void every_mcp_tool_declares_a_closed_argument_schema() {
-        for (McpTools.Tool tool : McpTools.declared()) {
+        for (McpTools.Tool tool : tools()) {
             assertThat(tool.inputSchema())
                 .as("the schema of '%s' must close additionalProperties: an argument the "
                     + "surface does not know is one a caller believes in, and accepting it "
@@ -252,6 +260,58 @@ class VerbSurfaceConformanceTest {
                     tool.name())
                 .containsEntry("additionalProperties", false);
         }
+    }
+
+    /**
+     * {@code query} answers on every view, so its {@code selector} names every
+     * view. RED STATE, observed 2026-10-12 on {@code e86e373}: it named item,
+     * iteration and milestone, and a caller reading the tool would not know the
+     * workstream view can be listed at all.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void the_query_selector_names_every_view_the_service_lists() {
+        McpTools.Tool query = tools().stream()
+            .filter(tool -> tool.name().equals("query"))
+            .findFirst().orElseThrow();
+        Map<String, Object> properties =
+            (Map<String, Object>) query.inputSchema().get("properties");
+        String selector = String.valueOf(
+            ((Map<String, Object>) properties.get("selector")).get("description"));
+        assertThat(selector).as("query's selector is described by its own text")
+            .isEqualTo("selectorQuery");
+        assertThat(argumentText("selectorQuery"))
+            .contains(ai.kumbuka.worklist.domain.Selector.VIEWS);
+    }
+
+    /**
+     * The tools as the declaration builds them, each text standing for the
+     * bundle method that words it: the words themselves are Quarkus's to
+     * render, and this probe reads the shape.
+     */
+    private static java.util.List<McpTools.Tool> tools() {
+        return McpTools.declared(named(ai.kumbuka.worklist.surface.ToolDescriptions.class),
+            named(ai.kumbuka.worklist.surface.ArgumentDescriptions.class),
+            named(ai.kumbuka.worklist.surface.ValueDescriptions.class));
+    }
+
+    private static <T> T named(Class<T> bundle) {
+        return bundle.cast(java.lang.reflect.Proxy.newProxyInstance(bundle.getClassLoader(),
+            new Class<?>[] {bundle}, (proxy, method, args) -> method.getName()));
+    }
+
+    private static String argumentText(String key) {
+        java.nio.file.Path direct = java.nio.file.Paths.get("src", "main", "resources",
+            "messages", "arguments.properties");
+        java.nio.file.Path file = java.nio.file.Files.exists(direct) ? direct
+            : java.nio.file.Paths.get("backend").resolve(direct);
+        java.util.Properties texts = new java.util.Properties();
+        try (java.io.Reader in = java.nio.file.Files.newBufferedReader(file)) {
+            texts.load(in);
+        } catch (java.io.IOException unreadable) {
+            throw new java.io.UncheckedIOException(unreadable);
+        }
+        return texts.getProperty(key);
     }
 
     // =======================================================================

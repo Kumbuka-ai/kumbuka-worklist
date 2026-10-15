@@ -1,8 +1,17 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Iteration;
 import ai.kumbuka.worklist.domain.IterationMembership;
 import ai.kumbuka.worklist.domain.Milestone;
+import ai.kumbuka.worklist.domain.PageRequest;
+import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.ScopeSetting;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -13,7 +22,9 @@ import jakarta.persistence.NoResultException;
 import jakarta.persistence.TypedQuery;
 import jakarta.transaction.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -78,14 +89,28 @@ public class PlanningRepository {
             .setParameter(P_NUMBER, number));
     }
 
-    /** Every milestone of a scope, in the axis's own order. */
+    /**
+     * One page of a scope's milestones, narrowed by the status and kind the
+     * request names, in its sort and continuing after its position — in the
+     * database, by {@link KeysetClause}, and never by reading the whole axis.
+     */
     @Transactional
-    public List<Milestone> milestonesInScope(UUID scopeId) {
-        return em.createQuery(
-                "SELECT m FROM Milestone m WHERE m.scopeId = :scope "
-                    + "ORDER BY m.rank, m.number", Milestone.class)
-            .setParameter(P_SCOPE, scopeId)
-            .getResultList();
+    public List<Milestone> milestonePage(UUID scopeId, PageRequest request) {
+        StringBuilder jpql = new StringBuilder("SELECT m FROM Milestone m WHERE m.scopeId = :scope");
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put(P_SCOPE, scopeId);
+        request.value(QueryFilter.MILESTONE_STATUS).ifPresent(status -> {
+            jpql.append(" AND m.status = :").append(P_STATUS);
+            params.put(P_STATUS, status);
+        });
+        request.value(QueryFilter.MILESTONE_KIND).ifPresent(kind -> {
+            jpql.append(" AND m.kind = :kind");
+            params.put("kind", kind);
+        });
+        KeysetClause.continueAndOrder(jpql, params, "m", request);
+        var query = em.createQuery(jpql.toString(), Milestone.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
     /**
@@ -132,14 +157,26 @@ public class PlanningRepository {
             .setParameter(P_NUMBER, number));
     }
 
-    /** Every iteration of a scope, in the order they are to be worked. */
+    /**
+     * One page of a scope's iterations, narrowed to the open or the closed ones
+     * when the request names which, in its sort and continuing after its
+     * position — in the database, by {@link KeysetClause}.
+     *
+     * <p>Open is read from the closing timestamp being absent, as in
+     * {@link #openIterations}.
+     */
     @Transactional
-    public List<Iteration> iterationsInScope(UUID scopeId) {
-        return em.createQuery(
-                "SELECT i FROM Iteration i WHERE i.scopeId = :scope "
-                    + "ORDER BY i.rank, i.number", Iteration.class)
-            .setParameter(P_SCOPE, scopeId)
-            .getResultList();
+    public List<Iteration> iterationPage(UUID scopeId, PageRequest request) {
+        StringBuilder jpql = new StringBuilder("SELECT i FROM Iteration i WHERE i.scopeId = :scope");
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put(P_SCOPE, scopeId);
+        request.value(QueryFilter.ITERATION_CLOSED).ifPresent(closed ->
+            jpql.append(Boolean.TRUE.equals(closed)
+                ? " AND i.closedAt IS NOT NULL" : " AND i.closedAt IS NULL"));
+        KeysetClause.continueAndOrder(jpql, params, "i", request);
+        var query = em.createQuery(jpql.toString(), Iteration.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
     /**

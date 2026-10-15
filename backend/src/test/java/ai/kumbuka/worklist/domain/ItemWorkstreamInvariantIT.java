@@ -103,7 +103,7 @@ class ItemWorkstreamInvariantIT {
         // value the scope does not hold, naming the field — not as the not-found
         // of an address, whose answer names nothing and talks about membership.
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
-        assertThat(refusal.offenders()).containsExactly(Field.WORKSTREAM_ID.canonicalName());
+        assertThat(refusal.offenders()).containsExactly(Field.WORKSTREAM_ID.path());
     }
 
     @Test

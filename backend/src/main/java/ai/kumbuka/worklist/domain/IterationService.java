@@ -16,12 +16,10 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -57,6 +55,10 @@ import java.util.UUID;
 @TenantBound
 public class IterationService extends PlanningService {
 
+    /** The argument a refusal about the addressed iteration names (DEC-0043 R18). */
+    private static final String ADDRESS = "address";
+
+
     /** An address, a scope id, a count, a transition. Never a motto, never an actor. */
     private static final Logger LOG = Logger.getLogger(IterationService.class);
 
@@ -69,8 +71,6 @@ public class IterationService extends PlanningService {
     @Inject ScopeAccessRepository scopeAccess;
     @Inject ItemRepository itemRepo;
 
-    /** What the cardinality refusal and its warning call the thing being counted. */
-    private static final String OPEN_ITERATIONS = "the number of open iterations in this scope";
 
     /**
      * The write-path cap on the title, matching the check constraint V16
@@ -89,25 +89,15 @@ public class IterationService extends PlanningService {
         return project(require(scopeId, iterationId), List.of());
     }
 
-    /** The scope's whole axis, in the order the iterations are to be worked. */
-    @Transactional
-    public List<Map<String, Object>> query(UUID scopeId) {
-        return planning.iterationsInScope(scopeId).stream()
-            .map(iteration -> project(iteration, List.of()))
-            .toList();
-    }
-
     /**
-     * One page of a scope's iterations, in the axis's own order, narrowed by
-     * the filters the iteration view declares.
+     * One page of a scope's iterations, narrowed by the filters the iteration
+     * view declares, in the request's sort.
      */
     @Transactional
-    public QueryAnswer query(UUID scopeId, Narrowing narrowing) {
-        Optional<Object> closed = narrowing.value(QueryFilter.ITERATION_CLOSED);
-        return QueryAnswer.page(narrowing, planning.iterationsInScope(scopeId),
-            iteration -> closed.map(wanted -> wanted.equals(iteration.closedAt != null))
-                .orElse(true),
-            iteration -> iteration.number,
+    public Page query(UUID scopeId, PageRequest request) {
+        return Page.of(request, planning.iterationPage(scopeId, request),
+            iteration -> PageCursor.Position.of(request.sort(), iteration.number,
+                iteration.createdAt, iteration.rank),
             iteration -> project(iteration, List.of()));
     }
 
@@ -136,22 +126,14 @@ public class IterationService extends PlanningService {
 
         ScopeSetting setting = requireSetting(scopeId);
         int openAfterwards = planning.openIterations(scopeId).size() + 1;
-        refuseBeyond(openAfterwards, setting.maxPlannedIterations, OPEN_ITERATIONS);
+        refuseBeyond(openAfterwards, setting.maxPlannedIterations);
 
         Iteration iteration = new Iteration();
         iteration.scopeId = scopeId;
-        iteration.title = capped(Field.TITLE, required(Field.TITLE, given.get(Field.TITLE),
-            "an iteration carries a title, the one-line handle a listing shows. "
-                + "It sits beside the motto and the description, and each has its own "
-                + "job — the title is not one of the three played by another"),
+        iteration.title = capped(Field.TITLE, required(Field.TITLE, given.get(Field.TITLE)),
             TITLE_MAX);
-        iteration.motto = required(Field.MOTTO, given.get(Field.MOTTO),
-            "an iteration carries a motto. With the description beside it, it is the "
-                + "only machine-readable criterion by which an agent can refuse an item "
-                + "as out of scope for this iteration");
-        iteration.description = required(Field.DESCRIPTION, given.get(Field.DESCRIPTION),
-            "an iteration carries a description: what it contains and what it does not. "
-                + "Mandatory for the same reason the motto is, and not decoration");
+        iteration.motto = required(Field.MOTTO, given.get(Field.MOTTO));
+        iteration.description = required(Field.DESCRIPTION, given.get(Field.DESCRIPTION));
         iteration.number = allocateNumber(scopeId);
 
         Integer rank = whole(Field.RANK, given.get(Field.RANK));
@@ -164,7 +146,7 @@ public class IterationService extends PlanningService {
         LOG.infof("iteration %d created in scope %s", iteration.number, scopeId);
 
         return project(iteration, warnings(warningAt(openAfterwards,
-            setting.warnPlannedIterations, setting.maxPlannedIterations, OPEN_ITERATIONS)));
+            setting.warnPlannedIterations, Notice.PLANNED_ITERATIONS_AT_THRESHOLD)));
     }
 
     /**
@@ -279,10 +261,6 @@ public class IterationService extends PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.ITERATION_PRODUCED_MISSING,
-            "an iteration is closed only when what was produced is NAMED. Presence is "
-                + "checked, form is not — a specification, a concept, a set of corpus "
-                + "nodes qualify on the same conditions as a release. Empty and "
-                + "whitespace-only are refused",
             List.of("produced"));
     }
 
@@ -308,11 +286,7 @@ public class IterationService extends PlanningService {
             .findFirst()
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.ITERATION_ABSENT,
-                "scope " + scopeId + " has no further open iteration to promote. That is "
-                    + "a call to plan one, and it is deliberately a different answer from "
-                    + "an iteration that is running with nothing left to do — which is a "
-                    + "call to close it",
-                List.of(String.valueOf(scopeId))));
+                List.of()));
 
         setting.currentIterationNumber = next.number;
         setting.stamp();
@@ -360,20 +334,16 @@ public class IterationService extends PlanningService {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
-                String title = capped(field, required(field, value,
-                    "an iteration carries a title on every path, so it cannot be cleared"),
+                String title = capped(field, required(field, value),
                     TITLE_MAX);
                 return moved(held, title, () -> iteration.title = title);
             }
             case MOTTO -> {
-                String motto = required(field, value,
-                    "an iteration carries a motto on every path, so it cannot be cleared");
+                String motto = required(field, value);
                 return moved(held, motto, () -> iteration.motto = motto);
             }
             case DESCRIPTION -> {
-                String description = required(field, value,
-                    "an iteration carries a description on every path, so it cannot be "
-                        + "cleared — it is the criterion an agent refuses against");
+                String description = required(field, value);
                 return moved(held, description, () -> iteration.description = description);
             }
             case RANK -> {
@@ -416,17 +386,9 @@ public class IterationService extends PlanningService {
             .map(m -> itemAddressOf(scopeSlug, m.itemNumber))
             .toList();
         if (!wanted.containsAll(held) || !held.containsAll(wanted)) {
-            List<String> difference = new ArrayList<>(wanted);
-            difference.removeAll(held);
-            difference.addAll(held.stream().filter(id -> !wanted.contains(id)).toList());
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_UNKNOWN,
-                "an order names exactly the items that ARE members of this iteration, "
-                    + "each once, as their canonical addresses. These are named on one "
-                    + "side only: " + difference + ". Reordering does not plan an item "
-                    + "in and does not unplan one out; those are `plan` and `unplan`, "
-                    + "and they say what they do",
-                difference);
+                List.of(Field.ORDER.path()));
         }
 
         boolean changed = false;
@@ -468,10 +430,7 @@ public class IterationService extends PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.ITERATION_CLOSED,
-            "iteration " + iteration.number + " was closed at " + iteration.closedAt
-                + " and takes no further writes. What it held stays readable; a closed "
-                + "iteration is a record of what was worked and not a gap",
-            List.of(String.valueOf(iteration.id)));
+            List.of(ADDRESS));
     }
 
     /**
@@ -483,20 +442,14 @@ public class IterationService extends PlanningService {
      * right there.
      */
     private void refuseLiveMemberships(Iteration iteration) {
-        List<String> live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()
-            .filter(IterationMembership::live)
-            .map(membership -> String.valueOf(
-                itemRepo.byAddress(iteration.scopeId, membership.itemNumber).id))
-            .toList();
-        if (live.isEmpty()) {
+        boolean live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()
+            .anyMatch(IterationMembership::live);
+        if (!live) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.ITERATION_INCOMPLETE,
-            "iteration " + iteration.number + " still holds memberships that are neither "
-                + "done nor dropped: " + live + ". Closing over them would decide for you "
-                + "what happened to each one. Mark each membership's outcome first",
-            live);
+            List.of(ADDRESS));
     }
 
     private static boolean moved(Object held, Object wanted, Runnable write) {
@@ -514,8 +467,7 @@ public class IterationService extends PlanningService {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
-                "no iteration " + iterationId + " in scope " + scopeId,
-                List.of(String.valueOf(iterationId)));
+                List.of());
         }
         return iteration;
     }
@@ -524,7 +476,7 @@ public class IterationService extends PlanningService {
      * The iteration as the canonical field map — the one answer shape, used
      * by the reads AND by the comparison the writes make.
      */
-    private Map<String, Object> project(Iteration iteration, List<String> warnings) {
+    private Map<String, Object> project(Iteration iteration, List<Notice> warnings) {
         String scopeSlug = slugOf(iteration.scopeId);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), iteration.id);

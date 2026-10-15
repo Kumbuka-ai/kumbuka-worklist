@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
+package ai.kumbuka.worklist.architecture;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Every text that tells a caller what to do is phrased positively
+ * (DEC-0043 R21; {@code code-conventions/service-construction.md}, texts
+ * addressed to a caller, rule 4).
+ *
+ * <p>The lint reads the files of the instructing texts -- the remedies, the
+ * tool descriptions, the argument descriptions and the value descriptions --
+ * and refuses the words of R21, as whole words and whatever their case: not,
+ * n't, never, no, none, nothing, nobody, neither, nor, cannot, without, avoid,
+ * unless, instead of, refrain. It keeps no list of exceptions. Messages and
+ * notices may state a finding in the negative and are not linted.
+ *
+ * <p>This service declares no next-step texts: its answers carry no
+ * {@code next} yet. The day they do, their file joins the list below.
+ */
+class PositivePhrasingLintTest {
+
+    /** The bundles whose texts instruct. */
+    private static final List<String> INSTRUCTING = List.of(
+        "remedies", "tools", "arguments", "values");
+
+    private static final Pattern FORBIDDEN = Pattern.compile(
+        "(?i)\\b(not|never|no|none|nothing|nobody|neither|nor|cannot|without|avoid|unless"
+            + "|refrain|instead\\s+of)\\b|n't\\b");
+
+    @Test
+    void every_instructing_text_states_the_act_to_perform() {
+        List<String> offenders = new ArrayList<>();
+        for (String bundle : INSTRUCTING) {
+            Properties texts = MessageBundleTest.texts(bundle);
+            assertThat(texts.stringPropertyNames())
+                .as("%s carries texts; an empty file would pass the lint unread", bundle)
+                .isNotEmpty();
+            for (String key : texts.stringPropertyNames()) {
+                offenders.addAll(negations(bundle + "." + key, texts.getProperty(key)));
+            }
+        }
+        assertThat(offenders)
+            .as("an instruction names the act to perform; a prohibition names the act it "
+                + "forbids, and a model takes that act up. Rephrase as what to do")
+            .isEmpty();
+    }
+
+    @Test
+    void the_lint_reports_a_prohibition() {
+        assertThat(negations("planted", "Do not retry; wait instead of polling."))
+            .as("RED STATE, observed: 'not' and 'instead of' must be reported")
+            .hasSize(2);
+        assertThat(negations("planted", "Don't retry."))
+            .as("RED STATE, observed: a contraction ending in n't must be reported")
+            .hasSize(1);
+        assertThat(negations("planted", "Send the notice, the knot and the nothingness."))
+            .as("and a word that merely contains one of them is a whole other word")
+            .isEmpty();
+    }
+
+    private static List<String> negations(String where, String text) {
+        List<String> found = new ArrayList<>();
+        Matcher matcher = FORBIDDEN.matcher(text);
+        while (matcher.find()) {
+            found.add(where + ": '" + matcher.group() + "' in: " + text);
+        }
+        return found;
+    }
+}

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -82,10 +89,7 @@ public class ScopeSettingService extends PlanningService {
         if (planning.settingOf(scopeId) != null) {
             throw new WorklistException(
                 WorklistException.Reason.SETTING_PRESENT,
-                "scope " + scopeId + " is already open and carries its settings row. "
-                    + "There is one per scope; change what it holds through `update` so "
-                    + "that the conflict token catches a second writer",
-                List.of(String.valueOf(scopeId)));
+                List.of());
         }
 
         ScopeSetting setting = new ScopeSetting();
@@ -163,12 +167,7 @@ public class ScopeSettingService extends PlanningService {
         if (value == null || value <= 0) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                field.canonicalName() + " is one of the four cardinality numbers a scope "
-                    + "names when it is opened, and it is a positive whole number. They "
-                    + "carry no defaults on purpose: a number this service chose would be "
-                    + "a platform constant wearing a setting's clothes. A limit of zero "
-                    + "forbids what the setting exists to bound",
-                List.of(field.canonicalName()));
+                List.of(field.path()));
         }
         return value;
     }
@@ -227,10 +226,7 @@ public class ScopeSettingService extends PlanningService {
         if (number == null || number <= 0) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                field.canonicalName() + " is a positive whole number. A limit of zero "
-                    + "forbids what the setting exists to bound, and a negative one is "
-                    + "not a limit at all",
-                List.of(field.canonicalName()));
+                List.of(field.path()));
         }
         return number;
     }
@@ -249,7 +245,7 @@ public class ScopeSettingService extends PlanningService {
      * number the settings row holds (ADR-0042). The answer still names the
      * iteration by its identity; only the stored reference changed form.
      */
-    private Map<String, Object> projectOf(ScopeSetting setting, List<String> warnings) {
+    private Map<String, Object> projectOf(ScopeSetting setting, List<Notice> warnings) {
         Iteration current = setting.currentIterationNumber == null ? null
             : planning.iterationByNumber(setting.scopeId, setting.currentIterationNumber);
         return project(setting, current == null ? null : current.id, warnings);
@@ -266,7 +262,7 @@ public class ScopeSettingService extends PlanningService {
      * is a mark that can be carried backwards.
      */
     static Map<String, Object> project(ScopeSetting setting, UUID currentIterationId,
-            List<String> warnings) {
+            List<Notice> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.SCOPE.canonicalName(), setting.scopeId);
         fields.put(Field.CURRENT_ITERATION.canonicalName(), currentIterationId);
