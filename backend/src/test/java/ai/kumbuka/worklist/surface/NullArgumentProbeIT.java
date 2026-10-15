@@ -145,16 +145,16 @@ class NullArgumentProbeIT {
 
     @Test
     void every_rest_body_answers_a_null_argument_as_the_argument_left_out() {
-        String items = "/api/" + SCOPE + "/" + Selector.ITEM;
+        String itemPath = "/api/" + SCOPE + "/" + Selector.ITEM;
         Map<String, Map<String, Object>> bodies = new LinkedHashMap<>();
-        bodies.put(items + "/1:withdraw", args("status", "done"));
-        bodies.put(items + "/1:claim", args("duration_seconds", 0));
-        bodies.put(items + "/1:release", args("receipt", "nobody-minted-this"));
-        bodies.put(items + "/1:relate", args("to_item", "worklist://" + SCOPE + "/item/2",
+        bodies.put(itemPath + "/1:withdraw", args("status", "done"));
+        bodies.put(itemPath + "/1:claim", args("duration_seconds", 0));
+        bodies.put(itemPath + "/1:release", args("receipt", "nobody-minted-this"));
+        bodies.put(itemPath + "/1:relate", args("to_item", "worklist://" + SCOPE + "/item/2",
             "type", "blocks"));
-        bodies.put(items + "/1:unrelate", args("to_item", "worklist://" + SCOPE + "/item/2",
+        bodies.put(itemPath + "/1:unrelate", args("to_item", "worklist://" + SCOPE + "/item/2",
             "type", "blocks"));
-        bodies.put(items + ":claim_next", args("duration_seconds", 0));
+        bodies.put(itemPath + ":claim_next", args("duration_seconds", 0));
         bodies.put("/api/" + SCOPE + "/iteration/1:close", args("produced", "a release"));
 
         SoftAssertions soft = new SoftAssertions();
@@ -174,9 +174,9 @@ class NullArgumentProbeIT {
                 .as("%s with every argument null answers as the absent body", path)
                 .isEqualTo(post(path, null));
         });
-        soft.assertThat(post(items, "null"))
+        soft.assertThat(post(itemPath, "null"))
             .as("a create whose body is null answers as one without a body")
-            .isEqualTo(post(items, null));
+            .isEqualTo(post(itemPath, null));
         soft.assertAll();
     }
 

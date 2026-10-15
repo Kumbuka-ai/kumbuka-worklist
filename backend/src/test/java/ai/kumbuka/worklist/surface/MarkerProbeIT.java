@@ -252,32 +252,32 @@ class MarkerProbeIT {
     @Test
     void no_rest_call_repeats_a_marked_value() {
         SoftAssertions soft = new SoftAssertions();
-        String items = "/api/" + SCOPE + "/" + Selector.ITEM;
+        String itemPath = "/api/" + SCOPE + "/" + Selector.ITEM;
 
-        absent(soft, "a body that is no JSON", post(items, "{\"" + MARKER + "\": " + MARKER));
-        absent(soft, "a field name", post(items, Map.of("title", "x", MARKER, MARKER)));
-        absent(soft, "a status", post(items, Map.of("title", "x", "status", MARKER)));
-        absent(soft, "a collection verb", post(items + ":" + MARKER, Map.of()));
-        absent(soft, "an item verb", post(items + "/1:" + MARKER, Map.of()));
-        absent(soft, "a body argument", post(items + "/1:withdraw", Map.of(MARKER, MARKER)));
-        absent(soft, "a lease", post(items + "/1:claim", Map.of("duration_seconds", MARKER)));
-        absent(soft, "a receipt", post(items + "/1:release", Map.of("receipt", MARKER)));
-        absent(soft, "an edge", post(items + "/1:relate", Map.of("to_item", MARKER,
+        absent(soft, "a body that is no JSON", post(itemPath, "{\"" + MARKER + "\": " + MARKER));
+        absent(soft, "a field name", post(itemPath, Map.of("title", "x", MARKER, MARKER)));
+        absent(soft, "a status", post(itemPath, Map.of("title", "x", "status", MARKER)));
+        absent(soft, "a collection verb", post(itemPath + ":" + MARKER, Map.of()));
+        absent(soft, "an item verb", post(itemPath + "/1:" + MARKER, Map.of()));
+        absent(soft, "a body argument", post(itemPath + "/1:withdraw", Map.of(MARKER, MARKER)));
+        absent(soft, "a lease", post(itemPath + "/1:claim", Map.of("duration_seconds", MARKER)));
+        absent(soft, "a receipt", post(itemPath + "/1:release", Map.of("receipt", MARKER)));
+        absent(soft, "an edge", post(itemPath + "/1:relate", Map.of("to_item", MARKER,
             "type", MARKER)));
         absent(soft, "a stale token", given().contentType(ContentType.JSON)
             .header("If-Match", "\"" + MARKER + "\"").body(Map.of("title", "y"))
-            .when().patch(items + "/1").then().extract().asString());
+            .when().patch(itemPath + "/1").then().extract().asString());
         absent(soft, "a query parameter name", given().queryParam(MARKER, MARKER)
-            .when().get(items).then().extract().asString());
+            .when().get(itemPath).then().extract().asString());
         absent(soft, "a filter name", given().queryParam("filter." + MARKER, MARKER)
-            .when().get(items).then().extract().asString());
+            .when().get(itemPath).then().extract().asString());
         absent(soft, "a surface header", given().header("Kumbuka-Surface", MARKER)
-            .when().get(items).then().extract().asString());
+            .when().get(itemPath).then().extract().asString());
         absent(soft, "a scope", given().when().get("/api/" + MARKER + "/item/1")
             .then().extract().asString());
         absent(soft, "a view", given().when().get("/api/" + SCOPE + "/" + MARKER + "/1")
             .then().extract().asString());
-        absent(soft, "a number", given().when().get(items + "/" + MARKER)
+        absent(soft, "a number", given().when().get(itemPath + "/" + MARKER)
             .then().extract().asString());
 
         soft.assertAll();
@@ -358,9 +358,9 @@ class MarkerProbeIT {
     }
 
     private static String post(String path, Object body) {
-        var request = given().contentType(ContentType.JSON);
-        request = body instanceof String text ? request.body(text) : request.body(body);
-        return request.when().post(path).then().extract().asString();
+        Object sent = body instanceof String text ? text : body;
+        return given().contentType(ContentType.JSON).body(sent)
+            .when().post(path).then().extract().asString();
     }
 
     // ======================================================================

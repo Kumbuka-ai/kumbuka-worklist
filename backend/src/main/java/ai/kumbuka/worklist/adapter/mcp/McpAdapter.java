@@ -106,8 +106,6 @@ public class McpAdapter {
     private static final String ARG_SORT = QuerySpec.SORT_ARGUMENT;
     private static final String ARG_DIRECTION = QuerySpec.DIRECTION_ARGUMENT;
 
-    /** Every argument {@code query} takes; anything else is refused by name. */
-
     /** JSON-RPC's own codes. Protocol faults only — a refused verb is not one. */
     private static final int METHOD_NOT_FOUND = -32601;
 
@@ -122,7 +120,7 @@ public class McpAdapter {
     @POST
     public Response rpc(Map<String, Object> request) {
         if (request == null || !JSONRPC.equals(request.get(KEY_JSONRPC))) {
-            return error(null, INVALID_PARAMS, RefusalCatalogue.protocol("protocolEnvelope"));
+            return error(null, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolEnvelope"));
         }
 
         Object id = request.get(KEY_ID);
@@ -140,7 +138,7 @@ public class McpAdapter {
             case "tools/call" -> result(id, call(arguments(request, "params")));
             // The method that arrived is the caller's and never comes back
             // (DEC-0043 R19); the answer names the methods this server speaks.
-            default -> error(id, METHOD_NOT_FOUND, RefusalCatalogue.protocol("protocolMethod"));
+            default -> error(id, METHOD_NOT_FOUND, RefusalCatalogue.protocolText("protocolMethod"));
         };
     }
 
@@ -493,9 +491,10 @@ public class McpAdapter {
      */
     private void visibleFirst(Map<String, Object> in, String refused) {
         Object address = ARG_ADDRESS.equals(refused) ? null : in.get(ARG_ADDRESS);
-        Object scope = address instanceof String text && !text.isBlank()
-            ? AddressParser.uri(text).scope()
-            : ARG_SCOPE.equals(refused) ? null : in.get(ARG_SCOPE);
+        Object scope = ARG_SCOPE.equals(refused) ? null : in.get(ARG_SCOPE);
+        if (address instanceof String text && !text.isBlank()) {
+            scope = AddressParser.uri(text).scope();
+        }
         if (scope instanceof String named && !named.isBlank()) {
             verbs.requireVisible(caller.subject(), named);
         }

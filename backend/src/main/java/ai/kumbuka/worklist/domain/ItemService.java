@@ -800,7 +800,7 @@ public class ItemService {
         if (raw instanceof Number given) {
             long value = given.longValue();
             if (value <= 0) {
-                throw milestoneFormRefusal(field, raw);
+                throw milestoneFormRefusal(field);
             }
             return value;
         }
@@ -812,15 +812,15 @@ public class ItemService {
         try {
             long value = Long.parseLong(rendered);
             if (value <= 0) {
-                throw milestoneFormRefusal(field, rendered);
+                throw milestoneFormRefusal(field);
             }
             return value;
         } catch (NumberFormatException notANumber) {
-            throw milestoneFormRefusal(field, rendered);
+            throw milestoneFormRefusal(field);
         }
     }
 
-    private static WorklistException milestoneFormRefusal(Field field, Object raw) {
+    private static WorklistException milestoneFormRefusal(Field field) {
         return new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
             List.of(field.path()));
@@ -1043,7 +1043,7 @@ public class ItemService {
      * writing several attributes at once can tell which one it was.
      */
     private List<String> textListValue(AttributeDefinition definition, Object given) {
-        List<?> elements = asArrayOrRefuse(definition, given);
+        List<?> elements = asArrayOrRefuse( given);
 
         if (elements.size() > 50) {
             throw new WorklistException(
@@ -1053,13 +1053,13 @@ public class ItemService {
 
         List<String> out = new ArrayList<>(elements.size());
         for (Object element : elements) {
-            out.add(validTextListEntry(definition, element));
+            out.add(validTextListEntry( element));
         }
         return List.copyOf(out);
     }
 
     /** The caller's value as a list, or a refusal naming the attribute key. */
-    private static List<?> asArrayOrRefuse(AttributeDefinition definition, Object given) {
+    private static List<?> asArrayOrRefuse( Object given) {
         if (given instanceof java.util.Collection<?> collection) {
             return new ArrayList<>(collection);
         }
@@ -1075,7 +1075,7 @@ public class ItemService {
      * One text_list entry: a string, not blank after trimming, at most 1500
      * characters. Returned as-is, so order, spacing and duplicates round-trip.
      */
-    private static String validTextListEntry(AttributeDefinition definition, Object element) {
+    private static String validTextListEntry( Object element) {
         if (!(element instanceof CharSequence)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,

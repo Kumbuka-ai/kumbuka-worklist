@@ -8,7 +8,6 @@
 package ai.kumbuka.worklist.domain;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -200,13 +199,6 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
                 List.of(SORT_ARGUMENT)));
     }
 
-    private static String sortsOf(String view, Set<SortKey> offered) {
-        return String.join(", ", Arrays.stream(SortKey.values())
-            .filter(offered::contains)
-            .filter(key -> key.declaredOn(view))
-            .map(key -> "'" + key.wireName() + "'")
-            .toList());
-    }
 
     private static SortKey.Direction directionOf(Object raw) {
         if (raw == null) {

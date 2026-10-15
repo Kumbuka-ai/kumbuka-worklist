@@ -13,7 +13,6 @@ import io.quarkus.qute.i18n.MessageBundles;
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -49,13 +48,8 @@ public final class NoticeTexts {
 
     /** The text of one notice. */
     public static String text(Notice notice) {
-        String[] words = notice.name().toLowerCase(Locale.ROOT).split("_");
-        StringBuilder name = new StringBuilder(words[0]);
-        for (int i = 1; i < words.length; i++) {
-            name.append(Character.toUpperCase(words[i].charAt(0))).append(words[i].substring(1));
-        }
         try {
-            return (String) Notices.class.getMethod(name.toString())
+            return (String) Notices.class.getMethod(RefusalCatalogue.lowerCamel(notice.name()))
                 .invoke(MessageBundles.get(Notices.class));
         } catch (NoSuchMethodException | IllegalAccessException
                  | InvocationTargetException unworded) {

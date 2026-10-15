@@ -42,10 +42,10 @@ public enum SortKey {
     RANK("rank");
 
     /** The sorts every transport offers. */
-    public static final Set<SortKey> STANDARD = EnumSet.of(ID, CREATED_AT);
+    public static final Set<SortKey> STANDARD = Set.copyOf(EnumSet.of(ID, CREATED_AT));
 
     /** Every sort, for the transport that offers declared fields too. */
-    public static final Set<SortKey> ALL = EnumSet.allOf(SortKey.class);
+    public static final Set<SortKey> ALL = Set.copyOf(EnumSet.allOf(SortKey.class));
 
     private final String wireName;
 

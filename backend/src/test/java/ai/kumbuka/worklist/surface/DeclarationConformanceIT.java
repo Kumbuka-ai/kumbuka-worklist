@@ -77,33 +77,33 @@ class DeclarationConformanceIT {
         Map<String, DeclarationSpecification.Verb> expected =
             DeclarationSpecification.byIdentity();
         for (Map<String, Object> verb : verbs) {
-            String identity = String.valueOf(verb.get("identity"));
-            DeclarationSpecification.Verb spec = expected.get(identity);
+            String id = String.valueOf(verb.get("identity"));
+            DeclarationSpecification.Verb spec = expected.get(id);
             if (spec == null) {
                 continue;
             }
-            soft.assertThat(verb.get("effect_class")).as("%s effect class", identity)
+            soft.assertThat(verb.get("effect_class")).as("%s effect class", id)
                 .isEqualTo(spec.effectClass());
             soft.assertThat(DeclarationSpecification.EFFECT_CLASSES)
-                .as("%s: the effect class is one the router knows", identity)
+                .as("%s: the effect class is one the router knows", id)
                 .contains(String.valueOf(verb.get("effect_class")));
-            soft.assertThat(verb.get("answer")).as("%s answer", identity)
+            soft.assertThat(verb.get("answer")).as("%s answer", id)
                 .isEqualTo(spec.answer());
             soft.assertThat(String.valueOf(verb.get("description")))
-                .as("%s carries its description", identity).isNotBlank();
+                .as("%s carries its description", id).isNotBlank();
             soft.assertThat(new LinkedHashSet<>((List<String>) verb.get("reasons")))
-                .as("%s reasons", identity)
+                .as("%s reasons", id)
                 .isEqualTo(new LinkedHashSet<>(spec.reasons()));
 
             List<Map<String, Object>> args = (List<Map<String, Object>>) verb.get("arguments");
             soft.assertThat(args.stream().map(a -> a.get("name")).toList())
-                .as("%s argument names, in order", identity)
+                .as("%s argument names, in order", id)
                 .containsExactlyElementsOf(spec.args().stream()
                     .map(DeclarationSpecification.Arg::name).toList());
             for (int i = 0; i < Math.min(args.size(), spec.args().size()); i++) {
                 Map<String, Object> arg = args.get(i);
                 DeclarationSpecification.Arg want = spec.args().get(i);
-                String where = identity + "." + want.name();
+                String where = id + "." + want.name();
                 soft.assertThat(arg.get("type")).as("%s type", where).isEqualTo(want.type());
                 soft.assertThat(arg.get("required")).as("%s required", where)
                     .isEqualTo(want.required());

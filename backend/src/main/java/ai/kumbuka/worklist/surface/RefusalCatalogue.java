@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The catalogue of refusals: every {@link RefusalCode} with its message and its
@@ -71,14 +72,14 @@ public final class RefusalCatalogue {
     }
 
     /** A protocol error, message and remedy joined. */
-    public static String protocol(String name) {
+    public static String protocolText(String name) {
         return render(RefusalMessages.class, name, Context.NONE) + " "
             + render(RefusalRemedies.class, name, Context.NONE);
     }
 
     /** The bundle method name of a code: {@code NOT_FOUND} is {@code notFound}. */
     public static String methodName(RefusalCode code) {
-        return camel(code.name());
+        return lowerCamel(code.name());
     }
 
     /**
@@ -91,37 +92,33 @@ public final class RefusalCatalogue {
      * @throws IllegalStateException naming the codes and methods that differ
      */
     public static void requireDeclared(Class<? extends Enum<?>> codes) {
-        Set<String> declared = new LinkedHashSet<>();
-        for (Enum<?> code : codes.getEnumConstants()) {
-            declared.add(camel(code.name()));
-        }
+        Set<String> declared = Arrays.stream(codes.getEnumConstants())
+            .map(code -> lowerCamel(code.name()))
+            .collect(Collectors.toCollection(LinkedHashSet::new));
         List<String> faults = new ArrayList<>();
-        for (Class<?> bundle : List.of(RefusalMessages.class, RefusalRemedies.class)) {
-            Set<String> worded = new LinkedHashSet<>();
-            for (Method method : bundle.getMethods()) {
-                if (!method.getName().startsWith(PROTOCOL)) {
-                    worded.add(method.getName());
-                }
-            }
-            for (String code : declared) {
-                if (!worded.contains(code)) {
-                    faults.add("missing:" + bundle.getSimpleName() + "." + code);
-                }
-            }
-            for (String method : worded) {
-                if (!declared.contains(method)) {
-                    faults.add("undeclared:" + bundle.getSimpleName() + "." + method);
-                }
-            }
-        }
+        faults.addAll(faults(RefusalMessages.class, declared));
+        faults.addAll(faults(RefusalRemedies.class, declared));
         if (!faults.isEmpty()) {
             throw new IllegalStateException("the refusal catalogue is incomplete: " + faults);
         }
     }
 
+    /** The codes one bundle lacks and the methods it words that no code declares. */
+    private static List<String> faults(Class<?> bundle, Set<String> declared) {
+        Set<String> worded = Arrays.stream(bundle.getMethods())
+            .map(Method::getName)
+            .filter(name -> !name.startsWith(PROTOCOL))
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<String> faults = new ArrayList<>();
+        declared.stream().filter(code -> !worded.contains(code))
+            .forEach(code -> faults.add("missing:" + bundle.getSimpleName() + "." + code));
+        worded.stream().filter(method -> !declared.contains(method))
+            .forEach(method -> faults.add("undeclared:" + bundle.getSimpleName() + "." + method));
+        return faults;
+    }
 
     /** A constant's name in lower camel case: {@code NOT_FOUND} is {@code notFound}. */
-    private static String camel(String constant) {
+    public static String lowerCamel(String constant) {
         String[] words = constant.toLowerCase(Locale.ROOT).split("_");
         StringBuilder name = new StringBuilder(words[0]);
         for (int i = 1; i < words.length; i++) {

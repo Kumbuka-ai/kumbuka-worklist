@@ -12,7 +12,9 @@ import jakarta.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
 
@@ -239,12 +241,6 @@ public abstract class PlanningService {
 
     /** The warnings of one write, as the answer carries them. Empty is the normal case. */
     protected static List<Notice> warnings(Notice... produced) {
-        List<Notice> collected = new ArrayList<>();
-        for (Notice warning : produced) {
-            if (warning != null) {
-                collected.add(warning);
-            }
-        }
-        return List.copyOf(collected);
+        return Arrays.stream(produced).filter(Objects::nonNull).toList();
     }
 }

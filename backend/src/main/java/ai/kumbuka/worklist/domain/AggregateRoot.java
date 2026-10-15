@@ -13,7 +13,6 @@ import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -116,9 +115,6 @@ public abstract class AggregateRoot extends TenantScoped {
         if (presented != null && conflictToken.equals(String.valueOf(presented))) {
             return;
         }
-        throw new WorklistException(
-            WorklistException.Reason.CONFLICT,
-            List.of(Field.CONFLICT_TOKEN.canonicalName()))
-            .withCurrentToken(conflictToken);
+        throw WorklistException.conflict(conflictToken);
     }
 }

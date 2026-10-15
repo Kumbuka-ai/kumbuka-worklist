@@ -218,7 +218,7 @@ public class WorkstreamService {
             String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        refuseIfDefault(workstream, "renamed");
+        refuseIfDefault(workstream);
         if (newToken == null || !Selector.TOKEN_PATTERN.matcher(newToken).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
@@ -253,7 +253,7 @@ public class WorkstreamService {
     public Workstream withdraw(UUID scopeId, UUID workstreamId, String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        refuseIfDefault(workstream, "withdrawn");
+        refuseIfDefault(workstream);
         if (Workstream.WITHDRAWN.equals(workstream.status)) {
             return workstream;
         }
@@ -292,7 +292,7 @@ public class WorkstreamService {
             List.of(Field.WORKSTREAM_ID.path()));
     }
 
-    private static void refuseIfDefault(Workstream workstream, String verb) {
+    private static void refuseIfDefault(Workstream workstream) {
         if (!workstream.isDefault) {
             return;
         }
@@ -315,8 +315,8 @@ public class WorkstreamService {
         fields.put("id", workstream.id);
         fields.put("scope", slugOf(workstream.scopeId));
         fields.put("number", workstream.number);
-        fields.put("token", workstream.token);
-        fields.put("description", workstream.description);
+        fields.put(TOKEN, workstream.token);
+        fields.put(DESCRIPTION, workstream.description);
         fields.put("status", workstream.status);
         fields.put("is_default", workstream.isDefault);
         fields.put("created_at", workstream.createdAt);

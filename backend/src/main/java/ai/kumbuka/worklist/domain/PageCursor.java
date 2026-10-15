@@ -103,11 +103,11 @@ public final class PageCursor {
         if (parts.length != FIELDS || !VERSION.equals(parts[0])) {
             throw malformed();
         }
-        refuseForeign("scope", parts[1], fingerprint(scopeId.toString()));
-        refuseForeign("view", parts[2], view);
-        refuseForeign("filter", parts[3], fingerprint(filters));
-        refuseForeign("sort", parts[4], sort.wireName());
-        refuseForeign("direction", parts[5], direction.wireName());
+        refuseForeign(parts[1], fingerprint(scopeId.toString()));
+        refuseForeign(parts[2], view);
+        refuseForeign(parts[3], fingerprint(filters));
+        refuseForeign(parts[4], sort.wireName());
+        refuseForeign(parts[5], direction.wireName());
         return position(sort, parts[6], parts[7]).orElseThrow(PageCursor::malformed);
     }
 
@@ -128,7 +128,7 @@ public final class PageCursor {
         }
     }
 
-    private static void refuseForeign(String what, String carried, String asked) {
+    private static void refuseForeign(String carried, String asked) {
         if (!carried.equals(asked)) {
             throw new WorklistException(
                 WorklistException.Reason.CURSOR_FOREIGN,

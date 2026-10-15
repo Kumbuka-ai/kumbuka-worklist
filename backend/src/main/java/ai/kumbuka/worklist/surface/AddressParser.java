@@ -100,8 +100,6 @@ public final class AddressParser {
      */
     private static final Pattern NUMBER = Pattern.compile("[1-9]\\d{0,18}");
 
-    /** The platform's views, as a refusal names them. */
-    private static final String VIEW_LIST = String.join(", ", Selector.VIEWS);
 
     private AddressParser() {
     }
@@ -156,7 +154,7 @@ public final class AddressParser {
      *         arrived.
      */
     public static String scope(String raw) {
-        String candidate = requirePresent(raw, "scope");
+        String candidate = requirePresent(raw);
         if (!SCOPE.matcher(candidate).matches()) {
             throw malformed();
         }
@@ -171,7 +169,7 @@ public final class AddressParser {
      * perfectly good word for something this service does not hold.
      */
     public static String view(String raw) {
-        String candidate = requirePresent(raw, "selector");
+        String candidate = requirePresent(raw);
         if (!Selector.TOKEN_PATTERN.matcher(candidate).matches()) {
             throw malformed();
         }
@@ -191,7 +189,7 @@ public final class AddressParser {
      */
     public static Target target(String rawView, String rawId) {
         String view = view(rawView);
-        String candidate = requirePresent(rawId, "id");
+        String candidate = requirePresent(rawId);
 
         if (CURRENT.equals(candidate)) {
             if (!Selector.ITERATION.equals(view)) {
@@ -227,7 +225,7 @@ public final class AddressParser {
             throw malformed();
         }
 
-        String iteration = requirePresent(rawIteration, "id");
+        String iteration = requirePresent(rawIteration);
         if (CURRENT.equals(iteration)) {
             throw malformed();
         }
@@ -252,7 +250,7 @@ public final class AddressParser {
      * PARTS are occupied and never by counting separators.
      */
     public static Parts uri(String raw) {
-        String candidate = requirePresent(raw, "address");
+        String candidate = requirePresent(raw);
         String prefix = SCHEME + "://";
 
         if (!candidate.startsWith(prefix)) {
@@ -290,14 +288,14 @@ public final class AddressParser {
      * catch block of a method that is supposed to decide it.
      */
     private static long number(String raw, String part) {
-        String candidate = requirePresent(raw, part);
+        String candidate = requirePresent(raw);
         if (!NUMBER.matcher(candidate).matches()) {
             throw malformed();
         }
         return Long.parseLong(candidate);
     }
 
-    private static String requirePresent(String raw, String part) {
+    private static String requirePresent(String raw) {
         if (raw == null || raw.isBlank()) {
             throw malformed();
         }

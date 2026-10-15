@@ -456,7 +456,7 @@ public class WorklistException extends RuntimeException {
     private final transient Reason reason;
     private final transient List<String> offenders;
     private final transient List<String> accepts;
-    private transient String currentToken;
+    private final transient String currentToken;
 
     public WorklistException(Reason reason) {
         this(reason, List.of());
@@ -473,10 +473,16 @@ public class WorklistException extends RuntimeException {
      *                  answers with (DEC-0043 R19)
      */
     public WorklistException(Reason reason, List<String> offenders, List<String> accepts) {
+        this(reason, offenders, accepts, null);
+    }
+
+    private WorklistException(Reason reason, List<String> offenders, List<String> accepts,
+                              String currentToken) {
         super(reason.name());
         this.reason = reason;
         this.offenders = List.copyOf(offenders);
         this.accepts = List.copyOf(accepts);
+        this.currentToken = currentToken;
     }
 
     public Reason reason() {
@@ -505,10 +511,10 @@ public class WorklistException extends RuntimeException {
         return currentToken;
     }
 
-    /** This refusal, carrying the object's current conflict token. */
-    public WorklistException withCurrentToken(String token) {
-        this.currentToken = token;
-        return this;
+    /** A {@code CONFLICT} on {@code conflict_token}, carrying the object's current token. */
+    public static WorklistException conflict(String currentToken) {
+        return new WorklistException(Reason.CONFLICT, List.of("conflict_token"), List.of(),
+            currentToken);
     }
 
     /** The declared names a refusal of an undeclared name answers with. */

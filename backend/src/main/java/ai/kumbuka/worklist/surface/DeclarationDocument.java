@@ -16,7 +16,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +38,9 @@ public final class DeclarationDocument {
 
     /** The member the version travels under. */
     public static final String VERSION = "version";
+
+    /** The member every text of the declaration travels under. */
+    private static final String DESCRIPTION = "description";
 
     /** The scheme this service declares the verbs of. */
     public static final String SCHEME = "worklist";
@@ -65,24 +68,14 @@ public final class DeclarationDocument {
     static Map<String, Object> content(ToolDescriptions tools, ArgumentDescriptions arguments,
                                        ValueDescriptions values) {
         Map<String, Object> content = new LinkedHashMap<>();
-        List<Map<String, Object>> verbs = new ArrayList<>();
-        for (SurfaceDeclaration.Verb verb : SurfaceDeclaration.verbs()) {
-            verbs.add(verb(verb, tools, arguments, values));
-        }
-        content.put("verbs", verbs);
-        List<Map<String, Object>> reasons = new ArrayList<>();
+        content.put("verbs", SurfaceDeclaration.verbs().stream()
+            .map(verb -> verb(verb, tools, arguments, values))
+            .toList());
         Properties messages = patterns("refusals");
         Properties remedies = patterns("remedies");
-        for (RefusalCode code : RefusalCode.values()) {
-            String name = RefusalCatalogue.methodName(code);
-            Map<String, Object> reason = new LinkedHashMap<>();
-            reason.put("code", code.name());
-            reason.put("status", code.status());
-            reason.put("message", messages.getProperty(name));
-            reason.put("remedy", remedies.getProperty(name));
-            reasons.add(reason);
-        }
-        content.put("reasons", reasons);
+        content.put("reasons", Arrays.stream(RefusalCode.values())
+            .map(code -> reason(code, messages, remedies))
+            .toList());
         return content;
     }
 
@@ -105,6 +98,17 @@ public final class DeclarationDocument {
         return patterns;
     }
 
+    private static Map<String, Object> reason(RefusalCode code, Properties messages,
+                                              Properties remedies) {
+        String name = RefusalCatalogue.methodName(code);
+        Map<String, Object> reason = new LinkedHashMap<>();
+        reason.put("code", code.name());
+        reason.put("status", code.status());
+        reason.put("message", messages.getProperty(name));
+        reason.put("remedy", remedies.getProperty(name));
+        return reason;
+    }
+
     private static Map<String, Object> verb(SurfaceDeclaration.Verb verb, ToolDescriptions tools,
                                             ArgumentDescriptions arguments,
                                             ValueDescriptions values) {
@@ -112,27 +116,29 @@ public final class DeclarationDocument {
         declared.put("identity", SCHEME + "_" + verb.name().name());
         declared.put("verb", verb.name().name());
         declared.put("effect_class", verb.effectClass().name());
-        declared.put("description", verb.description().apply(tools));
-        List<Map<String, Object>> args = new ArrayList<>();
-        for (SurfaceDeclaration.Argument argument : verb.arguments()) {
-            Map<String, Object> arg = new LinkedHashMap<>();
-            arg.put("name", argument.name().name());
-            arg.put("type", argument.type().json());
-            arg.put("required", argument.required());
-            arg.put("default", argument.defaultValue());
-            List<Map<String, Object>> admitted = new ArrayList<>();
-            for (SurfaceDeclaration.Value value : argument.values()) {
-                admitted.add(Map.of("value", value.name(),
-                    "description", value.description().apply(values)));
-            }
-            arg.put("values", admitted);
-            arg.put("description", argument.description().apply(arguments));
-            args.add(arg);
-        }
-        declared.put("arguments", args);
+        declared.put(DESCRIPTION, verb.description().apply(tools));
+        declared.put("arguments", verb.arguments().stream()
+            .map(argument -> argument(argument, arguments, values))
+            .toList());
         declared.put("answer", verb.answer().name());
         declared.put("reasons", verb.reasons().stream().map(RefusalCode::name).toList());
         return declared;
+    }
+
+    private static Map<String, Object> argument(SurfaceDeclaration.Argument argument,
+                                                ArgumentDescriptions arguments,
+                                                ValueDescriptions values) {
+        Map<String, Object> arg = new LinkedHashMap<>();
+        arg.put("name", argument.name().name());
+        arg.put("type", argument.type().json());
+        arg.put("required", argument.required());
+        arg.put("default", argument.defaultValue());
+        arg.put("values", argument.values().stream()
+            .map(value -> Map.<String, Object>of("value", value.name(),
+                DESCRIPTION, value.description().apply(values)))
+            .toList());
+        arg.put(DESCRIPTION, argument.description().apply(arguments));
+        return arg;
     }
 
     /**
@@ -156,37 +162,45 @@ public final class DeclarationDocument {
         return out.toString();
     }
 
-    @SuppressWarnings("unchecked")
     private static void write(StringBuilder out, Object value) {
         if (value == null) {
             out.append("null");
         } else if (value instanceof Map<?, ?> map) {
-            out.append('{');
-            boolean first = true;
-            for (Map.Entry<String, Object> e : new TreeMap<>((Map<String, Object>) map).entrySet()) {
-                if (!first) {
-                    out.append(',');
-                }
-                first = false;
-                string(out, e.getKey());
-                out.append(':');
-                write(out, e.getValue());
-            }
-            out.append('}');
+            writeObject(out, map);
         } else if (value instanceof List<?> list) {
-            out.append('[');
-            for (int i = 0; i < list.size(); i++) {
-                if (i > 0) {
-                    out.append(',');
-                }
-                write(out, list.get(i));
-            }
-            out.append(']');
+            writeArray(out, list);
         } else if (value instanceof Number || value instanceof Boolean) {
             out.append(value);
         } else {
             string(out, value.toString());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void writeObject(StringBuilder out, Map<?, ?> map) {
+        out.append('{');
+        boolean first = true;
+        for (Map.Entry<String, Object> e : new TreeMap<>((Map<String, Object>) map).entrySet()) {
+            if (!first) {
+                out.append(',');
+            }
+            first = false;
+            string(out, e.getKey());
+            out.append(':');
+            write(out, e.getValue());
+        }
+        out.append('}');
+    }
+
+    private static void writeArray(StringBuilder out, List<?> list) {
+        out.append('[');
+        for (int i = 0; i < list.size(); i++) {
+            if (i > 0) {
+                out.append(',');
+            }
+            write(out, list.get(i));
+        }
+        out.append(']');
     }
 
     private static void string(StringBuilder out, String text) {

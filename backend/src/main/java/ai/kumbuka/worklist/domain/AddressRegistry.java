@@ -89,7 +89,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.ITEM);
         Item item = items.byAddress(scopeId, number);
         if (item == null) {
-            throw absent(WorklistException.Reason.ITEM_UNKNOWN, Selector.ITEM, number, scopeId);
+            throw absent(WorklistException.Reason.ITEM_UNKNOWN);
         }
         return item.id;
     }
@@ -100,8 +100,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.ITERATION);
         Iteration iteration = planning.iterationByNumber(scopeId, number);
         if (iteration == null) {
-            throw absent(WorklistException.Reason.ITERATION_UNKNOWN,
-                Selector.ITERATION, number, scopeId);
+            throw absent(WorklistException.Reason.ITERATION_UNKNOWN);
         }
         return iteration.id;
     }
@@ -112,8 +111,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.MILESTONE);
         Milestone milestone = planning.milestoneByNumber(scopeId, number);
         if (milestone == null) {
-            throw absent(WorklistException.Reason.MILESTONE_UNKNOWN,
-                Selector.MILESTONE, number, scopeId);
+            throw absent(WorklistException.Reason.MILESTONE_UNKNOWN);
         }
         return milestone.id;
     }
@@ -130,8 +128,7 @@ public class AddressRegistry {
         selectors.require(scopeId, Selector.WORKSTREAM);
         Workstream workstream = workstreams.findByNumber(scopeId, number);
         if (workstream == null) {
-            throw absent(WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                Selector.WORKSTREAM, number, scopeId);
+            throw absent(WorklistException.Reason.WORKSTREAM_UNKNOWN);
         }
         return workstream.id;
     }
@@ -165,8 +162,7 @@ public class AddressRegistry {
         return current;
     }
 
-    private static WorklistException absent(WorklistException.Reason reason, String view,
-            long number, UUID scopeId) {
+    private static WorklistException absent(WorklistException.Reason reason) {
         return new WorklistException(reason,
             List.of());
     }

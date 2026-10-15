@@ -10,7 +10,6 @@ package ai.kumbuka.worklist.adapter.rest;
 import ai.kumbuka.worklist.surface.SurfaceDeclaration;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -34,8 +33,9 @@ class DeclarationGuardTest {
 
     @Test
     void the_check_refuses_a_verb_whose_declaration_is_missing() {
-        List<String> withoutClaim = new ArrayList<>(declared());
-        withoutClaim.remove("claim");
+        List<String> withoutClaim = declared().stream()
+            .filter(verb -> !verb.equals("claim"))
+            .toList();
         assertThatThrownBy(() -> DeclarationGuard.requireDeclared(DeclarationGuard.served(),
                 withoutClaim))
             .as("RED STATE, observed: a served verb with its declaration removed must stop "
