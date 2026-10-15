@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.domain.WorklistException;
@@ -5,6 +12,7 @@ import ai.kumbuka.worklist.surface.SurfaceException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -109,7 +117,8 @@ public record RefusalPayload(String reason, String message, Object data) {
             // existence the answer is refusing to confirm.
             return new RefusalPayload(NOT_FOUND, NOT_FOUND_MESSAGE, null);
         }
-        return new RefusalPayload(e.reason().name(), e.getMessage(), dataOf(e.offenders()));
+        return new RefusalPayload(e.reason().name(), e.getMessage(),
+            dataOf(e.offenders(), e.accepts()));
     }
 
     /**
@@ -120,8 +129,29 @@ public record RefusalPayload(String reason, String message, Object data) {
      * with it. If one ever does, it goes under {@code data} like every other.
      */
     public static RefusalPayload of(SurfaceException e) {
-        return new RefusalPayload(e.reason().name(), e.getMessage(), null);
+        return new RefusalPayload(e.reason().name(), e.getMessage(),
+            dataOf(e.offenders(), e.accepts()));
     }
+
+    /** The member a reference to an unexpected failure travels under, inside {@code data}. */
+    public static final String REFERENCE = "reference";
+
+    /**
+     * An unanticipated failure (DEC-0043 R13): it names no rule, says that it
+     * is a defect, and carries a reference the log line shares. Nothing the
+     * failure itself said reaches the caller -- an exception's message is
+     * written by whatever threw it and can carry anything.
+     */
+    public static RefusalPayload unexpected(String reference) {
+        return new RefusalPayload(SurfaceException.Reason.UNEXPECTED_FAILURE.name(),
+            UNEXPECTED_FAILURE_MESSAGE, Map.of(REFERENCE, reference));
+    }
+
+    /** The one message of an unanticipated failure. */
+    public static final String UNEXPECTED_FAILURE_MESSAGE =
+        "the call failed inside the service. This is a defect of the service and "
+            + "no rule of the call, and nothing was changed. Report the reference "
+            + "under data.reference.";
 
     /**
      * The offenders, under {@code data} — never beside {@code reason}.
@@ -132,7 +162,17 @@ public record RefusalPayload(String reason, String message, Object data) {
      * are none: an empty list is a member, and a caller reading the key set
      * would see a difference where the node says there is none.
      */
-    private static Object dataOf(List<String> offenders) {
-        return offenders.isEmpty() ? null : Map.of(OFFENDERS, offenders);
+    private static Object dataOf(List<String> offenders, List<String> accepts) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (!offenders.isEmpty()) {
+            data.put(OFFENDERS, offenders);
+        }
+        if (!accepts.isEmpty()) {
+            data.put(ACCEPTS, accepts);
+        }
+        return data.isEmpty() ? null : data;
     }
+
+    /** The member the declared names travel under, inside {@code data} (DEC-0042). */
+    public static final String ACCEPTS = "accepts";
 }

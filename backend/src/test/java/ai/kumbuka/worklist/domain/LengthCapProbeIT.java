@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -74,8 +81,9 @@ class LengthCapProbeIT {
             Field.DESCRIPTION.canonicalName(), "description")));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
-            .as("the message names the field, the cap and the actual length")
-            .contains(Field.TITLE.canonicalName(), "200", "201");
+            .as("the message names the cap; the field travels under offenders, and the length that arrived is the caller's and stays out")
+            .contains("200").doesNotContain("201");
+        assertThat(refusal.offenders()).containsExactly(Field.TITLE.path());
     }
 
     @Test
@@ -99,7 +107,8 @@ class LengthCapProbeIT {
             Field.TITLE.canonicalName(), tooLong,
             Field.KIND.canonicalName(), Milestone.GOAL)));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.getMessage()).contains(Field.TITLE.canonicalName(), "200", "201");
+        assertThat(refusal.getMessage()).contains("200").doesNotContain("201");
+        assertThat(refusal.offenders()).containsExactly(Field.TITLE.path());
     }
 
     // ==================================================================
@@ -115,7 +124,8 @@ class LengthCapProbeIT {
             Field.MISSION.canonicalName(), tooLong)));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
-            .contains(Field.MISSION.canonicalName(), "1500", "1501");
+            .contains("1500").doesNotContain("1501");
+        assertThat(refusal.offenders()).containsExactly(Field.MISSION.path());
     }
 
     // ==================================================================

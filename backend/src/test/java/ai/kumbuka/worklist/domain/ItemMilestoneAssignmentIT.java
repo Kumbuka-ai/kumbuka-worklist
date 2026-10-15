@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -166,7 +173,7 @@ class ItemMilestoneAssignmentIT {
                 + "first, and the answer says so instead of letting the write through "
                 + "and inventing a target")
             .isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
-        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.path());
     }
 
     @Test
@@ -178,7 +185,7 @@ class ItemMilestoneAssignmentIT {
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
-        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.path());
     }
 
     @Test
@@ -194,7 +201,7 @@ class ItemMilestoneAssignmentIT {
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.path());
     }
 
     /**
@@ -220,13 +227,13 @@ class ItemMilestoneAssignmentIT {
             .as("zero is not a milestone number — the scope allocates from one, so "
                 + "zero cannot have been handed out")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(zeroNumber.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(zeroNumber.offenders()).containsExactly(Field.MILESTONE_ID.path());
 
         WorklistException negativeNumber = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), -1L,
             Field.CONFLICT_TOKEN.canonicalName(), token)));
         assertThat(negativeNumber.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(negativeNumber.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(negativeNumber.offenders()).containsExactly(Field.MILESTONE_ID.path());
 
         WorklistException negativeString = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "-5",
@@ -236,7 +243,7 @@ class ItemMilestoneAssignmentIT {
                 + "to a non-positive number is the same refusal as the Number path, so "
                 + "the two shapes cannot answer the same question differently")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(negativeString.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(negativeString.offenders()).containsExactly(Field.MILESTONE_ID.path());
 
         WorklistException unparseable = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "abc",
@@ -246,7 +253,7 @@ class ItemMilestoneAssignmentIT {
                 + "the message names the field so a caller writing several at once knows "
                 + "which one was refused")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(unparseable.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(unparseable.offenders()).containsExactly(Field.MILESTONE_ID.path());
     }
 
     @Test
@@ -261,7 +268,7 @@ class ItemMilestoneAssignmentIT {
             .as("a value that is not a number is a form refusal — the wire form fixed "
                 + "in Sprint 180.4 is the milestone number the scope allocated")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.path());
 
         // A UUID is refused for the same reason: the platform's identity is
         // no longer part of the wire form.
@@ -269,7 +276,7 @@ class ItemMilestoneAssignmentIT {
             Field.MILESTONE_ID.canonicalName(), UUID.randomUUID().toString(),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
         assertThat(uuidShape.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(uuidShape.offenders()).containsExactly(Field.MILESTONE_ID.canonicalName());
+        assertThat(uuidShape.offenders()).containsExactly(Field.MILESTONE_ID.path());
     }
 
     // ==================================================================

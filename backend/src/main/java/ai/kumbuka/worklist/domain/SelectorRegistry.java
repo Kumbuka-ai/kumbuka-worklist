@@ -65,8 +65,8 @@ public class SelectorRegistry {
                 "a selector token is a leading lower-case letter followed by lower-case "
                     + "alphanumerics and interior hyphens. Upper case is refused rather "
                     + "than folded, because folding would make two strings resolve to one "
-                    + "selector. Refused: " + token,
-                List.of(String.valueOf(token)));
+                    + "selector",
+                List.of(SELECTOR_ARGUMENT));
         }
 
         // The token is well formed; whether it names a VIEW is the next
@@ -77,12 +77,12 @@ public class SelectorRegistry {
             throw new WorklistException(
                 WorklistException.Reason.VIEW_UNKNOWN,
                 "the selector is the view, and there are three: " + Selector.VIEWS
-                    + ". '" + token + "' is none of them. The families an item may belong "
+                    + ", and the token named is none of them. The families an item may belong "
                     + "to are a scope's own declared vocabulary and are no longer address "
                     + "spaces, so declaring one here would open a fourth view — and every "
                     + "address issued under it would name a kind of thing this service "
                     + "does not hold",
-                List.of(token));
+                List.of(SELECTOR_ARGUMENT));
         }
 
         Selector existing = find(scopeId, token);
@@ -184,10 +184,9 @@ public class SelectorRegistry {
         if (Selector.WITHDRAWN.equals(selector.status)) {
             throw new WorklistException(
                 WorklistException.Reason.SELECTOR_WITHDRAWN,
-                "selector " + selector.token + " is withdrawn in scope " + scopeId
-                    + ", so no further address is issued under it. What was already "
+                "the view addressed is withdrawn in this scope, so no further address is issued under it. What was already "
                     + "issued keeps resolving",
-                List.of(selector.token));
+                List.of(SELECTOR_ARGUMENT));
         }
 
         NumberSpace space = selectors.lockSpace(selector.pk);
@@ -198,10 +197,9 @@ public class SelectorRegistry {
             // silently accept the second case.
             throw new WorklistException(
                 WorklistException.Reason.SELECTOR_UNDECLARED,
-                "selector " + selector.token + " has no number space in scope " + scopeId
-                    + ". A declared selector always has one; this selector was not "
+                "the view addressed has no number space in this scope. A declared selector always has one; this selector was not "
                     + "declared through the declaring verb",
-                List.of(selector.token));
+                List.of(SELECTOR_ARGUMENT));
         }
 
         space.highWaterMark = space.highWaterMark + 1;
@@ -238,12 +236,10 @@ public class SelectorRegistry {
         if (mark < standing) {
             throw new WorklistException(
                 WorklistException.Reason.MARK_REGRESSION,
-                "the high-water mark of selector " + token + " in scope " + scopeId
-                    + " stands at " + standing + " and may not be set to " + mark
-                    + ". A mark is carried forward and never back: every number up to "
+                "the high-water mark named lies below the mark that stands. A mark is carried forward and never back: every number up to "
                     + "the mark has been handed out, and setting it lower hands the same "
                     + "numbers out a second time",
-                List.of(token));
+                List.of());
         }
 
         space.highWaterMark = mark;

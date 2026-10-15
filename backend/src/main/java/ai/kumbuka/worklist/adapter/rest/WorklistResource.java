@@ -13,6 +13,7 @@ import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.SurfaceException;
+import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -149,19 +150,24 @@ public class WorklistResource {
             // undeclared means complete address only, so a range capability never
             // comes into existence by omission.
             throw new SurfaceException(SurfaceException.Reason.WRITE_ON_TRUNCATED_ADDRESS,
-                "'" + at.verb() + "' does not act on a truncated address. The only "
+                "the verb named acts on a complete address and never on a truncated one. The only "
                     + "declarable set semantics is exactly one, which create has and "
                     + "advance has and no other verb of this scheme does.",
                 COLLECTION_ALLOW);
         }
 
         return switch (at.method()) {
-            case ADVANCE -> ok(scope, verbs.advance(caller.subject(), scope, at.address(),
-                unquote(ifMatch)));
+            case ADVANCE -> {
+                arguments(scope, body);
+                yield ok(scope, verbs.advance(caller.subject(), scope, at.address(),
+                    unquote(ifMatch)));
+            }
             case CLAIM_NEXT -> ok(scope, verbs.claimNext(caller.subject(), scope,
-                at.address(),
-                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
-            case VALIDATE -> ok(scope, verbs.validate(caller.subject(), scope, at.address()));
+                at.address(), lease(scope, arguments(scope, body, DURATION))));
+            case VALIDATE -> {
+                arguments(scope, body);
+                yield ok(scope, verbs.validate(caller.subject(), scope, at.address()));
+            }
             case DIGEST -> uncarried(scope, at.address(), null, at.verb());
             default -> throw new IllegalStateException(
                 "'" + at.verb() + "' is declared at collection depth and has no arm here");
@@ -274,9 +280,9 @@ public class WorklistResource {
                            @PathParam("selector") String selector,
                            @PathParam("id") String id,
                            @HeaderParam("If-Match") String ifMatch,
-                           Map<String, Object> body) {
+                           String body) {
         return ok(scope, verbs.update(caller.subject(), scope, selector, id,
-            unquote(ifMatch), Payloads.fields(body)));
+            unquote(ifMatch), Payloads.fields(readObject(body))));
     }
 
     /**
@@ -302,7 +308,7 @@ public class WorklistResource {
             .filter(CustomMethod.Split::isKnown)
             .orElseThrow(() -> new SurfaceException(
                 SurfaceException.Reason.WRITE_ON_TRUNCATED_ADDRESS,
-                "'" + segment + "' names no verb of this scheme at item depth. A "
+                "the last segment names no verb of this scheme at item depth. A "
                     + "transition is written in colon notation on the item URI — "
                     + "'<number>:close' — because a verb as a trailing path segment could "
                     + "not be told apart from a further id segment.",
@@ -324,20 +330,23 @@ public class WorklistResource {
         String id = at.address();
 
         return switch (at.method()) {
-            case ACCEPT -> ok(scope, verbs.accept(subject, scope, selector, id, token));
+            case ACCEPT -> {
+                arguments(scope, body);
+                yield ok(scope, verbs.accept(subject, scope, selector, id, token));
+            }
             case WITHDRAW -> ok(scope, verbs.withdraw(subject, scope, selector, id, token,
-                Payloads.withdrawal(read(body, Payloads.WithdrawRequest.class))));
+                withdrawal(scope, arguments(scope, body, STATUS))));
             case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token,
-                producedOr(read(body, Payloads.CloseRequest.class))));
+                text(scope, arguments(scope, body, PRODUCED), PRODUCED)));
 
             case CLAIM -> ok(scope, verbs.claim(subject, scope, selector, id,
-                Payloads.lease(read(body, Payloads.LeaseRequest.class))));
+                lease(scope, arguments(scope, body, DURATION))));
             case RELEASE -> ok(scope, verbs.release(subject, scope, selector, id,
-                Payloads.releaseOf(read(body, Payloads.ReleaseRequest.class))));
+                release(scope, arguments(scope, body, RECEIPT))));
             case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
-                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+                edge(scope, arguments(scope, body, TO_ITEM, TYPE))));
             case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
-                Payloads.edge(read(body, Payloads.EdgeRequest.class))));
+                edge(scope, arguments(scope, body, TO_ITEM, TYPE))));
 
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
@@ -407,9 +416,9 @@ public class WorklistResource {
                                      @PathParam("id") String id,
                                      @PathParam("member") String member,
                                      @HeaderParam("If-Match") String ifMatch,
-                                     Map<String, Object> body) {
+                                     String body) {
         return ok(scope, verbs.updateMembership(caller.subject(), scope, selector, id, member,
-            unquote(ifMatch), Payloads.fields(body)));
+            unquote(ifMatch), Payloads.fields(readObject(body))));
     }
 
     // ======================================================================
@@ -497,9 +506,100 @@ public class WorklistResource {
         return read(body, OBJECT);
     }
 
-    /** The `produced` field of a close body, or null if no body arrived. */
-    private static String producedOr(Payloads.CloseRequest request) {
-        return request == null ? null : request.produced();
+    // ======================================================================
+    // The arguments of a body
+    // ======================================================================
+
+    private static final String STATUS = "status";
+    private static final String PRODUCED = "produced";
+    private static final String DURATION = "duration_seconds";
+    private static final String RECEIPT = "receipt";
+    private static final String TO_ITEM = "to_item";
+    private static final String TYPE = "type";
+
+    /**
+     * The arguments of a body, under the names the verb declares.
+     *
+     * <p>The body is read as an object and checked against the declared names
+     * before anything is taken from it: a name the verb does not declare is
+     * refused as {@code ARGUMENT_UNKNOWN} with the declared names under
+     * {@code accepts} (DEC-0043 R4, R19), so nothing is accepted and dropped.
+     * A name that arrived as JSON {@code null} is left out, which makes it
+     * the same call as one that never sent it (R17). An absent body is an
+     * empty one.
+     */
+    private Map<String, Object> arguments(String scope, String body, String... declared) {
+        Map<String, Object> in = readObject(body);
+        Map<String, Object> present = new LinkedHashMap<>();
+        if (in == null) {
+            return present;
+        }
+        java.util.List<String> names = java.util.List.of(declared);
+        if (!names.containsAll(in.keySet())) {
+            // A stranger is answered NOT_FOUND whatever else is wrong with the
+            // call (DEC-0042), so the scope is checked before the names.
+            verbs.requireVisible(caller.subject(), scope);
+            throw SurfaceException.unknown(names,
+                "the body carries an argument outside the ones this verb declares. Send "
+                    + "only the arguments under accepts.");
+        }
+        in.forEach((name, value) -> {
+            if (value != null) {
+                present.put(name, value);
+            }
+        });
+        return present;
+    }
+
+    /** An argument that takes text, or null when it did not arrive. */
+    private String text(String scope, Map<String, Object> arguments, String name) {
+        Object value = arguments.get(name);
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof String text)) {
+            throw invalid(scope, name,
+                "the argument under offenders takes text. Send it as a JSON string.");
+        }
+        return text;
+    }
+
+    private VerbInput.Withdrawal withdrawal(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? null
+            : new VerbInput.Withdrawal(text(scope, arguments, STATUS));
+    }
+
+    private VerbInput.Release release(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? null
+            : new VerbInput.Release(text(scope, arguments, RECEIPT));
+    }
+
+    private VerbInput.Edge edge(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? null
+            : new VerbInput.Edge(text(scope, arguments, TO_ITEM), text(scope, arguments, TYPE));
+    }
+
+    private VerbInput.Lease lease(String scope, Map<String, Object> arguments) {
+        if (arguments.isEmpty()) {
+            return null;
+        }
+        Object value = arguments.get(DURATION);
+        if (value instanceof Integer || value instanceof Long) {
+            return new VerbInput.Lease(((Number) value).longValue());
+        }
+        throw invalid(scope, DURATION,
+            "duration_seconds takes a whole number of seconds. Send the lease duration as "
+                + "a positive whole number.");
+    }
+
+    /**
+     * A value of the wrong form, refused only once the scope is known to be
+     * visible: a stranger is answered NOT_FOUND whatever else is wrong with
+     * the call (DEC-0042).
+     */
+    private SurfaceException invalid(String scope, String name, String message) {
+        verbs.requireVisible(caller.subject(), scope);
+        return SurfaceException.invalid(name, message);
     }
 
     private <T> T read(String body, Class<T> shape) {
@@ -517,8 +617,11 @@ public class WorklistResource {
         try {
             return json.readValue(body, shape);
         } catch (JsonProcessingException e) {
+            // The parser's own message quotes the body back, so it stays in
+            // here (DEC-0043 R18).
             throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the request body is not the JSON this verb takes: " + e.getOriginalMessage());
+                "the request body is outside the JSON this verb takes. Send the body as one "
+                    + "JSON object of the arguments the verb declares.");
         }
     }
 

@@ -1,4 +1,13 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
+
+import java.util.List;
 
 /**
  * A typed refusal the surface itself produces, as distinct from one the domain
@@ -126,7 +135,28 @@ public class SurfaceException extends RuntimeException {
          * call made in a guessed one would answer in the wrong vocabulary. No
          * {@code data}, because there is no argument to name.
          */
-        ARGUMENT_INVALID(400);
+        ARGUMENT_INVALID(400),
+
+        /**
+         * A mandatory argument did not arrive, or arrived as JSON {@code null},
+         * which DEC-0043 R17 reads as the same thing. The offender is the
+         * argument's declared name, never a value.
+         */
+        ARGUMENT_MISSING(400),
+
+        /**
+         * An argument name the call does not declare, at any level of the
+         * input (DEC-0043 R4). The answer carries the names the call declares
+         * under {@code accepts} and never the name that arrived (R19).
+         */
+        ARGUMENT_UNKNOWN(400),
+
+        /**
+         * A failure nobody anticipated (DEC-0043 R13). It names no rule because
+         * it is a defect, carries a reference to report, and nothing was
+         * changed: the transaction of the call rolled back.
+         */
+        UNEXPECTED_FAILURE(500);
 
         private final int status;
 
@@ -142,6 +172,8 @@ public class SurfaceException extends RuntimeException {
 
     private final transient Reason reason;
     private final transient String allow;
+    private final transient List<String> offenders;
+    private final transient List<String> accepts;
 
     public SurfaceException(Reason reason, String message) {
         this(reason, message, null);
@@ -153,9 +185,41 @@ public class SurfaceException extends RuntimeException {
      *              would have worked.
      */
     public SurfaceException(Reason reason, String message, String allow) {
+        this(reason, message, allow, List.of(), List.of());
+    }
+
+    /**
+     * A refusal with detail under {@code data}.
+     *
+     * @param offenders the declared argument paths the refusal concerns
+     * @param accepts   the argument names the call declares, carried by a
+     *                  refusal of a name the call does not declare
+     */
+    public SurfaceException(Reason reason, String message, String allow,
+                            List<String> offenders, List<String> accepts) {
         super(message);
         this.reason = reason;
         this.allow = allow;
+        this.offenders = List.copyOf(offenders);
+        this.accepts = List.copyOf(accepts);
+    }
+
+    /** A mandatory argument that did not arrive, by its declared name. */
+    public static SurfaceException missing(String argument, String message) {
+        return new SurfaceException(Reason.ARGUMENT_MISSING, message, null,
+            List.of(argument), List.of());
+    }
+
+    /** A value the argument does not admit, by the argument's declared path. */
+    public static SurfaceException invalid(String argument, String message) {
+        return new SurfaceException(Reason.ARGUMENT_INVALID, message, null,
+            List.of(argument), List.of());
+    }
+
+    /** Names the call does not declare, answered with the ones it does. */
+    public static SurfaceException unknown(List<String> accepts, String message) {
+        return new SurfaceException(Reason.ARGUMENT_UNKNOWN, message, null,
+            List.of(), accepts);
     }
 
     public Reason reason() {
@@ -164,5 +228,13 @@ public class SurfaceException extends RuntimeException {
 
     public String allow() {
         return allow;
+    }
+
+    public List<String> offenders() {
+        return offenders;
+    }
+
+    public List<String> accepts() {
+        return accepts;
     }
 }

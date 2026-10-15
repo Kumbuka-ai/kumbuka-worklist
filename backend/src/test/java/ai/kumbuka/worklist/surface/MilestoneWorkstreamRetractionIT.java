@@ -236,7 +236,7 @@ class MilestoneWorkstreamRetractionIT {
             .isEqualTo(WorklistException.Reason.FIELD_RETRACTED);
         assertThat(refusal.offenders())
             .as("the offender is the argument name, as with the other two field refusals")
-            .containsExactly(Field.WORKSTREAM_ID.canonicalName());
+            .containsExactly(Field.WORKSTREAM_ID.path());
         assertThat(refusal.getMessage())
             .as("the message has to let the caller act without asking anybody: what was "
                 + "retracted, the ratified document it rests on, that nothing was "
@@ -297,7 +297,7 @@ class MilestoneWorkstreamRetractionIT {
             .statusCode(422)
             .body("reason", is(WorklistException.Reason.FIELD_RETRACTED.name()))
             .body("message", containsString("TAR-0002 section 4"))
-            .body("data.offenders", is(List.of("workstream")));
+            .body("data.offenders", is(List.of("fields.workstream")));
     }
 
     // =======================================================================
@@ -369,7 +369,7 @@ class MilestoneWorkstreamRetractionIT {
         assertThat(refusal.offenders())
             .as("only the retracted name; the typo is the caller's next round trip and "
                 + "the message that names it is a different sentence")
-            .containsExactly(Field.WORKSTREAM_ID.canonicalName());
+            .containsExactly(Field.WORKSTREAM_ID.path());
     }
 
     // =======================================================================

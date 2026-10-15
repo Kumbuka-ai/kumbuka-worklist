@@ -273,8 +273,7 @@ public final class AddressParser {
         String prefix = SCHEME + "://";
 
         if (!candidate.startsWith(prefix)) {
-            throw malformed("the address '" + candidate + "' does not name the worklist "
-                + "scheme. A complete address is '" + prefix + "<scope>/<view>/<id>', with "
+            throw malformed("the address names another scheme than the worklist scheme. A complete address is '" + prefix + "<scope>/<view>/<id>', with "
                 + "the scheme leading and the scope in the authority position.");
         }
 
@@ -285,8 +284,8 @@ public final class AddressParser {
 
         List<String> parts = List.of(rest.split("/", -1));
         if (parts.size() < 3 || parts.size() > 4) {
-            throw malformed("the address '" + candidate + "' occupies " + parts.size()
-                + " part(s) after the scheme, and a complete address occupies three: scope, "
+            throw malformed("the address occupies another number of parts after the scheme than a "
+                + "complete address, which occupies three: scope, "
                 + "view and id — with the id running to a second segment where it names a "
                 + "membership. Truncation is recognised by which parts are occupied, and a "
                 + "verb acting on an existing object takes a complete address.");
@@ -315,7 +314,7 @@ public final class AddressParser {
     private static long number(String raw, String part) {
         String candidate = requirePresent(raw, part);
         if (!NUMBER.matcher(candidate).matches()) {
-            throw malformed("the " + part + " '" + candidate + "' is not a number in this "
+            throw malformed("the " + part + " part of the address takes a number of this "
                 + "address space. Counting starts at one and there are no leading zeroes: "
                 + "'07' and '7' would be two strings for one object.");
         }

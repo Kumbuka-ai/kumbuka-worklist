@@ -307,14 +307,15 @@ class ItemDomainIT {
         WorklistException refusal = catchWorklistException(() ->
             items.update(SCOPE, id, misspelt));
 
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ARGUMENT_UNKNOWN);
+        assertThat(refusal.accepts())
+            .as("the refusal names the fields the item declares, so the caller compares "
+                + "them with the call it holds (DEC-0043 R19)")
+            .contains("fields.title");
         assertThat(refusal.offenders())
-            .as("the refusal must NAME the argument. One that only states the rule sends "
-                + "the caller to diff two vocabularies by eye")
-            .containsExactly("Titel");
-        assertThat(refusal.getMessage())
-            .as("and say what was possible instead")
-            .contains("title");
+            .as("and never the name that arrived: it is the caller's input")
+            .isEmpty();
+        assertThat(refusal.getMessage()).doesNotContain("Titel");
 
         // RED STATE, by its trace. A silently dropped argument would have
         // written the row: same values, fresh date, rotated token. The token
@@ -355,11 +356,12 @@ class ItemDomainIT {
         WorklistException refusal = catchWorklistException(() ->
             items.update(SCOPE, id, arguments));
 
-        assertThat(refusal.offenders())
-            .as("a caller that misspelt three fields learns all three in one round trip, "
-                + "and a declared attribute sent as a field is one of the three: it "
-                + "travels inside `attributes` under the key it was declared with")
-            .containsExactlyInAnyOrder("Titel", "Status", "cluster");
+        assertThat(refusal.accepts())
+            .as("a caller that misspelt three fields learns in one round trip which fields "
+                + "the item declares, and a declared attribute sent as a field is outside "
+                + "them: it travels inside `attributes` under the key it was declared with")
+            .contains("fields.title", "fields.status", "fields.attributes")
+            .doesNotContain("Titel", "Status", "cluster");
     }
 
     /**
@@ -403,7 +405,7 @@ class ItemDomainIT {
         assertThat(refusal.offenders())
             .as("echoing state back is fine; setting it is not, and the difference is "
                 + "which fields carried a value other than the one held")
-            .containsExactlyInAnyOrder("id", "number");
+            .containsExactlyInAnyOrder("fields.id", "fields.number");
     }
 
     // ==================================================================
@@ -610,7 +612,7 @@ class ItemDomainIT {
             .as("the refusal names the key, because a scope's attribute set is a "
                 + "declaration and a value under an undeclared key is one nothing can "
                 + "read back")
-            .containsExactly("not_declared");
+            .containsExactly("fields.attributes");
     }
 
     /**
@@ -702,7 +704,7 @@ class ItemDomainIT {
             .as("and the message says where the vocabulary comes from, because a caller "
                 + "reading 'no such status' would otherwise look for a list in this "
                 + "service — which is precisely what is not here any more")
-            .contains("declared");
+            .contains("declares");
 
         // A UUID in the status field is a different refusal: the wire form
         // is the display name and the platform's identity is not what a
@@ -717,7 +719,7 @@ class ItemDomainIT {
                 + "form fixed in Sprint 180.4 is the declared display name, and the "
                 + "platform's identity never reaches a reader any more")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(uuidShape.offenders()).containsExactly("status");
+        assertThat(uuidShape.offenders()).containsExactly("fields.status");
     }
 
     /**
@@ -765,7 +767,7 @@ class ItemDomainIT {
         });
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("status");
+        assertThat(refusal.offenders()).containsExactly("fields.status");
         assertThat(refusal.getMessage())
             .as("the message names why: an item carries a status on every path, so "
                 + "clearing it back to nothing would be exactly the pre-declaration state "
@@ -791,12 +793,12 @@ class ItemDomainIT {
                 "status", "no such status name here")));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
-        assertThat(refusal.offenders()).containsExactly("status");
+        assertThat(refusal.offenders()).containsExactly("fields.status");
         assertThat(refusal.getMessage())
             .as("and the message points to where the vocabulary comes from — the "
                 + "statuses of a scope are its own data, and inventing one at intake "
                 + "would be this service deciding what a scope's list means")
-            .contains("declared");
+            .contains("declares");
     }
 
     /** A status cannot be both closed and in progress, and the refusal says so. */
@@ -969,7 +971,7 @@ class ItemDomainIT {
             updateField(id, "relations", List.of(relation(type, id))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("relations");
+        assertThat(refusal.offenders()).containsExactly("fields.relations");
     }
 
     /** An edge of a type nobody declared is refused before it reaches the table. */
@@ -1034,7 +1036,7 @@ class ItemDomainIT {
         WorklistException nullAddress = catchWorklistException(() ->
             items.relate(SCOPE, from, null, "carries", conflictToken));
         assertThat(nullAddress.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(nullAddress.offenders()).containsExactly("relations");
+        assertThat(nullAddress.offenders()).containsExactly("to_item");
 
         WorklistException wrongScheme = catchWorklistException(() ->
             items.relate(SCOPE, from, "http://foo", "carries", conflictToken));
@@ -1052,7 +1054,7 @@ class ItemDomainIT {
             .as("only the item view carries edges as the other end here — a milestone "
                 + "address is a form refusal, not a not-found on the item table")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(wrongView.offenders()).containsExactly("relations");
+        assertThat(wrongView.offenders()).containsExactly("to_item");
 
         WorklistException wrongNumber = catchWorklistException(() ->
             items.relate(SCOPE, from,
@@ -1062,7 +1064,7 @@ class ItemDomainIT {
                 + "does not resolve because it cannot be parsed, and saying 'not found' "
                 + "here would let a spelling problem look like a missing row")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(wrongNumber.offenders()).containsExactly("relations");
+        assertThat(wrongNumber.offenders()).containsExactly("to_item");
 
         WorklistException foreignScope = catchWorklistException(() ->
             items.relate(SCOPE, from,
@@ -1072,7 +1074,7 @@ class ItemDomainIT {
                 + "scope in the address must match this write's scope, or the row is "
                 + "reachable from neither side")
             .isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
-        assertThat(foreignScope.offenders()).containsExactly("relations");
+        assertThat(foreignScope.offenders()).containsExactly("to_item");
     }
 
     // ==================================================================
@@ -1217,7 +1219,7 @@ class ItemDomainIT {
             updateField(id, "references", List.of(Map.of("label", "a label and no target"))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("references");
+        assertThat(refusal.offenders()).containsExactly("fields.references");
     }
 
     // ==================================================================
@@ -1280,7 +1282,7 @@ class ItemDomainIT {
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders())
             .as("an address is allocated by admission and never supplied")
-            .containsExactly("number");
+            .containsExactly("fields.number");
     }
 
     /** And it carries a title and a status, on every path. */
@@ -1297,7 +1299,7 @@ class ItemDomainIT {
                 + "on — inventing one here would be this service deciding what a scope's "
                 + "list means")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(statusless.offenders()).containsExactly("status");
+        assertThat(statusless.offenders()).containsExactly("fields.status");
 
         UUID id = createdId("title clearing probe");
         assertThat(catchWorklistException(() -> {
@@ -1418,11 +1420,12 @@ class ItemDomainIT {
         assertThat(refusal.offenders())
             .as("the refusal names the key so a caller writing several attributes at "
                 + "once can tell which one was refused")
-            .containsExactly(key);
+            .containsExactly("fields.attributes");
         assertThat(refusal.getMessage())
             .as("and the message says why: a text_list is a JSON array of strings, and "
                 + "a string on its own is not one")
-            .contains(key, "text_list");
+            .contains("text_list")
+            .doesNotContain(key);
     }
 
     /**
@@ -1443,12 +1446,12 @@ class ItemDomainIT {
             updateField(id, "attributes", Map.of(key, List.of("first", 42, "third"))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly(key);
+        assertThat(refusal.offenders()).containsExactly("fields.attributes");
         assertThat(refusal.getMessage())
             .as("a number is not a string and the value in question is named — a "
                 + "refusal saying only 'wrong type' is a refusal the caller has to "
                 + "guess through")
-            .contains(key);
+            .doesNotContain(key);
     }
 
     /**
@@ -1468,7 +1471,7 @@ class ItemDomainIT {
             updateField(id, "attributes", Map.of(key, List.of("first", "   ", "third"))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly(key);
+        assertThat(refusal.offenders()).containsExactly("fields.attributes");
     }
 
     /**
@@ -1489,7 +1492,7 @@ class ItemDomainIT {
             updateField(id, "attributes", Map.of(key, overCap)));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly(key);
+        assertThat(refusal.offenders()).containsExactly("fields.attributes");
 
         List<String> atCap = java.util.stream.IntStream.range(0, 50)
             .mapToObj(i -> "entry-" + i).toList();
@@ -1516,7 +1519,7 @@ class ItemDomainIT {
             updateField(id, "attributes", Map.of(key, List.of("short", overCap))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly(key);
+        assertThat(refusal.offenders()).containsExactly("fields.attributes");
 
         String atCap = "x".repeat(1500);
         Map<String, Object> after =

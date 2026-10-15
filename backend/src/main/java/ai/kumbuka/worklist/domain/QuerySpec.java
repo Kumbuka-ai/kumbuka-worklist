@@ -124,16 +124,26 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
             PageCursor.decode(cursorOf(after), scopeId, view, filters, key, way));
     }
 
+    /** The arguments {@code query} declares, which a refusal of any other name answers with. */
+    public static final List<String> ARGUMENTS = List.of("scope", "selector",
+        QueryFilter.FILTER_ARGUMENT, PAGE_SIZE_ARGUMENT, AFTER_ARGUMENT, SORT_ARGUMENT,
+        DIRECTION_ARGUMENT);
+
+    /**
+     * Refuses a name that is no argument of {@code query}. The names that
+     * arrived are the caller's and never come back (DEC-0043 R19); the answer
+     * lists the arguments {@code query} declares.
+     */
     private static void refuseUntaken(List<String> untaken) {
         if (untaken.isEmpty()) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.ARGUMENT_UNKNOWN,
-            "query takes scope, selector, filter, page_size, after, sort and direction, and "
-                + "the arguments under offenders are outside that set. Write a narrowing "
-                + "inside filter, bound the page with page_size and continue it with after.",
-            untaken);
+            "query carries an argument outside the ones it declares. Send only the arguments "
+                + "under accepts: write a narrowing inside filter, bound the page with "
+                + "page_size and continue it with after.",
+            List.of(), ARGUMENTS);
     }
 
     private static Map<String, Object> filterOf(Object raw) {
@@ -151,11 +161,19 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             String name = String.valueOf(entry.getKey());
             Object value = entry.getValue();
-            if (value == null || value instanceof Map || value instanceof Collection) {
-                String path = QueryFilter.FILTER_ARGUMENT + "." + name;
+            if (value == null) {
+                // DEC-0043 R17: a filter sent as null is a filter left out.
+                continue;
+            }
+            if (value instanceof Map || value instanceof Collection) {
+                // A name no view declares is the caller's, and the refusal
+                // names the argument it arrived in rather than the name.
+                String path = QueryFilter.declaredAnywhere(name)
+                    ? QueryFilter.FILTER_ARGUMENT + "." + name
+                    : QueryFilter.FILTER_ARGUMENT;
                 throw new WorklistException(
                     WorklistException.Reason.ARGUMENT_INVALID,
-                    path + " takes one single value. Send " + path + " once, with one value.",
+                    "the filter under offenders takes one single value. Send it once, with one value.",
                     List.of(path));
             }
             filter.put(name, value);

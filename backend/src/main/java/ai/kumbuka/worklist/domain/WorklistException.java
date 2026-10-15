@@ -90,18 +90,12 @@ public class WorklistException extends RuntimeException {
          */
         SCOPE_READ_ONLY,
 
-        /**
-         * An argument named a field that does not exist. The offenders are the
-         * argument names, because a refusal that does not say WHICH name it
-         * did not recognise leaves the caller to diff two vocabularies by eye.
-         */
-        UNKNOWN_FIELD,
 
         /**
          * An argument named a field the addressed object USED to carry, and
          * whose relation has since been retracted.
          *
-         * <p>Distinct from {@link #UNKNOWN_FIELD} because the remedy is
+         * <p>Distinct from {@link #ARGUMENT_UNKNOWN} because the remedy is
          * different, and that is the whole reason it exists. A caller holding
          * an unknown name is holding a typo and should check their spelling. A
          * caller holding a retracted name is holding something this service
@@ -459,15 +453,28 @@ public class WorklistException extends RuntimeException {
 
     private final transient Reason reason;
     private final transient List<String> offenders;
+    private final transient List<String> accepts;
 
     public WorklistException(Reason reason, String message) {
         this(reason, message, List.of());
     }
 
     public WorklistException(Reason reason, String message, List<String> offenders) {
+        this(reason, message, offenders, List.of());
+    }
+
+    /**
+     * @param offenders the declared argument paths the refusal concerns, never
+     *                  a value the caller sent (DEC-0043 R18)
+     * @param accepts   the declared names a refusal of an undeclared name
+     *                  answers with (DEC-0043 R19)
+     */
+    public WorklistException(Reason reason, String message, List<String> offenders,
+                             List<String> accepts) {
         super(message);
         this.reason = reason;
         this.offenders = List.copyOf(offenders);
+        this.accepts = List.copyOf(accepts);
     }
 
     public Reason reason() {
@@ -483,5 +490,10 @@ public class WorklistException extends RuntimeException {
      */
     public List<String> offenders() {
         return offenders;
+    }
+
+    /** The declared names a refusal of an undeclared name answers with. */
+    public List<String> accepts() {
+        return accepts;
     }
 }

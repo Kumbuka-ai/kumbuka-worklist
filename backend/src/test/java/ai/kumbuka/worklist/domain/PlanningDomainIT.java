@@ -293,16 +293,16 @@ class PlanningDomainIT {
                 + "warning exists so the limit is met deliberately rather than "
                 + "discovered at the moment it refuses")
             .hasSize(1);
-        assertThat(warningsOf(warned).get(0)).contains("2");
+        assertThat(warningsOf(warned).get(0)).contains("warning threshold").doesNotContain("2");
 
         WorklistException refusal = refusalFrom(() ->
             memberships.plan(scope, iteration, third, token(iteration)));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.CARDINALITY_EXCEEDED);
         assertThat(refusal.offenders())
-            .as("the refusal carries the limit, so a caller can tell a setting they may "
-                + "raise from a platform ceiling they may not")
-            .containsExactly("2");
+            .as("the limit is the scope's setting and travels in the read of the settings, "
+                + "never in the refusal (DEC-0043 R18)")
+            .isEmpty();
 
         assertThat(memberships.query(scope))
             .as("RED STATE, by its trace: with the check removed the third membership "
@@ -402,9 +402,9 @@ class PlanningDomainIT {
         assertThat(notActionable.reason())
             .isEqualTo(WorklistException.Reason.ITEM_UNPLANNABLE);
         assertThat(notActionable.offenders())
-            .as("the refusal names the STATUS it found, because the three causes read "
-                + "the same from outside and the remedy for each is different")
-            .containsExactly("on hold");
+            .as("the refusal names the address, never the status it found: a status name "
+                + "is the tenant's vocabulary (DEC-0043 R18)")
+            .containsExactly("address");
 
         UUID unassessed = item("not assessed yet");
         WorklistException noMilestone = refusalFrom(() ->
@@ -416,8 +416,8 @@ class PlanningDomainIT {
         WorklistException off = refusalFrom(() ->
             memberships.plan(scope, iteration, offPath, token(iteration)));
         assertThat(off.offenders())
-            .as("and here it names the KIND it found")
-            .containsExactly(Milestone.OFF_PATH);
+            .as("and here too the address, never the kind it found")
+            .containsExactly("address");
 
         // The legitimate neighbour, without which all three assertions would
         // be satisfied by a precondition that refuses everything.
@@ -516,7 +516,7 @@ class PlanningDomainIT {
 
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.MEMBERSHIP_UNKNOWN);
-        assertThat(refusal.offenders()).contains(strangerAddress);
+        assertThat(refusal.offenders()).containsExactly("fields.order");
 
         // The legitimate neighbour: the sequence that names exactly the
         // members must go through, or the check would refuse every reorder.
@@ -634,7 +634,7 @@ class PlanningDomainIT {
             "vision", "a north star a marker may not have")));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.offenders()).containsExactly("kind");
+        assertThat(refusal.offenders()).containsExactly("fields.kind");
 
         // Both legitimate neighbours: a marker without a goal, and a real
         // milestone with one.

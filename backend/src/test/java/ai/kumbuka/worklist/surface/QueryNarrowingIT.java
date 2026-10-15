@@ -261,7 +261,7 @@ class QueryNarrowingIT {
     void an_undeclared_filter_name_is_refused_on_every_view(Transport via) {
         for (String view : Selector.VIEWS) {
             Answer answer = via.query(view, Map.of("colour", "blue"), null, null);
-            assertRefused(answer, "PREDICATE_UNKNOWN", "filter.colour", view);
+            assertRefused(answer, "PREDICATE_UNKNOWN", "filter", view);
         }
     }
 
@@ -274,14 +274,14 @@ class QueryNarrowingIT {
     @EnumSource(Transport.class)
     void a_filter_declared_on_another_view_is_refused(Transport via) {
         Answer answer = via.query(Selector.ITERATION, Map.of("milestone", 6), null, null);
-        assertRefused(answer, "PREDICATE_UNKNOWN", "filter.milestone", "iteration");
+        assertRefused(answer, "PREDICATE_UNKNOWN", "filter", "iteration");
     }
 
     /** The measured shape of 2026-09-24: a narrowing beside the filter, not in it. */
     @Test
     void a_rest_parameter_the_read_does_not_take_is_refused() {
         Answer answer = Transport.REST.raw(Selector.ITEM, Map.of("milestone", "6"));
-        assertRefused(answer, "ARGUMENT_UNKNOWN", "milestone", "item");
+        assertRefused(answer, "ARGUMENT_UNKNOWN", null, "item");
     }
 
     @Test
@@ -290,7 +290,7 @@ class QueryNarrowingIT {
         args.put("scope", SCOPE);
         args.put("selector", Selector.ITEM);
         args.put("milestone", 6);
-        assertRefused(Transport.mcp(args), "ARGUMENT_UNKNOWN", "milestone", "item");
+        assertRefused(Transport.mcp(args), "ARGUMENT_UNKNOWN", null, "item");
     }
 
     // ======================================================================
@@ -478,14 +478,14 @@ class QueryNarrowingIT {
     @EnumSource(Transport.class)
     void the_earlier_limit_and_cursor_are_refused_as_unknown(Transport via) {
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("limit", 1)),
-            "ARGUMENT_UNKNOWN", "limit", "limit");
+            "ARGUMENT_UNKNOWN", null, "limit");
         String cursor = via.query(Selector.ITEM, Map.of(), 1, null).next();
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("cursor", cursor)),
-            "ARGUMENT_UNKNOWN", "cursor", "cursor");
+            "ARGUMENT_UNKNOWN", null, "cursor");
         assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("foo", "1")),
-            "ARGUMENT_UNKNOWN", "foo", "foo");
+            "ARGUMENT_UNKNOWN", null, "foo");
         assertRefused(via.call(Selector.ITEM, Map.of("foo", "1"), Map.of()),
-            "PREDICATE_UNKNOWN", "filter.foo", "filter.foo");
+            "PREDICATE_UNKNOWN", "filter", "filter.foo");
     }
 
     /**
@@ -803,7 +803,7 @@ class QueryNarrowingIT {
             .then().statusCode(422)
             .extract().jsonPath();
         assertThat(body.getString("reason")).isEqualTo("VALUE_UNDECLARED");
-        assertThat(body.getList("data.offenders", String.class)).containsExactly("workstream");
+        assertThat(body.getList("data.offenders", String.class)).containsExactly("fields.workstream");
     }
 
     // ======================================================================
@@ -829,7 +829,15 @@ class QueryNarrowingIT {
                 .isEqualTo(REFUSED_WITHOUT_SCOPE.contains(reason) ? 400 : 422);
         }
         assertThat(answer.reason()).as("%s refused with a typed reason", what).isEqualTo(reason);
-        assertThat(answer.offenders()).as("%s names the argument", what).containsExactly(offender);
+        if (offender == null) {
+            // DEC-0043 R19: a name the call does not declare is answered with
+            // the declared ones and never named itself.
+            assertThat(answer.offenders()).as("%s names no argument that arrived", what)
+                .isEmpty();
+        } else {
+            assertThat(answer.offenders()).as("%s names the argument", what)
+                .containsExactly(offender);
+        }
     }
 
     private static void assertPagesCoverTheWhole(Transport via, String view, SortKey sort,

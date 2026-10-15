@@ -83,7 +83,7 @@ class PlanningRefusalIT {
         WorklistException refusal = refusalFrom(() -> iterations.create(unopened, Map.of(
             "motto", "nowhere", "description", "a scope that was never opened")));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SETTING_ABSENT);
-        assertThat(refusal.offenders()).containsExactly(String.valueOf(unopened));
+        assertThat(refusal.offenders()).isEmpty();
 
         assertThat(refusalFrom(() -> settings.read(unopened)).reason())
             .as("reading them is the same absence and the same refusal")
@@ -121,7 +121,7 @@ class PlanningRefusalIT {
                 "max_planned_iterations", 0, "warn_planned_iterations", 1,
                 "max_memberships_per_iteration", 1,
                 "warn_memberships_per_iteration", 1))).offenders())
-            .containsExactly("max_planned_iterations");
+            .containsExactly("fields.max_planned_iterations");
 
         assertThat(refusalFrom(() -> settings.update(scope, Map.of(
                 "max_planned_iterations", "not a number",
@@ -205,7 +205,7 @@ class PlanningRefusalIT {
         WorklistException refusal = refusalFrom(() ->
             memberships.plan(scope, iteration, item, token(iteration)));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.MEMBERSHIP_PRESENT);
-        assertThat(refusal.offenders()).containsExactly(String.valueOf(item));
+        assertThat(refusal.offenders()).containsExactly("address");
 
         // The admitted neighbour: the SAME item in a second iteration is
         // ordinary — an item worked across two iterations is the normal case.
@@ -239,8 +239,8 @@ class PlanningRefusalIT {
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.ITERATION_INCOMPLETE);
         assertThat(refusal.offenders())
-            .as("exactly the live one, and not the one that is done")
-            .containsExactly(String.valueOf(standing));
+            .as("the address of the iteration; the live memberships are read, never repeated")
+            .containsExactly("address");
 
         // The admitted neighbour: every membership terminal, and the close
         // goes through.
@@ -335,17 +335,18 @@ class PlanningRefusalIT {
             "title", "an item", "status", vocabulary.requireStatus(scope, openStatus).name,
             "motto", "which an item does not have")));
 
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
-        assertThat(refusal.offenders()).containsExactly("motto");
+        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ARGUMENT_UNKNOWN);
+        assertThat(refusal.offenders()).isEmpty();
+        assertThat(refusal.accepts()).contains("fields.title").doesNotContain("fields.motto");
         assertThat(refusal.getMessage())
             .as("and the message names the object that was addressed, because the field "
                 + "exists — just not here")
-            .contains("no field of a item is named");
+            .contains("does not declare").doesNotContain("motto");
 
         assertThat(refusalFrom(() -> iterations.create(scope, Map.of(
                 "motto", "fine", "description", "fine", "vision", "a milestone's"))).reason())
             .as("the same in the other direction: a milestone's field on an iteration")
-            .isEqualTo(WorklistException.Reason.UNKNOWN_FIELD);
+            .isEqualTo(WorklistException.Reason.ARGUMENT_UNKNOWN);
     }
 
     /**
@@ -363,7 +364,7 @@ class PlanningRefusalIT {
             milestones.update(scope, milestone, tampered);
         });
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
-        assertThat(refusal.offenders()).containsExactly("number");
+        assertThat(refusal.offenders()).containsExactly("fields.number");
 
         String settled = (String) read.get("conflict_token");
         milestones.update(scope, milestone, read);
@@ -406,11 +407,11 @@ class PlanningRefusalIT {
         assertThat(refusalFrom(() -> milestones.update(scope, milestone, Map.of(
                 "status", "half done", "conflict_token", milestoneToken(milestone))))
                 .offenders())
-            .containsExactly("status");
+            .containsExactly("fields.status");
         assertThat(refusalFrom(() -> milestones.update(scope, milestone, Map.of(
                 "kind", "a kind nobody declared",
                 "conflict_token", milestoneToken(milestone)))).offenders())
-            .containsExactly("kind");
+            .containsExactly("fields.kind");
 
         milestones.update(scope, milestone, Map.of(
             "status", Milestone.ACTIVE, "vision", "the north star",
@@ -423,26 +424,26 @@ class PlanningRefusalIT {
     @Test
     void the_mandatory_text_of_each_object_cannot_be_left_out_or_cleared() {
         assertThat(refusalFrom(() -> milestones.create(scope, Map.of("rank", 1))).offenders())
-            .containsExactly("title");
+            .containsExactly("fields.title");
         assertThat(refusalFrom(() -> iterations.create(scope,
                 Map.of("motto", "one", "description", "no title"))).offenders())
-            .containsExactly("title");
+            .containsExactly("fields.title");
         assertThat(refusalFrom(() -> iterations.create(scope,
                 Map.of("title", "a title", "description", "no motto"))).offenders())
-            .containsExactly("motto");
+            .containsExactly("fields.motto");
         assertThat(refusalFrom(() -> iterations.create(scope,
                 Map.of("title", "a title", "motto", "no description"))).offenders())
-            .containsExactly("description");
+            .containsExactly("fields.description");
 
         UUID iteration = iteration("complete");
         assertThat(refusalFrom(() -> iterations.update(scope, iteration, Map.of(
                 "motto", "  ", "conflict_token", token(iteration)))).offenders())
             .as("and what is mandatory cannot be cleared through an update either")
-            .containsExactly("motto");
+            .containsExactly("fields.motto");
         assertThat(refusalFrom(() -> iterations.update(scope, iteration, Map.of(
                 "title", "  ", "conflict_token", token(iteration)))).offenders())
             .as("clearing the title through an update is refused too")
-            .containsExactly("title");
+            .containsExactly("fields.title");
 
         Map<String, Object> moved = iterations.update(scope, iteration, Map.of(
             "motto", "renamed", "rank", 7, "conflict_token", token(iteration)));

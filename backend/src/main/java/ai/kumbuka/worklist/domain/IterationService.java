@@ -56,6 +56,10 @@ import java.util.UUID;
 @TenantBound
 public class IterationService extends PlanningService {
 
+    /** The argument a refusal about the addressed iteration names (DEC-0043 R18). */
+    private static final String ADDRESS = "address";
+
+
     /** An address, a scope id, a count, a transition. Never a motto, never an actor. */
     private static final Logger LOG = Logger.getLogger(IterationService.class);
 
@@ -297,11 +301,11 @@ public class IterationService extends PlanningService {
             .findFirst()
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.ITERATION_ABSENT,
-                "scope " + scopeId + " has no further open iteration to promote. That is "
+                "this scope has no further open iteration to promote. That is "
                     + "a call to plan one, and it is deliberately a different answer from "
                     + "an iteration that is running with nothing left to do — which is a "
                     + "call to close it",
-                List.of(String.valueOf(scopeId))));
+                List.of()));
 
         setting.currentIterationNumber = next.number;
         setting.stamp();
@@ -405,17 +409,14 @@ public class IterationService extends PlanningService {
             .map(m -> itemAddressOf(scopeSlug, m.itemNumber))
             .toList();
         if (!wanted.containsAll(held) || !held.containsAll(wanted)) {
-            List<String> difference = new ArrayList<>(wanted);
-            difference.removeAll(held);
-            difference.addAll(held.stream().filter(id -> !wanted.contains(id)).toList());
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_UNKNOWN,
                 "an order names exactly the items that ARE members of this iteration, "
-                    + "each once, as their canonical addresses. These are named on one "
-                    + "side only: " + difference + ". Reordering does not plan an item "
+                    + "each once, as their canonical addresses, and the order sent names a "
+                    + "different set. Reordering does not plan an item "
                     + "in and does not unplan one out; those are `plan` and `unplan`, "
                     + "and they say what they do",
-                difference);
+                List.of(Field.ORDER.path()));
         }
 
         boolean changed = false;
@@ -457,10 +458,9 @@ public class IterationService extends PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.ITERATION_CLOSED,
-            "iteration " + iteration.number + " was closed at " + iteration.closedAt
-                + " and takes no further writes. What it held stays readable; a closed "
+            "the iteration is closed and takes no further writes. What it held stays readable; a closed "
                 + "iteration is a record of what was worked and not a gap",
-            List.of(String.valueOf(iteration.id)));
+            List.of(ADDRESS));
     }
 
     /**
@@ -472,20 +472,17 @@ public class IterationService extends PlanningService {
      * right there.
      */
     private void refuseLiveMemberships(Iteration iteration) {
-        List<String> live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()
-            .filter(IterationMembership::live)
-            .map(membership -> String.valueOf(
-                itemRepo.byAddress(iteration.scopeId, membership.itemNumber).id))
-            .toList();
-        if (live.isEmpty()) {
+        boolean live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()
+            .anyMatch(IterationMembership::live);
+        if (!live) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.ITERATION_INCOMPLETE,
-            "iteration " + iteration.number + " still holds memberships that are neither "
-                + "done nor dropped: " + live + ". Closing over them would decide for you "
-                + "what happened to each one. Mark each membership's outcome first",
-            live);
+            "the iteration still holds memberships that are neither done nor dropped. "
+                + "Closing over them would decide for you what happened to each one. Read the "
+                + "iteration's memberships and mark each one's outcome first",
+            List.of(ADDRESS));
     }
 
     private static boolean moved(Object held, Object wanted, Runnable write) {
@@ -503,8 +500,8 @@ public class IterationService extends PlanningService {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
-                "no iteration " + iterationId + " in scope " + scopeId,
-                List.of(String.valueOf(iterationId)));
+                "the iteration addressed is outside this scope",
+                List.of());
         }
         return iteration;
     }

@@ -152,7 +152,7 @@ class QueryFilterProbeIT {
 
         WorklistException typed = (WorklistException) refused;
         assertThat(typed.reason()).isEqualTo(WorklistException.Reason.PREDICATE_UNKNOWN);
-        assertThat(typed.offenders()).containsExactly("filter.title_contains");
+        assertThat(typed.offenders()).containsExactly("filter");
         assertThat(typed.getMessage())
             .as("and the message names what WAS narrowable, so a caller can act on it "
                 + "without a second call to find out")

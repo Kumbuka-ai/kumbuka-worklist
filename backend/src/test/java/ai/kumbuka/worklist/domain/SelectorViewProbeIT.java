@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -73,7 +80,7 @@ class SelectorViewProbeIT {
                 + "tell it from an undeclared view — which is fixed by declaring, and this "
                 + "one never is")
             .isEqualTo(WorklistException.Reason.VIEW_UNKNOWN);
-        assertThat(refusal.offenders()).containsExactly(FOREIGN_TOKEN);
+        assertThat(refusal.offenders()).containsExactly("selector");
         assertThat(refusal.getMessage())
             .as("and the message names the three, because the remedy is to pick one of "
                 + "them and a refusal that withheld the list would send the caller reading "

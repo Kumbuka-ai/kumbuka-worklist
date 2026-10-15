@@ -181,7 +181,7 @@ class WorkstreamViewIT {
             .then()
             .statusCode(422)
             .body("reason", is("PREDICATE_UNKNOWN"))
-            .body("data.offenders", org.hamcrest.Matchers.contains("filter.token"));
+            .body("data.offenders", org.hamcrest.Matchers.contains("filter"));
     }
 
     // =======================================================================
@@ -265,7 +265,7 @@ class WorkstreamViewIT {
     void claim_on_workstream_is_a_category_error() {
         given()
             .contentType(ContentType.JSON)
-            .body(Map.of("durationSeconds", 60))
+            .body(Map.of("duration_seconds", 60))
             .when().post(SurfaceFixture.item(Selector.WORKSTREAM, workstreamNumber) + ":claim")
             .then()
             .statusCode(422)

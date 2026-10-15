@@ -10,12 +10,15 @@ package ai.kumbuka.worklist.adapter.rest;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.SurfaceException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import org.jboss.logging.Logger;
+
+import java.util.UUID;
 
 /**
  * Turns the two families of typed refusal into HTTP, and keeps them apart.
@@ -169,7 +172,7 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 // of what this scope offers, or carries a value a field cannot
                 // take. A field this object does not have and a value nobody
                 // declared are the same class of answer.
-                case UNKNOWN_FIELD, FIELD_NOT_SETTABLE, INVALID_VALUE, VALUE_UNDECLARED,
+                case FIELD_NOT_SETTABLE, INVALID_VALUE, VALUE_UNDECLARED,
                      SELECTOR_UNDECLARED, SELECTOR_WITHDRAWN -> 422;
 
                 // A filter field the scope's vocabulary does not declare for the
@@ -265,6 +268,39 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 // conflict with the store.
                 case ITEM_WORKSTREAM_MISSING, ITERATION_PRODUCED_MISSING -> 422;
             };
+        }
+    }
+
+    /**
+     * Every failure nobody anticipated, in the same envelope (DEC-0043 R13).
+     *
+     * <p>Registered for {@link Exception} and therefore chosen only where no
+     * more specific mapper applies: the two typed refusals above keep theirs.
+     * The framework's own answers -- a 405 for a method the route does not
+     * take, a 415 for a body of the wrong type, a 401 with its challenge --
+     * travel as {@link WebApplicationException} and are handed back as they
+     * came, because they are the protocol's form and replacing them would
+     * make the surface non-conformant.
+     *
+     * <p>The exception's own message never reaches the caller: whatever threw
+     * it wrote it, and it can carry a value the call sent. The log line and
+     * the answer share a reference instead, and the line names the exception
+     * type only (DEC-0051).
+     */
+    @Provider
+    public static class Unexpected implements ExceptionMapper<Exception> {
+
+        @Override
+        public Response toResponse(Exception e) {
+            if (e instanceof WebApplicationException framework) {
+                return framework.getResponse();
+            }
+            String reference = UUID.randomUUID().toString();
+            LOG.errorf("unexpected failure %s: %s", reference, e.getClass().getName());
+            return Response.status(SurfaceException.Reason.UNEXPECTED_FAILURE.status())
+                .type(MediaType.APPLICATION_JSON)
+                .entity(RefusalPayload.unexpected(reference))
+                .build();
         }
     }
 }

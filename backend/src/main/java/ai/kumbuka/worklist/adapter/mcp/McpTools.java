@@ -88,6 +88,9 @@ public final class McpTools {
     /** The declared type of one edge. */
     private static final String ARG_TYPE = "type";
 
+    /** What a closing iteration names as produced. */
+    private static final String ARG_PRODUCED = "produced";
+
     private static final String INTEGER = "integer";
 
     private static final String SCOPE_DOC = "The scope name, a DNS label.";
@@ -173,21 +176,32 @@ public final class McpTools {
                 schema(
                     required(ARG_SCOPE, STRING, SCOPE_DOC),
                     required(ARG_SELECTOR, STRING, QUERY_SELECTOR_DOC),
-                    optional(QueryFilter.FILTER_ARGUMENT, OBJECT, FILTER_DOC),
+                    optional(QueryFilter.FILTER_ARGUMENT, OBJECT, FILTER_DOC
+                        + " Default: the whole view. Sending null equals leaving the "
+                        + "argument out."),
                     optional(QuerySpec.PAGE_SIZE_ARGUMENT, INTEGER,
                         "How many objects one page carries, from 1 to "
-                            + QuerySpec.MAX_PAGE_SIZE + ". A missing page_size uses the "
-                            + "default of " + QuerySpec.DEFAULT_PAGE_SIZE + "."),
+                            + QuerySpec.MAX_PAGE_SIZE + ". Default: "
+                            + QuerySpec.DEFAULT_PAGE_SIZE + ". Sending null equals leaving "
+                            + "the argument out."),
                     optional(QuerySpec.AFTER_ARGUMENT, STRING,
                         "The 'next_cursor' of the previous answer of the same query, as "
-                            + "it came. A missing after answers the first page."),
-                    optional(QuerySpec.SORT_ARGUMENT, STRING,
-                        "'" + SortKey.ID.wireName() + "' (the object's number, the "
-                            + "default) or '" + SortKey.CREATED_AT.wireName() + "' (when it "
-                            + "was created, then its number)."),
-                    optional(QuerySpec.DIRECTION_ARGUMENT, STRING,
-                        "'" + SortKey.Direction.ASC.wireName() + "' (the default) or '"
-                            + SortKey.Direction.DESC.wireName() + "'."))),
+                            + "it came. Default: the first page. Sending null equals leaving "
+                            + "the argument out."),
+                    choice(QuerySpec.SORT_ARGUMENT,
+                        "The order of the page. Default: '" + QuerySpec.DEFAULT_SORT.wireName()
+                            + "'. Sending null equals leaving the argument out.",
+                        List.of(SortKey.ID.wireName(), SortKey.CREATED_AT.wireName()),
+                        List.of("the object's number", "when the object was created, then "
+                            + "its number")),
+                    choice(QuerySpec.DIRECTION_ARGUMENT,
+                        "The direction of the order. Default: '"
+                            + QuerySpec.DEFAULT_DIRECTION.wireName() + "'. Sending null "
+                            + "equals leaving the argument out.",
+                        List.of(SortKey.Direction.ASC.wireName(),
+                            SortKey.Direction.DESC.wireName()),
+                        List.of("ascending, the smallest first",
+                            "descending, the largest first")))),
 
             new Tool("accept",
                 "The intake gate. It refuses today and says why: the address it used to "
@@ -219,7 +233,11 @@ public final class McpTools {
                     + "update.",
                 schema(
                     required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC))),
+                    required(ARG_TOKEN, STRING, TOKEN_DOC),
+                    optional(ARG_PRODUCED, STRING,
+                        "What the iteration produced, named in a few words; an iteration "
+                            + "closes with it, a milestone takes no such argument. Default: "
+                            + "nothing named. Sending null equals leaving the argument out."))),
 
             new Tool("advance",
                 "Promote the first planned iteration to current. Exactly one, in the "
@@ -329,11 +347,45 @@ public final class McpTools {
     // The schema shapes
     // ----------------------------------------------------------------------
 
-    private record Field(String name, String type, String description, boolean required) {
+    private record Field(String name, String type, String description, boolean required,
+                         List<String> values, List<String> valueDescriptions) {
+
+        Field(String name, String type, String description, boolean required) {
+            this(name, type, description, required, List.of(), List.of());
+        }
     }
 
     private static Field required(String name, String type, String description) {
         return new Field(name, type, description, true);
+    }
+
+    /**
+     * An optional text argument that takes one value of a fixed set of the
+     * platform's own, each value with its description: the schema closes it
+     * with {@code enum}, and {@code oneOf} carries a description per value.
+     */
+    private static Field choice(String name, String description, List<String> values,
+                                List<String> valueDescriptions) {
+        return new Field(name, STRING, description, false, values, valueDescriptions);
+    }
+
+    /** The names of the tools this server declares, in the order of tools/list. */
+    public static List<String> names() {
+        return declared().stream().map(Tool::name).toList();
+    }
+
+    /**
+     * The argument names one tool declares, or {@code null} for a name that is
+     * no declared tool.
+     */
+    @SuppressWarnings("unchecked")
+    public static List<String> argumentsOf(String tool) {
+        return declared().stream()
+            .filter(t -> t.name().equals(tool))
+            .findFirst()
+            .map(t -> List.copyOf(((Map<String, Object>) t.inputSchema().get("properties"))
+                .keySet()))
+            .orElse(null);
     }
 
     /**
@@ -364,7 +416,19 @@ public final class McpTools {
         List<String> mandatory = new ArrayList<>();
 
         for (Field f : fields) {
-            properties.put(f.name(), Map.of("type", f.type(), "description", f.description()));
+            Map<String, Object> property = new LinkedHashMap<>();
+            property.put("type", f.type());
+            property.put("description", f.description());
+            if (!f.values().isEmpty()) {
+                property.put("enum", f.values());
+                List<Map<String, Object>> each = new ArrayList<>();
+                for (int i = 0; i < f.values().size(); i++) {
+                    each.add(Map.of("const", f.values().get(i),
+                        "description", f.valueDescriptions().get(i)));
+                }
+                property.put("oneOf", List.copyOf(each));
+            }
+            properties.put(f.name(), Map.copyOf(property));
             if (f.required()) {
                 mandatory.add(f.name());
             }

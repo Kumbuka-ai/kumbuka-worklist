@@ -106,10 +106,10 @@ public class ScopeDirectory {
         if (row.isEmpty()) {
             // Reached only with both settings bound, so this genuinely means
             // "no such scope for this subject" and not "nothing was bound".
-            LOG.warnf("scope '%s' unresolved: %s", slug,
-                WorklistException.Reason.SCOPE_UNRESOLVED);
+            // The slug is the caller's and stays out of the line (DEC-0051).
+            LOG.warnf("scope unresolved: %s", WorklistException.Reason.SCOPE_UNRESOLVED);
             throw new WorklistException(WorklistException.Reason.SCOPE_UNRESOLVED,
-                "no scope '" + slug + "' is open to this subject. The directory answers "
+                "the scope named is closed to this subject. The directory answers "
                     + "for the bound subject only, and existence in its answer is the "
                     + "permission — so this is a refusal, not a missing row to be "
                     + "worked around.");
@@ -122,7 +122,7 @@ public class ScopeDirectory {
             refuseWriteWithoutTheRight(found);
         }
 
-        LOG.debugf("resolved scope '%s'", slug);
+        LOG.debugf("resolved scope %s", found.scopeId());
         return new ScopeAccess(
             found.scopeId(),
             found.tenantId(),
@@ -172,11 +172,11 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_LOCKED,
-            "scope '" + scope.slug() + "' is locked, so it takes no writes over a "
+            "the scope is locked, so it takes no writes over a "
                 + "service channel. Reading it is unaffected — freezing a scope keeps "
                 + "the record, it does not withdraw it. The lock is lifted where it was "
                 + "set, which is not here.",
-            List.of(scope.slug()));
+            List.of(SCOPE_ARGUMENT));
     }
 
     /** A write this subject may not make in a scope it may read. */
@@ -185,11 +185,11 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_READ_ONLY,
-            "this subject may read scope '" + scope.slug() + "' and may not write into "
+            "this subject may read the scope and may not write into "
                 + "it over a service channel. The write right is the platform's answer, "
                 + "not this service's, so it is changed where membership is "
                 + "administered.",
-            List.of(scope.slug()));
+            List.of(SCOPE_ARGUMENT));
     }
 
     /**

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
@@ -46,6 +53,10 @@ import java.util.UUID;
 @ApplicationScoped
 @TenantBound
 public class MembershipService extends PlanningService {
+
+    /** The argument a refusal about the addressed membership names (DEC-0043 R18). */
+    private static final String ADDRESS = "address";
+
 
     /** An address, a scope id, a count, a transition. Never a title, never an actor. */
     private static final Logger LOG = Logger.getLogger(MembershipService.class);
@@ -121,10 +132,9 @@ public class MembershipService extends PlanningService {
         if (planning.membership(scopeId, iteration.number, item.number) != null) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_PRESENT,
-                "item " + itemId + " is already in iteration " + iteration.number
-                    + ". Planning it again would have to displace the membership that is "
+                "the item is already a member of the iteration. Planning it again would have to displace the membership that is "
                     + "there, along with its status and its place in the sequence",
-                List.of(String.valueOf(itemId)));
+                List.of(ADDRESS));
         }
 
         ScopeSetting setting = requireSetting(scopeId);
@@ -266,29 +276,28 @@ public class MembershipService extends PlanningService {
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
-                "no item " + itemId + " in scope " + scopeId,
-                List.of(String.valueOf(itemId)));
+                "the item addressed is outside this scope",
+                List.of(ADDRESS));
         }
 
         ItemStatus status = vocabulary.requireStatus(scopeId, item.statusPk);
         if (!status.actionable) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
-                "item " + itemId + " carries the status " + status.name + ", which this "
-                    + "scope declared as not actionable. An iteration is what is being "
+                "the item carries a status this scope declared as not actionable. An iteration is what is being "
                     + "worked, and something that cannot be worked on has no place in "
                     + "one",
-                List.of(status.name));
+                List.of(ADDRESS));
         }
 
         if (item.milestoneNumber == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
-                "item " + itemId + " carries no milestone, so nothing says which goal "
+                "the item carries no milestone, so nothing says which goal "
                     + "working it would serve. An item without one is not worked out "
                     + "yet — including the three markers, which ARE milestones and say "
                     + "so explicitly",
-                List.of(String.valueOf(itemId)));
+                List.of(ADDRESS));
         }
 
         Milestone milestone = planning.milestoneByNumber(scopeId, item.milestoneNumber);
@@ -297,11 +306,11 @@ public class MembershipService extends PlanningService {
                 : milestone.kind;
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
-                "item " + itemId + " carries " + found + ", which is not on the product "
-                    + "path. Only " + Milestone.ON_THE_PRODUCT_PATH + " are; the other "
+                "the item carries a milestone off the product path. Only "
+                    + Milestone.ON_THE_PRODUCT_PATH + " are on it; the other "
                     + "two positions on the axis say the item is off the path or has not "
                     + "been assessed, and neither is something to spend an iteration on",
-                List.of(found));
+                List.of(ADDRESS));
         }
         return item;
     }
@@ -349,16 +358,15 @@ public class MembershipService extends PlanningService {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
-                "no iteration " + iterationId + " in scope " + scopeId,
-                List.of(String.valueOf(iterationId)));
+                "the iteration addressed is outside this scope",
+                List.of(ADDRESS));
         }
         if (!iteration.open()) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_CLOSED,
-                "iteration " + iteration.number + " was closed at " + iteration.closedAt
-                    + " and its memberships take no further writes. They stay readable, "
+                "the iteration is closed and its memberships take no further writes. They stay readable, "
                     + "which is what makes a closed iteration a record rather than a gap",
-                List.of(String.valueOf(iterationId)));
+                List.of(ADDRESS));
         }
         return iteration;
     }
@@ -371,9 +379,8 @@ public class MembershipService extends PlanningService {
         if (membership == null) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_UNKNOWN,
-                "item " + itemId + " is not in iteration " + iteration.number
-                    + " of scope " + iteration.scopeId,
-                List.of(String.valueOf(itemId)));
+                "the item is outside the iteration addressed",
+                List.of(ADDRESS));
         }
         return membership;
     }

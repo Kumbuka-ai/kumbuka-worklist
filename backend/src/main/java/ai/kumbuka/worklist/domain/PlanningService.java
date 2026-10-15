@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.PlanningRepository;
@@ -59,12 +66,12 @@ public abstract class PlanningService {
         if (setting == null) {
             throw new WorklistException(
                 WorklistException.Reason.SETTING_ABSENT,
-                "scope " + scopeId + " has no settings row, so its cardinality limits "
+                "this scope has no settings row, so its cardinality limits "
                     + "and its allocation counters do not exist yet. They carry no "
                     + "defaults on purpose — a limit this service invented would be a "
                     + "platform constant wearing a setting's clothes. Open the scope "
                     + "first",
-                List.of(String.valueOf(scopeId)));
+                List.of());
         }
         return setting;
     }
@@ -94,15 +101,15 @@ public abstract class PlanningService {
             }
             if (!ItemFields.unchangedAsText(current.get(field.canonicalName()),
                     entry.getValue())) {
-                refused.add(field.canonicalName());
+                refused.add(field.path());
             }
         }
 
         if (!refused.isEmpty()) {
             throw new WorklistException(
                 WorklistException.Reason.FIELD_NOT_SETTABLE,
-                "these fields of a " + addressed.description() + " are the service's and "
-                    + "may not be changed: " + refused + ". Sending them back unaltered "
+                "the fields under offenders are the service's and keep their values. "
+                    + "Sending them back unaltered "
                     + "is fine — that is what a read answer carries — but the values "
                     + "given differ from the ones held. Settable here is "
                     + Field.settableNames(addressed),
@@ -145,9 +152,8 @@ public abstract class PlanningService {
         } catch (NumberFormatException notANumber) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                field.canonicalName() + " is a whole number, and " + rendered
-                    + " was given",
-                List.of(field.canonicalName()));
+                "the field under offenders takes a whole number, and another form arrived",
+                List.of(field.path()));
         }
     }
 
@@ -163,7 +169,7 @@ public abstract class PlanningService {
         if (value == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE, why,
-                List.of(field.canonicalName()));
+                List.of(field.path()));
         }
         return value;
     }
@@ -188,13 +194,13 @@ public abstract class PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            field.canonicalName() + " is capped at " + max + " characters on the "
-                + "write path, and " + value.length() + " were given. The store carries "
+            "the field under offenders is capped at " + max + " characters on the "
+                + "write path. The store carries "
                 + "the same cap as a check constraint, so a value over it is refused "
                 + "whichever path a write took; the refusal is raised here so it "
                 + "reaches the caller typed rather than as a constraint violation at "
                 + "flush",
-            List.of(field.canonicalName()));
+            List.of(field.path()));
     }
 
     /**
@@ -213,10 +219,10 @@ public abstract class PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            field.canonicalName() + " is one of " + admitted + " — the platform's own "
-                + "planning vocabulary, not a value the scope declares — and " + value
-                + " was given",
-            List.of(field.canonicalName()));
+            "the field under offenders takes one of " + admitted + " — the platform's own "
+                + "planning vocabulary, not a value the scope declares — and another value "
+                + "arrived",
+            List.of(field.path()));
     }
 
     /**
@@ -231,9 +237,12 @@ public abstract class PlanningService {
         if (reached < warnAt) {
             return null;
         }
-        return subject + " now stands at " + reached + ", at or past the warning "
-            + "threshold of " + warnAt + " this scope set for itself. The hard limit is "
-            + limit + ", and it refuses rather than warns";
+        // A fixed notice: the numbers are the scope's settings and travel in
+        // the read of those settings, not in a statement of the platform
+        // (DEC-0043 R18).
+        return subject + " stands at or past the warning threshold this scope set for "
+            + "itself. The hard limit refuses rather than warns; read the scope's settings "
+            + "for both numbers";
     }
 
     /**
@@ -250,10 +259,9 @@ public abstract class PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.CARDINALITY_EXCEEDED,
-            subject + " would stand at " + reached + ", beyond the limit of " + limit
-                + " this scope set for itself. The limit is a setting and not a platform "
+            subject + " would stand beyond the limit this scope set for itself. The limit is a setting and not a platform "
                 + "constant: raise it on the scope if the work genuinely belongs here",
-            List.of(String.valueOf(limit)));
+            List.of());
     }
 
     /** The warnings of one write, as the answer carries them. Empty is the normal case. */

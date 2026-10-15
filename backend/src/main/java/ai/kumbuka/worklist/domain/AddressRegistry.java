@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.ItemRepository;
@@ -153,10 +160,10 @@ public class AddressRegistry {
         if (current == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_ABSENT,
-                "scope " + scopeId + " is working no iteration, so 'current' addresses "
+                "this scope is working no iteration, so 'current' addresses "
                     + "nothing. The pointer moves when an iteration is advanced and is "
                     + "empty between a close and the next advance",
-                List.of(Selector.ITERATION));
+                List.of("address"));
         }
         return current;
     }
@@ -164,9 +171,9 @@ public class AddressRegistry {
     private static WorklistException absent(WorklistException.Reason reason, String view,
             long number, UUID scopeId) {
         return new WorklistException(reason,
-            "no " + view + " numbered " + number + " in scope " + scopeId + ". Numbers are "
+            "the " + view + " addressed is outside this scope. Numbers are "
                 + "never reused here, so this one was either never handed out or names "
                 + "something in another scope",
-            List.of(view + "/" + number));
+            List.of());
     }
 }

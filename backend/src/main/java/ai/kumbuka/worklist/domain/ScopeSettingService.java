@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -82,10 +89,10 @@ public class ScopeSettingService extends PlanningService {
         if (planning.settingOf(scopeId) != null) {
             throw new WorklistException(
                 WorklistException.Reason.SETTING_PRESENT,
-                "scope " + scopeId + " is already open and carries its settings row. "
+                "this scope is already open and carries its settings row. "
                     + "There is one per scope; change what it holds through `update` so "
                     + "that the conflict token catches a second writer",
-                List.of(String.valueOf(scopeId)));
+                List.of());
         }
 
         ScopeSetting setting = new ScopeSetting();
@@ -168,7 +175,7 @@ public class ScopeSettingService extends PlanningService {
                     + "carry no defaults on purpose: a number this service chose would be "
                     + "a platform constant wearing a setting's clothes. A limit of zero "
                     + "forbids what the setting exists to bound",
-                List.of(field.canonicalName()));
+                List.of(field.path()));
         }
         return value;
     }
@@ -230,7 +237,7 @@ public class ScopeSettingService extends PlanningService {
                 field.canonicalName() + " is a positive whole number. A limit of zero "
                     + "forbids what the setting exists to bound, and a negative one is "
                     + "not a limit at all",
-                List.of(field.canonicalName()));
+                List.of(field.path()));
         }
         return number;
     }

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.fixture.ServicePrivateVerbFixture;
@@ -153,7 +160,8 @@ class VerbVocabularyGuardTest {
      * would silently admit the next method that happened to match it.
      */
     private static final Set<String> SURFACE_MECHANICS = Set.of(
-        "read_membership", "update_membership", "uncarried", "unbuilt");
+        "read_membership", "update_membership", "uncarried", "unbuilt",
+            "require_visible");
 
     /** Every verb the scheme carries, across all five addresses. */
     private static Set<String> everythingCarried() {
@@ -239,7 +247,9 @@ class VerbVocabularyGuardTest {
      * its iteration rather than as a fourth view. {@code uncarried} and
      * {@code unbuilt} are how the two classes of non-acting verb are refused;
      * they are the surface's own vocabulary for saying no, not acts of their
-     * own.
+     * own. {@code require_visible} is the scope stage alone, which an adapter
+     * runs before it refuses an argument so that a stranger still meets
+     * NOT_FOUND first (DEC-0042); it acts on nothing either.
      */
     @Test
     void the_public_methods_of_the_verb_surface_are_the_carried_verbs() {

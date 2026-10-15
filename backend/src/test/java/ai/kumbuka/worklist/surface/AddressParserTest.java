@@ -154,7 +154,8 @@ class AddressParserTest {
     @Test
     void an_address_of_another_scheme_is_not_an_address_of_this_one() {
         assertThat(malformed(() -> AddressParser.uri("dispatch://kumbuka/sprint/171.1")))
-            .contains("does not name the worklist scheme");
+            .contains("another scheme than the worklist scheme")
+            .doesNotContain("dispatch://kumbuka/sprint/171.1");
     }
 
     @Test
@@ -162,7 +163,7 @@ class AddressParserTest {
         assertThat(malformed(() -> AddressParser.uri("worklist://kumbuka/" + Selector.ITEM)))
             .as("an address without an id part is reserved, which is what stops a "
                 + "three-part string meaning 'the objects of this scope'")
-            .contains("occupies 2 part(s)");
+            .contains("occupies three");
     }
 
     @Test

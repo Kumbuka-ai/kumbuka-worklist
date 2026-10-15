@@ -157,9 +157,9 @@ class QueryRefusalWordingIT {
                 "filter", Map.of("status", List.of(MARKER)))),
             new Case("filter list", "ARGUMENT_INVALID", SCOPE, Selector.ITEM, Map.of(), MARKER));
         check(soft, "MCP no scope", mcp(Map.of("selector", Selector.ITEM)),
-            new Case("no scope", "PAYLOAD_MALFORMED", null, Selector.ITEM, Map.of()));
+            new Case("no scope", "ARGUMENT_MISSING", null, Selector.ITEM, Map.of()));
         check(soft, "MCP no selector", mcp(Map.of("scope", SCOPE)),
-            new Case("no selector", "PAYLOAD_MALFORMED", SCOPE, null, Map.of()));
+            new Case("no selector", "ARGUMENT_MISSING", SCOPE, null, Map.of()));
         soft.assertAll();
     }
 
@@ -183,6 +183,11 @@ class QueryRefusalWordingIT {
             Map.of("foo", MARKER), MARKER));
         cases.add(new Case("undeclared filter", "PREDICATE_UNKNOWN", SCOPE, Selector.ITEM,
             Map.of("filter.foo", MARKER), MARKER));
+        // DEC-0043 R19: a name the call does not declare never comes back either.
+        cases.add(new Case("marked argument name", "ARGUMENT_UNKNOWN", SCOPE, Selector.ITEM,
+            Map.of(MARKER, "1"), MARKER));
+        cases.add(new Case("marked filter name", "PREDICATE_UNKNOWN", SCOPE, Selector.ITEM,
+            Map.of("filter." + MARKER, "1"), MARKER));
         cases.add(new Case("milestone form", "ARGUMENT_INVALID", SCOPE, Selector.ITEM,
             Map.of("filter.milestone", MARKER), MARKER));
         cases.add(new Case("status as an identity", "ARGUMENT_INVALID", SCOPE, Selector.ITEM,

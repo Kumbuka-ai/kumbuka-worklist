@@ -123,11 +123,20 @@ public enum QueryFilter {
         return of(view).stream()
             .filter(f -> f.filterName.equals(name))
             .findFirst()
+            // The name that arrived is the caller's and never comes back
+            // (DEC-0043 R19): the answer names the filter argument and lists
+            // the filters this view declares, as their paths.
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.PREDICATE_UNKNOWN,
-                "the filter under offenders is outside the filters this view declares. Use "
-                    + "one of the filters this view declares: " + describe(view) + ".",
-                List.of(FILTER_ARGUMENT + "." + name)));
+                "filter carries a name outside the filters this view declares. Use one of "
+                    + "the filters this view declares: " + describe(view) + ".",
+                List.of(FILTER_ARGUMENT),
+                of(view).stream().map(QueryFilter::offenderName).toList()));
+    }
+
+    /** Whether any view declares a filter of this name: the name is then the platform's. */
+    static boolean declaredAnywhere(String name) {
+        return Arrays.stream(values()).anyMatch(f -> f.filterName.equals(name));
     }
 
     /** The filters of one view, as a caller reads them in a refusal or a tool description. */

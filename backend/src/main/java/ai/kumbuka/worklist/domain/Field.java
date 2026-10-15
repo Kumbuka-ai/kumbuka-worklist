@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import java.util.ArrayList;
@@ -452,6 +459,19 @@ public enum Field {
         return canonicalName;
     }
 
+    /** The argument every field travels under on the verb surface. */
+    public static final String FIELDS_ARGUMENT = "fields";
+
+    /** This field as an argument path, {@code fields.<name>}. */
+    public String path() {
+        return path(canonicalName);
+    }
+
+    /** A declared field name as an argument path, {@code fields.<name>}. */
+    public static String path(String canonicalName) {
+        return FIELDS_ARGUMENT + "." + canonicalName;
+    }
+
     /** Whether the addressed object has this field at all. */
     public boolean carriedBy(Addressed addressed) {
         return carriedBy.contains(addressed);
@@ -542,22 +562,20 @@ public enum Field {
                     + ". Nothing was written: a field whose relation was retracted is "
                     + "refused rather than taken, because a write that is accepted and "
                     + "lands nowhere is the defect the retraction is undoing",
-                retracted);
+                retracted.stream().map(Field::path).toList());
         }
 
         if (!unknown.isEmpty()) {
+            // The names that arrived are the caller's input and never come
+            // back (DEC-0043 R19): the answer is the fields this object
+            // declares, as their argument paths.
             throw new WorklistException(
-                WorklistException.Reason.UNKNOWN_FIELD,
-                "no field of a " + addressed.description() + " is named " + unknown
-                    + ". Its fields are "
-                    + of(addressed).stream().map(Field::canonicalName).toList()
-                    + ", of which " + settableNames(addressed) + " may be set. A scope's "
-                    + "own attributes are not fields: they travel inside `attributes`, "
-                    + "under the key they were declared with. Nothing was written: "
-                    + "an argument this service does not recognise is refused rather "
-                    + "than dropped, because a dropped argument makes a write that "
-                    + "changed nothing look like one that succeeded",
-                unknown);
+                WorklistException.Reason.ARGUMENT_UNKNOWN,
+                "fields carries a name this " + addressed.description() + " does not "
+                    + "declare, and nothing was written. Name only the fields under "
+                    + "accepts; a scope's own attributes travel inside fields.attributes.",
+                List.of(),
+                of(addressed).stream().map(Field::path).toList());
         }
         return resolved;
     }

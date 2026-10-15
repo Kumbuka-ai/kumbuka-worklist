@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.VocabularyRepository;
@@ -76,9 +83,8 @@ public class VocabularyRegistry {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "a status cannot be both closed and in progress: finished means there is "
-                    + "nothing further to do, and in progress means somebody is doing it. "
-                    + "Refused: " + name,
-                List.of(name));
+                    + "nothing further to do, and in progress means somebody is doing it",
+                List.of());
         }
 
         // Idempotent, like the selector and attribute declarations: a caller
@@ -124,11 +130,10 @@ public class VocabularyRegistry {
         if (status == null || !status.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "no status " + statusId + " is declared in scope " + scopeId
-                    + ". The statuses of a scope are its own data, and each one carries "
+                "the status named is outside the statuses this scope declares. The statuses of a scope are its own data, and each one carries "
                     + "the four predicates the platform reasons about — declare the "
                     + "status before setting it on an item",
-                List.of(String.valueOf(statusId)));
+                List.of(Field.STATUS.path()));
         }
         return status;
     }
@@ -193,20 +198,19 @@ public class VocabularyRegistry {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 "an attribute key is a leading lower-case letter followed by "
-                    + "alphanumerics and interior underscores — cluster, story_points. "
-                    + "Refused: " + key,
-                List.of(String.valueOf(key)));
+                    + "alphanumerics and interior underscores — cluster, story_points",
+                List.of());
         }
         requireName(name, "an attribute");
         if (!AttributeDefinition.TYPES.contains(type)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "there is no attribute type " + type + ". The set is "
+                "the attribute type named is outside the platform's set. The set is "
                     + AttributeDefinition.TYPES + " and it is closed at the platform "
                     + "level. Which of them a field gets is the scope's own choice — the "
                     + "same field is a choice in one scope, free text in the next and a "
                     + "number in a third, and no rule here narrows that",
-                List.of(String.valueOf(type)));
+                List.of());
         }
 
         AttributeDefinition existing = vocabulary.definitionByKey(scopeId, key);
@@ -247,11 +251,10 @@ public class VocabularyRegistry {
         if (definition == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "no attribute " + key + " is declared in scope " + scopeId
-                    + ". An attribute is not created by being written to: a scope's "
+                "the attribute named is outside the attributes this scope declares. An attribute is not created by being written to: a scope's "
                     + "attribute set is a declaration, and a value under an undeclared "
                     + "key is a value nothing can read back",
-                List.of(String.valueOf(key)));
+                List.of(Field.ATTRIBUTES.path()));
         }
         return definition;
     }
@@ -282,10 +285,10 @@ public class VocabularyRegistry {
         if (!AttributeDefinition.ENUMERATED.contains(definition.type)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "attribute " + key + " is of type " + definition.type + " and draws its "
+                "the attribute named is of type " + definition.type + " and draws its "
                     + "values from no declared set. Options belong to "
                     + AttributeDefinition.ENUMERATED,
-                List.of(key));
+                List.of());
         }
 
         // Idempotent by name, as declaring an attribute is by key: the name is
@@ -326,10 +329,9 @@ public class VocabularyRegistry {
         if (option == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "no option named " + name + " is declared under attribute " + definition.key
-                    + ". The options of an attribute are the scope's declaration, and a "
+                "the option named is outside the options this attribute declares. The options of an attribute are the scope's declaration, and a "
                     + "value outside it is one nothing can render",
-                List.of(definition.key, name));
+                List.of(Field.ATTRIBUTES.path()));
         }
         return option;
     }
@@ -388,11 +390,10 @@ public class VocabularyRegistry {
         if (type == null || !type.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "no relation type " + typeId + " is declared in scope " + scopeId
-                    + ". An edge carries a declared type, and the one thing the platform "
+                "the relation type named is outside the types this scope declares. An edge carries a declared type, and the one thing the platform "
                     + "reads out of a type is whether it blocks — an undeclared type is "
                     + "an edge nothing can answer that question about",
-                List.of(String.valueOf(typeId)));
+                List.of(Field.RELATIONS.path()));
         }
         return type;
     }
@@ -434,7 +435,7 @@ public class VocabularyRegistry {
                 WorklistException.Reason.INVALID_VALUE,
                 subject + " carries a display name: it is what a reader sees, and a "
                     + "declared value nobody can name is one nobody can pick",
-                List.of(String.valueOf(name)));
+                List.of());
         }
     }
 }

@@ -158,7 +158,7 @@ public class VerbSurface {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         refuseWriteOnDeclaredView(in.view(), "create");
         addresses.requireView(in.scopeId(), in.view());
-        Map<String, Object> fields = required(body).values();
+        Map<String, Object> fields = required(body, FIELDS).values();
 
         Map<String, Object> created = switch (in.view()) {
             case Selector.ITEM -> items.create(in.scopeId(), fields);
@@ -249,7 +249,7 @@ public class VerbSurface {
         requireWritable(target);
         UUID id = resolve(in, target);
 
-        Map<String, Object> fields = required(body)
+        Map<String, Object> fields = required(body, FIELDS)
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
@@ -324,7 +324,7 @@ public class VerbSurface {
         UUID id = resolve(in, target);
 
         Result result = at(target, items.withdraw(in.scopeId(), id,
-            requireStatusName(required(body).status()), requireToken(conflictToken)));
+            requireLabel(STATUS, required(body, STATUS).status()), requireToken(conflictToken)));
         LOG.infof("withdraw %s in scope %s", target.id(), in.scopeId());
         return result;
     }
@@ -472,7 +472,7 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
-        Map<String, Object> fields = required(body)
+        Map<String, Object> fields = required(body, FIELDS)
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
@@ -522,7 +522,7 @@ public class VerbSurface {
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "release");
         UUID id = resolve(in, target);
 
-        String receipt = required(body).receipt();
+        String receipt = requireText(RECEIPT, required(body, RECEIPT).receipt());
         Map<String, Object> answered = claims.release(in.scopeId(), id, subject, receipt);
         LOG.infof("release on %s in scope %s", target.id(), in.scopeId());
         return at(target, answered);
@@ -582,10 +582,9 @@ public class VerbSurface {
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "relate");
         UUID from = resolve(in, target);
 
-        VerbInput.Edge edge = required(body);
-        String typeName = requireLabel("type", edge.type(), "a relation type's display name");
-        String toAddress = requireLabel("to_item", edge.toItem(),
-            "the other item's canonical address worklist://<scope>/item/<number>");
+        VerbInput.Edge edge = required(body, TO_ITEM, TYPE);
+        String toAddress = requireLabel(TO_ITEM, edge.toItem());
+        String typeName = requireLabel(TYPE, edge.type());
 
         Map<String, Object> answered = items.relate(in.scopeId(), from, toAddress, typeName,
             requireToken(conflictToken));
@@ -601,10 +600,9 @@ public class VerbSurface {
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "unrelate");
         UUID from = resolve(in, target);
 
-        VerbInput.Edge edge = required(body);
-        String typeName = requireLabel("type", edge.type(), "a relation type's display name");
-        String toAddress = requireLabel("to_item", edge.toItem(),
-            "the other item's canonical address worklist://<scope>/item/<number>");
+        VerbInput.Edge edge = required(body, TO_ITEM, TYPE);
+        String toAddress = requireLabel(TO_ITEM, edge.toItem());
+        String typeName = requireLabel(TYPE, edge.type());
 
         Map<String, Object> answered = items.unrelate(in.scopeId(), from, toAddress, typeName,
             requireToken(conflictToken));
@@ -693,6 +691,20 @@ public class VerbSurface {
         throw new SurfaceException(SurfaceException.Reason.VERB_UNBUILT,
             "'" + verb + "' is a verb of the worklist scheme and this service has not "
                 + "built it. " + why);
+    }
+
+    /**
+     * Stage 1 and stage 2 alone: the scope parses and this subject sees it.
+     *
+     * <p>Called by an adapter before it refuses an argument the call does not
+     * declare. That refusal is decidable from the verb alone, and DEC-0042
+     * still answers {@code NOT_FOUND} for a scope the caller cannot see
+     * "whatever else is wrong with the call": an unknown argument must not
+     * tell a stranger that the scope exists.
+     */
+    @Transactional
+    public void requireVisible(String subject, String rawScope) {
+        scopes.resolve(subject, AddressParser.scope(rawScope), Access.READ);
     }
 
     // ======================================================================
@@ -821,74 +833,73 @@ public class VerbSurface {
         return presented;
     }
 
-    /**
-     * The status name a withdrawal moves the item into.
-     *
-     * <p>Sprint 180.4: the wire form of a status is the display name the
-     * scope declared it under, and a uuid is refused as malformed here
-     * rather than passed on to the domain — the surface converts the wire
-     * shape to what the domain reads, and this is that conversion.
-     */
-    private static String requireStatusName(String raw) {
-        if (raw == null || raw.isBlank()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "a withdrawal names the status it moves the item into. No value arrived.");
-        }
-        String candidate = raw.strip();
-        if (UUID_SHAPE.matcher(candidate).matches()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "a withdrawal names the status it moves the item into by its declared "
-                    + "display name, not by the platform's identity. Refused: '" + candidate
-                    + "'.");
-        }
-        return candidate;
-    }
 
-    private static <T> T required(T body) {
+    /**
+     * The body a verb needs, refused by the names of its mandatory arguments
+     * when nothing arrived (DEC-0043 R17: an absent body and a body of nulls
+     * are the same call).
+     */
+    private static <T> T required(T body, String... arguments) {
         if (body == null) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "this verb takes arguments and none arrived.");
+            throw new SurfaceException(SurfaceException.Reason.ARGUMENT_MISSING,
+                "the arguments under offenders are mandatory, and the call left them out or sent "
+                    + "them as null. Send each with a value.", null, List.of(arguments), List.of());
         }
         return body;
     }
 
     /** A lease duration, refused when the body arrives without a positive one. */
     private static Duration requireLease(VerbInput.Lease body) {
-        VerbInput.Lease lease = required(body);
+        VerbInput.Lease lease = required(body, DURATION);
+        if (lease.durationSeconds() == null) {
+            throw SurfaceException.missing(DURATION,
+                "the argument under offenders is mandatory, and the call left it out or sent it "
+                    + "as null. Send the lease duration as a positive whole number of seconds.");
+        }
         if (lease.durationSeconds() <= 0) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the duration of a lease is a positive number of seconds. A zero "
-                    + "duration is a lease that is inert the moment it is granted, and a "
-                    + "negative one is not a duration at all — the predecessor's exact "
-                    + "defect, refused here rather than passed on to a domain that would "
-                    + "refuse it too");
+            throw SurfaceException.invalid(DURATION,
+                "duration_seconds takes a positive whole number of seconds. Send the lease "
+                    + "duration as such a number.");
         }
         return Duration.ofSeconds(lease.durationSeconds());
     }
 
     /**
-     * A label-shaped argument (a name, a token, an address), refused when it
-     * did not arrive or when it renders as a uuid.
-     *
-     * <p>Sprint 180.4: the wire form of every declared value is what the
-     * reader saw — a name, a number, a token — and the platform's identity
-     * is not something a caller reads back any more. A uuid on any of these
-     * arguments is a form refusal that names the argument and what it takes
-     * instead.
+     * A mandatory text argument that names a declared value or an address,
+     * refused by its declared name and never by what arrived.
      */
-    private static String requireLabel(String name, String raw, String expectedForm) {
-        if (raw == null || raw.isBlank()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the argument '" + name + "' is required and did not arrive.");
-        }
-        String candidate = raw.strip();
+    private static String requireLabel(String name, String raw) {
+        String candidate = requireText(name, raw);
         if (UUID_SHAPE.matcher(candidate).matches()) {
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the argument '" + name + "' takes " + expectedForm + ", not the "
-                    + "platform's own identity. A uuid arrived: '" + candidate + "'.");
+            throw SurfaceException.invalid(name,
+                "the argument under offenders takes a name, and an identity of the platform "
+                    + "arrived. Send it by the name a read answers it under.");
         }
         return candidate;
     }
+
+    /** A mandatory text argument, refused by its declared name when absent or empty. */
+    private static String requireText(String name, String raw) {
+        if (raw == null) {
+            throw SurfaceException.missing(name,
+                "the argument under offenders is mandatory, and the call left it out or sent it "
+                    + "as null. Send it with a value.");
+        }
+        String candidate = raw.strip();
+        if (candidate.isEmpty()) {
+            throw SurfaceException.invalid(name,
+                "the argument under offenders arrived as empty text. Send it with a value.");
+        }
+        return candidate;
+    }
+
+    /** The argument names this class refuses by. */
+    private static final String FIELDS = "fields";
+    private static final String STATUS = "status";
+    private static final String RECEIPT = "receipt";
+    private static final String TO_ITEM = "to_item";
+    private static final String TYPE = "type";
+    private static final String DURATION = "duration_seconds";
 
     /**
      * The switch arm that cannot be reached.

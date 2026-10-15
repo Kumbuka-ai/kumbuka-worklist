@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -202,7 +209,7 @@ class SurfaceCoverageIT {
         // probe, and here it is enough that the two forms travel end to
         // end and answer through the surface.
         String receipt = call("POST", item(Selector.ITEM, itemNumber) + ":claim", null,
-            Map.of("durationSeconds", 60))
+            Map.of("duration_seconds", 60))
             .statusCode(200)
             .body("fields.receipt", org.hamcrest.Matchers.notNullValue())
             .extract().path("fields.receipt");
@@ -217,7 +224,7 @@ class SurfaceCoverageIT {
         // lease is released again so the withdraw below is not talking
         // to a row a fresh claim just wrote.
         String drawnReceipt = call("POST", collection(Selector.ITEM) + ":claim_next", null,
-            Map.of("durationSeconds", 60))
+            Map.of("duration_seconds", 60))
             .statusCode(200)
             .body("fields.receipt", org.hamcrest.Matchers.notNullValue())
             .extract().path("fields.receipt");
@@ -246,7 +253,7 @@ class SurfaceCoverageIT {
         String missingAddress = "worklist://" + SurfaceFixture.SCOPE + "/item/9999999";
         String missingTypeName = "no-such-relation-type";
         call("POST", item(Selector.ITEM, itemNumber) + ":relate", itemToken,
-            Map.of("toItem", missingAddress, "type", missingTypeName))
+            Map.of("to_item", missingAddress, "type", missingTypeName))
             .statusCode(404)
             .body("reason", org.hamcrest.Matchers.is("NOT_FOUND"));
         // For unrelate to reach the RELATION_UNKNOWN answer we need a
@@ -255,7 +262,7 @@ class SurfaceCoverageIT {
         // absent in the scope, so this is refused as VALUE_UNDECLARED at
         // the vocabulary check. Answered by the same domain refusal path.
         call("POST", item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
-            Map.of("toItem", itemAddress, "type", missingTypeName))
+            Map.of("to_item", itemAddress, "type", missingTypeName))
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
@@ -312,7 +319,7 @@ class SurfaceCoverageIT {
 
         call("POST", collection(Selector.ITEM), null, null)
             .statusCode(400)
-            .body("reason", org.hamcrest.Matchers.is("PAYLOAD_MALFORMED"));
+            .body("reason", org.hamcrest.Matchers.is("ARGUMENT_MISSING"));
 
         // A well-formed but undeclared status name reaches the domain as a
         // VALUE_UNDECLARED refusal — Sprint 180.4 fixes the wire form as the
@@ -329,7 +336,7 @@ class SurfaceCoverageIT {
         call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
             Map.of("status", UUID.randomUUID().toString()))
             .statusCode(400)
-            .body("reason", org.hamcrest.Matchers.is("PAYLOAD_MALFORMED"));
+            .body("reason", org.hamcrest.Matchers.is("ARGUMENT_INVALID"));
 
         // ---- POST on an item address with no verb in it --------------------
         call("POST", item(Selector.ITEM, itemNumber), null, null)

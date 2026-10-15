@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
@@ -209,11 +216,11 @@ class McpProjectionIT {
     void an_argument_the_schema_declares_required_is_refused_when_it_is_absent() {
         call("read", Map.of())
             .body("result.isError", is(true))
-            .body("result.structuredContent.reason", is("PAYLOAD_MALFORMED"));
+            .body("result.structuredContent.reason", is("ARGUMENT_MISSING"));
 
         call("create", Map.of("scope", SurfaceFixture.SCOPE))
             .body("result.isError", is(true))
-            .body("result.structuredContent.reason", is("PAYLOAD_MALFORMED"));
+            .body("result.structuredContent.reason", is("ARGUMENT_MISSING"));
     }
 
     @Test
@@ -235,7 +242,7 @@ class McpProjectionIT {
     void a_tool_this_server_does_not_have_is_a_malformed_call_and_says_so() {
         call("frobnicate", Map.of("address", SurfaceFixture.address(Selector.ITEM, 1)))
             .body("result.isError", is(true))
-            .body("result.structuredContent.reason", is("PAYLOAD_MALFORMED"));
+            .body("result.structuredContent.reason", is("ARGUMENT_INVALID"));
     }
 
     /**

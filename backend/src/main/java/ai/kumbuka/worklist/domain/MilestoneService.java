@@ -320,7 +320,7 @@ public class MilestoneService extends PlanningService {
             "a milestone of kind " + milestone.kind + " is a position on the axis and "
                 + "never a goal, so it carries neither a vision nor a mission. Those two "
                 + "belong to a milestone that something is being worked towards",
-            List.of(Field.KIND.canonicalName()));
+            List.of(Field.KIND.path()));
     }
 
     private static boolean moved(Object held, Object wanted, Runnable write) {
@@ -345,8 +345,8 @@ public class MilestoneService extends PlanningService {
         if (milestone == null || !milestone.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
-                "no milestone " + milestoneId + " in scope " + scopeId,
-                List.of(String.valueOf(milestoneId)));
+                "the milestone addressed is outside this scope",
+                List.of());
         }
         return milestone;
     }
