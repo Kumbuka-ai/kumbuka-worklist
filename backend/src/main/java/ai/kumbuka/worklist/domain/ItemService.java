@@ -988,7 +988,7 @@ public class ItemService {
      */
     private Object storedValue(AttributeDefinition definition, Object given) {
         if (AttributeDefinition.TEXT_LIST.equals(definition.type)) {
-            return textListValue(definition, given);
+            return textListValue(given);
         }
         if (!AttributeDefinition.ENUMERATED.contains(definition.type)) {
             return given;
@@ -1042,8 +1042,8 @@ public class ItemService {
      * <p>Every refusal carries the attribute key as its offender, so a caller
      * writing several attributes at once can tell which one it was.
      */
-    private List<String> textListValue(AttributeDefinition definition, Object given) {
-        List<?> elements = asArrayOrRefuse( given);
+    private List<String> textListValue(Object given) {
+        List<?> elements = asArrayOrRefuse(given);
 
         if (elements.size() > 50) {
             throw new WorklistException(
@@ -1053,13 +1053,13 @@ public class ItemService {
 
         List<String> out = new ArrayList<>(elements.size());
         for (Object element : elements) {
-            out.add(validTextListEntry( element));
+            out.add(validTextListEntry(element));
         }
         return List.copyOf(out);
     }
 
     /** The caller's value as a list, or a refusal naming the attribute key. */
-    private static List<?> asArrayOrRefuse( Object given) {
+    private static List<?> asArrayOrRefuse(Object given) {
         if (given instanceof java.util.Collection<?> collection) {
             return new ArrayList<>(collection);
         }
@@ -1075,7 +1075,7 @@ public class ItemService {
      * One text_list entry: a string, not blank after trimming, at most 1500
      * characters. Returned as-is, so order, spacing and duplicates round-trip.
      */
-    private static String validTextListEntry( Object element) {
+    private static String validTextListEntry(Object element) {
         if (!(element instanceof CharSequence)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,

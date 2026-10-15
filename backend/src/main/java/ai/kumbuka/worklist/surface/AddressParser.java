@@ -198,7 +198,7 @@ public final class AddressParser {
             return new Target(view, null, null);
         }
 
-        return new Target(view, number(candidate, "id"), null);
+        return new Target(view, number(candidate), null);
     }
 
     /**
@@ -230,7 +230,7 @@ public final class AddressParser {
             throw malformed();
         }
 
-        return new Target(view, number(iteration, "id"), number(rawItem, "item number"));
+        return new Target(view, number(iteration), number(rawItem));
     }
 
     /**
@@ -287,7 +287,7 @@ public final class AddressParser {
      * from an exception thrown by the parser would put the refusal in the
      * catch block of a method that is supposed to decide it.
      */
-    private static long number(String raw, String part) {
+    private static long number(String raw) {
         String candidate = requirePresent(raw);
         if (!NUMBER.matcher(candidate).matches()) {
             throw malformed();
