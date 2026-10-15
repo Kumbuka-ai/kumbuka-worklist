@@ -18,8 +18,10 @@ import java.util.List;
  * do that yet" from "that does not exist" cannot map either onto its own
  * protocol without guessing.
  *
- * <p>The message is for a human and names the specifics; the reason is for a
- * caller and is stable.
+ * <p>It carries no text. What a caller reads -- the message and the remedy --
+ * is the refusal catalogue's, worded once per code in the surface's message
+ * bundles; the domain names the reason and the declared argument paths the
+ * refusal concerns, and nothing a call sent (DEC-0043 R18).
  *
  * <p>The first two below are the substrate's. The rest arrived with the item
  * domain, and each one names a refusal something in this service actually
@@ -454,13 +456,14 @@ public class WorklistException extends RuntimeException {
     private final transient Reason reason;
     private final transient List<String> offenders;
     private final transient List<String> accepts;
+    private transient String currentToken;
 
-    public WorklistException(Reason reason, String message) {
-        this(reason, message, List.of());
+    public WorklistException(Reason reason) {
+        this(reason, List.of());
     }
 
-    public WorklistException(Reason reason, String message, List<String> offenders) {
-        this(reason, message, offenders, List.of());
+    public WorklistException(Reason reason, List<String> offenders) {
+        this(reason, offenders, List.of());
     }
 
     /**
@@ -469,9 +472,8 @@ public class WorklistException extends RuntimeException {
      * @param accepts   the declared names a refusal of an undeclared name
      *                  answers with (DEC-0043 R19)
      */
-    public WorklistException(Reason reason, String message, List<String> offenders,
-                             List<String> accepts) {
-        super(message);
+    public WorklistException(Reason reason, List<String> offenders, List<String> accepts) {
+        super(reason.name());
         this.reason = reason;
         this.offenders = List.copyOf(offenders);
         this.accepts = List.copyOf(accepts);
@@ -490,6 +492,23 @@ public class WorklistException extends RuntimeException {
      */
     public List<String> offenders() {
         return offenders;
+    }
+
+    /**
+     * The conflict token the object carries now, on a {@code CONFLICT}.
+     *
+     * <p>State, not input: it is what the caller's own read would answer at
+     * this moment (DEC-0041), and it saves the caller a second call to learn
+     * what it should have sent.
+     */
+    public String currentToken() {
+        return currentToken;
+    }
+
+    /** This refusal, carrying the object's current conflict token. */
+    public WorklistException withCurrentToken(String token) {
+        this.currentToken = token;
+        return this;
     }
 
     /** The declared names a refusal of an undeclared name answers with. */

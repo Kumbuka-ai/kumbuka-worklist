@@ -125,7 +125,9 @@ class ItemDomainIT {
             .as("the refusal must carry the current token, so the caller can re-read, "
                 + "re-apply and retry without a round trip whose only purpose is to find "
                 + "out what it should have sent")
-            .containsExactly(currentToken);
+            .containsExactly("conflict_token");
+        assertThat(refusal.currentToken()).as("and the current token travels as state")
+            .isEqualTo(currentToken);
 
         // What the absent mechanism would have left behind: the second
         // writer's title, and a token rotated a second time. Neither is here.
@@ -704,7 +706,7 @@ class ItemDomainIT {
             .as("and the message says where the vocabulary comes from, because a caller "
                 + "reading 'no such status' would otherwise look for a list in this "
                 + "service — which is precisely what is not here any more")
-            .contains("declares");
+            .isEqualTo("VALUE_UNDECLARED");
 
         // A UUID in the status field is a different refusal: the wire form
         // is the display name and the platform's identity is not what a
@@ -772,7 +774,7 @@ class ItemDomainIT {
             .as("the message names why: an item carries a status on every path, so "
                 + "clearing it back to nothing would be exactly the pre-declaration state "
                 + "the vocabulary rule exists against")
-            .contains("cannot be cleared");
+            .isEqualTo("INVALID_VALUE");
     }
 
     /**
@@ -798,7 +800,7 @@ class ItemDomainIT {
             .as("and the message points to where the vocabulary comes from — the "
                 + "statuses of a scope are its own data, and inventing one at intake "
                 + "would be this service deciding what a scope's list means")
-            .contains("declares");
+            .isEqualTo("VALUE_UNDECLARED");
     }
 
     /** A status cannot be both closed and in progress, and the refusal says so. */
@@ -811,7 +813,7 @@ class ItemDomainIT {
         assertThat(refusal.getMessage())
             .as("finished means there is nothing further to do, and in progress means "
                 + "somebody is doing it — the two cannot both hold of one value")
-            .contains("closed");
+            .isEqualTo("INVALID_VALUE");
     }
 
     /** Withdrawing an item moves it to a status the scope declared as closed. */
@@ -1044,7 +1046,7 @@ class ItemDomainIT {
         assertThat(wrongScheme.getMessage())
             .as("the message names the expected scheme — a caller reading it can fix "
                 + "the shape without a second call")
-            .contains("worklist://");
+            .isEqualTo("INVALID_VALUE");
 
         String ownSlug = String.valueOf(items.read(SCOPE, from).get("scope"));
         WorklistException wrongView = catchWorklistException(() ->
@@ -1359,8 +1361,7 @@ class ItemDomainIT {
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
-            .contains("text", "number", "date", "boolean", "choice", "multi_choice",
-                "item_reference", "text_list");
+            .isEqualTo("INVALID_VALUE");
     }
 
     // ==================================================================
@@ -1424,7 +1425,7 @@ class ItemDomainIT {
         assertThat(refusal.getMessage())
             .as("and the message says why: a text_list is a JSON array of strings, and "
                 + "a string on its own is not one")
-            .contains("text_list")
+            .isEqualTo("INVALID_VALUE")
             .doesNotContain(key);
     }
 
@@ -1640,7 +1641,7 @@ class ItemDomainIT {
         assertThat(refusal.getMessage())
             .as("a free-text attribute draws its values from no declared set, so an "
                 + "option under it would be a declaration nothing reads")
-            .contains("choice");
+            .isEqualTo("INVALID_VALUE");
     }
 
     // ==================================================================

@@ -66,11 +66,6 @@ public abstract class PlanningService {
         if (setting == null) {
             throw new WorklistException(
                 WorklistException.Reason.SETTING_ABSENT,
-                "this scope has no settings row, so its cardinality limits "
-                    + "and its allocation counters do not exist yet. They carry no "
-                    + "defaults on purpose — a limit this service invented would be a "
-                    + "platform constant wearing a setting's clothes. Open the scope "
-                    + "first",
                 List.of());
         }
         return setting;
@@ -108,11 +103,6 @@ public abstract class PlanningService {
         if (!refused.isEmpty()) {
             throw new WorklistException(
                 WorklistException.Reason.FIELD_NOT_SETTABLE,
-                "the fields under offenders are the service's and keep their values. "
-                    + "Sending them back unaltered "
-                    + "is fine — that is what a read answer carries — but the values "
-                    + "given differ from the ones held. Settable here is "
-                    + Field.settableNames(addressed),
                 refused);
         }
     }
@@ -152,7 +142,6 @@ public abstract class PlanningService {
         } catch (NumberFormatException notANumber) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the field under offenders takes a whole number, and another form arrived",
                 List.of(field.path()));
         }
     }
@@ -164,11 +153,11 @@ public abstract class PlanningService {
      * service to fall back on. Inventing a value here would be the service
      * deciding something the caller is the only one who knows.
      */
-    protected static String required(Field field, Object raw, String why) {
+    protected static String required(Field field, Object raw) {
         String value = ItemFields.text(field, raw);
         if (value == null) {
             throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE, why,
+                WorklistException.Reason.INVALID_VALUE,
                 List.of(field.path()));
         }
         return value;
@@ -194,12 +183,6 @@ public abstract class PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "the field under offenders is capped at " + max + " characters on the "
-                + "write path. The store carries "
-                + "the same cap as a check constraint, so a value over it is refused "
-                + "whichever path a write took; the refusal is raised here so it "
-                + "reaches the caller typed rather than as a constraint violation at "
-                + "flush",
             List.of(field.path()));
     }
 
@@ -219,9 +202,6 @@ public abstract class PlanningService {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "the field under offenders takes one of " + admitted + " — the platform's own "
-                + "planning vocabulary, not a value the scope declares — and another value "
-                + "arrived",
             List.of(field.path()));
     }
 
@@ -233,16 +213,11 @@ public abstract class PlanningService {
      * refuses. The warning exists so that the limit is met deliberately
      * rather than discovered at the moment it refuses.
      */
-    protected static String warningAt(int reached, int warnAt, int limit, String subject) {
-        if (reached < warnAt) {
-            return null;
-        }
+    protected static Notice warningAt(int reached, int warnAt, Notice notice) {
         // A fixed notice: the numbers are the scope's settings and travel in
-        // the read of those settings, not in a statement of the platform
+        // the read of those settings, never in a statement of the platform
         // (DEC-0043 R18).
-        return subject + " stands at or past the warning threshold this scope set for "
-            + "itself. The hard limit refuses rather than warns; read the scope's settings "
-            + "for both numbers";
+        return reached < warnAt ? null : notice;
     }
 
     /**
@@ -253,21 +228,19 @@ public abstract class PlanningService {
      * only "too many" has no way to tell a platform ceiling from a setting
      * they may change.
      */
-    protected static void refuseBeyond(int reached, int limit, String subject) {
+    protected static void refuseBeyond(int reached, int limit) {
         if (reached <= limit) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.CARDINALITY_EXCEEDED,
-            subject + " would stand beyond the limit this scope set for itself. The limit is a setting and not a platform "
-                + "constant: raise it on the scope if the work genuinely belongs here",
             List.of());
     }
 
     /** The warnings of one write, as the answer carries them. Empty is the normal case. */
-    protected static List<String> warnings(String... produced) {
-        List<String> collected = new ArrayList<>();
-        for (String warning : produced) {
+    protected static List<Notice> warnings(Notice... produced) {
+        List<Notice> collected = new ArrayList<>();
+        for (Notice warning : produced) {
             if (warning != null) {
                 collected.add(warning);
             }

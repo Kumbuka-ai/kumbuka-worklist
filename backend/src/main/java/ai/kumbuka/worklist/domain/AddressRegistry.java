@@ -160,9 +160,6 @@ public class AddressRegistry {
         if (current == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_ABSENT,
-                "this scope is working no iteration, so 'current' addresses "
-                    + "nothing. The pointer moves when an iteration is advanced and is "
-                    + "empty between a close and the next advance",
                 List.of("address"));
         }
         return current;
@@ -171,9 +168,6 @@ public class AddressRegistry {
     private static WorklistException absent(WorklistException.Reason reason, String view,
             long number, UUID scopeId) {
         return new WorklistException(reason,
-            "the " + view + " addressed is outside this scope. Numbers are "
-                + "never reused here, so this one was either never handed out or names "
-                + "something in another scope",
             List.of());
     }
 }

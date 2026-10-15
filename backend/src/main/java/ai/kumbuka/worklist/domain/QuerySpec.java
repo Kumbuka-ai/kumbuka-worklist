@@ -140,9 +140,6 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         }
         throw new WorklistException(
             WorklistException.Reason.ARGUMENT_UNKNOWN,
-            "query carries an argument outside the ones it declares. Send only the arguments "
-                + "under accepts: write a narrowing inside filter, bound the page with "
-                + "page_size and continue it with after.",
             List.of(), ARGUMENTS);
     }
 
@@ -153,8 +150,6 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         if (!(raw instanceof Map<?, ?> map)) {
             throw new WorklistException(
                 WorklistException.Reason.ARGUMENT_INVALID,
-                "filter is an object that maps each filter name to one value. Send filter "
-                    + "as such an object.",
                 List.of(QueryFilter.FILTER_ARGUMENT));
         }
         Map<String, Object> filter = new LinkedHashMap<>();
@@ -173,7 +168,6 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
                     : QueryFilter.FILTER_ARGUMENT;
                 throw new WorklistException(
                     WorklistException.Reason.ARGUMENT_INVALID,
-                    "the filter under offenders takes one single value. Send it once, with one value.",
                     List.of(path));
             }
             filter.put(name, value);
@@ -189,9 +183,6 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         if (number == null || number < 1 || number > MAX_PAGE_SIZE) {
             throw new WorklistException(
                 WorklistException.Reason.PAGE_SIZE_REJECTED,
-                "page_size takes a whole number from 1 to " + MAX_PAGE_SIZE + ". Send "
-                    + "page_size in that range, and follow next_cursor of the answer for the "
-                    + "objects beyond one page.",
                 List.of(PAGE_SIZE_ARGUMENT));
         }
         return number.intValue();
@@ -206,8 +197,6 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
             .filter(key -> key.declaredOn(view))
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.SORT_UNDECLARED,
-                "sort takes one of the sorts this view offers on this surface. Send sort as "
-                    + "one of " + sortsOf(view, offered) + ".",
                 List.of(SORT_ARGUMENT)));
     }
 
@@ -227,7 +216,6 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
                 : Optional.<SortKey.Direction>empty())
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.ARGUMENT_INVALID,
-                "direction takes 'asc' or 'desc'. Send direction as 'asc' or 'desc'.",
                 List.of(DIRECTION_ARGUMENT)));
     }
 

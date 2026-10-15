@@ -108,11 +108,7 @@ public class ScopeDirectory {
             // "no such scope for this subject" and not "nothing was bound".
             // The slug is the caller's and stays out of the line (DEC-0051).
             LOG.warnf("scope unresolved: %s", WorklistException.Reason.SCOPE_UNRESOLVED);
-            throw new WorklistException(WorklistException.Reason.SCOPE_UNRESOLVED,
-                "the scope named is closed to this subject. The directory answers "
-                    + "for the bound subject only, and existence in its answer is the "
-                    + "permission — so this is a refusal, not a missing row to be "
-                    + "worked around.");
+            throw new WorklistException(WorklistException.Reason.SCOPE_UNRESOLVED);
         }
 
         ScopeAccessRepository.ScopeAccessRow found = row.get();
@@ -160,9 +156,6 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_KIND_UNSUPPORTED,
-            "the scope is a private scope, a per-tenant container for memory content, and "
-                + "the worklist keeps its items, iterations, milestones and workstreams in "
-                + "project and global scopes. Address a project or a global scope.",
             List.of(SCOPE_ARGUMENT));
     }
 
@@ -172,10 +165,6 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_LOCKED,
-            "the scope is locked, so it takes no writes over a "
-                + "service channel. Reading it is unaffected — freezing a scope keeps "
-                + "the record, it does not withdraw it. The lock is lifted where it was "
-                + "set, which is not here.",
             List.of(SCOPE_ARGUMENT));
     }
 
@@ -185,10 +174,6 @@ public class ScopeDirectory {
             return;
         }
         throw new WorklistException(WorklistException.Reason.SCOPE_READ_ONLY,
-            "this subject may read the scope and may not write into "
-                + "it over a service channel. The write right is the platform's answer, "
-                + "not this service's, so it is changed where membership is "
-                + "administered.",
             List.of(SCOPE_ARGUMENT));
     }
 
@@ -201,11 +186,7 @@ public class ScopeDirectory {
      */
     private void bindSubject(String subject) {
         if (subject == null || subject.isBlank()) {
-            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND,
-                "there is no subject to bind to app.subject. The directory answers for a "
-                    + "subject, so resolving without one would be asking a question with "
-                    + "no asker — and the answer would be zero rows, which reads as "
-                    + "'no such scope'.");
+            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND);
         }
         scopes.bindSubject(subject);
     }
@@ -226,13 +207,7 @@ public class ScopeDirectory {
         if (tenant == null || subject == null) {
             LOG.warnf("directory call with unbound session: %s",
                 WorklistException.Reason.SESSION_NOT_BOUND);
-            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND,
-                ("the session contract is not bound (app.tenant_id=%s, app.subject=%s), so "
-                    + "the directory would return zero rows for every scope. That reads as "
-                    + "'no such scope' and invites a repair to the privileges — which is "
-                    + "why this fails here instead of returning nothing.")
-                    .formatted(tenant == null ? "unset" : "set",
-                               subject == null ? "unset" : "set"));
+            throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND);
         }
     }
 

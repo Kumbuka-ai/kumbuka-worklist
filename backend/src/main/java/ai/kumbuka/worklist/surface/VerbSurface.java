@@ -86,7 +86,7 @@ import java.util.regex.Pattern;
  *
  * <p>The workstream view is declared, not written through this surface. A
  * caller aiming {@code create} or {@code update} at it hears a third sentence
- * ({@link SurfaceException.Reason#SELECTOR_DECLARED_NOT_WRITTEN}) that says the
+ * ({@link RefusalCode#SELECTOR_DECLARED_NOT_WRITTEN}) that says the
  * act exists and runs on the selector-declaration surface, not here. {@code read}
  * and {@code query} on the same view do act — a workstream is addressable like
  * any other declared view — and every other verb refuses on the existing view
@@ -365,19 +365,10 @@ public class VerbSurface {
         Result result = at(target, switch (in.view()) {
             case Selector.ITERATION -> iterations.close(in.scopeId(), id, produced, token);
             case Selector.MILESTONE -> milestones.close(in.scopeId(), id, token);
-            case Selector.ITEM -> throw new SurfaceException(
-                SurfaceException.Reason.VERB_UNCARRIED,
-                "'close' is not addressed at an item. An item's terminality is a status "
-                    + "its scope declared as closed, reached through 'update' — so closing "
-                    + "one is an ordinary change of a declared value and not a transition "
-                    + "of its own. On this scheme 'close' addresses the iteration or the "
-                    + "milestone, both of which have a terminal transition at form level.");
-            case Selector.WORKSTREAM -> throw new SurfaceException(
-                SurfaceException.Reason.VERB_UNCARRIED,
-                "'close' is not addressed at a workstream. A workstream has no terminal "
-                    + "transition — it is declared, and its retirement is 'withdraw' on the "
-                    + "selector-declaration surface, not a close here. Aiming 'close' at it "
-                    + "is a category error and not a spelling.");
+            case Selector.ITEM -> throw SurfaceException.of(
+                RefusalCode.VERB_UNCARRIED, CLOSE);
+            case Selector.WORKSTREAM -> throw SurfaceException.of(
+                RefusalCode.VERB_UNCARRIED, CLOSE);
             default -> throw unreachableView(in.view());
         });
         LOG.infof("close %s in scope %s", target.id(), in.scopeId());
@@ -403,11 +394,7 @@ public class VerbSurface {
                           String conflictToken) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITERATION.equals(in.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'advance' promotes an iteration and is addressed at the iteration view. "
-                    + "The goal axis has no order to advance through: a milestone becomes "
-                    + "active by being set active, which is a declared status and an "
-                    + "ordinary update.");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "advance");
         }
 
         Map<String, Object> setting = iterations.advance(in.scopeId(),
@@ -542,11 +529,7 @@ public class VerbSurface {
                             VerbInput.Lease body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITEM.equals(in.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'claim_next' draws an item and is addressed at the item view. The "
-                    + "iteration and milestone views have no draw of their own — an "
-                    + "iteration is promoted with 'advance', and a milestone is set "
-                    + "active by ordinary update against its scope-declared status");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "claim_next");
         }
         addresses.requireView(in.scopeId(), in.view());
 
@@ -633,11 +616,7 @@ public class VerbSurface {
     public Result validate(String subject, String rawScope, String rawView) {
         Entry in = entry(subject, rawScope, rawView, Access.READ);
         if (!Selector.ITEM.equals(in.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'validate' walks the scope's cross-item consistencies and is addressed "
-                    + "at the item view. Its ratified target is the scope; the nearest "
-                    + "truncation this surface offers is the item collection, and the "
-                    + "iteration and milestone views have no cross-item graph to walk");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "validate");
         }
         addresses.requireView(in.scopeId(), in.view());
 
@@ -664,13 +643,12 @@ public class VerbSurface {
      */
     @Transactional
     public void uncarried(String subject, String rawScope, String rawView, String at,
-                          String verb, String why) {
+                          String verb) {
         entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
             AddressParser.target(rawView, at);
         }
-        throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-            "'" + verb + "' is not part of the worklist scheme. " + why);
+        throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, verb);
     }
 
     /**
@@ -683,14 +661,12 @@ public class VerbSurface {
      */
     @Transactional
     public void unbuilt(String subject, String rawScope, String rawView, String at,
-                        String verb, String why) {
+                        String verb) {
         entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
             AddressParser.target(rawView, at);
         }
-        throw new SurfaceException(SurfaceException.Reason.VERB_UNBUILT,
-            "'" + verb + "' is a verb of the worklist scheme and this service has not "
-                + "built it. " + why);
+        throw SurfaceException.of(RefusalCode.VERB_UNBUILT, verb);
     }
 
     /**
@@ -777,11 +753,7 @@ public class VerbSurface {
      */
     private static void requireWritable(AddressParser.Target target) {
         if (target.isCurrent()) {
-            throw new SurfaceException(SurfaceException.Reason.ADDRESS_READ_ONLY,
-                "'" + AddressParser.CURRENT + "' is a pointer the scope moves, so a write "
-                    + "through it would land on whichever iteration happened to be current "
-                    + "when the call arrived. Read it to find out which one that is, then "
-                    + "write at its number.",
+            throw new SurfaceException(RefusalCode.ADDRESS_READ_ONLY,
                 "GET");
         }
     }
@@ -799,13 +771,7 @@ public class VerbSurface {
         if (!Selector.WORKSTREAM.equals(view)) {
             return;
         }
-        throw new SurfaceException(SurfaceException.Reason.SELECTOR_DECLARED_NOT_WRITTEN,
-            "'" + verb + "' is not addressed at the workstream view. A workstream is "
-                + "declared, and a declaration is a different act from acting on an object: "
-                + "it runs on the selector-declaration surface, not through this verb. This "
-                + "surface reads workstreams — 'read' and 'query' answer as they do on any "
-                + "other view — and refuses writes on them so that a caller does not learn "
-                + "to declare through the wrong door.");
+        throw SurfaceException.of(RefusalCode.SELECTOR_DECLARED_NOT_WRITTEN, verb);
     }
 
     /** A verb that only one view carries, addressed at another. */
@@ -813,11 +779,7 @@ public class VerbSurface {
                                                     String expected, String verb) {
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         if (!expected.equals(target.view())) {
-            throw new SurfaceException(SurfaceException.Reason.VERB_UNCARRIED,
-                "'" + verb + "' is addressed at the " + expected + " view and this address "
-                    + "names the " + target.view() + " view. The verb is one word across "
-                    + "the platform and the ADDRESS says what it acts on, so aiming it at "
-                    + "the wrong kind of thing is a category error rather than a typo.");
+            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, verb);
         }
         requireWritable(target);
         return target;
@@ -825,10 +787,7 @@ public class VerbSurface {
 
     private static String requireToken(String presented) {
         if (presented == null || presented.isBlank()) {
-            throw new SurfaceException(SurfaceException.Reason.CONFLICT_TOKEN_MISSING,
-                "this write declares conflict-token repetition, so it carries one. The "
-                    + "token is the one handed out with the last read. Without it a retry "
-                    + "across a network cannot be told from a second, different write.");
+            throw new SurfaceException(RefusalCode.CONFLICT_TOKEN_MISSING);
         }
         return presented;
     }
@@ -841,9 +800,7 @@ public class VerbSurface {
      */
     private static <T> T required(T body, String... arguments) {
         if (body == null) {
-            throw new SurfaceException(SurfaceException.Reason.ARGUMENT_MISSING,
-                "the arguments under offenders are mandatory, and the call left them out or sent "
-                    + "them as null. Send each with a value.", null, List.of(arguments), List.of());
+            throw SurfaceException.missing(arguments);
         }
         return body;
     }
@@ -852,14 +809,10 @@ public class VerbSurface {
     private static Duration requireLease(VerbInput.Lease body) {
         VerbInput.Lease lease = required(body, DURATION);
         if (lease.durationSeconds() == null) {
-            throw SurfaceException.missing(DURATION,
-                "the argument under offenders is mandatory, and the call left it out or sent it "
-                    + "as null. Send the lease duration as a positive whole number of seconds.");
+            throw SurfaceException.missing(DURATION);
         }
         if (lease.durationSeconds() <= 0) {
-            throw SurfaceException.invalid(DURATION,
-                "duration_seconds takes a positive whole number of seconds. Send the lease "
-                    + "duration as such a number.");
+            throw SurfaceException.invalid(DURATION);
         }
         return Duration.ofSeconds(lease.durationSeconds());
     }
@@ -871,9 +824,7 @@ public class VerbSurface {
     private static String requireLabel(String name, String raw) {
         String candidate = requireText(name, raw);
         if (UUID_SHAPE.matcher(candidate).matches()) {
-            throw SurfaceException.invalid(name,
-                "the argument under offenders takes a name, and an identity of the platform "
-                    + "arrived. Send it by the name a read answers it under.");
+            throw SurfaceException.invalid(name);
         }
         return candidate;
     }
@@ -881,14 +832,11 @@ public class VerbSurface {
     /** A mandatory text argument, refused by its declared name when absent or empty. */
     private static String requireText(String name, String raw) {
         if (raw == null) {
-            throw SurfaceException.missing(name,
-                "the argument under offenders is mandatory, and the call left it out or sent it "
-                    + "as null. Send it with a value.");
+            throw SurfaceException.missing(name);
         }
         String candidate = raw.strip();
         if (candidate.isEmpty()) {
-            throw SurfaceException.invalid(name,
-                "the argument under offenders arrived as empty text. Send it with a value.");
+            throw SurfaceException.invalid(name);
         }
         return candidate;
     }
@@ -900,6 +848,7 @@ public class VerbSurface {
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String DURATION = "duration_seconds";
+    private static final String CLOSE = "close";
 
     /**
      * The switch arm that cannot be reached.

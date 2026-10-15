@@ -102,7 +102,7 @@ class AddressResolutionIT {
             .as("and it says what the state is rather than what is missing: a scope with "
                 + "no settings row has no pointer either, and the caller asked about the "
                 + "iteration, not about the shape of the record holding the answer")
-            .contains("working no iteration");
+            .isEqualTo("ITERATION_ABSENT");
     }
 
     private static WorklistException refusalFrom(Runnable call) {

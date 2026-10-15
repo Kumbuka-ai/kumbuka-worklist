@@ -167,17 +167,14 @@ public class ItemService {
     private Long statusFilter(UUID scopeId, String name) {
         ItemStatus status = vocabulary.statusByName(scopeId, name);
         if (status == null) {
-            throw undeclaredFilterValue(QueryFilter.ITEM_STATUS,
-                "Use a status this scope declares, by the name a read answers it under.");
+            throw undeclaredFilterValue(QueryFilter.ITEM_STATUS);
         }
         return status.pk;
     }
 
     private Long milestoneFilter(UUID scopeId, long number) {
         if (planning.milestoneByNumber(scopeId, number) == null) {
-            throw undeclaredFilterValue(QueryFilter.ITEM_MILESTONE,
-                "Use the number of a milestone this scope holds; query the milestone view "
-                    + "to list them.");
+            throw undeclaredFilterValue(QueryFilter.ITEM_MILESTONE);
         }
         return number;
     }
@@ -187,11 +184,9 @@ public class ItemService {
      * answered as an empty set, because an empty answer cannot be told from a
      * typo. The value is left out of the message; the caller holds it.
      */
-    private static WorklistException undeclaredFilterValue(QueryFilter filter, String remedy) {
+    private static WorklistException undeclaredFilterValue(QueryFilter filter) {
         return new WorklistException(
             WorklistException.Reason.VALUE_UNDECLARED,
-            "the value of " + filter.offenderName() + " is outside what this scope "
-                + "declares. " + remedy,
             List.of(filter.offenderName()));
     }
 
@@ -233,9 +228,6 @@ public class ItemService {
         if (!notSettable.isEmpty()) {
             throw new WorklistException(
                 WorklistException.Reason.FIELD_NOT_SETTABLE,
-                "the fields under offenders are the service's and are derived rather than "
-                    + "given, and a new item carries none of them. An address in particular "
-                    + "is allocated with the item",
                 notSettable);
         }
 
@@ -243,8 +235,6 @@ public class ItemService {
         if (title == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an item carries a title. It is the one thing a call-in always has, and "
-                    + "the one field that is required regardless of status",
                 List.of(Field.TITLE.path()));
         }
 
@@ -260,11 +250,7 @@ public class ItemService {
         Selector view = selectors.require(scopeId, Selector.ITEM);
         long number = selectors.allocate(scopeId, view);
 
-        ItemStatus initialStatus = resolveStatus(scopeId, given.get(Field.STATUS),
-            "an item carries a status, and a status is a value the scope declared "
-                + "rather than one of a fixed set this service knows. Declare the "
-                + "vocabulary of this scope and name the status to start "
-                + "an item in");
+        ItemStatus initialStatus = resolveStatus(scopeId, given.get(Field.STATUS));
 
         // The workstream is mandatory — ratified 2026-09-08. If the caller
         // named one, use it (existence, refusal on withdrawn); if not, fall
@@ -341,12 +327,6 @@ public class ItemService {
 
         throw new WorklistException(
             WorklistException.Reason.IDENTIFIER_UNDECIDED,
-            "this item already carries its address, allocated with it at "
-                + "creation, and this scheme has no carrier for a business identifier "
-                + "beside it. The selector is the view now, so the family that made "
-                + "FEAT-51 an identifier is not an address space any more. The gate is "
-                + "not being skipped and it is not being faked: what it allocates is an "
-                + "open decision about this store",
             List.of(String.valueOf(itemId)));
     }
 
@@ -417,9 +397,6 @@ public class ItemService {
         if (statusName == null || statusName.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "withdrawing an item moves it to a status the scope declared as closed, "
-                    + "and no status name arrived. That a withdrawal is terminal is the "
-                    + "platform's; which value a scope closes with is its own declaration",
                 List.of(WITHDRAW_STATUS));
         }
         ItemFields.refuseUuidShape(WITHDRAW_STATUS, statusName);
@@ -427,15 +404,11 @@ public class ItemService {
         if (status == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the status named is outside the statuses this scope declares",
                 List.of(WITHDRAW_STATUS));
         }
         if (!status.closed) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "withdrawing an item moves it to a status that is CLOSED, and the status "
-                    + "named is open. Which values a scope closes with is its "
-                    + "own declaration; that a withdrawal is terminal is the platform's",
                 List.of(WITHDRAW_STATUS));
         }
 
@@ -477,8 +450,6 @@ public class ItemService {
         if (item.id.equals(target.id)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an item cannot relate to itself. That is the one cycle a single row can "
-                    + "express, and the only one a constraint can see",
                 List.of(TO_ITEM));
         }
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName, TYPE);
@@ -534,9 +505,6 @@ public class ItemService {
         if (edge == null || ItemRelation.WITHDRAWN.equals(edge.status)) {
             throw new WorklistException(
                 WorklistException.Reason.RELATION_UNKNOWN,
-                "no asserted edge of the type named runs from this item to the item named. A "
-                    + "withdrawn edge reads the same as an absent one from here; "
-                    + "reasserting it is what 'relate' does",
                 List.of(TO_ITEM, TYPE));
         }
 
@@ -599,10 +567,7 @@ public class ItemService {
             Map<String, Object> finding = new LinkedHashMap<>();
             finding.put("kind", "blocking_cycle");
             finding.put("items", cycle);
-            finding.put("message",
-                "these items form a cycle over blocking relations, so each one is "
-                    + "permanently unready — a deadlock the caller cannot see through a "
-                    + "read of any one of them");
+            finding.put("message", Notice.BLOCKING_CYCLE);
             findings.add(finding);
         }
 
@@ -706,10 +671,6 @@ public class ItemService {
         if (!refused.isEmpty()) {
             throw new WorklistException(
                 WorklistException.Reason.FIELD_NOT_SETTABLE,
-                "the fields under offenders are the service's and keep their values. "
-                    + "Sending them back unaltered is fine — that is what a read "
-                    + "answer carries — but the values given differ from the ones held. "
-                    + "Settable here is " + Field.settableNames(Addressed.ITEM),
                 refused);
         }
     }
@@ -742,7 +703,6 @@ public class ItemService {
                 if (title == null) {
                     throw new WorklistException(
                         WorklistException.Reason.INVALID_VALUE,
-                        "an item carries a title on every status, so it cannot be cleared",
                         List.of(field.path()));
                 }
                 if (Objects.equals(held, title)) {
@@ -812,16 +772,11 @@ public class ItemService {
         if (milestone == null) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
-                "the milestone named is outside this scope. Numbers on the goal axis are never reused, so this one was "
-                    + "either never handed out or names something in another scope",
                 List.of(field.path()));
         }
         if (Milestone.CLOSED.equals(milestone.status)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the milestone named is closed. An item's assignment is what "
-                    + "the item is working towards, and a closed milestone is not "
-                    + "something anything is working towards any more",
                 List.of(field.path()));
         }
         // V12 (2026-09-09) retracts the milestone-workstream edge:
@@ -868,9 +823,6 @@ public class ItemService {
     private static WorklistException milestoneFormRefusal(Field field, Object raw) {
         return new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            field.canonicalName() + " takes the milestone's number — the count the "
-                + "scope allocated it under — as a positive integer. A number a caller could choose is a number that can be handed out "
-                + "twice; leave the field empty to clear the assignment",
             List.of(field.path()));
     }
 
@@ -890,8 +842,6 @@ public class ItemService {
         if (token == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_WORKSTREAM_MISSING,
-                "an item carries a workstream on every status, so it cannot be cleared. "
-                    + "Move it to another workstream instead",
                 List.of(field.path()));
         }
         ItemFields.refuseUuidShape(field.path(), token);
@@ -944,9 +894,6 @@ public class ItemService {
         if (workstream == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the workstream named in " + argument + " is outside the workstreams this "
-                    + "scope declares. Use the token of a declared workstream, as a read "
-                    + "answers it; query the workstream view to list them.",
                 List.of(argument));
         }
         return workstream;
@@ -965,9 +912,6 @@ public class ItemService {
         if (name == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an item carries a status on every path, so it cannot be cleared. What "
-                    + "the predecessor's delete did is a terminal status here, not the "
-                    + "absence of one",
                 List.of(field.path()));
         }
         ItemFields.refuseUuidShape(field.path(), name);
@@ -978,8 +922,6 @@ public class ItemService {
         if (status == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the status named is outside the statuses this scope declares. The statuses of a scope are its own data — declare the "
-                    + "status before setting it on an item",
                 List.of(field.path()));
         }
         item.statusPk = status.pk;
@@ -993,12 +935,11 @@ public class ItemService {
      * message so the caller sees the field-level error rather than a
      * confusing shape hint.
      */
-    private ItemStatus resolveStatus(UUID scopeId, Object value, String missingMessage) {
+    private ItemStatus resolveStatus(UUID scopeId, Object value) {
         String name = ItemFields.text(Field.STATUS, value);
         if (name == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                missingMessage,
                 List.of(Field.STATUS.path()));
         }
         ItemFields.refuseUuidShape(Field.STATUS.path(), name);
@@ -1006,9 +947,6 @@ public class ItemService {
         if (status == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the status named is outside the statuses this scope declares. The "
-                    + "statuses of a scope are its own data — declare the status before "
-                    + "setting it on an item",
                 List.of(Field.STATUS.path()));
         }
         return status;
@@ -1079,8 +1017,6 @@ public class ItemService {
         if (name == null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an attribute of choice type takes one of its declared options, by name, "
-                    + "and no value arrived",
                 List.of(Field.ATTRIBUTES.path()));
         }
         ItemFields.refuseUuidShape(Field.ATTRIBUTES.path(), name);
@@ -1112,10 +1048,6 @@ public class ItemService {
         if (elements.size() > 50) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an attribute of type text_list admits at most 50 entries on the write "
-                    + "path. A cap that "
-                    + "bound the read path would seal the store against its own "
-                    + "content; this one bounds what a fresh write may produce",
                 List.of(Field.ATTRIBUTES.path()));
         }
 
@@ -1136,8 +1068,6 @@ public class ItemService {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "an attribute of type text_list takes a JSON array of strings, and "
-                + "another form arrived",
             List.of(Field.ATTRIBUTES.path()));
     }
 
@@ -1149,27 +1079,17 @@ public class ItemService {
         if (!(element instanceof CharSequence)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an attribute of type text_list is a list of strings, and an entry of another "
-                    + "type arrived. Numbers and booleans are not coerced: two "
-                    + "different values would spell the same one, and the reader "
-                    + "would have no way to tell them apart",
                 List.of(Field.ATTRIBUTES.path()));
         }
         String value = element.toString();
         if (value.trim().isEmpty()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an attribute of type text_list admits no blank entry: an entry "
-                    + "that trims to nothing is the absence of an entry, and a "
-                    + "position occupied by one would read as content where none is",
                 List.of(Field.ATTRIBUTES.path()));
         }
         if (value.length() > 1500) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an attribute of type text_list admits entries of at most 1500 "
-                    + "characters on the write path. The read path returns whatever was "
-                    + "stored, however that got in",
                 List.of(Field.ATTRIBUTES.path()));
         }
         return value;
@@ -1271,8 +1191,6 @@ public class ItemService {
             if (item.id.equals(target.id)) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
-                    "an item cannot relate to itself. That is the one cycle a single row "
-                        + "can express, and the only one a constraint can see",
                     List.of(Field.RELATIONS.path()));
             }
             resolved.add(new ResolvedEdge(type.pk, target.number));
@@ -1328,8 +1246,6 @@ public class ItemService {
         if (name == null || name.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a relation's type is the display name a scope declared it under, and "
-                    + "no value arrived",
                 List.of(argument));
         }
         ItemFields.refuseUuidShape(argument, name);
@@ -1337,9 +1253,6 @@ public class ItemService {
         if (type == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the relation type named is outside the types this scope declares. An edge carries a declared type, and the one thing the "
-                    + "platform reads out of a type is whether it blocks — an undeclared "
-                    + "type is an edge nothing can answer that question about",
                 List.of(argument));
         }
         return type;
@@ -1358,8 +1271,6 @@ public class ItemService {
         if (address == null || address.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the other end of a relation is the canonical address of the other end — "
-                    + "'worklist://<scope>/item/<number>' — and no value arrived",
                 List.of(argument));
         }
         ItemFields.refuseUuidShape(argument, address);
@@ -1367,8 +1278,6 @@ public class ItemService {
         if (!address.startsWith(scheme)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the other end of a relation is a worklist address, of the form "
-                    + "'worklist://<scope>/item/<number>', and another form arrived",
                 List.of(argument));
         }
         String rest = address.substring(scheme.length());
@@ -1377,9 +1286,6 @@ public class ItemService {
                 || parts[0].isBlank() || parts[2].isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the other end of a relation names an item address. "
-                    + "Its form is 'worklist://<scope>/item/<number>' and only the item "
-                    + "view carries edges as the other end here",
                 List.of(argument));
         }
         String targetSlug = parts[0];
@@ -1389,15 +1295,12 @@ public class ItemService {
         } catch (NumberFormatException notANumber) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the other end of a relation carries its number as a whole number. Numbers in addresses are counted from one",
                 List.of(argument));
         }
         String ownSlug = slugOf(scopeId);
         if (!ownSlug.equals(targetSlug)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
-                "the other end of a relation lies in another scope than this item. An edge across scopes "
-                    + "is refused rather than stored dangling",
                 List.of(argument));
         }
         selectors.require(scopeId, Selector.ITEM);
@@ -1405,8 +1308,6 @@ public class ItemService {
         if (target == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
-                "the other end of a relation names an item this scope lacks. A reference is refused rather than stored dangling: an edge is a "
-                    + "row here, and the foreign key is the check",
                 List.of(argument));
         }
         return target;
@@ -1417,7 +1318,6 @@ public class ItemService {
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
-                "the item addressed is outside this scope",
                 List.of());
         }
         return item;

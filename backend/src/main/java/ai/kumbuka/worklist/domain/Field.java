@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static ai.kumbuka.worklist.domain.Addressed.ITEM;
 import static ai.kumbuka.worklist.domain.Addressed.ITERATION;
@@ -432,17 +431,12 @@ public enum Field {
      * WorklistException.Reason#UNKNOWN_FIELD}, which is the right answer once
      * the name has been gone long enough to be a typo again.
      */
-    private static final Map<Addressed, Map<String, String>> RETRACTED = Map.of(
-        MILESTONE, Map.of("workstream",
-            "a milestone belongs to no workstream, and several workstreams reach one "
-                + "milestone together — that is the normal case rather than a tolerated "
-                + "one (TAR-0002 section 4, accepted; REQ-0148 obsolete). The edge was "
-                + "retracted in the database by V12 on 2026-09-09 and is now off the "
-                + "surface too, which is what this refusal is: between the two, the "
-                + "field was still answered and still taken, and a write on it landed "
-                + "nowhere without saying so. The edge that stands is the item's: an "
-                + "item belongs to exactly one workstream, so a milestone's work is "
-                + "filed through the items that aim at it"));
+    // A milestone belongs to no workstream, and several workstreams reach one
+    // milestone together (TAR-0002 section 4). The edge was retracted in the
+    // database by V12 and is off the surface too; the edge that stands is the
+    // item's. The sentence a caller reads is the catalogue's FIELD_RETRACTED.
+    private static final Map<Addressed, Set<String>> RETRACTED = Map.of(
+        MILESTONE, Set.of("workstream"));
 
     private final String canonicalName;
     private final Set<Addressed> carriedBy;
@@ -532,7 +526,7 @@ public enum Field {
      */
     public static Map<Field, Object> resolve(Addressed addressed, Map<String, ?> arguments) {
         Map<Field, Object> resolved = new LinkedHashMap<>();
-        Map<String, String> retractedHere = RETRACTED.getOrDefault(addressed, Map.of());
+        Set<String> retractedHere = RETRACTED.getOrDefault(addressed, Set.of());
         List<String> retracted = new ArrayList<>();
         List<String> unknown = new ArrayList<>();
 
@@ -540,7 +534,7 @@ public enum Field {
             Optional<Field> field = byCanonicalName(addressed, entry.getKey());
             if (field.isPresent()) {
                 resolved.put(field.get(), entry.getValue());
-            } else if (retractedHere.containsKey(entry.getKey())) {
+            } else if (retractedHere.contains(entry.getKey())) {
                 retracted.add(entry.getKey());
             } else {
                 unknown.add(entry.getKey());
@@ -555,13 +549,6 @@ public enum Field {
         if (!retracted.isEmpty()) {
             throw new WorklistException(
                 WorklistException.Reason.FIELD_RETRACTED,
-                "a " + addressed.description() + " no longer carries " + retracted
-                    + ". " + retracted.stream()
-                        .map(name -> name + " — " + retractedHere.get(name))
-                        .collect(Collectors.joining("; "))
-                    + ". Nothing was written: a field whose relation was retracted is "
-                    + "refused rather than taken, because a write that is accepted and "
-                    + "lands nowhere is the defect the retraction is undoing",
                 retracted.stream().map(Field::path).toList());
         }
 
@@ -571,9 +558,6 @@ public enum Field {
             // declares, as their argument paths.
             throw new WorklistException(
                 WorklistException.Reason.ARGUMENT_UNKNOWN,
-                "fields carries a name this " + addressed.description() + " does not "
-                    + "declare, and nothing was written. Name only the fields under "
-                    + "accepts; a scope's own attributes travel inside fields.attributes.",
                 List.of(),
                 of(addressed).stream().map(Field::path).toList());
         }

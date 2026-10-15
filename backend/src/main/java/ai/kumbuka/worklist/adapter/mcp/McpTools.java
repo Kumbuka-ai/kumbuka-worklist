@@ -7,10 +7,11 @@
  */
 package ai.kumbuka.worklist.adapter.mcp;
 
-import ai.kumbuka.worklist.domain.QueryFilter;
-import ai.kumbuka.worklist.domain.QuerySpec;
-import ai.kumbuka.worklist.domain.SortKey;
-import ai.kumbuka.worklist.domain.Selector;
+import ai.kumbuka.worklist.surface.ArgumentDescriptions;
+import ai.kumbuka.worklist.surface.SurfaceDeclaration;
+import ai.kumbuka.worklist.surface.ToolDescriptions;
+import ai.kumbuka.worklist.surface.ValueDescriptions;
+import io.quarkus.qute.i18n.MessageBundles;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,31 +19,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The tools the MCP exposition declares: the ten verbs this service carries, and
+ * The tools the MCP exposition declares: the verbs this service carries, and
  * nothing else.
  *
- * <p><strong>MCP omits and never adds.</strong> There is no tool here without a
- * verb behind it. What it omits is declared rather than inferred from a shorter
- * list: the seven verbs the scheme does not carry and the six it carries unbuilt
- * are absent from {@code tools/list} and are still <em>answered by name</em> when
- * called, with the same typed refusal the REST surface gives. An unknown-tool
- * reply would send a caller looking for a spelling; a category error tells them
- * the act does not exist here, and a 501-shaped one tells them it is coming.
+ * <p><strong>Generated, never written.</strong> Each tool is one verb of
+ * {@link SurfaceDeclaration}: its name, its arguments with their JSON types,
+ * which are required, the fixed value sets, and the texts the message bundles
+ * hold for the verb, each argument and each value. Nothing here says anything
+ * of its own, so the tool list and the declaration cannot drift apart (ADR-0039).
  *
- * <p>The declaration is written out rather than derived from the REST routes. The
- * two expositions are conformance-probed against one specification and neither is
- * the source for the other — that is share-nothing applied to the surface. A list
- * generated from the routes would make the probe an assertion that one copy
- * equals itself.
- *
- * <h2>Two argument shapes, and the difference is not cosmetic</h2>
- *
- * A verb acting on an existing object takes a <strong>complete address</strong>
- * and nothing else identifies the target. A verb that does not act on an existing
- * object — {@code create}, {@code query}, and {@code advance}, which draws from a
- * set — takes scope and selector as separate arguments, because an address
- * without an id part is reserved and giving a three-part string the meaning "the
- * objects of this scope" is what the reservation forbids.
+ * <p><strong>MCP omits and never adds.</strong> The verbs of the scheme this
+ * service refuses by name are absent from {@code tools/list} and still answered
+ * by name when called, with the same typed refusal the REST surface gives.
  */
 public final class McpTools {
 
@@ -53,389 +41,69 @@ public final class McpTools {
     public record Tool(String name, String description, Map<String, Object> inputSchema) {
     }
 
-    /** The JSON Schema types this surface's arguments take. */
-    private static final String STRING = "string";
-    private static final String OBJECT = "object";
-
-    /** The filters, per view, written from their one declaration. */
-    private static final String FILTER_DOC =
-        "An object from filter name to one value, e.g. {\"status\": \"open\"}. The "
-            + "filters per view: " + String.join("; ", Selector.VIEWS
-                .stream()
-                .map(view -> view + " — " + QueryFilter.describe(view))
-                .toList())
-            + ". A missing filter answers the whole view, page by page.";
-
-    /** The argument every verb acting on an existing object takes. */
-    private static final String ARG_ADDRESS = "address";
-
-    /** The two that address a collection rather than an object. */
-    private static final String ARG_SCOPE = "scope";
-    private static final String ARG_SELECTOR = "selector";
-
-    private static final String ARG_TOKEN = "conflict_token";
-    private static final String ARG_FIELDS = "fields";
-
-    /** The claim family's shared argument. */
-    private static final String ARG_DURATION = "duration_seconds";
-
-    /** The receipt {@code release} presents. */
-    private static final String ARG_RECEIPT = "receipt";
-
-    /** The other end of one edge. */
-    private static final String ARG_TO_ITEM = "to_item";
-
-    /** The declared type of one edge. */
-    private static final String ARG_TYPE = "type";
-
-    /** What a closing iteration names as produced. */
-    private static final String ARG_PRODUCED = "produced";
-
-    private static final String INTEGER = "integer";
-
-    private static final String SCOPE_DOC = "The scope name, a DNS label.";
-
-    private static final String SELECTOR_DOC =
-        "The view: one of " + Selector.ITEM + ", " + Selector.ITERATION + ", "
-            + Selector.MILESTONE + ". Lower case; it is not folded.";
-
-    /**
-     * The view {@code query} lists, which is every view the service serves:
-     * the workstream view is read like any other and only its writes run
-     * elsewhere, so the three {@code create} takes would hide one.
-     */
-    private static final String QUERY_SELECTOR_DOC =
-        "The view: one of " + String.join(", ", Selector.VIEWS) + ". Lower case; it is not "
-            + "folded.";
-
-    private static final String ADDRESS_DOC =
-        "The complete address: worklist://<scope>/<view>/<number>. An iteration may also "
-            + "be addressed as 'current', which resolves to the iteration the scope is "
-            + "working and cannot be written through. A membership carries a second id "
-            + "segment: worklist://<scope>/iteration/<iteration>/<item>.";
-
-    private static final String TOKEN_DOC =
-        "The conflict token from the last read of this object. A membership presents its "
-            + "ITERATION's token, because the iteration is the aggregate and a reorder of "
-            + "twelve memberships must not present twelve tokens.";
-
-    private static final String FIELDS_DOC =
-        "The object's fields, under the canonical names a read answers with. A read answer "
-            + "may be sent back unchanged: a field that carries the value it already has "
-            + "changes nothing, and one this object does not have is refused by name rather "
-            + "than dropped.";
-
-    /**
-     * Prefix for the selector argument's description on tools that act on
-     * exactly one view. The tool declares which view, and this prefix names
-     * the reason the schema still asks for it: the shape of the surface is
-     * uniform, and a tool that took no selector would be a tool a caller
-     * has to remember is special.
-     */
-    private static final String SELECTOR_FIXED_DOC = "The view this acts on, which is ";
-
-    /**
-     * The ten, in the order of the object's life rather than alphabetically: what
-     * brings it into being, what reads and changes it, what ends it, and what
-     * plans it.
-     */
+    /** The tools, in the order of the declaration. */
     public static List<Tool> declared() {
-        return List.of(
-            new Tool("create",
-                "Bring an object into being in one view. Its number is allocated inside "
-                    + "the transaction that inserts it and is never supplied by the "
-                    + "caller; the answer carries the address it got.",
-                schema(
-                    required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING, SELECTOR_DOC),
-                    required(ARG_FIELDS, OBJECT, FIELDS_DOC))),
-
-            new Tool("read",
-                "One object by address. Writes nothing.",
-                schema(required(ARG_ADDRESS, STRING, ADDRESS_DOC))),
-
-            new Tool("update",
-                "Change what is known about an object. A write that changes no value "
-                    + "writes nothing at all — no timestamp, no rotated token — so the "
-                    + "change trail keeps meaning what it says.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC),
-                    required(ARG_FIELDS, OBJECT, FIELDS_DOC))),
-
-            new Tool("query",
-                "One page of the objects of one view. A filter narrows it, 'page_size' "
-                    + "bounds it, 'sort' and 'direction' order it, and the answer's "
-                    + "'next_cursor' — passed back as 'after' with the same scope, view, "
-                    + "filter, sort and direction — continues after its last object; it is "
-                    + "absent exactly when nothing follows. A filter name the view does not "
-                    + "declare, a value a filter cannot read, a value the scope does not "
-                    + "hold, a page size out of range, an undeclared sort, a cursor of "
-                    + "another query and any other argument are refused by name and never "
-                    + "answered with the whole set.",
-                schema(
-                    required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING, QUERY_SELECTOR_DOC),
-                    optional(QueryFilter.FILTER_ARGUMENT, OBJECT, FILTER_DOC
-                        + " Default: the whole view. Sending null equals leaving the "
-                        + "argument out."),
-                    optional(QuerySpec.PAGE_SIZE_ARGUMENT, INTEGER,
-                        "How many objects one page carries, from 1 to "
-                            + QuerySpec.MAX_PAGE_SIZE + ". Default: "
-                            + QuerySpec.DEFAULT_PAGE_SIZE + ". Sending null equals leaving "
-                            + "the argument out."),
-                    optional(QuerySpec.AFTER_ARGUMENT, STRING,
-                        "The 'next_cursor' of the previous answer of the same query, as "
-                            + "it came. Default: the first page. Sending null equals leaving "
-                            + "the argument out."),
-                    choice(QuerySpec.SORT_ARGUMENT,
-                        "The order of the page. Default: '" + QuerySpec.DEFAULT_SORT.wireName()
-                            + "'. Sending null equals leaving the argument out.",
-                        List.of(SortKey.ID.wireName(), SortKey.CREATED_AT.wireName()),
-                        List.of("the object's number", "when the object was created, then "
-                            + "its number")),
-                    choice(QuerySpec.DIRECTION_ARGUMENT,
-                        "The direction of the order. Default: '"
-                            + QuerySpec.DEFAULT_DIRECTION.wireName() + "'. Sending null "
-                            + "equals leaving the argument out.",
-                        List.of(SortKey.Direction.ASC.wireName(),
-                            SortKey.Direction.DESC.wireName()),
-                        List.of("ascending, the smallest first",
-                            "descending, the largest first")))),
-
-            new Tool("accept",
-                "The intake gate. It refuses today and says why: the address it used to "
-                    + "allocate is now allocated with the object, and what a business "
-                    + "identifier beside it should be is an open decision about this "
-                    + "store. Called rather than hidden, so the gap is visible.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC))),
-
-            new Tool("withdraw",
-                "Take an item back. It keeps its address forever and moves into a status "
-                    + "the scope declared as closed. NOTHING HERE IS HARD DELETED: the "
-                    + "predecessor's delete removed the row, this tombstones, and the two "
-                    + "are not the same act — an address that was issued must never later "
-                    + "resolve to nothing.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC),
-                    required("status", STRING,
-                        "The closed status to withdraw into, by its declared display "
-                            + "NAME. Which values a scope closes with is its own "
-                            + "declaration."))),
-
-            new Tool("close",
-                "Terminal, on an iteration or a milestone. An iteration refuses while it "
-                    + "still holds live memberships and names them. Never addressed at an "
-                    + "item: an item's terminality is a declared status reached through "
-                    + "update.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC),
-                    optional(ARG_PRODUCED, STRING,
-                        "What the iteration produced, named in a few words; an iteration "
-                            + "closes with it, a milestone takes no such argument. Default: "
-                            + "nothing named. Sending null equals leaving the argument out."))),
-
-            new Tool("advance",
-                "Promote the first planned iteration to current. Exactly one, in the "
-                    + "scope's own order — which is why it takes no address. The token is "
-                    + "the scope settings' one, because the pointer being moved lives "
-                    + "there.",
-                schema(
-                    required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING,
-                        SELECTOR_FIXED_DOC + Selector.ITERATION + "."),
-                    required(ARG_TOKEN, STRING,
-                        "The conflict token of the scope's settings row."))),
-
-            new Tool("plan",
-                "Add an item to an iteration, at the end of its order. Planning it twice "
-                    + "is refused rather than treated as a move: displacing a position "
-                    + "somebody is holding is how the predecessor lost one.",
-                schema(
-                    required(ARG_ADDRESS, STRING,
-                        "The membership's address: worklist://<scope>/iteration/"
-                            + "<iteration>/<item>."),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC))),
-
-            new Tool("unplan",
-                "Remove an item from an iteration.",
-                schema(
-                    required(ARG_ADDRESS, STRING,
-                        "The membership's address: worklist://<scope>/iteration/"
-                            + "<iteration>/<item>."),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC))),
-
-            new Tool("claim",
-                "Take a lease on an item, for a duration. The receipt in the answer is "
-                    + "what release presents; a caller-chosen holder is refused, and a "
-                    + "second live lease on one item is refused as CLAIM_HELD. Expiry is "
-                    + "lazy: nothing writes when the lease lapses, and the next claim "
-                    + "overwrites the row in place.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_DURATION, INTEGER,
-                        "The lease duration in seconds. A positive whole number; zero is "
-                            + "inert the moment it is granted and negative is not a "
-                            + "duration at all."))),
-
-            new Tool("release",
-                "Give up a lease, by presenting the receipt that claim minted for it. "
-                    + "The check is on the value in the row, not on the actor, so a "
-                    + "holder that handed the receipt on has passed the lease.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_RECEIPT, STRING,
-                        "The opaque receipt from the claim's answer."))),
-
-            new Tool("claim_next",
-                "Draw the next unclaimed addressable item in a scope and take the lease "
-                    + "atomically. Exactly one, in the item view's own order. An empty "
-                    + "scope answers ITEM_UNKNOWN and one where every item is held "
-                    + "answers NOTHING_TO_CLAIM — different remedies, different reasons.",
-                schema(
-                    required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING,
-                        SELECTOR_FIXED_DOC + Selector.ITEM + "."),
-                    required(ARG_DURATION, INTEGER,
-                        "The lease duration in seconds. See 'claim'."))),
-
-            new Tool("relate",
-                "Assert one directed, typed edge from this item to another. Idempotent "
-                    + "under the triple: reasserting an existing asserted edge writes "
-                    + "nothing. Reasserting a withdrawn edge moves the row back to "
-                    + "asserted. The self-edge is refused.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC),
-                    required(ARG_TO_ITEM, STRING,
-                        "The canonical address of the item at the other end of the "
-                            + "edge, 'worklist://<scope>/item/<number>'."),
-                    required(ARG_TYPE, STRING,
-                        "The declared relation type by its display NAME."))),
-
-            new Tool("unrelate",
-                "Withdraw one asserted edge from this item to another. The row remains "
-                    + "and its status moves; a deleted edge would be a delete in a schema "
-                    + "that grants none.",
-                schema(
-                    required(ARG_ADDRESS, STRING, ADDRESS_DOC),
-                    required(ARG_TOKEN, STRING, TOKEN_DOC),
-                    required(ARG_TO_ITEM, STRING,
-                        "The canonical address of the item at the other end of the "
-                            + "edge, 'worklist://<scope>/item/<number>'."),
-                    required(ARG_TYPE, STRING,
-                        "The declared relation type by its display NAME."))),
-
-            new Tool("validate",
-                "Walk the scope and report every consistency the store guarantees. "
-                    + "Mutates nothing. Today the check reported is cycles over blocking "
-                    + "relations — the one rule the schema cannot express with a "
-                    + "constraint, which is precisely the class of rule this verb "
-                    + "carries a red probe for.",
-                schema(
-                    required(ARG_SCOPE, STRING, SCOPE_DOC),
-                    required(ARG_SELECTOR, STRING,
-                        SELECTOR_FIXED_DOC + Selector.ITEM + " — the nearest truncation "
-                            + "this surface offers to the scope."))));
+        return declared(MessageBundles.get(ToolDescriptions.class),
+            MessageBundles.get(ArgumentDescriptions.class),
+            MessageBundles.get(ValueDescriptions.class));
     }
 
-    // ----------------------------------------------------------------------
-    // The schema shapes
-    // ----------------------------------------------------------------------
-
-    private record Field(String name, String type, String description, boolean required,
-                         List<String> values, List<String> valueDescriptions) {
-
-        Field(String name, String type, String description, boolean required) {
-            this(name, type, description, required, List.of(), List.of());
-        }
-    }
-
-    private static Field required(String name, String type, String description) {
-        return new Field(name, type, description, true);
-    }
-
-    /**
-     * An optional text argument that takes one value of a fixed set of the
-     * platform's own, each value with its description: the schema closes it
-     * with {@code enum}, and {@code oneOf} carries a description per value.
-     */
-    private static Field choice(String name, String description, List<String> values,
-                                List<String> valueDescriptions) {
-        return new Field(name, STRING, description, false, values, valueDescriptions);
+    /** The tools, worded by the bundles given. */
+    public static List<Tool> declared(ToolDescriptions tools, ArgumentDescriptions arguments,
+                                      ValueDescriptions values) {
+        return SurfaceDeclaration.verbs().stream()
+            .map(verb -> new Tool(verb.name().name(), verb.description().apply(tools),
+                schema(verb, arguments, values)))
+            .toList();
     }
 
     /** The names of the tools this server declares, in the order of tools/list. */
     public static List<String> names() {
-        return declared().stream().map(Tool::name).toList();
+        return SurfaceDeclaration.verbs().stream().map(v -> v.name().name()).toList();
     }
 
     /**
      * The argument names one tool declares, or {@code null} for a name that is
      * no declared tool.
      */
-    @SuppressWarnings("unchecked")
     public static List<String> argumentsOf(String tool) {
-        return declared().stream()
-            .filter(t -> t.name().equals(tool))
-            .findFirst()
-            .map(t -> List.copyOf(((Map<String, Object>) t.inputSchema().get("properties"))
-                .keySet()))
+        return SurfaceDeclaration.verb(tool)
+            .map(SurfaceDeclaration.Verb::argumentNames)
             .orElse(null);
-    }
-
-    /**
-     * A field a caller may leave off.
-     *
-     * <p>Enumerated rather than tolerated: the tool schema declares which
-     * fields are required, so an optional one is a shape decision — the
-     * caller may omit it and the surface answers on the default. The
-     * conformance test requires {@code additionalProperties: false}, which is
-     * separate: closing additional properties refuses fields NAMED in a call
-     * that aren't in the schema at all, and optional fields are in the
-     * schema.
-     */
-    private static Field optional(String name, String type, String description) {
-        return new Field(name, type, description, false);
     }
 
     /**
      * A JSON Schema object, with {@code additionalProperties} closed.
      *
      * <p>Closed rather than open, deliberately: an argument this surface does not
-     * know is one a caller believes in. Accepting and ignoring it is how a client
-     * comes to depend on a field the server never read — which is the same defect
-     * the canonical field naming exists against, one layer out.
+     * know is one a caller believes in, and it is refused by name rather than
+     * accepted and ignored (DEC-0043 R4). A fixed value set is closed with
+     * {@code enum}, and {@code oneOf} carries a description per value.
      */
-    private static Map<String, Object> schema(Field... fields) {
+    private static Map<String, Object> schema(SurfaceDeclaration.Verb verb,
+                                              ArgumentDescriptions arguments,
+                                              ValueDescriptions values) {
         Map<String, Object> properties = new LinkedHashMap<>();
         List<String> mandatory = new ArrayList<>();
-
-        for (Field f : fields) {
+        for (SurfaceDeclaration.Argument argument : verb.arguments()) {
             Map<String, Object> property = new LinkedHashMap<>();
-            property.put("type", f.type());
-            property.put("description", f.description());
-            if (!f.values().isEmpty()) {
-                property.put("enum", f.values());
-                List<Map<String, Object>> each = new ArrayList<>();
-                for (int i = 0; i < f.values().size(); i++) {
-                    each.add(Map.of("const", f.values().get(i),
-                        "description", f.valueDescriptions().get(i)));
-                }
-                property.put("oneOf", List.copyOf(each));
+            property.put("type", argument.type().json());
+            property.put("description", argument.description().apply(arguments));
+            if (!argument.values().isEmpty()) {
+                property.put("enum", argument.values().stream()
+                    .map(SurfaceDeclaration.Value::name).toList());
+                property.put("oneOf", argument.values().stream()
+                    .map(v -> Map.<String, Object>of("const", v.name(),
+                        "description", v.description().apply(values)))
+                    .toList());
             }
-            properties.put(f.name(), Map.copyOf(property));
-            if (f.required()) {
-                mandatory.add(f.name());
+            properties.put(argument.name().name(), Map.copyOf(property));
+            if (argument.required()) {
+                mandatory.add(argument.name().name());
             }
         }
-
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", OBJECT);
+        schema.put("type", "object");
         schema.put("properties", properties);
         schema.put("required", List.copyOf(mandatory));
         schema.put("additionalProperties", false);

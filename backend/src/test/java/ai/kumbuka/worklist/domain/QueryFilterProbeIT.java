@@ -156,7 +156,10 @@ class QueryFilterProbeIT {
         assertThat(typed.getMessage())
             .as("and the message names what WAS narrowable, so a caller can act on it "
                 + "without a second call to find out")
-            .contains("status").contains("milestone");
+            .isEqualTo("PREDICATE_UNKNOWN");
+        assertThat(typed.accepts())
+            .as("what WAS narrowable travels under accepts, as the declared filter paths")
+            .contains("filter.status");
     }
 
     // ==================================================================

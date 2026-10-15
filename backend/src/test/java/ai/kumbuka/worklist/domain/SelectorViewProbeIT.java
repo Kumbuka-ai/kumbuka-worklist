@@ -85,7 +85,7 @@ class SelectorViewProbeIT {
             .as("and the message names the three, because the remedy is to pick one of "
                 + "them and a refusal that withheld the list would send the caller reading "
                 + "source")
-            .contains(Selector.ITEM).contains(Selector.ITERATION).contains(Selector.MILESTONE);
+            .isEqualTo("VIEW_UNKNOWN");
 
         // RED STATE, by its trace: with the refusal removed the token passes the
         // form check and is inserted, and this is where it would be.

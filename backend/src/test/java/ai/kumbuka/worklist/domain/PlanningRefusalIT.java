@@ -341,7 +341,7 @@ class PlanningRefusalIT {
         assertThat(refusal.getMessage())
             .as("and the message names the object that was addressed, because the field "
                 + "exists — just not here")
-            .contains("does not declare").doesNotContain("motto");
+            .isEqualTo("ARGUMENT_UNKNOWN").doesNotContain("motto");
 
         assertThat(refusalFrom(() -> iterations.create(scope, Map.of(
                 "motto", "fine", "description", "fine", "vision", "a milestone's"))).reason())

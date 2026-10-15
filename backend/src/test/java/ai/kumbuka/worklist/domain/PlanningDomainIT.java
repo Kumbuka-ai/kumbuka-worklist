@@ -125,7 +125,9 @@ class PlanningDomainIT {
             .as("the refusal carries the CURRENT token, so a caller can re-read, "
                 + "re-apply and retry without a round trip whose only purpose is to find "
                 + "out what it should have sent")
-            .containsExactly(token(iteration));
+            .containsExactly("conflict_token");
+        assertThat(refusal.currentToken()).as("and the current token travels as state")
+            .isEqualTo(token(iteration));
 
         // What the absent rotation would have left behind: the second item in
         // the iteration, planned under a token that was already spent.
@@ -293,7 +295,9 @@ class PlanningDomainIT {
                 + "warning exists so the limit is met deliberately rather than "
                 + "discovered at the moment it refuses")
             .hasSize(1);
-        assertThat(warningsOf(warned).get(0)).contains("warning threshold").doesNotContain("2");
+        assertThat(warningsOf(warned).get(0))
+            .as("a fixed notice, worded at the edge and carrying no number")
+            .isEqualTo(ai.kumbuka.worklist.domain.Notice.MEMBERSHIPS_AT_THRESHOLD);
 
         WorklistException refusal = refusalFrom(() ->
             memberships.plan(scope, iteration, third, token(iteration)));
@@ -740,8 +744,8 @@ class PlanningDomainIT {
     }
 
     @SuppressWarnings("unchecked")
-    private static List<String> warningsOf(Map<String, Object> answer) {
-        return (List<String>) answer.get("warnings");
+    private static List<Object> warningsOf(Map<String, Object> answer) {
+        return (List<Object>) answer.get("warnings");
     }
 
     private UUID item(String title) {

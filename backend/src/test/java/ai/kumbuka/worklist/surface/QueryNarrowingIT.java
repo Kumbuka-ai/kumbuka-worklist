@@ -709,7 +709,7 @@ class QueryNarrowingIT {
         assertThat(response.jsonPath().getMap("$"))
             .as("the header is not an argument of the call, so there is no offender to name")
             .doesNotContainKey("data");
-        assertThat(response.jsonPath().getString("message")).contains(SURFACE)
+        assertThat(response.jsonPath().getString("message")).isNotBlank()
             .doesNotContain("console");
     }
 

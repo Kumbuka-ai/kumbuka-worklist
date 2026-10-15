@@ -61,8 +61,6 @@ public class MembershipService extends PlanningService {
     /** An address, a scope id, a count, a transition. Never a title, never an actor. */
     private static final Logger LOG = Logger.getLogger(MembershipService.class);
 
-    /** What the cardinality refusal and its warning call the thing being counted. */
-    private static final String MEMBERSHIPS = "the number of items in this iteration";
 
     @Inject ItemRepository items;
     @Inject VocabularyRegistry vocabulary;
@@ -132,15 +130,13 @@ public class MembershipService extends PlanningService {
         if (planning.membership(scopeId, iteration.number, item.number) != null) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_PRESENT,
-                "the item is already a member of the iteration. Planning it again would have to displace the membership that is "
-                    + "there, along with its status and its place in the sequence",
                 List.of(ADDRESS));
         }
 
         ScopeSetting setting = requireSetting(scopeId);
         List<IterationMembership> living = planning.membershipsOf(scopeId, iteration.number);
         int afterwards = living.size() + 1;
-        refuseBeyond(afterwards, setting.maxMembershipsPerIteration, MEMBERSHIPS);
+        refuseBeyond(afterwards, setting.maxMembershipsPerIteration);
 
         IterationMembership membership = new IterationMembership();
         membership.scopeId = scopeId;
@@ -154,8 +150,7 @@ public class MembershipService extends PlanningService {
         LOG.infof("item planned into iteration %d in scope %s", iteration.number, scopeId);
 
         return project(iteration, membership, warnings(warningAt(afterwards,
-            setting.warnMembershipsPerIteration, setting.maxMembershipsPerIteration,
-            MEMBERSHIPS)));
+            setting.warnMembershipsPerIteration, Notice.MEMBERSHIPS_AT_THRESHOLD)));
     }
 
     /**
@@ -232,8 +227,7 @@ public class MembershipService extends PlanningService {
         }
 
         String status = oneOf(Field.MEMBERSHIP_STATUS,
-            required(Field.MEMBERSHIP_STATUS, wanted,
-                "a membership carries a status on every path, so it cannot be cleared"),
+            required(Field.MEMBERSHIP_STATUS, wanted),
             IterationMembership.STATUSES);
         if (status.equals(membership.status)) {
             LOG.debugf("update of a membership in scope %s changed nothing and wrote "
@@ -276,7 +270,6 @@ public class MembershipService extends PlanningService {
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
-                "the item addressed is outside this scope",
                 List.of(ADDRESS));
         }
 
@@ -284,32 +277,19 @@ public class MembershipService extends PlanningService {
         if (!status.actionable) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
-                "the item carries a status this scope declared as not actionable. An iteration is what is being "
-                    + "worked, and something that cannot be worked on has no place in "
-                    + "one",
                 List.of(ADDRESS));
         }
 
         if (item.milestoneNumber == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
-                "the item carries no milestone, so nothing says which goal "
-                    + "working it would serve. An item without one is not worked out "
-                    + "yet — including the three markers, which ARE milestones and say "
-                    + "so explicitly",
                 List.of(ADDRESS));
         }
 
         Milestone milestone = planning.milestoneByNumber(scopeId, item.milestoneNumber);
         if (milestone == null || !milestone.onTheProductPath()) {
-            String found = milestone == null ? "a milestone that does not resolve"
-                : milestone.kind;
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
-                "the item carries a milestone off the product path. Only "
-                    + Milestone.ON_THE_PRODUCT_PATH + " are on it; the other "
-                    + "two positions on the axis say the item is off the path or has not "
-                    + "been assessed, and neither is something to spend an iteration on",
                 List.of(ADDRESS));
         }
         return item;
@@ -358,14 +338,11 @@ public class MembershipService extends PlanningService {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
-                "the iteration addressed is outside this scope",
                 List.of(ADDRESS));
         }
         if (!iteration.open()) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_CLOSED,
-                "the iteration is closed and its memberships take no further writes. They stay readable, "
-                    + "which is what makes a closed iteration a record rather than a gap",
                 List.of(ADDRESS));
         }
         return iteration;
@@ -379,7 +356,6 @@ public class MembershipService extends PlanningService {
         if (membership == null) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_UNKNOWN,
-                "the item is outside the iteration addressed",
                 List.of(ADDRESS));
         }
         return membership;
@@ -394,7 +370,7 @@ public class MembershipService extends PlanningService {
      * travels with it is the token of the thing that owns the write.
      */
     private Map<String, Object> project(Iteration iteration,
-            IterationMembership membership, List<String> warnings) {
+            IterationMembership membership, List<Notice> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.SCOPE.canonicalName(), slugOf(membership.scopeId));
         fields.put(Field.ITERATION_ID.canonicalName(), iteration.number);

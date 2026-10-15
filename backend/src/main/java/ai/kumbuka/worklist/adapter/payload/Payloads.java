@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.surface.AddressParser;
+import ai.kumbuka.worklist.surface.NoticeTexts;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -71,7 +72,12 @@ public final class Payloads {
     /** One object, at its address. */
     public static ObjectResponse of(String scope, VerbSurface.Result result) {
         return new ObjectResponse(
-            AddressParser.render(scope, result.address()), result.fields());
+            AddressParser.render(scope, result.address()), worded(result.fields()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> worded(Map<String, Object> fields) {
+        return (Map<String, Object>) NoticeTexts.worded(fields);
     }
 
     /** A set of them. */

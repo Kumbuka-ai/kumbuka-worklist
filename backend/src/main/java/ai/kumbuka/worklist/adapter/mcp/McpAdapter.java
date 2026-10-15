@@ -15,6 +15,7 @@ import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
+import ai.kumbuka.worklist.surface.RefusalCatalogue;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
@@ -110,28 +111,7 @@ public class McpAdapter {
     /** JSON-RPC's own codes. Protocol faults only — a refused verb is not one. */
     private static final int METHOD_NOT_FOUND = -32601;
 
-    /** The methods this server speaks, which an unknown method is answered with. */
-    private static final List<String> METHODS = List.of("initialize", "tools/list", "tools/call");
     private static final int INVALID_PARAMS = -32602;
-
-    /**
-     * The sentences the two classes of non-acting verb are refused with.
-     *
-     * <p>Written once and handed to the surface, which owns the refusal. Two
-     * adapters explaining the same refusal in their own words is how two callers
-     * come to believe two different things about one surface.
-     */
-    private static final String UNCARRIED_WHY =
-        "The capability declaration gives this scheme the object lifecycle, the planning "
-            + "verbs, the claim family, the graph verbs and validate. The commitment gate "
-            + "it carries is accept and not send: an item is never frozen, so there is "
-            + "nothing for an author to commit outward and nothing for an addendum to hang "
-            + "off.";
-
-    private static final String UNBUILT_WHY =
-        "It is declared, it is specified, and no code answers it yet. That is a different "
-            + "sentence from 'this scheme does not have it', which is why it does not get "
-            + "the same answer: waiting for this one is reasonable.";
 
     private static final Logger LOG = Logger.getLogger(McpAdapter.class);
 
@@ -142,9 +122,7 @@ public class McpAdapter {
     @POST
     public Response rpc(Map<String, Object> request) {
         if (request == null || !JSONRPC.equals(request.get(KEY_JSONRPC))) {
-            return error(null, INVALID_PARAMS,
-                "the request is outside the JSON-RPC 2.0 envelope. Send jsonrpc as 2.0 with "
-                    + "method and id.");
+            return error(null, INVALID_PARAMS, RefusalCatalogue.protocol("protocolEnvelope"));
         }
 
         Object id = request.get(KEY_ID);
@@ -162,9 +140,7 @@ public class McpAdapter {
             case "tools/call" -> result(id, call(arguments(request, "params")));
             // The method that arrived is the caller's and never comes back
             // (DEC-0043 R19); the answer names the methods this server speaks.
-            default -> error(id, METHOD_NOT_FOUND,
-                "the method is outside the methods of this server. Call one of "
-                    + String.join(", ", METHODS) + ".");
+            default -> error(id, METHOD_NOT_FOUND, RefusalCatalogue.protocol("protocolMethod"));
         };
     }
 
@@ -250,9 +226,7 @@ public class McpAdapter {
             return;
         }
         visibleFirst(in, null);
-        throw SurfaceException.unknown(declared,
-            "the call carries an argument outside the ones this tool declares. Send only "
-                + "the arguments under accepts.");
+        throw SurfaceException.unknown(declared);
     }
 
     // ======================================================================
@@ -289,9 +263,7 @@ public class McpAdapter {
 
             // The tool name that arrived is the caller's and never comes back
             // (DEC-0043 R19); the answer names the tools this server declares.
-            default -> throw SurfaceException.invalid(KEY_NAME,
-                "the tool named is outside the tools of this server. Call one of "
-                    + String.join(", ", McpTools.names()) + ".");
+            default -> throw SurfaceException.invalid(KEY_NAME, McpTools.names());
         };
     }
 
@@ -438,9 +410,9 @@ public class McpAdapter {
         String id = at == null ? null : at.id();
 
         if (unbuilt) {
-            verbs.unbuilt(caller.subject(), scope, view, id, verb, UNBUILT_WHY);
+            verbs.unbuilt(caller.subject(), scope, view, id, verb);
         } else {
-            verbs.uncarried(caller.subject(), scope, view, id, verb, UNCARRIED_WHY);
+            verbs.uncarried(caller.subject(), scope, view, id, verb);
         }
         throw new IllegalStateException("a verb that does not act returned instead of refusing");
     }
@@ -489,9 +461,7 @@ public class McpAdapter {
         }
         if (!(raw instanceof Map)) {
             visibleFirst(in, ARG_FIELDS);
-            throw SurfaceException.invalid(ARG_FIELDS,
-                "fields takes an object from field name to value. Send fields as such an "
-                    + "object.");
+            throw SurfaceException.invalid(ARG_FIELDS);
         }
         return new VerbInput.Fields((Map<String, Object>) raw);
     }
@@ -506,13 +476,10 @@ public class McpAdapter {
             visibleFirst(in, name);
         }
         if (value == null) {
-            throw SurfaceException.missing(name,
-                "the argument under offenders is mandatory, and the call left it out or sent it "
-                    + "as null. Send it with a value.");
+            throw SurfaceException.missing(name);
         }
         if (value.isBlank()) {
-            throw SurfaceException.invalid(name,
-                "the argument under offenders arrived as empty text. Send it with a value.");
+            throw SurfaceException.invalid(name);
         }
         return value;
     }
@@ -565,9 +532,7 @@ public class McpAdapter {
             }
         }
         visibleFirst(in, ARG_DURATION);
-        throw SurfaceException.invalid(ARG_DURATION,
-            "duration_seconds takes a whole number of seconds. Send the lease duration as "
-                + "a positive whole number.");
+        throw SurfaceException.invalid(ARG_DURATION);
     }
 
     @SuppressWarnings("unchecked")

@@ -38,28 +38,25 @@ import java.util.regex.Pattern;
 public enum QueryFilter {
 
     /** An item's status, by the display name the scope declared it under. */
-    ITEM_STATUS(Selector.ITEM, Names.STATUS, Form.NAME, "a status name the scope declared"),
+    ITEM_STATUS(Selector.ITEM, Names.STATUS, Form.NAME),
 
     /** An item's milestone, by the milestone's number. */
-    ITEM_MILESTONE(Selector.ITEM, "milestone", Form.NUMBER, "a milestone number"),
+    ITEM_MILESTONE(Selector.ITEM, "milestone", Form.NUMBER),
 
     /** An item's workstream, by the token the scope declared it under. */
-    ITEM_WORKSTREAM(Selector.ITEM, "workstream", Form.NAME, "a workstream token"),
+    ITEM_WORKSTREAM(Selector.ITEM, "workstream", Form.NAME),
 
     /** Whether an iteration is closed. */
-    ITERATION_CLOSED(Selector.ITERATION, "closed", Form.BOOLEAN, "true or false"),
+    ITERATION_CLOSED(Selector.ITERATION, "closed", Form.BOOLEAN),
 
     /** A milestone's status, one of the platform's fixed set. */
-    MILESTONE_STATUS(Selector.MILESTONE, Names.STATUS, Form.oneOf(Milestone.STATUSES),
-        Names.ONE_OF + Milestone.STATUSES),
+    MILESTONE_STATUS(Selector.MILESTONE, Names.STATUS, Form.oneOf(Milestone.STATUSES)),
 
     /** A milestone's kind, the goal or one of the markers. */
-    MILESTONE_KIND(Selector.MILESTONE, "kind", Form.oneOf(Milestone.KINDS),
-        Names.ONE_OF + Milestone.KINDS),
+    MILESTONE_KIND(Selector.MILESTONE, "kind", Form.oneOf(Milestone.KINDS)),
 
     /** A workstream's status, one of the platform's fixed set. */
-    WORKSTREAM_STATUS(Selector.WORKSTREAM, Names.STATUS, Form.oneOf(Workstream.STATUSES),
-        Names.ONE_OF + Workstream.STATUSES);
+    WORKSTREAM_STATUS(Selector.WORKSTREAM, Names.STATUS, Form.oneOf(Workstream.STATUSES));
 
     /** The prefix every filter argument is named under in a refusal and on REST. */
     public static final String FILTER_ARGUMENT = "filter";
@@ -67,13 +64,11 @@ public enum QueryFilter {
     private final String view;
     private final String filterName;
     private final Form form;
-    private final String takes;
 
-    QueryFilter(String view, String filterName, Form form, String takes) {
+    QueryFilter(String view, String filterName, Form form) {
         this.view = view;
         this.filterName = filterName;
         this.form = form;
-        this.takes = takes;
     }
 
     /** The view this filter narrows. */
@@ -86,10 +81,6 @@ public enum QueryFilter {
         return filterName;
     }
 
-    /** What the value takes, in words a caller reads. */
-    public String takes() {
-        return takes;
-    }
 
     /** The argument a refusal names: {@code filter.<name>}. */
     public String offenderName() {
@@ -128,8 +119,6 @@ public enum QueryFilter {
             // the filters this view declares, as their paths.
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.PREDICATE_UNKNOWN,
-                "filter carries a name outside the filters this view declares. Use one of "
-                    + "the filters this view declares: " + describe(view) + ".",
                 List.of(FILTER_ARGUMENT),
                 of(view).stream().map(QueryFilter::offenderName).toList()));
     }
@@ -139,16 +128,6 @@ public enum QueryFilter {
         return Arrays.stream(values()).anyMatch(f -> f.filterName.equals(name));
     }
 
-    /** The filters of one view, as a caller reads them in a refusal or a tool description. */
-    public static String describe(String view) {
-        List<QueryFilter> declared = of(view);
-        if (declared.isEmpty()) {
-            return "nothing";
-        }
-        return String.join(", ", declared.stream()
-            .map(f -> "'" + f.filterName + "' (" + f.takes + ")")
-            .toList());
-    }
 
     /**
      * Literals the constants above share. A nested holder, because an enum's
@@ -156,7 +135,6 @@ public enum QueryFilter {
      */
     private static final class Names {
         static final String STATUS = "status";
-        static final String ONE_OF = "one of ";
 
         private Names() {
         }
@@ -174,8 +152,7 @@ public enum QueryFilter {
             Object read(QueryFilter filter, Object raw) {
                 String text = text(filter, raw);
                 if (UUID_SHAPE.matcher(text).matches()) {
-                    throw refused(filter, "the name the scope declared, in place of the "
-                        + "platform's own identity");
+                    throw refused(filter);
                 }
                 return text;
             }
@@ -187,7 +164,7 @@ public enum QueryFilter {
             Object read(QueryFilter filter, Object raw) {
                 Long number = QuerySpec.wholeNumber(raw);
                 if (number == null || number < 1) {
-                    throw refused(filter, "a positive whole number");
+                    throw refused(filter);
                 }
                 return number;
             }
@@ -203,7 +180,7 @@ public enum QueryFilter {
                 if ("true".equals(raw) || "false".equals(raw)) {
                     return Boolean.valueOf((String) raw);
                 }
-                throw refused(filter, "true or false");
+                throw refused(filter);
             }
         };
 
@@ -213,7 +190,7 @@ public enum QueryFilter {
                 Object read(QueryFilter filter, Object raw) {
                     String text = text(filter, raw);
                     if (!admitted.contains(text)) {
-                        throw refused(filter, Names.ONE_OF + admitted);
+                        throw refused(filter);
                     }
                     return text;
                 }
@@ -224,21 +201,19 @@ public enum QueryFilter {
 
         private static String text(QueryFilter filter, Object raw) {
             if (!(raw instanceof String text) || text.isBlank()) {
-                throw refused(filter, "a value with at least one visible character");
+                throw refused(filter);
             }
             return text.strip();
         }
 
         /**
-         * A value this filter cannot read: the filter named, the form it takes
-         * said, the value itself left out — the caller holds it, and a refusal
-         * is logged.
+         * A value this filter cannot read: the filter named as its path, the
+         * value itself left out — the caller holds it, and a refusal is logged.
          */
-        private static WorklistException refused(QueryFilter filter, String form) {
+        private static WorklistException refused(QueryFilter filter) {
             String path = filter.offenderName();
             return new WorklistException(
                 WorklistException.Reason.ARGUMENT_INVALID,
-                path + " takes " + filter.takes + ". Send " + path + " as " + form + ".",
                 List.of(path));
         }
     }

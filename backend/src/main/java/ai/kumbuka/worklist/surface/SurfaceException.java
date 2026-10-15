@@ -21,162 +21,22 @@ import java.util.List;
  * a collection. None of that needs an object to exist, and most of it is
  * decided before one is looked for.
  *
- * <p>Every reason below names a status class and keeps it. A caller that has to
- * tell "you addressed this wrongly" from "that verb is not part of this scheme"
- * from "there is nothing there" cannot do it from prose, and a surface that
- * answered all three the same way would be indistinguishable from one with
- * unbuilt routes.
+ * <p>It carries a {@link RefusalCode} and the detail of {@code data}, and no
+ * text: the message and the remedy are the catalogue's, read from the message
+ * bundles when the refusal reaches the edge ({@link RefusalCatalogue}). The
+ * status travels with the code, because the choice is part of the published
+ * contract and a mapper is exactly where a choice gets quietly changed.
  */
 public class SurfaceException extends RuntimeException {
 
-    /**
-     * The category of a surface refusal, and the HTTP status it carries.
-     *
-     * <p>The status travels with the reason rather than being decided at the
-     * mapper, because the choice is part of the published contract and a mapper
-     * is exactly where a choice gets quietly changed.
-     */
-    public enum Reason {
-
-        /**
-         * The address violates the production. Stage 1, and decidable without
-         * knowing any scope — which is why answering 400 leaks nothing and why
-         * this check sits in front of everything else.
-         *
-         * <p>The view is checked here too, and that placement is a decision.
-         * Which selectors a SCOPE has declared is vocabulary and sits behind
-         * scope visibility; that there are three views at all is the platform's
-         * object model and is decidable without knowing any scope. Putting it
-         * in stage 1 therefore leaks nothing, and putting it in stage 3 would
-         * make a misspelt view reveal that a scope exists.
-         */
-        ADDRESS_MALFORMED(400),
-
-        /**
-         * The worklist scheme does not carry this verb.
-         *
-         * <p>422 and never 404: a not-found says the object is missing, an
-         * unimplemented path says nothing at all, and both invite the caller to
-         * retry. A category error says the call will never work, and names why.
-         */
-        VERB_UNCARRIED(422),
-
-        /**
-         * The scheme carries this verb and this service has not built it.
-         *
-         * <p>A different sentence from the one above and it must not be spelled
-         * the same way. The capability declaration says the worklist scheme
-         * carries the claim family, the graph verbs and {@code validate}; this
-         * service has none of them yet. Answering {@code VERB_UNCARRIED} would
-         * tell a caller the act does not exist in this scheme, which is false
-         * and would stop them waiting for something that is coming.
-         *
-         * <p>501, which is the one status in this enum that says the fault is
-         * ours. It is also the status the catalogue refuses for an uncarried
-         * verb, and that refusal is what makes it the right one here: the two
-         * cases are answered differently because they ARE different.
-         */
-        VERB_UNBUILT(501),
-
-        /**
-         * A writing verb of the verb surface arrived on a view that is
-         * declared, not written through this surface.
-         *
-         * <p>The one such view today is {@code workstream}. A workstream is
-         * brought into being by declaring it — the same act that brings a
-         * scope's items, iterations and milestones into their vocabularies —
-         * and the declaration is the selector-declaration surface's, not this
-         * one's. Answering {@code VERB_UNCARRIED} would say the act does not
-         * exist in this scheme, which is false; answering {@code VERB_UNBUILT}
-         * would say the act is coming here, which is also false. The act
-         * exists and runs elsewhere, and that is a third sentence.
-         *
-         * <p>422, which is what {@code VERB_UNCARRIED} carries too: the call
-         * is syntactically fine, and the surface refuses to act on it for a
-         * reason it names. The status is the same as {@code VERB_UNCARRIED}
-         * on purpose — both are typed category errors — but the reason is a
-         * distinct sentence a caller reads, because acting on the two the
-         * same way would smooth over which surface the act belongs on.
-         */
-        SELECTOR_DECLARED_NOT_WRITTEN(422),
-
-        /**
-         * A writing verb arrived on a truncated address that declares no set
-         * semantics.
-         *
-         * <p>405, and the answer carries {@code Allow}. HTTP does not forbid a
-         * write on a collection — it merely finds it unusual — so this is an
-         * explicit check rather than something the framework does for us.
-         */
-        WRITE_ON_TRUNCATED_ADDRESS(405),
-
-        /**
-         * The address resolves and may not be written through.
-         *
-         * <p>{@code iteration/current} is the one such address: it is a pointer
-         * the scope moves, so a write through it would land on whichever
-         * iteration happened to be current when the call arrived. 405 with
-         * {@code Allow: GET}, because the address is real and the method is
-         * what does not apply to it.
-         */
-        ADDRESS_READ_ONLY(405),
-
-        /** A field write arrived without the conflict token it declares. */
-        CONFLICT_TOKEN_MISSING(428),
-
-        /** The request body is absent or does not carry what the verb needs. */
-        PAYLOAD_MALFORMED(400),
-
-        /**
-         * The {@code Kumbuka-Surface} header names a surface other than the
-         * assistant, the one value it takes. Refused before the call is made,
-         * as kumbuka-dispatch refuses it: the header is not an argument of the
-         * call, it says which surface's vocabulary the call is made in, and a
-         * call made in a guessed one would answer in the wrong vocabulary. No
-         * {@code data}, because there is no argument to name.
-         */
-        ARGUMENT_INVALID(400),
-
-        /**
-         * A mandatory argument did not arrive, or arrived as JSON {@code null},
-         * which DEC-0043 R17 reads as the same thing. The offender is the
-         * argument's declared name, never a value.
-         */
-        ARGUMENT_MISSING(400),
-
-        /**
-         * An argument name the call does not declare, at any level of the
-         * input (DEC-0043 R4). The answer carries the names the call declares
-         * under {@code accepts} and never the name that arrived (R19).
-         */
-        ARGUMENT_UNKNOWN(400),
-
-        /**
-         * A failure nobody anticipated (DEC-0043 R13). It names no rule because
-         * it is a defect, carries a reference to report, and nothing was
-         * changed: the transaction of the call rolled back.
-         */
-        UNEXPECTED_FAILURE(500);
-
-        private final int status;
-
-        Reason(int status) {
-            this.status = status;
-        }
-
-        /** The HTTP status this reason answers with, fixed at the reason. */
-        public int status() {
-            return status;
-        }
-    }
-
-    private final transient Reason reason;
+    private final transient RefusalCode reason;
     private final transient String allow;
     private final transient List<String> offenders;
     private final transient List<String> accepts;
+    private final transient String attempted;
 
-    public SurfaceException(Reason reason, String message) {
-        this(reason, message, null);
+    public SurfaceException(RefusalCode reason) {
+        this(reason, null);
     }
 
     /**
@@ -184,45 +44,58 @@ public class SurfaceException extends RuntimeException {
      *              one. 405 without it is a refusal that does not say what
      *              would have worked.
      */
-    public SurfaceException(Reason reason, String message, String allow) {
-        this(reason, message, allow, List.of(), List.of());
+    public SurfaceException(RefusalCode reason, String allow) {
+        this(reason, allow, List.of(), List.of(), null);
     }
 
     /**
      * A refusal with detail under {@code data}.
      *
      * @param offenders the declared argument paths the refusal concerns
-     * @param accepts   the argument names the call declares, carried by a
-     *                  refusal of a name the call does not declare
+     * @param accepts   the names the call declares, carried by a refusal of a
+     *                  name the call does not declare
+     * @param attempted the declared verb the refusal's text names, or null
      */
-    public SurfaceException(Reason reason, String message, String allow,
-                            List<String> offenders, List<String> accepts) {
-        super(message);
+    public SurfaceException(RefusalCode reason, String allow, List<String> offenders,
+                            List<String> accepts, String attempted) {
+        super(reason.name());
         this.reason = reason;
         this.allow = allow;
         this.offenders = List.copyOf(offenders);
         this.accepts = List.copyOf(accepts);
+        this.attempted = attempted;
     }
 
-    /** A mandatory argument that did not arrive, by its declared name. */
-    public static SurfaceException missing(String argument, String message) {
-        return new SurfaceException(Reason.ARGUMENT_MISSING, message, null,
-            List.of(argument), List.of());
+    /** A refusal whose text names the verb the call attempted. */
+    public static SurfaceException of(RefusalCode reason, String attempted) {
+        return new SurfaceException(reason, null, List.of(), List.of(), attempted);
+    }
+
+    /** Mandatory arguments that did not arrive, by their declared names. */
+    public static SurfaceException missing(String... arguments) {
+        return new SurfaceException(RefusalCode.ARGUMENT_MISSING, null, List.of(arguments),
+            List.of(), null);
     }
 
     /** A value the argument does not admit, by the argument's declared path. */
-    public static SurfaceException invalid(String argument, String message) {
-        return new SurfaceException(Reason.ARGUMENT_INVALID, message, null,
-            List.of(argument), List.of());
+    public static SurfaceException invalid(String argument) {
+        return new SurfaceException(RefusalCode.ARGUMENT_INVALID, null, List.of(argument),
+            List.of(), null);
+    }
+
+    /** A value the argument does not admit, answered with the names it does admit. */
+    public static SurfaceException invalid(String argument, List<String> accepts) {
+        return new SurfaceException(RefusalCode.ARGUMENT_INVALID, null, List.of(argument),
+            accepts, null);
     }
 
     /** Names the call does not declare, answered with the ones it does. */
-    public static SurfaceException unknown(List<String> accepts, String message) {
-        return new SurfaceException(Reason.ARGUMENT_UNKNOWN, message, null,
-            List.of(), accepts);
+    public static SurfaceException unknown(List<String> accepts) {
+        return new SurfaceException(RefusalCode.ARGUMENT_UNKNOWN, null, List.of(), accepts,
+            null);
     }
 
-    public Reason reason() {
+    public RefusalCode reason() {
         return reason;
     }
 
@@ -236,5 +109,10 @@ public class SurfaceException extends RuntimeException {
 
     public List<String> accepts() {
         return accepts;
+    }
+
+    /** The declared verb the refusal's text names, or null. */
+    public String attempted() {
+        return attempted;
     }
 }

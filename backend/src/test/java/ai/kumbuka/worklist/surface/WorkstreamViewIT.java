@@ -200,7 +200,7 @@ class WorkstreamViewIT {
             // The message names the surface the act belongs on. Asserting on
             // it is what makes this a probe of the REASON rather than only of
             // a status class shared with VERB_UNCARRIED.
-            .body("message", containsString("declared"))
+            .body("message", containsString("declaration"))
             .body("message", containsString("selector-declaration surface"));
     }
 
@@ -214,7 +214,7 @@ class WorkstreamViewIT {
             .then()
             .statusCode(422)
             .body("reason", is("SELECTOR_DECLARED_NOT_WRITTEN"))
-            .body("message", containsString("declared"))
+            .body("message", containsString("declaration"))
             .body("message", containsString("selector-declaration surface"));
     }
 
@@ -248,7 +248,7 @@ class WorkstreamViewIT {
             .then()
             .statusCode(422)
             .body("reason", is("VERB_UNCARRIED"))
-            .body("message", containsString("workstream"));
+            .body("message", containsString("close"));
     }
 
     @Test

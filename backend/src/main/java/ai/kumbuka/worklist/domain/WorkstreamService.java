@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.repository.ScopeAccessRepository;
 import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
+import io.quarkus.qute.i18n.MessageBundles;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
@@ -118,8 +119,8 @@ public class WorkstreamService {
         defaultRow.scopeId     = scopeId;
         defaultRow.number      = number;
         defaultRow.token       = Workstream.DEFAULT_TOKEN;
-        defaultRow.description = "The default workstream. Everything that names no other "
-            + "lands here; its identity is fixed and only the description is settable.";
+        defaultRow.description = MessageBundles.get(StoredTexts.class)
+            .defaultWorkstreamDescription();
         defaultRow.status      = Workstream.DECLARED;
         defaultRow.isDefault   = true;
         workstreams.insert(defaultRow);
@@ -155,20 +156,12 @@ public class WorkstreamService {
         if (token == null || !Selector.TOKEN_PATTERN.matcher(token).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a workstream token is a leading lower-case letter followed by lower-case "
-                    + "alphanumerics and interior hyphens. Upper case is refused rather "
-                    + "than folded, because folding would make two strings resolve to one "
-                    + "workstream",
                 List.of(TOKEN));
         }
-        String cleaned = requireNonBlank(description,
-            "a workstream carries a mandatory description. A workstream without one is a "
-                + "violation and not a report");
+        String cleaned = requireNonBlank(description);
         if (workstreams.findByToken(scopeId, token) != null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the workstream token is already declared in this scope. A withdrawn workstream keeps its token, so redeclaring under a "
-                    + "known name is refused rather than folded",
                 List.of(TOKEN));
         }
 
@@ -202,8 +195,7 @@ public class WorkstreamService {
             String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        String cleaned = requireNonBlank(description,
-            "a workstream description is mandatory; it may not be cleared");
+        String cleaned = requireNonBlank(description);
         if (cleaned.equals(workstream.description)) {
             return workstream;
         }
@@ -226,14 +218,10 @@ public class WorkstreamService {
             String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        refuseIfDefault(workstream, "renamed",
-            "The default's token is fixed — its identity is what things point at from "
-                + "outside the store, and renaming it would break every such pointer at once");
+        refuseIfDefault(workstream, "renamed");
         if (newToken == null || !Selector.TOKEN_PATTERN.matcher(newToken).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a workstream token is a leading lower-case letter followed by lower-case "
-                    + "alphanumerics and interior hyphens",
                 List.of(TOKEN));
         }
         if (newToken.equals(workstream.token)) {
@@ -242,15 +230,11 @@ public class WorkstreamService {
         if (workstreams.findByToken(scopeId, newToken) != null) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the workstream token is already in use in this scope",
                 List.of(TOKEN));
         }
         if (workstreams.hasReferences(scopeId, workstream.number)) {
             throw new WorklistException(
                 WorklistException.Reason.WORKSTREAM_HAS_REFERENCES,
-                "the workstream is renamable only while nothing points at it. An item or a "
-                    + "milestone does; declare a new workstream and move the pointers "
-                    + "if the name has to change",
                 List.of(TOKEN));
         }
         String oldToken = workstream.token;
@@ -269,10 +253,7 @@ public class WorkstreamService {
     public Workstream withdraw(UUID scopeId, UUID workstreamId, String conflictToken) {
         Workstream workstream = require(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
-        refuseIfDefault(workstream, "withdrawn",
-            "The default is the intake landing for every item and milestone that names no "
-                + "other. Withdrawing it would refuse a create that carried no explicit "
-                + "workstream, and the frame says the default takes those in");
+        refuseIfDefault(workstream, "withdrawn");
         if (Workstream.WITHDRAWN.equals(workstream.status)) {
             return workstream;
         }
@@ -296,7 +277,6 @@ public class WorkstreamService {
         if (workstream == null) {
             throw new WorklistException(
                 WorklistException.Reason.WORKSTREAM_UNKNOWN,
-                "the workstream addressed is outside this scope",
                 List.of());
         }
         return workstream;
@@ -309,26 +289,22 @@ public class WorkstreamService {
         }
         throw new WorklistException(
             WorklistException.Reason.WORKSTREAM_WITHDRAWN,
-            "the workstream named is withdrawn. Nothing new is accepted "
-                + "under it; what was already accepted keeps resolving",
             List.of(Field.WORKSTREAM_ID.path()));
     }
 
-    private static void refuseIfDefault(Workstream workstream, String verb, String reason) {
+    private static void refuseIfDefault(Workstream workstream, String verb) {
         if (!workstream.isDefault) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.WORKSTREAM_DEFAULT_LOCKED,
-            "the default workstream may not be " + verb + ". " + reason,
             List.of());
     }
 
-    private static String requireNonBlank(String value, String reason) {
+    private static String requireNonBlank(String value) {
         if (value == null || value.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                reason + " — empty and whitespace-only are refused",
                 List.of(DESCRIPTION));
         }
         return value.strip();

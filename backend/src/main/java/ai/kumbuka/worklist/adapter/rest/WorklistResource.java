@@ -12,6 +12,7 @@ import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.surface.CallerActor;
+import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
@@ -149,10 +150,7 @@ public class WorklistResource {
             // Every other verb acts at item depth. Depth is declared per verb and
             // undeclared means complete address only, so a range capability never
             // comes into existence by omission.
-            throw new SurfaceException(SurfaceException.Reason.WRITE_ON_TRUNCATED_ADDRESS,
-                "the verb named acts on a complete address and never on a truncated one. The only "
-                    + "declarable set semantics is exactly one, which create has and "
-                    + "advance has and no other verb of this scheme does.",
+            throw new SurfaceException(RefusalCode.WRITE_ON_TRUNCATED_ADDRESS,
                 COLLECTION_ALLOW);
         }
 
@@ -254,11 +252,7 @@ public class WorklistResource {
         if (java.util.List.of(ASSISTANT).equals(surface)) {
             return SortKey.STANDARD;
         }
-        throw new SurfaceException(SurfaceException.Reason.ARGUMENT_INVALID,
-            "the header " + SURFACE + " names the surface the caller came through, and takes "
-                + "the one value '" + ASSISTANT + "', sent once. Send " + SURFACE + ": "
-                + ASSISTANT + " for the assistant surface, or leave the header out for this "
-                + "one.");
+        throw new SurfaceException(RefusalCode.ARGUMENT_INVALID);
     }
 
     // ======================================================================
@@ -307,11 +301,7 @@ public class WorklistResource {
         CustomMethod.Split at = CustomMethod.split(segment, CustomMethod.Depth.ITEM)
             .filter(CustomMethod.Split::isKnown)
             .orElseThrow(() -> new SurfaceException(
-                SurfaceException.Reason.WRITE_ON_TRUNCATED_ADDRESS,
-                "the last segment names no verb of this scheme at item depth. A "
-                    + "transition is written in colon notation on the item URI — "
-                    + "'<number>:close' — because a verb as a trailing path segment could "
-                    + "not be told apart from a further id segment.",
+                RefusalCode.WRITE_ON_TRUNCATED_ADDRESS,
                 ITEM_ALLOW));
 
         return dispatch(at, scope, selector, unquote(ifMatch), body);
@@ -437,12 +427,7 @@ public class WorklistResource {
      * things about one surface.
      */
     private Response uncarried(String scope, String view, String id, String verb) {
-        verbs.uncarried(caller.subject(), scope, view, id, verb,
-            "The capability declaration gives this scheme the object lifecycle, the "
-                + "planning verbs, the claim family, the graph verbs and validate. The "
-                + "commitment gate it carries is accept and not send: an item is never "
-                + "frozen, so there is nothing for an author to commit outward and nothing "
-                + "for an addendum to hang off.");
+        verbs.uncarried(caller.subject(), scope, view, id, verb);
         throw unreachable(verb);
     }
 
@@ -539,9 +524,7 @@ public class WorklistResource {
             // A stranger is answered NOT_FOUND whatever else is wrong with the
             // call (DEC-0042), so the scope is checked before the names.
             verbs.requireVisible(caller.subject(), scope);
-            throw SurfaceException.unknown(names,
-                "the body carries an argument outside the ones this verb declares. Send "
-                    + "only the arguments under accepts.");
+            throw SurfaceException.unknown(names);
         }
         in.forEach((name, value) -> {
             if (value != null) {
@@ -558,8 +541,7 @@ public class WorklistResource {
             return null;
         }
         if (!(value instanceof String text)) {
-            throw invalid(scope, name,
-                "the argument under offenders takes text. Send it as a JSON string.");
+            throw invalid(scope, name);
         }
         return text;
     }
@@ -587,9 +569,7 @@ public class WorklistResource {
         if (value instanceof Integer || value instanceof Long) {
             return new VerbInput.Lease(((Number) value).longValue());
         }
-        throw invalid(scope, DURATION,
-            "duration_seconds takes a whole number of seconds. Send the lease duration as "
-                + "a positive whole number.");
+        throw invalid(scope, DURATION);
     }
 
     /**
@@ -597,9 +577,9 @@ public class WorklistResource {
      * visible: a stranger is answered NOT_FOUND whatever else is wrong with
      * the call (DEC-0042).
      */
-    private SurfaceException invalid(String scope, String name, String message) {
+    private SurfaceException invalid(String scope, String name) {
         verbs.requireVisible(caller.subject(), scope);
-        return SurfaceException.invalid(name, message);
+        return SurfaceException.invalid(name);
     }
 
     private <T> T read(String body, Class<T> shape) {
@@ -619,9 +599,7 @@ public class WorklistResource {
         } catch (JsonProcessingException e) {
             // The parser's own message quotes the body back, so it stays in
             // here (DEC-0043 R18).
-            throw new SurfaceException(SurfaceException.Reason.PAYLOAD_MALFORMED,
-                "the request body is outside the JSON this verb takes. Send the body as one "
-                    + "JSON object of the arguments the verb declares.");
+            throw new SurfaceException(RefusalCode.PAYLOAD_MALFORMED);
         }
     }
 

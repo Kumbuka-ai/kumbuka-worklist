@@ -82,7 +82,7 @@ class LengthCapProbeIT {
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
             .as("the message names the cap; the field travels under offenders, and the length that arrived is the caller's and stays out")
-            .contains("200").doesNotContain("201");
+            .isEqualTo("INVALID_VALUE").doesNotContain("201");
         assertThat(refusal.offenders()).containsExactly(Field.TITLE.path());
     }
 
@@ -107,7 +107,7 @@ class LengthCapProbeIT {
             Field.TITLE.canonicalName(), tooLong,
             Field.KIND.canonicalName(), Milestone.GOAL)));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(refusal.getMessage()).contains("200").doesNotContain("201");
+        assertThat(refusal.getMessage()).isEqualTo("INVALID_VALUE").doesNotContain("201");
         assertThat(refusal.offenders()).containsExactly(Field.TITLE.path());
     }
 
@@ -124,7 +124,7 @@ class LengthCapProbeIT {
             Field.MISSION.canonicalName(), tooLong)));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.getMessage())
-            .contains("1500").doesNotContain("1501");
+            .isEqualTo("INVALID_VALUE").doesNotContain("1501");
         assertThat(refusal.offenders()).containsExactly(Field.MISSION.path());
     }
 

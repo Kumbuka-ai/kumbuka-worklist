@@ -78,12 +78,10 @@ public class VocabularyRegistry {
     @Transactional
     public ItemStatus declareStatus(UUID scopeId, String name, int rank,
             boolean actionable, boolean inProgress, boolean closed, boolean successful) {
-        requireName(name, "a status");
+        requireName(name);
         if (closed && inProgress) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "a status cannot be both closed and in progress: finished means there is "
-                    + "nothing further to do, and in progress means somebody is doing it",
                 List.of());
         }
 
@@ -130,9 +128,6 @@ public class VocabularyRegistry {
         if (status == null || !status.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the status named is outside the statuses this scope declares. The statuses of a scope are its own data, and each one carries "
-                    + "the four predicates the platform reasons about — declare the "
-                    + "status before setting it on an item",
                 List.of(Field.STATUS.path()));
         }
         return status;
@@ -197,19 +192,12 @@ public class VocabularyRegistry {
         if (key == null || !AttributeDefinition.KEY_PATTERN.matcher(key).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "an attribute key is a leading lower-case letter followed by "
-                    + "alphanumerics and interior underscores — cluster, story_points",
                 List.of());
         }
-        requireName(name, "an attribute");
+        requireName(name);
         if (!AttributeDefinition.TYPES.contains(type)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the attribute type named is outside the platform's set. The set is "
-                    + AttributeDefinition.TYPES + " and it is closed at the platform "
-                    + "level. Which of them a field gets is the scope's own choice — the "
-                    + "same field is a choice in one scope, free text in the next and a "
-                    + "number in a third, and no rule here narrows that",
                 List.of());
         }
 
@@ -251,9 +239,6 @@ public class VocabularyRegistry {
         if (definition == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the attribute named is outside the attributes this scope declares. An attribute is not created by being written to: a scope's "
-                    + "attribute set is a declaration, and a value under an undeclared "
-                    + "key is a value nothing can read back",
                 List.of(Field.ATTRIBUTES.path()));
         }
         return definition;
@@ -281,13 +266,10 @@ public class VocabularyRegistry {
     @Transactional
     public AttributeOption declareOption(UUID scopeId, String key, String name, int rank) {
         AttributeDefinition definition = requireAttribute(scopeId, key);
-        requireName(name, "an option");
+        requireName(name);
         if (!AttributeDefinition.ENUMERATED.contains(definition.type)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the attribute named is of type " + definition.type + " and draws its "
-                    + "values from no declared set. Options belong to "
-                    + AttributeDefinition.ENUMERATED,
                 List.of());
         }
 
@@ -329,8 +311,6 @@ public class VocabularyRegistry {
         if (option == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the option named is outside the options this attribute declares. The options of an attribute are the scope's declaration, and a "
-                    + "value outside it is one nothing can render",
                 List.of(Field.ATTRIBUTES.path()));
         }
         return option;
@@ -356,7 +336,7 @@ public class VocabularyRegistry {
     @Transactional
     public RelationType declareRelationType(UUID scopeId, String name, boolean blocks,
             int rank) {
-        requireName(name, "a relation type");
+        requireName(name);
 
         // Idempotent for the same reason declareStatus is: the name is the
         // wire form of a relation entry, and a second row under the same name
@@ -390,9 +370,6 @@ public class VocabularyRegistry {
         if (type == null || !type.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                "the relation type named is outside the types this scope declares. An edge carries a declared type, and the one thing the platform "
-                    + "reads out of a type is whether it blocks — an undeclared type is "
-                    + "an edge nothing can answer that question about",
                 List.of(Field.RELATIONS.path()));
         }
         return type;
@@ -429,12 +406,10 @@ public class VocabularyRegistry {
     }
 
     /** A display name is present and is not whitespace. */
-    private static void requireName(String name, String subject) {
+    private static void requireName(String name) {
         if (name == null || name.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                subject + " carries a display name: it is what a reader sees, and a "
-                    + "declared value nobody can name is one nobody can pick",
                 List.of());
         }
     }

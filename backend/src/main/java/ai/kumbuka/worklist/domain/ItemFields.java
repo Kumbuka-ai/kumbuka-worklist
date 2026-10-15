@@ -92,10 +92,6 @@ final class ItemFields {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "the argument under offenders names a declared value by an identity of the "
-                + "platform. Declared values travel on the wire by their name (or number, or "
-                + "token), because a caller writing an identity would be writing something "
-                + "the reader never sees back",
             List.of(argument));
     }
 
@@ -117,7 +113,6 @@ final class ItemFields {
         if (!(raw instanceof CharSequence)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "the field under offenders takes text, and another form arrived",
                 List.of(field.path()));
         }
         String value = raw.toString().trim();
@@ -167,10 +162,6 @@ final class ItemFields {
             if (target == null) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
-                    "a reference entry carries a target. The service validates its form "
-                        + "and never resolves it — a pointer to a document, a URL and a "
-                        + "citation are all the same kind of thing here — but an entry "
-                        + "pointing at nothing is not an entry",
                     List.of(Field.REFERENCES.path()));
             }
             // An ordinary unmodifiable map rather than Map.copyOf: the label
@@ -211,12 +202,6 @@ final class ItemFields {
             if (type == null || item == null) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
-                    "a relation entry carries a `" + TYPE + "` and an `" + ITEM + "`. "
-                        + "The type is the display name a scope declared it under and the "
-                        + "item is the other end's canonical address "
-                        + "(worklist://<scope>/item/<number>). A relation without a type is "
-                        + "the predecessor's untyped edge, and every machine reader of one "
-                        + "has to guess whether it blocks",
                     List.of(Field.RELATIONS.path()));
             }
             refuseUuidShape(Field.RELATIONS.path(), type);
@@ -250,8 +235,6 @@ final class ItemFields {
         if (!(raw instanceof Map<?, ?> given)) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                "attributes is a map from a declared attribute's key to its value, and "
-                    + "another form arrived",
                 List.of(Field.ATTRIBUTES.path()));
         }
 
@@ -307,7 +290,6 @@ final class ItemFields {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "the field under offenders is a list of entries, and another form arrived",
             List.of(field.path()));
     }
 
@@ -318,8 +300,6 @@ final class ItemFields {
         }
         throw new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
-            "an entry of the field under offenders is an object, and another form "
-                + "arrived",
             List.of(field.path()));
     }
 

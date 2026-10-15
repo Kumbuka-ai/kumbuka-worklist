@@ -132,10 +132,6 @@ public final class PageCursor {
         if (!carried.equals(asked)) {
             throw new WorklistException(
                 WorklistException.Reason.CURSOR_FOREIGN,
-                "after carries a cursor handed out by a query of another " + what + ". A "
-                    + "cursor continues the query that handed it out, with the same scope, "
-                    + "view, filter, sort and direction. Pass back the next_cursor of this "
-                    + "query, or call query again from the first page.",
                 List.of(QuerySpec.AFTER_ARGUMENT));
         }
     }
@@ -144,8 +140,6 @@ public final class PageCursor {
     static WorklistException malformed() {
         return new WorklistException(
             WorklistException.Reason.CURSOR_MALFORMED,
-            "after takes the next_cursor of a previous answer, exactly as it came. Pass back "
-                + "next_cursor unchanged, or call query again from the first page.",
             List.of(QuerySpec.AFTER_ARGUMENT));
     }
 
