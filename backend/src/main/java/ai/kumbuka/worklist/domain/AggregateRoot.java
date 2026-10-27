@@ -9,7 +9,6 @@ package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
-import jakarta.persistence.PostUpdate;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Transient;
 
@@ -115,8 +114,9 @@ public abstract class AggregateRoot extends TenantScoped {
     public String storedToken;
 
     /**
-     * Whether the change about to be flushed passed {@link #stamp}. Not a
-     * column: it lives for one write of one loaded root.
+     * Whether the write this loaded root takes part in passed {@link #stamp}.
+     * Not a column: it lives as long as the loaded root, which is one
+     * transaction.
      */
     @Transient
     private boolean stamped;
@@ -142,12 +142,17 @@ public abstract class AggregateRoot extends TenantScoped {
     /**
      * The creation and modification timestamps and the token of a new root,
      * all one instant: the clock's, at the microsecond the column stores.
+     *
+     * <p>A root may have passed {@link #stamp} before it is born, where its
+     * fields are applied by the same code an update runs. Its birth is not a
+     * write the stamp may cover, so the flag is cleared here.
      */
     public void born(Instant now) {
         Instant at = now.truncatedTo(ChronoUnit.MICROS);
         created(at);
         touch(at);
         storedToken = render(at);
+        stamped = false;
     }
 
     /**
@@ -174,12 +179,17 @@ public abstract class AggregateRoot extends TenantScoped {
      * write that changes nothing flushes nothing and keeps its token.
      *
      * <p>It does NOT clear the flag, as the dispatch and memory services do in
-     * theirs. Hibernate also calls it when it weighs flushing before a query
-     * and then finds the query reads no table the change touches: no
-     * statement runs, the row stays changed, and the real flush calls it a
-     * second time. A flag cleared on the first call refuses the second, which
-     * would refuse a stamped write for the order of its queries. The flag is
-     * cleared by {@link #clearTheStamp()} instead, once the row is written.
+     * theirs, and nothing clears it after an update either. One write here
+     * may reach the database in several flushes: activating a milestone reads
+     * the active one, which flushes the milestone being written, and sets the
+     * status after that. A flag cleared at the first flush refuses the
+     * second, which would refuse a stamped write for the order of its own
+     * statements. Hibernate also calls this when it only weighs a flush before
+     * a query and then runs no statement. So the flag holds for the loaded
+     * root, and the loaded root lives for one transaction, which is the unit
+     * the token fences: a second writer compares under the lock, after this
+     * transaction has ended. A transaction that changes a root and never
+     * stamps it is refused; that is the write the token would not fence.
      */
     @PreUpdate
     void refuseAnUnstampedWrite() {
@@ -187,15 +197,6 @@ public abstract class AggregateRoot extends TenantScoped {
             throw new IllegalStateException(subject() + " is written without stamp(), "
                 + "and its conflict token would not move");
         }
-    }
-
-    /**
-     * Clears the flag once the update has run, so the stamp of one write never
-     * stands in for a change made after it was written.
-     */
-    @PostUpdate
-    void clearTheStamp() {
-        stamped = false;
     }
 
     /**

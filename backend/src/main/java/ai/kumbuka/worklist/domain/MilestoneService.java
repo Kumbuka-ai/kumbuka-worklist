@@ -171,7 +171,6 @@ public class MilestoneService extends PlanningService {
         }
         refuseGoalOnAMarker(milestone);
 
-        milestone.stamp(clock.instant());
         planning.flushAndRefresh(milestone);
         LOG.infof("milestone %d updated in scope %s", milestone.number, scopeId);
         return project(milestone, List.of());
@@ -223,11 +222,24 @@ public class MilestoneService extends PlanningService {
         return selectors.allocate(scopeId, milestoneSelector);
     }
 
+    /**
+     * Apply the settable fields that actually differ, and report whether any
+     * did.
+     *
+     * <p>The milestone is stamped at the FIRST field that changes it, not
+     * after the last. Activating reads the active milestone and flushes its
+     * demotion, and a read or a flush after the title was set would meet the
+     * changed milestone not yet stamped, which is refused there. So a caller
+     * of this method does not stamp again.
+     */
     private boolean applyEffectiveChanges(Milestone milestone, Map<String, Object> current,
             Map<Field, Object> settable) {
         boolean changed = false;
         for (Map.Entry<Field, Object> entry : settable.entrySet()) {
-            changed |= applyOne(milestone, current, entry.getKey(), entry.getValue());
+            if (applyOne(milestone, current, entry.getKey(), entry.getValue()) && !changed) {
+                milestone.stamp(clock.instant());
+                changed = true;
+            }
         }
         return changed;
     }

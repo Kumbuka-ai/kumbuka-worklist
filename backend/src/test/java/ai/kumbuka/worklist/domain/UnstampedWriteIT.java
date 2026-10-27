@@ -16,7 +16,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -34,16 +34,20 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  *
  * <p>The unstamped write is made the way a careless one would be: the root is
  * read in a transaction, a field is set, and the persistence context is
- * flushed. A stamped change that was written does not cover a change made
- * after it. A create, an update through the verb, an update that changes
+ * flushed. A create, an update through the verb, an update that changes
  * nothing and the update that follows are the writes the service makes, and
- * none of them is refused.
+ * none of them is refused; nor is a write that reaches the database in more
+ * than one flush, as activating a milestone and reordering an iteration do.
  *
  * <p>RED STATE, observed on worklist {@code 01df14c} (before the stamp was
  * enforced): each of the five refusal cases failed at its first assertion,
  * {@code Expecting actual not to be null}, because the unstamped change was
  * flushed and committed; the five cases of the service's own writes passed
- * there as well, as they must.
+ * there as well, as they must. The two cases of a write in more than one
+ * flush were added with the refusal; they were seen red against a service
+ * that stamps after its last field and against a flag cleared at each
+ * flush, both {@code milestone is written without stamp()} and
+ * {@code iteration is written without stamp()}.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -52,6 +56,7 @@ class UnstampedWriteIT {
     @Inject ItemService items;
     @Inject IterationService iterations;
     @Inject MilestoneService milestones;
+    @Inject MembershipService memberships;
     @Inject WorkstreamService workstreams;
     @Inject ScopeSettingService settings;
     @Inject SelectorRegistry selectors;
@@ -153,23 +158,6 @@ class UnstampedWriteIT {
         assertThat(tokenOf(after)).isEqualTo(tokenOf(created));
     }
 
-    @Test
-    void the_stamp_of_a_written_change_does_not_cover_a_change_after_it() {
-        Map<String, Object> created = item("as created");
-
-        refusedAtTheFlush(() -> {
-            items.read(scope, idOf(created));
-            Item row = em.find(Item.class, idOf(created));
-            row.title = "stamped";
-            row.stamp(Instant.now());
-            em.flush();
-            row.title = "changed behind the stamp, after it was written";
-        });
-
-        assertThat(items.read(scope, idOf(created)).get(Field.TITLE.canonicalName()))
-            .as("the transaction rolls back as a whole").isEqualTo("as created");
-    }
-
     // -----------------------------------------------------------------------
     // The service's own writes pass: create, change, no-op, the next change.
     // -----------------------------------------------------------------------
@@ -192,6 +180,51 @@ class UnstampedWriteIT {
         Map<String, Object> created = milestone("first");
         passesTheFlush(created, Field.TITLE,
             fields -> milestones.update(scope, idOf(created), fields));
+    }
+
+    @Test
+    void an_iteration_reordered_with_a_new_title_passes_the_flush_of_the_reorder() {
+        Map<String, Object> created = iteration("first");
+        UUID iteration = idOf(created);
+        Object goal = milestone("a goal").get(Field.NUMBER.canonicalName());
+        Map<String, Object> one = itemOnPath("one", goal);
+        Map<String, Object> two = itemOnPath("two", goal);
+        memberships.plan(scope, iteration, idOf(one), tokenOf(iterations.read(scope, iteration)));
+        memberships.plan(scope, iteration, idOf(two), tokenOf(iterations.read(scope, iteration)));
+        List<String> reversed = List.of(addressOf(two), addressOf(one));
+
+        Map<String, Object> written = iterations.update(scope, iteration, Map.of(
+            Field.TITLE.canonicalName(), "first, renamed",
+            Field.ORDER.canonicalName(), reversed,
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(iterations.read(scope, iteration))));
+
+        assertThat(written)
+            .as("the reorder reads and flushes inside the write, after the title was set, "
+                + "and the renamed iteration is already stamped there")
+            .containsEntry(Field.TITLE.canonicalName(), "first, renamed")
+            .containsEntry(Field.ORDER.canonicalName(), reversed);
+    }
+
+    @Test
+    void a_milestone_activated_with_a_new_title_passes_the_flush_of_the_demotion() {
+        Map<String, Object> active = milestone("active");
+        milestones.update(scope, idOf(active), Map.of(
+            Field.STATUS.canonicalName(), Milestone.ACTIVE,
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(active)));
+        Map<String, Object> next = milestone("next");
+
+        Map<String, Object> activated = milestones.update(scope, idOf(next), Map.of(
+            Field.TITLE.canonicalName(), "next, renamed",
+            Field.STATUS.canonicalName(), Milestone.ACTIVE,
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(next)));
+
+        assertThat(activated)
+            .as("the demotion flushes inside the write, after the title was set, and the "
+                + "renamed milestone is already stamped there")
+            .containsEntry(Field.TITLE.canonicalName(), "next, renamed")
+            .containsEntry(Field.STATUS.canonicalName(), Milestone.ACTIVE);
+        assertThat(milestones.read(scope, idOf(active)).get(Field.STATUS.canonicalName()))
+            .isEqualTo(Milestone.PLANNED);
     }
 
     @Test
@@ -289,6 +322,14 @@ class UnstampedWriteIT {
             Field.STATUS.canonicalName(), openStatus));
     }
 
+    /** An item pointed at a milestone, which is what makes it plannable. */
+    private Map<String, Object> itemOnPath(String title, Object milestoneNumber) {
+        return items.create(scope, Map.of(
+            Field.TITLE.canonicalName(), title,
+            Field.STATUS.canonicalName(), openStatus,
+            Field.MILESTONE_ID.canonicalName(), milestoneNumber));
+    }
+
     private Map<String, Object> iteration(String title) {
         return iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
@@ -302,6 +343,13 @@ class UnstampedWriteIT {
             Field.KIND.canonicalName(), Milestone.GOAL,
             Field.VISION.canonicalName(), "a vision",
             Field.MISSION.canonicalName(), "a mission"));
+    }
+
+    /** The canonical address of an item, the wire form of an order entry. */
+    private String addressOf(Map<String, Object> item) {
+        Map<String, Object> read = items.read(scope, idOf(item));
+        Object slug = read.get("scope");
+        return "worklist://" + (slug == null ? scope : slug) + "/item/" + read.get("number");
     }
 
     private static void inOneTransaction(Runnable work) {

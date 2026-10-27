@@ -45,7 +45,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * random uuid, so the three cases that expect an instant failed on the first
  * token they read ({@code expected: "2031-03-04T05:06:07.123456Z" but was} a
  * uuid); the case on the write that changes nothing was green there too, as
- * it must be.
+ * it must be. The cases for the milestone, the workstream and the scope
+ * setting came after the rule; they were seen red against a stamp that took
+ * the clock as it stood, without {@code max(now, previous + 1 µs)}
+ * ({@code expected: "2031-03-04T05:06:07.123457Z" but was:
+ * "2031-03-04T05:06:07.123456Z"}).
  */
 @QuarkusTest
 @TestProfile(SettableClock.Profile.class)
