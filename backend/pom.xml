@@ -70,6 +70,12 @@
         <failsafe-plugin.version>3.5.0</failsafe-plugin.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <assertj.version>3.27.7</assertj.version>
+
+        <!-- null inside the service: NullAway on every main source (C7.5). -->
+        <compiler-plugin.version>3.14.1</compiler-plugin.version>
+        <errorprone.version>2.50.0</errorprone.version>
+        <nullaway.version>0.14.2</nullaway.version>
+        <jspecify.version>1.0.0</jspecify.version>
     </properties>
 
     <dependencyManagement>
@@ -208,10 +214,86 @@
             <artifactId>quarkus-jacoco</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- The one annotation a value that may be absent carries (C7.5). -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <version>${jspecify.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!--
+                NullAway in the compiler, on every main source (C7.5): a field,
+                parameter or record component is non-null unless it carries
+                org.jspecify.annotations.Nullable, and a return that may be
+                absent is an Optional. A finding fails the build. The test
+                sources are compiled without it.
+
+                One option recognises an initialisation NullAway cannot see:
+                a field annotated jakarta.ws.rs.core.Context is set by JAX-RS for
+                each request before the provider runs, as an @Inject field is by
+                CDI, which NullAway already recognises.
+
+                ONE PACKAGE IS EXCLUDED FOR NOW: ai.kumbuka.worklist.domain is
+                treated as unannotated code (UnannotatedSubPackages), so NullAway
+                neither checks it nor trusts its signatures. The package is being
+                reworked by a parallel change at the same time, and annotating it
+                here would collide with that work. A follow-up change removes the
+                UnannotatedSubPackages option and brings domain to zero findings;
+                until then this is the one place the rule does not yet bind.
+
+                Error Prone runs inside javac and reaches into its internals;
+                the compiler is forked so that the -J flags opening them stay in
+                this file, and so hold for every build of it, the container's
+                included.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${compiler-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <fork>true</fork>
+                            <compilerArgs>
+                                <arg>-XDcompilePolicy=simple</arg>
+                                <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
+                                <arg>-Xmaxerrs</arg>
+                                <arg>10000</arg>
+                                <arg>--should-stop=ifError=FLOW</arg>
+                                <arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=ai.kumbuka.worklist -XepOpt:NullAway:UnannotatedSubPackages=ai.kumbuka.worklist.domain -XepOpt:NullAway:ExcludedFieldAnnotations=jakarta.ws.rs.core.Context -XepDisableWarningsInGeneratedCode</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                                <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                                <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+                            </compilerArgs>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>com.google.errorprone</groupId>
+                                    <artifactId>error_prone_core</artifactId>
+                                    <version>${errorprone.version}</version>
+                                </path>
+                                <path>
+                                    <groupId>com.uber.nullaway</groupId>
+                                    <artifactId>nullaway</artifactId>
+                                    <version>${nullaway.version}</version>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
