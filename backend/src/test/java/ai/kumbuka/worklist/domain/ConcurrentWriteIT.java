@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * <p>RED STATE, observed against worklist {@code b20d27f}, where the
  * aggregate is read with a bare {@code em.find} and compared in memory: in
  * both cases the second writer wrote as well, and each case failed on the
- * refusal it expected (output recorded in the return of sprint 204.4).
+ * refusal it expected, with "the second writer must be refused, not write: Expecting actual not to be null".
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)

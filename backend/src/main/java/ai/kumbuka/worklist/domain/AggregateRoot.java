@@ -64,11 +64,16 @@ import java.time.temporal.ChronoUnit;
  * one. The time comes from the injected clock, never from a database default
  * read back (C20.1).
  *
- * <p>The comparison is only half the guarantee. It is sound only on a row the
- * caller's transaction has locked and refreshed under that lock (C10.2,
- * C11.1): every service loads a root it is about to check through a locking
- * read of its repository, so a second writer with the same token waits on the
- * first and then compares against what the first wrote.
+ * <p>The comparison is only half of C10.2. It is sound only on a row the
+ * caller's transaction has locked and refreshed under that lock (C11.1), so
+ * a caller loads a root it is about to check through the locking read of its
+ * repository ({@code lockById} and its siblings), and a second writer with the
+ * same token waits on the first and then compares against what the first
+ * wrote. {@code LockedReadRefreshTest} holds the repository half, that every
+ * locking read refreshes; {@code ConcurrentWriteIT} shows the whole for the
+ * item and the iteration. That a caller chose the locking read is not guarded
+ * by a test: a call of {@link #requireCurrentToken} on a root read without the
+ * lock compiles and passes every check here.
  */
 @MappedSuperclass
 public abstract class AggregateRoot extends TenantScoped {

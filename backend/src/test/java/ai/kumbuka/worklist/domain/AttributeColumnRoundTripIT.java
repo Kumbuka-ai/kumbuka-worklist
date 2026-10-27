@@ -39,10 +39,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * planted after each step, so a mapper that read a value differently, or wrote
  * it back in another form, shows as a changed byte.
  *
- * <p>RED STATE, observed by planting the integer 3 as {@code 3.0}: the
- * attributes the read answered carried 3.0 and the column after the write
- * still read {@code 3.0}, but the comparison with the planted {@code 3} text
- * failed — the check sees a single changed byte.
+ * <p>Run unchanged against worklist {@code b20d27f}, where the column went
+ * through the service's own {@code DocumentColumnFormat}, both cases are green
+ * as well: the two mappers read and write the same bytes.
+ *
+ * <p>RED STATE, observed with the integer planted as {@code 3.0}: the read
+ * answered {@code "count"=3.0} and the case failed on the value it expected,
+ * so a stored value read in another form does not pass unseen.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)

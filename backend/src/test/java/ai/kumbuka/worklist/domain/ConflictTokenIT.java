@@ -41,8 +41,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * role, it carries the token the answer handed out.
  *
  * <p>RED STATE, observed against worklist {@code b20d27f}: the token was a
- * random uuid, so the first case failed on the token of the new item, which
- * was no instant at all.
+ * random uuid, so the three cases that expect an instant failed on the first
+ * token they read ({@code expected: "2031-03-04T05:06:07.123456Z" but was} a
+ * uuid); the case on the write that changes nothing was green there too, as
+ * it must be.
  */
 @QuarkusTest
 @TestProfile(SettableClock.Profile.class)
