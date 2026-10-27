@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import ai.kumbuka.worklist.CounterProbe;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +24,7 @@ import java.util.Map;
  * <p>The effect classes are the router's names, verbatim, so that the router
  * reads them without a mapping.
  */
+@CounterProbe
 public final class DeclarationSpecification {
 
     private DeclarationSpecification() {
