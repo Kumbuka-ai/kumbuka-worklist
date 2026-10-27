@@ -1,6 +1,13 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
-import ai.kumbuka.worklist.adapter.rest.CustomMethod;
+import ai.kumbuka.worklist.CounterProbe;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,7 +37,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * coverage and closure at once, which is the one failure this file could cause
  * on its own.
  */
+@CounterProbe
 public final class VerbSurfaceSpecification {
+
+    /**
+     * The colon that sets a custom method off from its resource, written here
+     * rather than read from the adapter: the specification is the expectation
+     * the adapter is held to, and one that took the separator from it would
+     * agree with it by construction (C22.5).
+     */
+    private static final char SEPARATOR = ':';
 
     /** On the classpath, so the probes read the copy the build ships. */
     private static final String RESOURCE = "verb-surface.tsv";
@@ -66,7 +82,7 @@ public final class VerbSurfaceSpecification {
 
         /** Whether this row's form is a custom method in colon notation. */
         public boolean isColonForm() {
-            return path.lastIndexOf(CustomMethod.SEPARATOR) > path.lastIndexOf('/');
+            return path.lastIndexOf(SEPARATOR) > path.lastIndexOf('/');
         }
     }
 

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist;
 
 import org.junit.jupiter.api.Test;
@@ -107,9 +114,9 @@ class LogContentGuardTest {
     /**
      * Below this the guard is not measuring the tree it thinks it is.
      *
-     * <p>Lower than the sibling service's eight, because this repository is
-     * the substrate alone and has fewer places that log at all. It is a floor
-     * against a stale pattern or a wrong directory, not a target.
+     * <p>Far below the log calls the main tree holds. It is a floor against a
+     * stale pattern or a wrong directory, not a target, so it does not follow
+     * the count as the tree grows.
      */
     private static final int MINIMUM_LOG_CALLS = 5;
 
