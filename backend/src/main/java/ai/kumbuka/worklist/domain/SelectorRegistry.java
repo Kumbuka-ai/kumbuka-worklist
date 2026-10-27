@@ -212,7 +212,7 @@ public class SelectorRegistry {
     @Transactional
     public long carryMarkForward(UUID scopeId, String token, long mark) {
         Selector selector = require(scopeId, token);
-        NumberSpace space = selectors.lockSpace(selector.pk).orElse(null);
+        NumberSpace space = selectors.lockSpace(selector.pk).orElseThrow();
 
         long standing = space.highWaterMark;
         if (mark < standing) {
