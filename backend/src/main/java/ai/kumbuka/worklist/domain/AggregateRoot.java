@@ -9,6 +9,9 @@ package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.PostUpdate;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Transient;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -19,9 +22,10 @@ import java.time.temporal.ChronoUnit;
  *
  * <h2>The aggregate is the unit, not the row</h2>
  *
- * Optimistic locking is per AGGREGATE. {@link Item}, {@link Iteration} and
- * {@link Milestone} are aggregate roots; {@link ScopeSetting} is a
- * configuration object with a token of its own. A write presents the token of
+ * Optimistic locking is per AGGREGATE. Five classes extend this one:
+ * {@link Item}, {@link Iteration}, {@link Milestone} and {@link Workstream}
+ * are aggregate roots; {@link ScopeSetting} is a configuration object with a
+ * token of its own. A write presents the token of
  * its ROOT — so a reorder writes the iteration whose membership list happens
  * to be twelve rows and presents that iteration's one token, never twelve.
  *
@@ -74,6 +78,26 @@ import java.time.temporal.ChronoUnit;
  * item and the iteration. That a caller chose the locking read is not guarded
  * by a test: a call of {@link #requireCurrentToken} on a root read without the
  * lock compiles and passes every check here.
+ *
+ * <h2>A write behind the stamp is refused at the flush</h2>
+ *
+ * That every effective write calls {@link #stamp(Instant)} would otherwise be
+ * a convention: a write path that forgot it would flush a changed row under
+ * the token it had, and a second writer holding that token would get through.
+ * So the lifecycle callback {@link #refuseAnUnstampedWrite()} turns the
+ * convention into a refusal: the persistence context calls it for
+ * every root it found changed, and a change that did not pass the stamp is
+ * refused with an {@link IllegalStateException}, which rolls the transaction
+ * back. A create is a persist and never reaches it; a write that changes
+ * nothing flushes nothing and never reaches it either.
+ *
+ * <p>The flag and the callback sit here, once, rather than on each of the
+ * five classes as on the single entities of the dispatch and memory services
+ * they follow. Both are inherited by every entity that extends a mapped
+ * superclass, and the stamp they guard is itself declared here: one class
+ * owns the rule and the check of it, and a sixth root cannot extend the one
+ * without the other. {@code UnstampedWriteIT} shows the refusal on each of
+ * the five.
  */
 @MappedSuperclass
 public abstract class AggregateRoot extends TenantScoped {
@@ -89,6 +113,13 @@ public abstract class AggregateRoot extends TenantScoped {
      */
     @Column(name = "conflict_token", nullable = false)
     public String storedToken;
+
+    /**
+     * Whether the change about to be flushed passed {@link #stamp}. Not a
+     * column: it lives for one write of one loaded root.
+     */
+    @Transient
+    private boolean stamped;
 
     /**
      * The word this root is called by in a refusal.
@@ -131,6 +162,40 @@ public abstract class AggregateRoot extends TenantScoped {
         Instant at = following(now);
         touch(at);
         storedToken = render(at);
+        stamped = true;
+    }
+
+    /**
+     * Refuses a changed root whose write did not pass {@link #stamp}: a write
+     * the token would not fence, refused here rather than stored (C10.1).
+     *
+     * <p>Called by the persistence context only for an update it found the
+     * row changed in. A create is a persist and never arrives here, and a
+     * write that changes nothing flushes nothing and keeps its token.
+     *
+     * <p>It does NOT clear the flag, as the dispatch and memory services do in
+     * theirs. Hibernate also calls it when it weighs flushing before a query
+     * and then finds the query reads no table the change touches: no
+     * statement runs, the row stays changed, and the real flush calls it a
+     * second time. A flag cleared on the first call refuses the second, which
+     * would refuse a stamped write for the order of its queries. The flag is
+     * cleared by {@link #clearTheStamp()} instead, once the row is written.
+     */
+    @PreUpdate
+    void refuseAnUnstampedWrite() {
+        if (!stamped) {
+            throw new IllegalStateException(subject() + " is written without stamp(), "
+                + "and its conflict token would not move");
+        }
+    }
+
+    /**
+     * Clears the flag once the update has run, so the stamp of one write never
+     * stands in for a change made after it was written.
+     */
+    @PostUpdate
+    void clearTheStamp() {
+        stamped = false;
     }
 
     /**

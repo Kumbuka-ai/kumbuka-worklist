@@ -16,6 +16,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -33,7 +34,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  *
  * <p>The unstamped write is made the way a careless one would be: the root is
  * read in a transaction, a field is set, and the persistence context is
- * flushed. A create, an update through the verb, an update that changes
+ * flushed. A stamped change that was written does not cover a change made
+ * after it. A create, an update through the verb, an update that changes
  * nothing and the update that follows are the writes the service makes, and
  * none of them is refused.
  *
@@ -149,6 +151,23 @@ class UnstampedWriteIT {
         assertThat(after.get(Field.WARN_PLANNED_ITERATIONS.canonicalName()))
             .as("nothing of it is stored").isEqualTo(9);
         assertThat(tokenOf(after)).isEqualTo(tokenOf(created));
+    }
+
+    @Test
+    void the_stamp_of_a_written_change_does_not_cover_a_change_after_it() {
+        Map<String, Object> created = item("as created");
+
+        refusedAtTheFlush(() -> {
+            items.read(scope, idOf(created));
+            Item row = em.find(Item.class, idOf(created));
+            row.title = "stamped";
+            row.stamp(Instant.now());
+            em.flush();
+            row.title = "changed behind the stamp, after it was written";
+        });
+
+        assertThat(items.read(scope, idOf(created)).get(Field.TITLE.canonicalName()))
+            .as("the transaction rolls back as a whole").isEqualTo("as created");
     }
 
     // -----------------------------------------------------------------------
