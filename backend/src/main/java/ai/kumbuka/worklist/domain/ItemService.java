@@ -17,6 +17,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -113,6 +114,7 @@ public class ItemService {
 
 
     @Inject ItemRepository items;
+    @Inject Clock clock;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
     @Inject PlanningRepository planning;
@@ -279,7 +281,7 @@ public class ItemService {
         rest.remove(Field.STATUS);
         rest.remove(Field.WORKSTREAM_ID);
         if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
-            item.stamp();
+            item.stamp(clock.instant());
             items.flush();
         }
 
@@ -322,7 +324,7 @@ public class ItemService {
      */
     @Transactional
     public Map<String, Object> accept(UUID scopeId, UUID itemId, String conflictToken) {
-        Item item = require(scopeId, itemId);
+        Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
         throw new WorklistException(
@@ -348,7 +350,7 @@ public class ItemService {
     @Transactional
     public Map<String, Object> update(UUID scopeId, UUID itemId, Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
-        Item item = require(scopeId, itemId);
+        Item item = requireLocked(scopeId, itemId);
 
         item.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
@@ -372,7 +374,7 @@ public class ItemService {
             return current;
         }
 
-        item.stamp();
+        item.stamp(clock.instant());
         items.flushAndRefresh(item);
         LOG.infof("item updated in scope %s", scopeId);
         return project(item);
@@ -443,7 +445,7 @@ public class ItemService {
     @Transactional
     public Map<String, Object> relate(UUID scopeId, UUID itemId, String toItemAddress,
             String relationTypeName, String conflictToken) {
-        Item item = require(scopeId, itemId);
+        Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
         Item target = resolveItemAddress(scopeId, toItemAddress, TO_ITEM);
@@ -472,7 +474,7 @@ public class ItemService {
         }
 
         if (changed) {
-            item.stamp();
+            item.stamp(clock.instant());
             items.flushAndRefresh(item);
             LOG.infof("relation asserted from %s to %s in scope %s", itemId, target.id, scopeId);
         }
@@ -495,7 +497,7 @@ public class ItemService {
     @Transactional
     public Map<String, Object> unrelate(UUID scopeId, UUID itemId, String toItemAddress,
             String relationTypeName, String conflictToken) {
-        Item item = require(scopeId, itemId);
+        Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
         Item target = resolveItemAddress(scopeId, toItemAddress, TO_ITEM);
@@ -509,7 +511,7 @@ public class ItemService {
         }
 
         edge.status = ItemRelation.WITHDRAWN;
-        item.stamp();
+        item.stamp(clock.instant());
         items.flushAndRefresh(item);
         LOG.infof("relation withdrawn from %s to %s in scope %s", itemId, target.id, scopeId);
         return project(item);
@@ -1314,7 +1316,19 @@ public class ItemService {
     }
 
     private Item require(UUID scopeId, UUID itemId) {
-        Item item = items.byId(itemId);
+        return requireIn(scopeId, items.byId(itemId));
+    }
+
+    /**
+     * The item, locked and read as it stands under the lock, or a typed
+     * refusal. Every write that checks the item's conflict token loads it
+     * here, so the comparison and the write are atomic (C10.2, C11.1).
+     */
+    private Item requireLocked(UUID scopeId, UUID itemId) {
+        return requireIn(scopeId, items.lockById(itemId));
+    }
+
+    private static Item requireIn(UUID scopeId, Item item) {
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
@@ -1356,7 +1370,7 @@ public class ItemService {
             workstreamTokenOf(item.scopeId, item.workstreamNumber));
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken);
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken());
         return fields;
     }
 

@@ -123,7 +123,7 @@ public class MembershipService extends PlanningService {
     @Transactional
     public Map<String, Object> plan(UUID scopeId, UUID iterationId, UUID itemId,
             String conflictToken) {
-        Iteration iteration = requireIteration(scopeId, iterationId);
+        Iteration iteration = requireLockedIteration(scopeId, iterationId);
         iteration.requireCurrentToken(conflictToken);
         Item item = refuseUnplannable(scopeId, itemId);
 
@@ -145,7 +145,7 @@ public class MembershipService extends PlanningService {
         membership.position = living.size();
         planning.insert(membership);
 
-        iteration.stamp();
+        iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
         LOG.infof("item planned into iteration %d in scope %s", iteration.number, scopeId);
 
@@ -173,7 +173,7 @@ public class MembershipService extends PlanningService {
     @Transactional
     public Map<String, Object> unplan(UUID scopeId, UUID iterationId, UUID itemId,
             String conflictToken) {
-        Iteration iteration = requireIteration(scopeId, iterationId);
+        Iteration iteration = requireLockedIteration(scopeId, iterationId);
         iteration.requireCurrentToken(conflictToken);
         IterationMembership membership = require(iteration, itemId);
 
@@ -184,7 +184,7 @@ public class MembershipService extends PlanningService {
         membership.status = IterationMembership.DROPPED;
         closeUpBehind(iteration, membership.position);
 
-        iteration.stamp();
+        iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
         LOG.infof("item unplanned from iteration %d in scope %s", iteration.number, scopeId);
         return project(iteration, membership, List.of());
@@ -211,7 +211,7 @@ public class MembershipService extends PlanningService {
     public Map<String, Object> update(UUID scopeId, UUID iterationId, UUID itemId,
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MEMBERSHIP, arguments);
-        Iteration iteration = requireIteration(scopeId, iterationId);
+        Iteration iteration = requireLockedIteration(scopeId, iterationId);
         iteration.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
         IterationMembership membership = require(iteration, itemId);
 
@@ -240,7 +240,7 @@ public class MembershipService extends PlanningService {
         }
         membership.status = status;
 
-        iteration.stamp();
+        iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
         LOG.infof("membership status moved in iteration %d, scope %s", iteration.number,
             scopeId);
@@ -334,7 +334,20 @@ public class MembershipService extends PlanningService {
     }
 
     private Iteration requireIteration(UUID scopeId, UUID iterationId) {
-        Iteration iteration = planning.iterationById(iterationId);
+        return requireOpen(scopeId, planning.iterationById(iterationId));
+    }
+
+    /**
+     * The iteration, locked and read as it stands under the lock, or the same
+     * refusals. A membership write presents the iteration's token and moves
+     * it, so the iteration is the row the comparison and the write are atomic
+     * on (C10.2, C11.1).
+     */
+    private Iteration requireLockedIteration(UUID scopeId, UUID iterationId) {
+        return requireOpen(scopeId, planning.lockIterationById(iterationId));
+    }
+
+    private static Iteration requireOpen(UUID scopeId, Iteration iteration) {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
@@ -380,7 +393,7 @@ public class MembershipService extends PlanningService {
         fields.put(Field.MEMBERSHIP_STATUS.canonicalName(), membership.status);
         fields.put(Field.CREATED_AT.canonicalName(), membership.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), membership.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken);
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken());
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }

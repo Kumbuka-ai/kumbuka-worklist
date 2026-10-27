@@ -22,6 +22,9 @@ import jakarta.persistence.NoResultException;
 import jakarta.persistence.TypedQuery;
 import jakarta.transaction.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +64,7 @@ public class PlanningRepository {
     private static final String P_NUMBER = "number";
 
     @Inject EntityManager em;
+    @Inject Clock clock;
 
     // ------------------------------------------------------------------
     // The goal axis
@@ -70,6 +74,17 @@ public class PlanningRepository {
     @Transactional
     public Milestone milestoneById(UUID milestoneId) {
         return milestoneId == null ? null : em.find(Milestone.class, milestoneId);
+    }
+
+    /**
+     * The milestone of that id, locked and read as it stands under the lock,
+     * or null (C10.2, C11.1). Every write that checks its token loads it here.
+     */
+    @Transactional
+    public Milestone lockMilestoneById(UUID milestoneId) {
+        Milestone milestone = milestoneId == null ? null
+            : em.find(Milestone.class, milestoneId, LockModeType.PESSIMISTIC_WRITE);
+        return milestone == null ? null : underLock(milestone);
     }
 
     /**
@@ -132,6 +147,7 @@ public class PlanningRepository {
 
     @Transactional
     public Milestone insert(Milestone milestone) {
+        milestone.born(now());
         em.persist(milestone);
         em.flush();
         return milestone;
@@ -145,6 +161,18 @@ public class PlanningRepository {
     @Transactional
     public Iteration iterationById(UUID iterationId) {
         return iterationId == null ? null : em.find(Iteration.class, iterationId);
+    }
+
+    /**
+     * The iteration of that id, locked and read as it stands under the lock,
+     * or null (C10.2, C11.1). Every write that checks its token, its own or
+     * one presented for a membership, loads it here.
+     */
+    @Transactional
+    public Iteration lockIterationById(UUID iterationId) {
+        Iteration iteration = iterationId == null ? null
+            : em.find(Iteration.class, iterationId, LockModeType.PESSIMISTIC_WRITE);
+        return iteration == null ? null : underLock(iteration);
     }
 
     /** The iteration at that number in a scope, or null. See {@link #milestoneByNumber}. */
@@ -197,6 +225,7 @@ public class PlanningRepository {
 
     @Transactional
     public Iteration insert(Iteration iteration) {
+        iteration.born(now());
         em.persist(iteration);
         em.flush();
         return iteration;
@@ -255,6 +284,8 @@ public class PlanningRepository {
 
     @Transactional
     public IterationMembership insert(IterationMembership membership) {
+        membership.createdAt = now();
+        membership.updatedAt = membership.createdAt;
         em.persist(membership);
         em.flush();
         return membership;
@@ -281,7 +312,9 @@ public class PlanningRepository {
      */
     @Transactional
     public ScopeSetting lockSettingOf(UUID scopeId) {
-        return first(settingQuery(scopeId).setLockMode(LockModeType.PESSIMISTIC_WRITE));
+        ScopeSetting setting = first(settingQuery(scopeId)
+            .setLockMode(LockModeType.PESSIMISTIC_WRITE));
+        return setting == null ? null : underLock(setting);
     }
 
     private TypedQuery<ScopeSetting> settingQuery(UUID scopeId) {
@@ -292,6 +325,7 @@ public class PlanningRepository {
 
     @Transactional
     public ScopeSetting insert(ScopeSetting setting) {
+        setting.born(now());
         em.persist(setting);
         em.flush();
         return setting;
@@ -327,5 +361,27 @@ public class PlanningRepository {
         } catch (NoResultException absent) {
             return null;
         }
+    }
+
+    /**
+     * The entity as its row stands under the lock this transaction holds.
+     *
+     * <p>A locking read takes the lock on the current row, but where this
+     * transaction already holds the entity, the persistence context answers
+     * the object it read earlier and not what the database found. A token
+     * compared against that object is compared against a row that may have
+     * moved since, and the write that follows overwrites the move (C11.1).
+     * The refresh reads the locked row again; it would drop a change not yet
+     * flushed, and every write of this service flushes in the call that
+     * makes it.
+     */
+    private <T> T underLock(T entity) {
+        em.refresh(entity);
+        return entity;
+    }
+
+    /** The clock's instant at the microsecond the timestamp columns store (C20.1). */
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 }

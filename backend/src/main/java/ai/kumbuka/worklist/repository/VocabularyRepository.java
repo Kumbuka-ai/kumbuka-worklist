@@ -1,7 +1,15 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.AttributeDefinition;
 import ai.kumbuka.worklist.domain.AttributeOption;
+import ai.kumbuka.worklist.domain.DeclaredValue;
 import ai.kumbuka.worklist.domain.ItemStatus;
 import ai.kumbuka.worklist.domain.RelationType;
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -11,6 +19,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
 
+import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +51,7 @@ public class VocabularyRepository {
     private static final String P_KEY = "key";
 
     @Inject EntityManager em;
+    @Inject Clock clock;
 
     // ------------------------------------------------------------------
     // Statuses
@@ -212,7 +223,9 @@ public class VocabularyRepository {
 
     /** Inserts a declared value and flushes, so its constraints answer here. */
     @Transactional
-    public <T> T insert(T declaration) {
+    public <T extends DeclaredValue> T insert(T declaration) {
+        declaration.createdAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        declaration.updatedAt = declaration.createdAt;
         em.persist(declaration);
         em.flush();
         return declaration;

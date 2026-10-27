@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Claim;
@@ -10,7 +17,9 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,6 +43,7 @@ public class ClaimRepository {
     private static final String P_SCOPE = "scope";
 
     @Inject EntityManager em;
+    @Inject Clock clock;
 
     // ------------------------------------------------------------------
     // Reading
@@ -67,8 +77,9 @@ public class ClaimRepository {
      */
     @Transactional
     public Claim lockByItem(Item item) {
-        return em.find(Claim.class, new Claim.Key(item.scopeId, item.number),
+        Claim claim = em.find(Claim.class, new Claim.Key(item.scopeId, item.number),
             LockModeType.PESSIMISTIC_WRITE);
+        return claim == null ? null : underLock(claim);
     }
 
     // ------------------------------------------------------------------
@@ -78,6 +89,8 @@ public class ClaimRepository {
     /** Inserts a claim and flushes so the table's constraints answer here. */
     @Transactional
     public Claim insert(Claim claim) {
+        claim.createdAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        claim.updatedAt = claim.createdAt;
         em.persist(claim);
         em.flush();
         return claim;
@@ -156,5 +169,22 @@ public class ClaimRepository {
         } catch (NoResultException absent) {
             return false;
         }
+    }
+
+    /**
+     * The entity as its row stands under the lock this transaction holds.
+     *
+     * <p>A locking read takes the lock on the current row, but where this
+     * transaction already holds the entity, the persistence context answers
+     * the object it read earlier and not what the database found. A token
+     * compared against that object is compared against a row that may have
+     * moved since, and the write that follows overwrites the move (C11.1).
+     * The refresh reads the locked row again; it would drop a change not yet
+     * flushed, and every write of this service flushes in the call that
+     * makes it.
+     */
+    private <T> T underLock(T entity) {
+        em.refresh(entity);
+        return entity;
     }
 }

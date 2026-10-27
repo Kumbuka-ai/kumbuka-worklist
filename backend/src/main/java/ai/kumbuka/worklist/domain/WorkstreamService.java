@@ -16,6 +16,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,7 @@ public class WorkstreamService {
     private static final Logger LOG = Logger.getLogger(WorkstreamService.class);
 
     @Inject WorkstreamRepository workstreams;
+    @Inject Clock clock;
     @Inject SelectorRegistry selectors;
     @Inject ScopeAccessRepository scopeAccess;
 
@@ -193,14 +195,14 @@ public class WorkstreamService {
     @Transactional
     public Workstream update(UUID scopeId, UUID workstreamId, String description,
             String conflictToken) {
-        Workstream workstream = require(scopeId, workstreamId);
+        Workstream workstream = requireLocked(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
         String cleaned = requireNonBlank(description);
         if (cleaned.equals(workstream.description)) {
             return workstream;
         }
         workstream.description = cleaned;
-        workstream.stamp();
+        workstream.stamp(clock.instant());
         workstreams.flush();
         LOG.infof("workstream %s description updated in scope %s", workstream.token, scopeId);
         return workstream;
@@ -216,7 +218,7 @@ public class WorkstreamService {
     @Transactional
     public Workstream rename(UUID scopeId, UUID workstreamId, String newToken,
             String conflictToken) {
-        Workstream workstream = require(scopeId, workstreamId);
+        Workstream workstream = requireLocked(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
         refuseIfDefault(workstream);
         if (newToken == null || !Selector.TOKEN_PATTERN.matcher(newToken).matches()) {
@@ -239,7 +241,7 @@ public class WorkstreamService {
         }
         String oldToken = workstream.token;
         workstream.token = newToken;
-        workstream.stamp();
+        workstream.stamp(clock.instant());
         workstreams.flush();
         LOG.infof("workstream renamed %s -> %s in scope %s", oldToken, newToken, scopeId);
         return workstream;
@@ -251,14 +253,14 @@ public class WorkstreamService {
      */
     @Transactional
     public Workstream withdraw(UUID scopeId, UUID workstreamId, String conflictToken) {
-        Workstream workstream = require(scopeId, workstreamId);
+        Workstream workstream = requireLocked(scopeId, workstreamId);
         workstream.requireCurrentToken(conflictToken);
         refuseIfDefault(workstream);
         if (Workstream.WITHDRAWN.equals(workstream.status)) {
             return workstream;
         }
         workstream.status = Workstream.WITHDRAWN;
-        workstream.stamp();
+        workstream.stamp(clock.instant());
         workstreams.flush();
         LOG.infof("workstream %s withdrawn in scope %s", workstream.token, scopeId);
         return workstream;
@@ -267,6 +269,21 @@ public class WorkstreamService {
     // ------------------------------------------------------------------
     // Mechanisms shared with other services.
     // ------------------------------------------------------------------
+
+    /**
+     * The workstream, locked and read as it stands under the lock, or the
+     * same refusal as {@link #require}. Every write that checks its token
+     * loads it here (C10.2, C11.1).
+     */
+    private Workstream requireLocked(UUID scopeId, UUID workstreamId) {
+        Workstream workstream = workstreams.lock(scopeId, workstreamId);
+        if (workstream == null) {
+            throw new WorklistException(
+                WorklistException.Reason.WORKSTREAM_UNKNOWN,
+                List.of());
+        }
+        return workstream;
+    }
 
     /**
      * Resolve a workstream by id in a scope, or a typed refusal.
@@ -321,7 +338,7 @@ public class WorkstreamService {
         fields.put("is_default", workstream.isDefault);
         fields.put("created_at", workstream.createdAt);
         fields.put("updated_at", workstream.updatedAt);
-        fields.put("conflict_token", workstream.conflictToken);
+        fields.put("conflict_token", workstream.conflictToken());
         return fields;
     }
 

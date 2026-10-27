@@ -14,9 +14,12 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
 
+import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +42,7 @@ public class WorkstreamRepository {
     private static final String P_ID    = "id";
 
     @Inject EntityManager em;
+    @Inject Clock clock;
 
     /** The workstream of that id in a scope, or null. */
     @Transactional
@@ -53,6 +57,21 @@ public class WorkstreamRepository {
         } catch (NoResultException absent) {
             return null;
         }
+    }
+
+    /**
+     * The workstream of that id in a scope, locked and read as it stands under
+     * the lock, or null (C10.2, C11.1). Every write that checks its token
+     * loads it here.
+     */
+    @Transactional
+    public Workstream lock(UUID scopeId, UUID id) {
+        Workstream workstream = find(scopeId, id);
+        if (workstream == null) {
+            return null;
+        }
+        em.lock(workstream, LockModeType.PESSIMISTIC_WRITE);
+        return underLock(workstream);
     }
 
     /** The workstream of that token in a scope, or null. */
@@ -145,6 +164,7 @@ public class WorkstreamRepository {
     /** Insert and flush, so table constraints answer here rather than at commit. */
     @Transactional
     public Workstream insert(Workstream workstream) {
+        workstream.born(clock.instant());
         em.persist(workstream);
         em.flush();
         return workstream;
@@ -160,5 +180,22 @@ public class WorkstreamRepository {
     @Transactional
     public void refresh(Workstream workstream) {
         em.refresh(workstream);
+    }
+
+    /**
+     * The entity as its row stands under the lock this transaction holds.
+     *
+     * <p>A locking read takes the lock on the current row, but where this
+     * transaction already holds the entity, the persistence context answers
+     * the object it read earlier and not what the database found. A token
+     * compared against that object is compared against a row that may have
+     * moved since, and the write that follows overwrites the move (C11.1).
+     * The refresh reads the locked row again; it would drop a change not yet
+     * flushed, and every write of this service flushes in the call that
+     * makes it.
+     */
+    private <T> T underLock(T entity) {
+        em.refresh(entity);
+        return entity;
     }
 }

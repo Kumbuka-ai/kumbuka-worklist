@@ -10,12 +10,13 @@ package ai.kumbuka.worklist.domain;
 import ai.kumbuka.worklist.repository.PlanningRepository;
 import jakarta.inject.Inject;
 
+import java.time.Clock;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -52,6 +53,7 @@ import java.util.UUID;
 public abstract class PlanningService {
 
     @Inject PlanningRepository planning;
+    @Inject Clock clock;
 
     /**
      * The scope's settings row, or a typed refusal naming what is missing.
@@ -64,7 +66,20 @@ public abstract class PlanningService {
      * selector is declared before an address is allocated.
      */
     protected ScopeSetting requireSetting(UUID scopeId) {
-        ScopeSetting setting = planning.settingOf(scopeId);
+        return requirePresent(planning.settingOf(scopeId));
+    }
+
+    /**
+     * The scope's settings row, locked and read as it stands under the lock,
+     * or the same refusal. Every write of the row loads it here, so a token
+     * compared against it is compared atomically with the write (C10.2,
+     * C11.1).
+     */
+    protected ScopeSetting requireLockedSetting(UUID scopeId) {
+        return requirePresent(planning.lockSettingOf(scopeId));
+    }
+
+    private static ScopeSetting requirePresent(ScopeSetting setting) {
         if (setting == null) {
             throw new WorklistException(
                 WorklistException.Reason.SETTING_ABSENT,

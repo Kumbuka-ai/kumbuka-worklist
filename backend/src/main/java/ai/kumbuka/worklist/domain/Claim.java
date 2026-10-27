@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
@@ -5,8 +12,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.Generated;
-import org.hibernate.generator.EventType;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -78,12 +83,25 @@ public class Claim extends ScopeKeyed {
      * Opaque, by contract. A caller reads it, presents it back with
      * {@code release}, and is refused if it is not the one the row carries.
      *
-     * <p>A uuid is what it happens to be; nothing may read structure into it,
-     * and a caller that parses it is a caller that breaks when the generator
-     * changes.
+     * <p>The plaintext, kept for the previous image only (N-1): this image
+     * mints it as {@link Receipt#mint()}, compares {@link #receiptHash}, and
+     * reads this column only where a previous image left the hash empty.
+     * Nothing may read structure into it.
      */
     @Column(name = "receipt", nullable = false)
     public String receipt;
+
+    /**
+     * SHA-256 of the receipt, hex-encoded: the form {@code release} compares
+     * against (C10.5).
+     *
+     * <p>Null only on a row a previous image wrote after a rollback, which
+     * knows the plaintext column alone; {@link Receipt} then hashes that. The
+     * plaintext column above is still written for that image (N-1) and falls
+     * with the contraction.
+     */
+    @Column(name = "receipt_hash")
+    public String receiptHash;
 
     /**
      * The subject the service derived from the write channel, at the moment the
@@ -96,21 +114,18 @@ public class Claim extends ScopeKeyed {
     @Column(name = "actor", nullable = false)
     public String actor;
 
-    /** When the lease started. Set at the insert and never moved. */
-    @Generated(event = EventType.INSERT)
-    @Column(name = "granted_at", nullable = false, insertable = false, updatable = false)
+    /** When the lease started. Set from the clock at the insert and never moved. */
+    @Column(name = "granted_at", nullable = false, updatable = false)
     public Instant grantedAt;
 
     /** When the lease ends, evaluated lazily against the reading side's notion of now. */
     @Column(name = "expires_at", nullable = false)
     public Instant expiresAt;
 
-    @Generated(event = EventType.INSERT)
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     public Instant createdAt;
 
-    @Generated(event = EventType.INSERT)
-    @Column(name = "updated_at", nullable = false, insertable = false)
+    @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
 
     /**

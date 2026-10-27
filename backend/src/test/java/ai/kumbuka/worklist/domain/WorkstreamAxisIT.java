@@ -136,7 +136,7 @@ class WorkstreamAxisIT {
     void rename_succeeds_while_nothing_points_at_the_workstream() {
         Workstream ws = workstreams.declare(scope, "beta", "beta description");
 
-        Workstream renamed = workstreams.rename(scope, ws.id, "alpha", ws.conflictToken);
+        Workstream renamed = workstreams.rename(scope, ws.id, "alpha", ws.conflictToken());
         assertThat(renamed.token).isEqualTo("alpha");
     }
 
@@ -150,7 +150,7 @@ class WorkstreamAxisIT {
             Field.WORKSTREAM_ID.canonicalName(), ws.token));
 
         WorklistException refusal = refusalFrom(() ->
-            workstreams.rename(scope, ws.id, "alpha", ws.conflictToken));
+            workstreams.rename(scope, ws.id, "alpha", ws.conflictToken()));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.WORKSTREAM_HAS_REFERENCES);
     }
@@ -159,7 +159,7 @@ class WorkstreamAxisIT {
     void the_default_is_never_renamed() {
         Workstream defaultWs = workstreams.requireDefault(scope);
         WorklistException refusal = refusalFrom(() ->
-            workstreams.rename(scope, defaultWs.id, "renamed", defaultWs.conflictToken));
+            workstreams.rename(scope, defaultWs.id, "renamed", defaultWs.conflictToken()));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.WORKSTREAM_DEFAULT_LOCKED);
     }
@@ -171,7 +171,7 @@ class WorkstreamAxisIT {
     @Test
     void withdraw_moves_a_declared_workstream_to_withdrawn() {
         Workstream ws = workstreams.declare(scope, "shelved", "still resolvable, closed to new");
-        Workstream withdrawn = workstreams.withdraw(scope, ws.id, ws.conflictToken);
+        Workstream withdrawn = workstreams.withdraw(scope, ws.id, ws.conflictToken());
         assertThat(withdrawn.status).isEqualTo(Workstream.WITHDRAWN);
 
         // A withdrawn workstream cannot take new items — refuseWithdrawn
@@ -189,7 +189,7 @@ class WorkstreamAxisIT {
     void the_default_is_never_withdrawn() {
         Workstream defaultWs = workstreams.requireDefault(scope);
         WorklistException refusal = refusalFrom(() ->
-            workstreams.withdraw(scope, defaultWs.id, defaultWs.conflictToken));
+            workstreams.withdraw(scope, defaultWs.id, defaultWs.conflictToken()));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.WORKSTREAM_DEFAULT_LOCKED);
     }
@@ -201,19 +201,19 @@ class WorkstreamAxisIT {
     @Test
     void update_changes_the_description_and_rotates_the_token() {
         Workstream ws = workstreams.declare(scope, "polish", "cosmetic polish");
-        String beforeToken = ws.conflictToken;
+        String beforeToken = ws.conflictToken();
 
         Workstream updated = workstreams.update(scope, ws.id,
             "cosmetic polish and copy-editing", beforeToken);
         assertThat(updated.description).isEqualTo("cosmetic polish and copy-editing");
-        assertThat(updated.conflictToken).isNotEqualTo(beforeToken);
+        assertThat(updated.conflictToken()).isNotEqualTo(beforeToken);
     }
 
     @Test
     void update_refuses_a_blank_description() {
         Workstream ws = workstreams.declare(scope, "polish", "cosmetic polish");
         WorklistException refusal = refusalFrom(() ->
-            workstreams.update(scope, ws.id, "  ", ws.conflictToken));
+            workstreams.update(scope, ws.id, "  ", ws.conflictToken()));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
     }
 

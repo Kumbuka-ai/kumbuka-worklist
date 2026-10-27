@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
@@ -5,8 +12,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.Generated;
-import org.hibernate.generator.EventType;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -98,12 +103,10 @@ public class IterationMembership extends ScopeKeyed {
     @Column(name = "status", nullable = false)
     public String status = TODO;
 
-    @Generated(event = EventType.INSERT)
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     public Instant createdAt;
 
-    @Generated(event = EventType.INSERT)
-    @Column(name = "updated_at", nullable = false, insertable = false)
+    @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
 
     /** Whether this iteration is still expected to do something with the item. */

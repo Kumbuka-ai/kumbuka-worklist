@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
@@ -6,8 +13,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.Generated;
-import org.hibernate.generator.EventType;
 
 import java.time.Instant;
 import java.util.List;
@@ -132,12 +137,10 @@ public class Milestone extends AggregateRoot {
     // the column any more, and V17 then dropped it together with
     // `fk_milestone_workstream`.
 
-    @Generated(event = EventType.INSERT)
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     public Instant createdAt;
 
-    @Generated(event = EventType.INSERT)
-    @Column(name = "updated_at", nullable = false, insertable = false)
+    @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
 
     /** Whether this milestone lets an item be planned at all. */
@@ -151,7 +154,17 @@ public class Milestone extends AggregateRoot {
     }
 
     @Override
-    protected void touch(Instant now) {
-        updatedAt = now;
+    protected void touch(Instant at) {
+        updatedAt = at;
+    }
+
+    @Override
+    protected Instant changeTime() {
+        return updatedAt;
+    }
+
+    @Override
+    protected void created(Instant at) {
+        createdAt = at;
     }
 }

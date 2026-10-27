@@ -139,7 +139,7 @@ public class ScopeSettingService extends PlanningService {
     @Transactional
     public Map<String, Object> update(UUID scopeId, Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.SETTING, arguments);
-        ScopeSetting setting = requireSetting(scopeId);
+        ScopeSetting setting = requireLockedSetting(scopeId);
         setting.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
         Map<String, Object> current = projectOf(setting, List.of());
@@ -151,7 +151,7 @@ public class ScopeSettingService extends PlanningService {
             return current;
         }
 
-        setting.stamp();
+        setting.stamp(clock.instant());
         planning.flushAndRefresh(setting);
         LOG.infof("settings of scope %s updated", scopeId);
         return projectOf(setting, List.of());
@@ -278,7 +278,7 @@ public class ScopeSettingService extends PlanningService {
             List.of(setting.defaultColumns));
         fields.put(Field.CREATED_AT.canonicalName(), setting.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), setting.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), setting.conflictToken);
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), setting.conflictToken());
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }

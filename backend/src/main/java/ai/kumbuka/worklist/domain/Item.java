@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
@@ -6,9 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.generator.EventType;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
@@ -181,14 +186,11 @@ public class Item extends AggregateRoot {
     // --- technical fields, server-derived ---------------------------------
 
     /**
-     * Written by the database default and read back, never sent.
-     *
-     * <p>{@code @Generated} is what tells Hibernate to fetch the value rather
-     * than to supply one: without it the entity would carry whatever it last
-     * saw, and an insert would try to write a null into a not-null column.
+     * Written by the service from its clock at the insert, never sent
+     * (C20.1). The column keeps its database default for the previous image,
+     * which inserts without it (N-1).
      */
-    @Generated(event = EventType.INSERT)
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     public Instant createdAt;
 
     /**
@@ -203,9 +205,10 @@ public class Item extends AggregateRoot {
      * A database trigger would have been the wrong mechanism for exactly that
      * reason: it cannot tell a statement that changed something from one that
      * did not, and would stamp both.
+     *
+     * <p>It is also the conflict token ({@link AggregateRoot#conflictToken()}).
      */
-    @Generated(event = EventType.INSERT)
-    @Column(name = "changed_at", nullable = false, insertable = false)
+    @Column(name = "changed_at", nullable = false)
     public Instant changedAt;
 
     /**
@@ -225,7 +228,17 @@ public class Item extends AggregateRoot {
 
     /** The item's modification column is {@code changed_at}, as the target schema names it. */
     @Override
-    protected void touch(Instant now) {
-        changedAt = now;
+    protected void touch(Instant at) {
+        changedAt = at;
+    }
+
+    @Override
+    protected Instant changeTime() {
+        return changedAt;
+    }
+
+    @Override
+    protected void created(Instant at) {
+        createdAt = at;
     }
 }

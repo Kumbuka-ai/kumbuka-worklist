@@ -16,8 +16,10 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +56,7 @@ import java.util.UUID;
  *
  * A claim ends at its {@link Claim#expiresAt}, and this class does not schedule
  * anything to notice — the next claimant reads the row and overwrites it (ADR-0002).
- * The comparison happens at read time against {@code Instant.now()}, and every
+ * The comparison happens at read time against the injected clock, and every
  * consumer of claim state derives the answer from the stored expiry rather than
  * reading a status column that does not exist.
  *
@@ -84,6 +86,7 @@ public class ClaimService {
     private static final Logger LOG = Logger.getLogger(ClaimService.class);
 
     @Inject ClaimRepository claims;
+    @Inject Clock clock;
     @Inject ItemRepository items;
     @Inject ScopeAccessRepository scopeAccess;
 
@@ -120,7 +123,7 @@ public class ClaimService {
         String subject = requireActor(actor);
         Duration lease = requirePositive(duration);
 
-        Instant now = Instant.now();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         Claim held = claims.lockByItem(item);
         if (held != null && held.liveAt(now)) {
             throw new WorklistException(
@@ -128,22 +131,12 @@ public class ClaimService {
                 List.of(ADDRESS));
         }
 
-        Claim claim = held == null ? new Claim() : held;
-        claim.itemNumber = item.number;
-        claim.scopeId = item.scopeId;
-        claim.receipt = UUID.randomUUID().toString();
-        claim.actor = subject;
-        claim.expiresAt = now.plus(lease);
-        if (held == null) {
-            claims.insert(claim);
-        } else {
-            claims.flush();
-        }
-        claims.flushAndRefresh(claim);
+        String receipt = Receipt.mint();
+        Claim claim = award(held, item, subject, receipt, now, lease);
 
         LOG.infof("claim taken on item %s in scope %s until %s",
             itemId, scopeId, claim.expiresAt);
-        return project(item, claim, subject);
+        return project(item, claim, subject, receipt);
     }
 
     /**
@@ -166,14 +159,14 @@ public class ClaimService {
             String receipt) {
         Item item = requireItem(scopeId, itemId);
         Claim claim = claims.lockByItem(item);
-        if (claim == null || !claim.liveAt(Instant.now())) {
+        if (claim == null || !claim.liveAt(clock.instant())) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_ABSENT,
                 List.of(ADDRESS));
         }
 
         String presented = requireReceipt(receipt);
-        if (!claim.receipt.equals(presented)) {
+        if (!Receipt.matches(presented, storedHashOf(claim))) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_RECEIPT_UNKNOWN,
                 List.of(F_RECEIPT));
@@ -196,7 +189,7 @@ public class ClaimService {
         claims.flushAndRefresh(claim);
 
         LOG.infof("claim released on item %s in scope %s", itemId, scopeId);
-        return project(item, claim, subject);
+        return project(item, claim, subject, presented);
     }
 
     /**
@@ -220,7 +213,7 @@ public class ClaimService {
         String subject = requireActor(actor);
         Duration lease = requirePositive(duration);
 
-        Instant now = Instant.now();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         Item item = claims.nextClaimable(scopeId, now);
         if (item == null) {
             // Read `hasAnyItems` once: the answer is stable inside this
@@ -235,7 +228,7 @@ public class ClaimService {
         }
 
         Claim held = claims.lockByItem(item);
-        if (held != null && held.liveAt(Instant.now())) {
+        if (held != null && held.liveAt(now)) {
             // A race we lost between reading and locking: another agent has
             // taken this exact row in the meantime. Reported as a routine
             // refusal so the caller retries — which will read the NEXT
@@ -245,27 +238,52 @@ public class ClaimService {
                 List.of());
         }
 
-        Claim claim = held == null ? new Claim() : held;
-        claim.itemNumber = item.number;
-        claim.scopeId = item.scopeId;
-        claim.receipt = UUID.randomUUID().toString();
-        claim.actor = subject;
-        claim.expiresAt = Instant.now().plus(lease);
-        if (held == null) {
-            claims.insert(claim);
-        } else {
-            claims.flush();
-        }
-        claims.flushAndRefresh(claim);
+        String receipt = Receipt.mint();
+        Claim claim = award(held, item, subject, receipt, now, lease);
 
         LOG.infof("claim drawn and taken on item %s in scope %s until %s",
             item.id, scopeId, claim.expiresAt);
-        return project(item, claim, subject);
+        return project(item, claim, subject, receipt);
     }
 
     // ------------------------------------------------------------------
     // The mechanisms
     // ------------------------------------------------------------------
+
+    /**
+     * Writes the lease into the row the caller holds locked, or a new row.
+     *
+     * <p>The receipt is 32 random bytes and the row keeps its SHA-256, which
+     * is what {@code release} compares (C10.5). The plaintext is written as
+     * well, for the previous image, which compares that column after a
+     * rollback (N-1); it falls with the contraction.
+     */
+    private Claim award(Claim held, Item item, String subject, String receipt, Instant now,
+            Duration lease) {
+        Claim claim = held == null ? new Claim() : held;
+        claim.itemNumber = item.number;
+        claim.scopeId = item.scopeId;
+        claim.receipt = receipt;
+        claim.receiptHash = Receipt.hash(receipt);
+        claim.actor = subject;
+        claim.expiresAt = now.plus(lease);
+        if (held == null) {
+            claim.grantedAt = now;
+            claims.insert(claim);
+        } else {
+            claims.flush();
+        }
+        return claim;
+    }
+
+    /**
+     * The hash a presented receipt is compared with: the stored one, or, on a
+     * row a previous image wrote after a rollback, the hash of the plaintext
+     * that image stored. Either way the comparison is of two hashes.
+     */
+    private static String storedHashOf(Claim claim) {
+        return claim.receiptHash != null ? claim.receiptHash : Receipt.hash(claim.receipt);
+    }
 
     /**
      * The projection: item address plus the lease's own fields.
@@ -281,12 +299,13 @@ public class ClaimService {
      * with no input path would be a canonical name whose settability check
      * nothing consults.
      */
-    private Map<String, Object> project(Item item, Claim claim, String callerSubject) {
+    private Map<String, Object> project(Item item, Claim claim, String callerSubject,
+            String receipt) {
         Map<String, Object> answer = new LinkedHashMap<>();
         answer.put(Field.ID.canonicalName(), item.id);
         answer.put(Field.SCOPE.canonicalName(), slugOf(item.scopeId));
         answer.put(Field.NUMBER.canonicalName(), item.number);
-        answer.put(F_RECEIPT, claim.receipt);
+        answer.put(F_RECEIPT, receipt);
         answer.put(F_ACTOR, holderStateOf(claim, callerSubject));
         answer.put(F_GRANTED_AT, claim.grantedAt);
         answer.put(F_EXPIRES_AT, claim.expiresAt);
@@ -299,8 +318,8 @@ public class ClaimService {
      * refusal to name a person behind a claim. A lapsed lease reads as
      * {@code nobody}, matching the derived meaning of "not held".
      */
-    private static HolderState holderStateOf(Claim claim, String callerSubject) {
-        if (claim == null || !claim.liveAt(Instant.now())) {
+    private HolderState holderStateOf(Claim claim, String callerSubject) {
+        if (claim == null || !claim.liveAt(clock.instant())) {
             return HolderState.NOBODY;
         }
         return HolderState.of(claim.actor, callerSubject);

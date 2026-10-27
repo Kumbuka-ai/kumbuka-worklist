@@ -15,8 +15,12 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -59,6 +63,7 @@ public class ItemRepository {
     public static final String BY_WORKSTREAM = "workstream_number";
 
     @Inject EntityManager em;
+    @Inject Clock clock;
 
     // ------------------------------------------------------------------
     // Reading
@@ -139,6 +144,21 @@ public class ItemRepository {
     @Transactional
     public Item byId(UUID itemId) {
         return itemId == null ? null : em.find(Item.class, itemId);
+    }
+
+    /**
+     * The item of that id, locked for the caller's transaction and read as it
+     * stands under the lock, or null (C10.2, C11.1).
+     *
+     * <p>Every write that checks the item's conflict token loads it here. Two
+     * writers with one token then decide one after the other, and the second
+     * compares against what the first wrote.
+     */
+    @Transactional
+    public Item lockById(UUID itemId) {
+        Item item = itemId == null ? null
+            : em.find(Item.class, itemId, LockModeType.PESSIMISTIC_WRITE);
+        return item == null ? null : underLock(item);
     }
 
     /**
@@ -242,6 +262,7 @@ public class ItemRepository {
      */
     @Transactional
     public Item insert(Item item) {
+        item.born(now());
         em.persist(item);
         em.flush();
         return item;
@@ -250,6 +271,8 @@ public class ItemRepository {
     /** Inserts a relation. Flushed by the caller, once, after the whole set. */
     @Transactional
     public void insertEdge(ItemRelation edge) {
+        edge.createdAt = now();
+        edge.updatedAt = edge.createdAt;
         em.persist(edge);
     }
 
@@ -263,6 +286,8 @@ public class ItemRepository {
      */
     @Transactional
     public void insertReference(ItemReference reference) {
+        reference.createdAt = now();
+        reference.updatedAt = reference.createdAt;
         em.persist(reference);
     }
 
@@ -284,5 +309,27 @@ public class ItemRepository {
     public void flushAndRefresh(Item item) {
         em.flush();
         em.refresh(item);
+    }
+
+    /**
+     * The entity as its row stands under the lock this transaction holds.
+     *
+     * <p>A locking read takes the lock on the current row, but where this
+     * transaction already holds the entity, the persistence context answers
+     * the object it read earlier and not what the database found. A token
+     * compared against that object is compared against a row that may have
+     * moved since, and the write that follows overwrites the move (C11.1).
+     * The refresh reads the locked row again; it would drop a change not yet
+     * flushed, and every write of this service flushes in the call that
+     * makes it.
+     */
+    private <T> T underLock(T entity) {
+        em.refresh(entity);
+        return entity;
+    }
+
+    /** The clock's instant at the microsecond the timestamp columns store (C20.1). */
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 }
