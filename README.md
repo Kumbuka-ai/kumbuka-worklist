@@ -1,3 +1,11 @@
+<!--
+Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+SPDX-License-Identifier: AGPL-3.0-only
+This file is part of Kumbuka and is licensed under the GNU Affero
+General Public License v3.0 only. See the LICENSE file in the
+repository root for the full licence text.
+-->
+
 # kumbuka-worklist
 
 The worklist service.
@@ -22,16 +30,17 @@ The **substrate**: the schema, its own database role, its own migration
 sequence, row-level security on the tenancy axis, the binding to the tenant
 realm, the read of the platform's scope directory, and the operator boundary.
 
-The **domain is not here yet**: no declared vocabulary and no predicates, no
-customer-defined attributes, no typed relations between items, no milestones
-or iterations, no claim lease, no number space, and no caller-facing verbs.
-Those arrive separately. What this repository carries is the ground they will
-stand on, built and proven first because proving isolation is much harder once
-there is data to lose.
+The **domain** stands on that substrate: the declared vocabulary of
+selectors, customer-defined attributes, items with typed relations between
+them, milestones, workstreams and iterations, the claim lease and the number
+space.
 
-The caller surface is therefore `GET /api/whoami` and the health endpoint, and
-deliberately nothing else. **Deployed is not the same as usable**, and this
-service is neither yet.
+The **caller surface** carries the verbs of the worklist scheme -- `create`,
+`read`, `update`, `query`, `accept`, `withdraw`, `close`, `advance`, `plan`,
+`unplan`, `claim`, `claim_next`, `release`, `relate`, `unrelate` and
+`validate` -- over REST under `/api/{scope}` and over MCP at `/mcp`, both
+through the one verb surface. Beside them stand the service's declaration at
+`GET /api/declaration`, `GET /api/whoami` and the health endpoint.
 
 ## How isolation is built
 
@@ -117,8 +126,11 @@ that does not exist yet.
 
 Configuration is environment variables with a `WORKLIST_` prefix; see
 `backend/src/main/resources/application.properties` for the full set and its
-development defaults. There is no deployment hostname and no credential in
-this repository.
+development defaults. There is no deployment hostname in this repository and
+no credential beyond placeholders: the development defaults of the two
+passwords in `application.properties`, and the password `V2__service_role.sql`
+gives a role it creates, which a deployment beyond a development machine
+replaces from its own secret store.
 
 ```
 WORKLIST_DB_JDBC_URL        jdbc:postgresql://<host>:5432/<database>
