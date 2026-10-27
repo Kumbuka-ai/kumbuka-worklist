@@ -46,7 +46,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the surface.
  *
  * <p><strong>What counts as prose, and what is exempt.</strong> A string
- * literal of four or more words. Exempt are the statements that cannot reach a
+ * literal of three words or more with a space among them, and a word in lower
+ * case. <strong>Every word of a literal counts, not a run of them</strong>, as
+ * in kumbuka-dispatch, which states the count as binding for every copy of
+ * this guard: a number or a sign between words breaks no sentence, so
+ * {@code "send 3 entries now"} is prose although no three words in it stand
+ * side by side. The word in lower case is kumbuka-memory's rule beside the
+ * reference's count: a list of methods such as the {@code Allow} value
+ * {@code "GET, PATCH, POST"} has three words and no sentence. Exempt are the statements that cannot reach a
  * caller: a log line, an exception of the JVM's own that only the unexpected
  * failure mapper ever sees (and that mapper answers with the catalogue's
  * text), an annotation, and the persistence and tenancy layers, whose literals
@@ -63,7 +70,13 @@ class MessageBundleTest {
 
     private static final Pattern LITERAL = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"");
 
-    private static final Pattern WORD = Pattern.compile("[A-Za-z]+");
+    /** Three words or more: a sentence, or the start of one. */
+    static final int PROSE_WORDS = 3;
+
+    private static final Pattern WORD = Pattern.compile("[A-Za-z][A-Za-z'-]*");
+
+    /** A sentence has a word in lower case; a list of methods or a constant does not. */
+    private static final Pattern LOWER_WORD = Pattern.compile("\\b[a-z]{2,}\\b");
 
     // ======================================================================
     // The bundles
@@ -171,6 +184,16 @@ class MessageBundleTest {
             .as("RED STATE, observed: prose in a refusal must be reported, and the log line "
                 + "beside it must not be")
             .hasSize(1);
+        assertThat(prose("class Planted { String hint() { return \"send 3 entries now\"; } }"))
+            .as("RED STATE, observed: a sentence with a number between its words is prose too")
+            .hasSize(1);
+        assertThat(longestRun("send 3 entries now"))
+            .as("RED STATE, observed: counted as the longest run of words, the same sentence "
+                + "stays under the threshold and would pass for a name")
+            .isLessThan(PROSE_WORDS);
+        assertThat(prose("class Planted { static final String ALLOW = \"GET, PATCH, POST\"; }"))
+            .as("RED STATE, observed: a list of methods has three words and no sentence")
+            .isEmpty();
     }
 
     // ======================================================================
@@ -230,13 +253,36 @@ class MessageBundleTest {
             Matcher literal = LITERAL.matcher(statement);
             while (literal.find()) {
                 String text = literal.group(1);
-                long words = WORD.matcher(text).results().count();
-                if (text.trim().split("\\s+").length >= 4 && words >= 4) {
+                if (isProse(text)) {
                     found.add(text);
                 }
             }
         }
         return found;
+    }
+
+    /**
+     * Three words or more anywhere in the literal, a space among them, and a
+     * word in lower case.
+     */
+    static boolean isProse(String text) {
+        return WORD.matcher(text).results().count() >= PROSE_WORDS && text.contains(" ")
+            && LOWER_WORD.matcher(text).find();
+    }
+
+    /**
+     * The longest run of words standing side by side, a count this guard does
+     * not make: kept so that the guard shows on every build what the count of
+     * every word catches that it would miss.
+     */
+    static int longestRun(String text) {
+        int longest = 0;
+        int run = 0;
+        for (String token : text.split("\\s+")) {
+            run = WORD.matcher(token).matches() ? run + 1 : 0;
+            longest = Math.max(longest, run);
+        }
+        return longest;
     }
 
     /** The source with its comments blanked, string and character literals kept. */
