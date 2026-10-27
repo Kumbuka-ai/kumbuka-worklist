@@ -157,7 +157,7 @@ public class MilestoneService extends PlanningService {
     public Map<String, Object> update(UUID scopeId, UUID milestoneId,
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
-        Milestone milestone = require(scopeId, milestoneId);
+        Milestone milestone = requireLocked(scopeId, milestoneId);
         milestone.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
         Map<String, Object> current = project(milestone, List.of());
@@ -171,7 +171,7 @@ public class MilestoneService extends PlanningService {
         }
         refuseGoalOnAMarker(milestone);
 
-        milestone.stamp();
+        milestone.stamp(clock.instant());
         planning.flushAndRefresh(milestone);
         LOG.infof("milestone %d updated in scope %s", milestone.number, scopeId);
         return project(milestone, List.of());
@@ -285,7 +285,7 @@ public class MilestoneService extends PlanningService {
             Milestone current = planning.activeMilestone(milestone.scopeId);
             if (current != null && !current.id.equals(milestone.id)) {
                 current.status = Milestone.PLANNED;
-                current.stamp();
+                current.stamp(clock.instant());
                 planning.flush();
                 LOG.infof("milestone %d demoted in scope %s", current.number,
                     milestone.scopeId);
@@ -332,7 +332,18 @@ public class MilestoneService extends PlanningService {
      * not true of the call.
      */
     private Milestone require(UUID scopeId, UUID milestoneId) {
-        Milestone milestone = planning.milestoneById(milestoneId);
+        return requireIn(scopeId, planning.milestoneById(milestoneId));
+    }
+
+    /**
+     * The same, locked and read as it stands under the lock. Every write that
+     * checks the milestone's token loads it here (C10.2, C11.1).
+     */
+    private Milestone requireLocked(UUID scopeId, UUID milestoneId) {
+        return requireIn(scopeId, planning.lockMilestoneById(milestoneId));
+    }
+
+    private static Milestone requireIn(UUID scopeId, Milestone milestone) {
         if (milestone == null || !milestone.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
@@ -369,7 +380,7 @@ public class MilestoneService extends PlanningService {
         // `Field.RETRACTED` carries the sentence one who still sends it gets.
         fields.put(Field.CREATED_AT.canonicalName(), milestone.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), milestone.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), milestone.conflictToken);
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), milestone.conflictToken());
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }

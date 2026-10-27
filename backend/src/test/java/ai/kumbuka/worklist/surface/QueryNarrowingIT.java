@@ -1059,7 +1059,7 @@ class QueryNarrowingIT {
         workstreams.requireDefault(SCOPE_ID);
         Workstream alpha = workstreams.declare(SCOPE_ID, "alpha", "the alpha stream");
         Workstream gamma = workstreams.declare(SCOPE_ID, "gamma", "a stream to withdraw");
-        workstreams.withdraw(SCOPE_ID, gamma.id, gamma.conflictToken);
+        workstreams.withdraw(SCOPE_ID, gamma.id, gamma.conflictToken());
 
         Map<String, Object> active = milestones.create(SCOPE_ID, Map.of(
             "title", "the active goal", "vision", "a north star"));

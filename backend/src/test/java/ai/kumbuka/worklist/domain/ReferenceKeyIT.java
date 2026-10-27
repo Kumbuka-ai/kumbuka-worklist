@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -133,7 +140,7 @@ class ReferenceKeyIT {
                     + "because a key is checked with row-level security bypassed")
                 .isNotNull();
             assertThat(refused.getSQLState()).isEqualTo(FOREIGN_KEY_VIOLATION);
-            assertThat(refused.getMessage()).contains("fk_item_status_pk");
+            assertThat(refused.getMessage()).contains("fk_item_item_status");
         }
     }
 

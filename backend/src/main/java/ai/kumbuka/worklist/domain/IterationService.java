@@ -16,6 +16,7 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -161,7 +162,7 @@ public class IterationService extends PlanningService {
     public Map<String, Object> update(UUID scopeId, UUID iterationId,
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITERATION, arguments);
-        Iteration iteration = require(scopeId, iterationId);
+        Iteration iteration = requireLocked(scopeId, iterationId);
         refuseClosed(iteration);
         iteration.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
@@ -175,7 +176,7 @@ public class IterationService extends PlanningService {
             return current;
         }
 
-        iteration.stamp();
+        iteration.stamp(clock.instant());
         planning.flushAndRefresh(iteration);
         LOG.infof("iteration %d updated in scope %s", iteration.number, scopeId);
         return project(iteration, List.of());
@@ -221,22 +222,23 @@ public class IterationService extends PlanningService {
             String produced, String conflictToken) {
         String producedNamed = requireNamed(produced);
 
-        Iteration iteration = require(scopeId, iterationId);
+        Iteration iteration = requireLocked(scopeId, iterationId);
         refuseClosed(iteration);
         iteration.requireCurrentToken(conflictToken);
         refuseLiveMemberships(iteration);
 
-        iteration.closedAt = Instant.now();
-        iteration.stamp();
+        Instant now = clock.instant();
+        iteration.closedAt = now.truncatedTo(ChronoUnit.MICROS);
+        iteration.stamp(now);
 
-        ScopeSetting setting = requireSetting(scopeId);
+        ScopeSetting setting = requireLockedSetting(scopeId);
         if (Objects.equals(iteration.number, setting.currentIterationNumber)) {
             // The pointer cannot outlive what it points at: a closed current
             // iteration is a state where the draw has somewhere to look and
             // nothing to find, which is the empty answer the concept insists
             // must mean "plan" rather than "close".
             setting.currentIterationNumber = null;
-            setting.stamp();
+            setting.stamp(clock.instant());
         }
 
         planning.flushAndRefresh(iteration);
@@ -278,7 +280,7 @@ public class IterationService extends PlanningService {
      */
     @Transactional
     public Map<String, Object> advance(UUID scopeId, String conflictToken) {
-        ScopeSetting setting = requireSetting(scopeId);
+        ScopeSetting setting = requireLockedSetting(scopeId);
         setting.requireCurrentToken(conflictToken);
 
         Iteration next = planning.openIterations(scopeId).stream()
@@ -289,7 +291,7 @@ public class IterationService extends PlanningService {
                 List.of()));
 
         setting.currentIterationNumber = next.number;
-        setting.stamp();
+        setting.stamp(clock.instant());
         planning.flushAndRefresh(setting);
         LOG.infof("iteration %d promoted to current in scope %s", next.number, scopeId);
         return ScopeSettingService.project(setting, next.id, List.of());
@@ -463,7 +465,19 @@ public class IterationService extends PlanningService {
 
     /** The iteration of that id in that scope, or a typed refusal. */
     private Iteration require(UUID scopeId, UUID iterationId) {
-        Iteration iteration = planning.iterationById(iterationId);
+        return requireIn(scopeId, planning.iterationById(iterationId));
+    }
+
+    /**
+     * The iteration of that id in that scope, locked and read as it stands
+     * under the lock, or a typed refusal. Both callers check its token and
+     * write it (C10.2, C11.1).
+     */
+    private Iteration requireLocked(UUID scopeId, UUID iterationId) {
+        return requireIn(scopeId, planning.lockIterationById(iterationId));
+    }
+
+    private static Iteration requireIn(UUID scopeId, Iteration iteration) {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
@@ -490,7 +504,7 @@ public class IterationService extends PlanningService {
         fields.put(Field.CLOSED_AT.canonicalName(), iteration.closedAt);
         fields.put(Field.CREATED_AT.canonicalName(), iteration.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), iteration.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken);
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken());
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }

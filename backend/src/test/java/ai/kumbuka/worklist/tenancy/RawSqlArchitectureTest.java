@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import org.junit.jupiter.api.Test;
@@ -8,8 +15,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,6 +113,110 @@ class RawSqlArchitectureTest {
                 + "@TenantBound and must be reported. An empty list here would mean the "
                 + "green assertion above is measuring nothing")
             .anyMatch(offender -> offender.contains("UnboundRawSqlFixture"));
+    }
+
+    /** One class's native SQL: how many statements, and why JPQL does not serve. */
+    record NativeUse(int statements, String reason) {
+    }
+
+    /**
+     * C17.2: every class that issues native SQL, by its package and name below
+     * the service root, with its count of native statements and its written
+     * reason. A statement added, removed or moved changes the count and turns
+     * this red, so the reason is read again whenever the SQL changes.
+     */
+    static final Map<String, NativeUse> NATIVE = Map.of(
+        "repository.ScopeAccessRepository", new NativeUse(5, "reads the platform's "
+            + "subject-filtered scope directory, a view no entity of this service maps, and "
+            + "binds and reads the session settings app.subject and app.tenant_id"),
+        "tenancy.TenantDatabaseBinding", new NativeUse(1, "binds app.tenant_id for the "
+            + "transaction with set_config: a session setting has no entity"),
+        "tenancy.TenantMigrationCallback", new NativeUse(1, "binds app.tenant_id on the "
+            + "migration's own connection, before Hibernate exists"));
+
+    /** C17.1, C17.2: native SQL lives in repository, and in the two named tenancy classes. */
+    private static final Set<String> NATIVE_HOMES = Set.of("repository");
+    private static final Set<String> TENANCY_EXCEPTIONS = Set.of(
+        "tenancy.TenantDatabaseBinding", "tenancy.TenantMigrationCallback");
+
+    private static final Pattern NATIVE_STATEMENT = Pattern.compile(
+        "createNativeQuery\\(|\\.prepareStatement\\(|\\.createStatement\\(");
+
+    @Test
+    void native_sql_is_confined_counted_and_reasoned_per_class() throws IOException {
+        assertThat(nativeOffences(nativeCountsUnder(sourceRoot("main")), NATIVE))
+            .as("native SQL lives in repository and the two named tenancy classes, and each "
+                + "class that issues it is listed in NATIVE with its count of statements and "
+                + "the reason JPQL does not serve (C17.2). Update the entry with the change")
+            .isEmpty();
+    }
+
+    /** The red state, observed on every build. */
+    @Test
+    void the_check_reports_a_statement_more_and_a_class_out_of_place() {
+        Map<String, Integer> found = new LinkedHashMap<>();
+        NATIVE.forEach((name, use) -> found.put(name, use.statements()));
+        found.put("repository.ScopeAccessRepository",
+            NATIVE.get("repository.ScopeAccessRepository").statements() + 1);
+        found.put("domain.ItemService", 1);
+
+        assertThat(nativeOffences(found, NATIVE))
+            .as("RED STATE, observed: one statement more than declared, and native SQL in "
+                + "the domain, must each be reported")
+            .containsExactlyInAnyOrder(
+                "repository.ScopeAccessRepository issues 6 native statements; NATIVE declares 5",
+                "domain.ItemService issues native SQL outside repository",
+                "domain.ItemService issues native SQL and is not listed in NATIVE");
+    }
+
+    static List<String> nativeOffences(Map<String, Integer> found,
+                                       Map<String, NativeUse> declared) {
+        List<String> offences = new ArrayList<>();
+        found.forEach((name, count) -> {
+            String layer = name.substring(0, name.lastIndexOf('.'));
+            if (!NATIVE_HOMES.contains(layer) && !TENANCY_EXCEPTIONS.contains(name)) {
+                offences.add(name + " issues native SQL outside repository");
+            }
+            NativeUse use = declared.get(name);
+            if (use == null) {
+                offences.add(name + " issues native SQL and is not listed in NATIVE");
+            } else if (use.statements() != count) {
+                offences.add(name + " issues " + count + " native statements; NATIVE declares "
+                    + use.statements());
+            }
+        });
+        declared.forEach((name, use) -> {
+            if (!found.containsKey(name)) {
+                offences.add(name + " is listed in NATIVE and issues no native SQL");
+            }
+            if (use.reason() == null || use.reason().isBlank()) {
+                offences.add(name + " is listed without a reason");
+            }
+        });
+        return offences;
+    }
+
+    /** Native statements per class, counted in code with its comments removed. */
+    private static Map<String, Integer> nativeCountsUnder(Path root) throws IOException {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        String base = "ai.kumbuka.worklist.";
+        try (Stream<Path> files = Files.walk(root)) {
+            for (Path file : (Iterable<Path>) files
+                    .filter(f -> f.toString().endsWith(".java"))::iterator) {
+                String code = Files.readString(file)
+                    .replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("//[^\\n]*", " ");
+                Matcher m = NATIVE_STATEMENT.matcher(code);
+                int count = 0;
+                while (m.find()) {
+                    count++;
+                }
+                if (count > 0) {
+                    counts.put(fqcn(root, file).substring(base.length()), count);
+                }
+            }
+        }
+        assertThat(counts).as("native SQL must have been found at all").isNotEmpty();
+        return counts;
     }
 
     /** The module's source root for a given source set, whichever directory the build runs from. */

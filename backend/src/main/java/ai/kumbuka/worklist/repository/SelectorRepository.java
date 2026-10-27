@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.NumberSpace;
@@ -11,6 +18,9 @@ import jakarta.persistence.NoResultException;
 import jakarta.persistence.TypedQuery;
 import jakarta.transaction.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,6 +46,7 @@ public class SelectorRepository {
     private static final String P_SELECTOR = "selector";
 
     @Inject EntityManager em;
+    @Inject Clock clock;
 
     /** The selector of that token in a scope, or null. */
     @Transactional
@@ -84,9 +95,10 @@ public class SelectorRepository {
      */
     @Transactional
     public NumberSpace lockSpace(Long selectorPk) {
-        return single(spaceQuery("s.selectorPk = :selector")
+        NumberSpace space = single(spaceQuery("s.selectorPk = :selector")
             .setParameter(P_SELECTOR, selectorPk)
             .setLockMode(LockModeType.PESSIMISTIC_WRITE));
+        return space == null ? null : underLock(space);
     }
 
     /** The selector's number space without a lock, for a read that only reports it. */
@@ -122,6 +134,8 @@ public class SelectorRepository {
     /** Inserts a selector and flushes, so its unique constraint answers here. */
     @Transactional
     public Selector insert(Selector selector) {
+        selector.createdAt = now();
+        selector.updatedAt = selector.createdAt;
         em.persist(selector);
         em.flush();
         return selector;
@@ -130,6 +144,8 @@ public class SelectorRepository {
     /** Inserts a number space and flushes, for the same reason. */
     @Transactional
     public NumberSpace insert(NumberSpace space) {
+        space.createdAt = now();
+        space.updatedAt = space.createdAt;
         em.persist(space);
         em.flush();
         return space;
@@ -139,5 +155,27 @@ public class SelectorRepository {
     @Transactional
     public void flush() {
         em.flush();
+    }
+
+    /**
+     * The entity as its row stands under the lock this transaction holds.
+     *
+     * <p>A locking read takes the lock on the current row, but where this
+     * transaction already holds the entity, the persistence context answers
+     * the object it read earlier and not what the database found. A token
+     * compared against that object is compared against a row that may have
+     * moved since, and the write that follows overwrites the move (C11.1).
+     * The refresh reads the locked row again; it would drop a change not yet
+     * flushed, and every write of this service flushes in the call that
+     * makes it.
+     */
+    private <T> T underLock(T entity) {
+        em.refresh(entity);
+        return entity;
+    }
+
+    /** The clock's instant at the microsecond the timestamp columns store (C20.1). */
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 }
