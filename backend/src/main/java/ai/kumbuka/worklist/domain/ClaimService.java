@@ -131,12 +131,11 @@ public class ClaimService {
                 List.of(ADDRESS));
         }
 
-        String receipt = Receipt.mint();
-        Claim claim = award(held, item, subject, receipt, now, lease);
+        Claim claim = award(held, item, subject, now, lease);
 
         LOG.infof("claim taken on item %s in scope %s until %s",
             itemId, scopeId, claim.expiresAt);
-        return project(item, claim, subject, receipt);
+        return project(item, claim, subject);
     }
 
     /**
@@ -166,7 +165,7 @@ public class ClaimService {
         }
 
         String presented = requireReceipt(receipt);
-        if (!Receipt.matches(presented, storedHashOf(claim))) {
+        if (!claim.receipt.equals(presented)) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_RECEIPT_UNKNOWN,
                 List.of(F_RECEIPT));
@@ -189,7 +188,7 @@ public class ClaimService {
         claims.flushAndRefresh(claim);
 
         LOG.infof("claim released on item %s in scope %s", itemId, scopeId);
-        return project(item, claim, subject, presented);
+        return project(item, claim, subject);
     }
 
     /**
@@ -238,12 +237,11 @@ public class ClaimService {
                 List.of());
         }
 
-        String receipt = Receipt.mint();
-        Claim claim = award(held, item, subject, receipt, now, lease);
+        Claim claim = award(held, item, subject, now, lease);
 
         LOG.infof("claim drawn and taken on item %s in scope %s until %s",
             item.id, scopeId, claim.expiresAt);
-        return project(item, claim, subject, receipt);
+        return project(item, claim, subject);
     }
 
     // ------------------------------------------------------------------
@@ -252,19 +250,12 @@ public class ClaimService {
 
     /**
      * Writes the lease into the row the caller holds locked, or a new row.
-     *
-     * <p>The receipt is 32 random bytes and the row keeps its SHA-256, which
-     * is what {@code release} compares (C10.5). The plaintext is written as
-     * well, for the previous image, which compares that column after a
-     * rollback (N-1); it falls with the contraction.
      */
-    private Claim award(Claim held, Item item, String subject, String receipt, Instant now,
-            Duration lease) {
+    private Claim award(Claim held, Item item, String subject, Instant now, Duration lease) {
         Claim claim = held == null ? new Claim() : held;
         claim.itemNumber = item.number;
         claim.scopeId = item.scopeId;
-        claim.receipt = receipt;
-        claim.receiptHash = Receipt.hash(receipt);
+        claim.receipt = UUID.randomUUID().toString();
         claim.actor = subject;
         claim.expiresAt = now.plus(lease);
         if (held == null) {
@@ -274,15 +265,6 @@ public class ClaimService {
             claims.flush();
         }
         return claim;
-    }
-
-    /**
-     * The hash a presented receipt is compared with: the stored one, or, on a
-     * row a previous image wrote after a rollback, the hash of the plaintext
-     * that image stored. Either way the comparison is of two hashes.
-     */
-    private static String storedHashOf(Claim claim) {
-        return claim.receiptHash != null ? claim.receiptHash : Receipt.hash(claim.receipt);
     }
 
     /**
@@ -299,13 +281,12 @@ public class ClaimService {
      * with no input path would be a canonical name whose settability check
      * nothing consults.
      */
-    private Map<String, Object> project(Item item, Claim claim, String callerSubject,
-            String receipt) {
+    private Map<String, Object> project(Item item, Claim claim, String callerSubject) {
         Map<String, Object> answer = new LinkedHashMap<>();
         answer.put(Field.ID.canonicalName(), item.id);
         answer.put(Field.SCOPE.canonicalName(), slugOf(item.scopeId));
         answer.put(Field.NUMBER.canonicalName(), item.number);
-        answer.put(F_RECEIPT, receipt);
+        answer.put(F_RECEIPT, claim.receipt);
         answer.put(F_ACTOR, holderStateOf(claim, callerSubject));
         answer.put(F_GRANTED_AT, claim.grantedAt);
         answer.put(F_EXPIRES_AT, claim.expiresAt);

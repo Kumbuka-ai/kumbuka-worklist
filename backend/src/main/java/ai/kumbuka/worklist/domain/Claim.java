@@ -83,25 +83,12 @@ public class Claim extends ScopeKeyed {
      * Opaque, by contract. A caller reads it, presents it back with
      * {@code release}, and is refused if it is not the one the row carries.
      *
-     * <p>The plaintext, kept for the previous image only (N-1): this image
-     * mints it as {@link Receipt#mint()}, compares {@link #receiptHash}, and
-     * reads this column only where a previous image left the hash empty.
-     * Nothing may read structure into it.
+     * <p>A uuid is what it happens to be; nothing may read structure into it,
+     * and a caller that parses it is a caller that breaks when the generator
+     * changes.
      */
     @Column(name = "receipt", nullable = false)
     public String receipt;
-
-    /**
-     * SHA-256 of the receipt, hex-encoded: the form {@code release} compares
-     * against (C10.5).
-     *
-     * <p>Null only on a row a previous image wrote after a rollback, which
-     * knows the plaintext column alone; {@link Receipt} then hashes that. The
-     * plaintext column above is still written for that image (N-1) and falls
-     * with the contraction.
-     */
-    @Column(name = "receipt_hash")
-    public String receiptHash;
 
     /**
      * The subject the service derived from the write channel, at the moment the

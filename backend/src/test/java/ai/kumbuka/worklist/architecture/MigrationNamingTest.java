@@ -59,7 +59,7 @@ class MigrationNamingTest {
      * Names applied migrations gave against the rule, as {@code V<n> name}.
      * Each stays because its migration ran: editing the file breaks every
      * database it ran on. The keys of V4 went with their columns in V20; the
-     * five of V19 that live on are renamed by V24, whose new names this test
+     * five of V19 that live on are renamed by V23, whose new names this test
      * holds to the rule like any other.
      */
     static final Set<String> APPLIED = Set.of(

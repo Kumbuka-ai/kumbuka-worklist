@@ -5,7 +5,7 @@
 -- repository root for the full licence text.
 
 -- ===========================================================================
--- V24: every foreign key names its target table.
+-- V23: every foreign key names its target table.
 --
 -- A foreign key is named `fk_<table>_<target>` (C18.3), so a refusal of the
 -- database names both tables. V19 named five keys against that: two shorten

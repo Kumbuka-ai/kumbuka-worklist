@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and the table it references, and none named otherwise. The expectation is
  * the rule, not a list of names.
  *
- * <p>RED STATE, observed against the schema before V24: the five keys V19
+ * <p>RED STATE, observed against the schema before V23: the five keys V19
  * named against the rule were reported, {@code fk_item_status_pk},
  * {@code fk_attribute_option_definition_pk}, {@code fk_item_relation_from_number},
  * {@code fk_item_relation_to_number} and {@code fk_item_relation_type_pk}.
