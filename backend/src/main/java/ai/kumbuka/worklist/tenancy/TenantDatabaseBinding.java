@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -8,6 +15,7 @@ import jakarta.transaction.TransactionSynchronizationRegistry;
 import org.jboss.logging.Logger;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -49,10 +57,11 @@ public class TenantDatabaseBinding {
      * probe over raw SQL instead.
      */
     public void bindCurrentTransaction() {
-        Set<String> alreadyBound = ensureRegistry();
-        if (alreadyBound == null) {
+        Optional<Set<String>> registry = ensureRegistry();
+        if (registry.isEmpty()) {
             return;
         }
+        Set<String> alreadyBound = registry.get();
         String tenant = context.current().toString();
         if (alreadyBound.contains(tenant)) {
             return;
@@ -76,15 +85,15 @@ public class TenantDatabaseBinding {
     }
 
     @SuppressWarnings("unchecked")
-    private Set<String> ensureRegistry() {
+    private Optional<Set<String>> ensureRegistry() {
         Object existing;
         try {
             existing = txReg.getResource(BOUND_KEY);
         } catch (RuntimeException noTx) {
-            return null;
+            return Optional.empty();
         }
         if (existing instanceof Set<?>) {
-            return (Set<String>) existing;
+            return Optional.of((Set<String>) existing);
         }
         Set<String> bound = new HashSet<>();
         try {
@@ -94,9 +103,9 @@ public class TenantDatabaseBinding {
             // The registry refused (transaction in an unexpected state). The
             // synchronization is housekeeping only — SET LOCAL resets itself
             // at commit or rollback either way — so skipping it is safe.
-            return null;
+            return Optional.empty();
         }
-        return bound;
+        return Optional.of(bound);
     }
 
     /** Clears the per-transaction record at commit or rollback. */

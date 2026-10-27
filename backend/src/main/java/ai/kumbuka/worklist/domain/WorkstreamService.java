@@ -107,7 +107,7 @@ public class WorkstreamService {
      */
     @Transactional
     public Workstream requireDefault(UUID scopeId) {
-        Workstream defaultWs = workstreams.findDefault(scopeId);
+        Workstream defaultWs = workstreams.findDefault(scopeId).orElse(null);
         if (defaultWs != null) {
             return defaultWs;
         }
@@ -161,7 +161,7 @@ public class WorkstreamService {
                 List.of(TOKEN));
         }
         String cleaned = requireNonBlank(description);
-        if (workstreams.findByToken(scopeId, token) != null) {
+        if (workstreams.findByToken(scopeId, token).isPresent()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 List.of(TOKEN));
@@ -229,7 +229,7 @@ public class WorkstreamService {
         if (newToken.equals(workstream.token)) {
             return workstream;
         }
-        if (workstreams.findByToken(scopeId, newToken) != null) {
+        if (workstreams.findByToken(scopeId, newToken).isPresent()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 List.of(TOKEN));
@@ -276,7 +276,7 @@ public class WorkstreamService {
      * loads it here (C10.2, C11.1).
      */
     private Workstream requireLocked(UUID scopeId, UUID workstreamId) {
-        Workstream workstream = workstreams.lock(scopeId, workstreamId);
+        Workstream workstream = workstreams.lock(scopeId, workstreamId).orElse(null);
         if (workstream == null) {
             throw new WorklistException(
                 WorklistException.Reason.WORKSTREAM_UNKNOWN,
@@ -290,7 +290,7 @@ public class WorkstreamService {
      */
     @Transactional
     public Workstream require(UUID scopeId, UUID workstreamId) {
-        Workstream workstream = workstreams.find(scopeId, workstreamId);
+        Workstream workstream = workstreams.find(scopeId, workstreamId).orElse(null);
         if (workstream == null) {
             throw new WorklistException(
                 WorklistException.Reason.WORKSTREAM_UNKNOWN,

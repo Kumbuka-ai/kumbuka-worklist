@@ -15,6 +15,7 @@ import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbName;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,9 +49,12 @@ import java.util.Map;
  * for that class are collapsed in {@link RefusalCode#of}, once, for both
  * surfaces; the catalogue words {@code NOT_FOUND} character for character as
  * the router's {@code RouterException.NOT_FOUND_MESSAGE} does.
+ *
+ * @param data the machine-readable detail; absent where the refusal has none,
+ *             and then left out of the envelope rather than sent empty
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record RefusalPayload(String reason, String message, Object data) {
+public record RefusalPayload(String reason, String message, @Nullable Object data) {
 
     private static final Logger LOG = Logger.getLogger(RefusalPayload.class);
 
@@ -71,15 +75,11 @@ public record RefusalPayload(String reason, String message, Object data) {
             // existence the answer is refusing to confirm.
             return new RefusalPayload(code.name(), message(code, null), null);
         }
-        Object data = dataOf(code, e.offenders(), e.accepts());
+        Map<String, Object> data = dataOf(code, e.offenders(), e.accepts());
         if (e.currentToken() != null) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> withState = data == null ? new LinkedHashMap<>()
-                : new LinkedHashMap<>((Map<String, Object>) data);
-            withState.put(CONFLICT_TOKEN, e.currentToken());
-            data = withState;
+            data.put(CONFLICT_TOKEN, e.currentToken());
         }
-        return new RefusalPayload(code.name(), message(code, null), data);
+        return new RefusalPayload(code.name(), message(code, null), data.isEmpty() ? null : data);
     }
 
     /** The member the object's current conflict token travels under on a {@code CONFLICT}. */
@@ -87,8 +87,10 @@ public record RefusalPayload(String reason, String message, Object data) {
 
     /** A surface refusal, in the same envelope. */
     public static RefusalPayload of(SurfaceException e) {
-        return new RefusalPayload(e.reason().name(), message(e.reason(), e.attempted()),
-            dataOf(e.reason(), e.offenders(), e.accepts()));
+        Map<String, Object> data = dataOf(e.reason(), e.offenders(), e.accepts());
+        return new RefusalPayload(e.reason().name(),
+            message(e.reason(), e.attempted().map(VerbName::declared).orElse(null)),
+            data.isEmpty() ? null : data);
     }
 
     /**
@@ -101,23 +103,24 @@ public record RefusalPayload(String reason, String message, Object data) {
         return new RefusalPayload(code.name(), message(code, null), Map.of(REFERENCE, reference));
     }
 
-    private static String message(RefusalCode code, String attempted) {
-        VerbName verb = attempted == null ? null : VerbName.declared(attempted);
+    /** @param attempted the verb the text names; absent where it names none */
+    private static String message(RefusalCode code, @Nullable VerbName attempted) {
         return RefusalCatalogue.message(code,
-            new RefusalCatalogue.Context(verb, RefusalCatalogue.boundOf(code)));
+            new RefusalCatalogue.Context(attempted, RefusalCatalogue.boundOf(code).orElse(null)));
     }
 
     /**
-     * The detail under {@code data}, made of declared paths only. Absent rather
-     * than empty when there is none: an empty map is a member, and a caller
-     * reading the key set would see a difference where the node says there is
-     * none.
+     * The detail under {@code data}, made of declared paths only; empty where
+     * there is none. The envelope then carries no {@code data} rather than an
+     * empty one: an empty map is a member, and a caller reading the key set
+     * would see a difference where the node says there is none.
      */
-    private static Object dataOf(RefusalCode code, List<String> offenders, List<String> accepts) {
+    private static Map<String, Object> dataOf(RefusalCode code, List<String> offenders,
+                                              List<String> accepts) {
         Map<String, Object> data = new LinkedHashMap<>();
         put(data, OFFENDERS, declared(code, offenders));
         put(data, ACCEPTS, declared(code, accepts));
-        return data.isEmpty() ? null : data;
+        return data;
     }
 
     private static List<String> declared(RefusalCode code, List<String> spellings) {

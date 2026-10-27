@@ -175,7 +175,7 @@ public class ItemService {
     }
 
     private Long milestoneFilter(UUID scopeId, long number) {
-        if (planning.milestoneByNumber(scopeId, number) == null) {
+        if (planning.milestoneByNumber(scopeId, number).isEmpty()) {
             throw undeclaredFilterValue(QueryFilter.ITEM_MILESTONE);
         }
         return number;
@@ -770,7 +770,7 @@ public class ItemService {
             item.milestoneNumber = null;
             return true;
         }
-        Milestone milestone = planning.milestoneByNumber(item.scopeId, milestoneNumber);
+        Milestone milestone = planning.milestoneByNumber(item.scopeId, milestoneNumber).orElse(null);
         if (milestone == null) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
@@ -892,7 +892,7 @@ public class ItemService {
      *                 {@code filter.workstream} on a query
      */
     private Workstream workstreamByToken(UUID scopeId, String token, String argument) {
-        Workstream workstream = workstreamRepository.findByToken(scopeId, token);
+        Workstream workstream = workstreamRepository.findByToken(scopeId, token).orElse(null);
         if (workstream == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
@@ -1306,7 +1306,7 @@ public class ItemService {
                 List.of(argument));
         }
         selectors.require(scopeId, Selector.ITEM);
-        Item target = items.byAddress(scopeId, number);
+        Item target = items.byAddress(scopeId, number).orElse(null);
         if (target == null) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
@@ -1316,7 +1316,7 @@ public class ItemService {
     }
 
     private Item require(UUID scopeId, UUID itemId) {
-        return requireIn(scopeId, items.byId(itemId));
+        return requireIn(scopeId, items.byId(itemId).orElse(null));
     }
 
     /**
@@ -1325,7 +1325,7 @@ public class ItemService {
      * here, so the comparison and the write are atomic (C10.2, C11.1).
      */
     private Item requireLocked(UUID scopeId, UUID itemId) {
-        return requireIn(scopeId, items.lockById(itemId));
+        return requireIn(scopeId, items.lockById(itemId).orElse(null));
     }
 
     private static Item requireIn(UUID scopeId, Item item) {
@@ -1408,7 +1408,7 @@ public class ItemService {
         if (workstreamNumber == null) {
             return null;
         }
-        Workstream workstream = workstreamRepository.findByNumber(scopeId, workstreamNumber);
+        Workstream workstream = workstreamRepository.findByNumber(scopeId, workstreamNumber).orElse(null);
         return workstream == null ? null : workstream.token;
     }
 

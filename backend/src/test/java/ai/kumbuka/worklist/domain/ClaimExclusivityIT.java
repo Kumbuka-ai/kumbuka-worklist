@@ -286,6 +286,6 @@ class ClaimExclusivityIT {
 
     /** The claim row of an item; a claim is keyed by the item's place in its scope. */
     private Claim claimOf(UUID itemId) {
-        return claimRows.byItem(itemRows.byId(itemId));
+        return claimRows.byItem(itemRows.byId(itemId).orElseThrow()).orElse(null);
     }
 }

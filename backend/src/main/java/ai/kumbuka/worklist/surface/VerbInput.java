@@ -7,6 +7,8 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -87,8 +89,11 @@ public final class VerbInput {
      * literal vocabulary the whole store was rebuilt to get rid of. What the
      * verb contributes is that the act is a withdrawal; which closed status it
      * lands in is the caller's to say and the domain's to check.
+     *
+     * @param status the status; absent where the body named none, which the
+     *               surface refuses as ARGUMENT_MISSING
      */
-    public record Withdrawal(String status) {
+    public record Withdrawal(@Nullable String status) {
     }
 
     /**
@@ -103,8 +108,11 @@ public final class VerbInput {
      * for a duration and rejects a non-positive one, and it does not fix the
      * duration itself. A number chosen here would be a platform decision
      * wearing an implementation's clothes.
+     *
+     * @param durationSeconds the duration; absent where the body named none,
+     *                        which the surface refuses as ARGUMENT_MISSING
      */
-    public record Lease(Long durationSeconds) {
+    public record Lease(@Nullable Long durationSeconds) {
     }
 
     /**
@@ -113,8 +121,11 @@ public final class VerbInput {
      * <p>Opaque to the surface — the domain compares it as a string. A caller
      * that parses it is a caller that breaks when the generator changes; the
      * check is on the value in the row, not on a shape.
+     *
+     * @param receipt the receipt; absent where the body named none, which the
+     *                surface refuses as ARGUMENT_MISSING
      */
-    public record Release(String receipt) {
+    public record Release(@Nullable String receipt) {
     }
 
     /**
@@ -124,7 +135,12 @@ public final class VerbInput {
      * type both arrive as ids — a declared value travels as its identity
      * rather than as its display name, which is the same rule
      * {@link Fields}'s status carries.
+     *
+     * @param toItem the target item; absent where the body named none, which
+     *               the surface refuses as ARGUMENT_MISSING
+     * @param type   the relation type; absent where the body named none, which
+     *               the surface refuses as ARGUMENT_MISSING
      */
-    public record Edge(String toItem, String type) {
+    public record Edge(@Nullable String toItem, @Nullable String type) {
     }
 }

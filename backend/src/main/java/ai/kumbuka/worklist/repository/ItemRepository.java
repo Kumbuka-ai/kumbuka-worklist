@@ -17,11 +17,13 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -140,29 +142,40 @@ public class ItemRepository {
         return query.setMaxResults(KeysetClause.bound(request)).getResultList();
     }
 
-    /** The item of that id, or null. Scope membership is checked by the caller. */
+    /**
+     * The item of that id, if there is one. Scope membership is checked by the
+     * caller.
+     *
+     * @param itemId the id, or absent where the caller holds none; an absent
+     *               id names no item
+     */
     @Transactional
-    public Item byId(UUID itemId) {
-        return itemId == null ? null : em.find(Item.class, itemId);
+    public Optional<Item> byId(@Nullable UUID itemId) {
+        return itemId == null ? Optional.empty() : Optional.ofNullable(em.find(Item.class, itemId));
     }
 
     /**
      * The item of that id, locked for the caller's transaction and read as it
-     * stands under the lock, or null (C10.2, C11.1).
+     * stands under the lock, if there is one (C10.2, C11.1).
      *
      * <p>Every write that checks the item's conflict token loads it here. Two
      * writers with one token then decide one after the other, and the second
      * compares against what the first wrote.
+     *
+     * @param itemId the id, or absent where the caller holds none; an absent
+     *               id names no item
      */
     @Transactional
-    public Item lockById(UUID itemId) {
-        Item item = itemId == null ? null
-            : em.find(Item.class, itemId, LockModeType.PESSIMISTIC_WRITE);
-        return item == null ? null : underLock(item);
+    public Optional<Item> lockById(@Nullable UUID itemId) {
+        if (itemId == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(em.find(Item.class, itemId, LockModeType.PESSIMISTIC_WRITE))
+            .map(this::underLock);
     }
 
     /**
-     * The item at one address, or null.
+     * The item at one address, if there is one.
      *
      * <p>The store is keyed by a surrogate id and the surface addresses by
      * number, so something has to turn the second into the first. It is here
@@ -175,15 +188,14 @@ public class ItemRepository {
      * number name one item; the view selector takes no part in it any more.
      */
     @Transactional
-    public Item byAddress(UUID scopeId, long number) {
+    public Optional<Item> byAddress(UUID scopeId, long number) {
         return em.createQuery(
                 "SELECT i FROM Item i WHERE i.scopeId = :scope AND i.number = :number",
                 Item.class)
             .setParameter(P_SCOPE, scopeId)
             .setParameter("number", number)
             .getResultStream()
-            .findFirst()
-            .orElse(null);
+            .findFirst();
     }
 
     /** Every relation out of an item, asserted and withdrawn alike. */

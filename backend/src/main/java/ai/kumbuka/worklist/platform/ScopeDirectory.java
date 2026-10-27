@@ -201,10 +201,7 @@ public class ScopeDirectory {
      * wrong thing.
      */
     private void requireSessionBound() {
-        Object tenant = scopes.boundTenant();
-        Object subject = scopes.boundSubject();
-
-        if (tenant == null || subject == null) {
+        if (scopes.boundTenant().isEmpty() || scopes.boundSubject().isEmpty()) {
             LOG.warnf("directory call with unbound session: %s",
                 WorklistException.Reason.SESSION_NOT_BOUND);
             throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND);

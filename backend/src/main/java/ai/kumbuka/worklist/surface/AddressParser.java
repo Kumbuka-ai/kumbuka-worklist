@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Selector;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.regex.Pattern;
@@ -108,11 +109,11 @@ public final class AddressParser {
      * What an address points at, once the grammar has held.
      *
      * @param view   one of the three, always present
-     * @param number the object's number, or null for {@link #CURRENT}
-     * @param member the item number of a membership, or null when the address
+     * @param number the object's number; absent for {@link #CURRENT}
+     * @param member the item number of a membership; absent when the address
      *               names the iteration itself
      */
-    public record Target(String view, Long number, Long member) {
+    public record Target(String view, @Nullable Long number, @Nullable Long member) {
 
         /** Whether the address is the moving pointer rather than a number. */
         public boolean isCurrent() {
@@ -218,8 +219,11 @@ public final class AddressParser {
      * mean two spellings of one membership, one of which cannot be written
      * through — so it is refused for both, which is fail-closed and one rule
      * instead of two.
+     *
+     * @param rawItem the item segment; absent where the address carried none,
+     *                which is refused as malformed
      */
-    public static Target membership(String rawView, String rawIteration, String rawItem) {
+    public static Target membership(String rawView, String rawIteration, @Nullable String rawItem) {
         String view = view(rawView);
         if (!Selector.ITERATION.equals(view)) {
             throw malformed();
@@ -287,7 +291,7 @@ public final class AddressParser {
      * from an exception thrown by the parser would put the refusal in the
      * catch block of a method that is supposed to decide it.
      */
-    private static long number(String raw) {
+    private static long number(@Nullable String raw) {
         String candidate = requirePresent(raw);
         if (!NUMBER.matcher(candidate).matches()) {
             throw malformed();
@@ -295,7 +299,7 @@ public final class AddressParser {
         return Long.parseLong(candidate);
     }
 
-    private static String requirePresent(String raw) {
+    private static String requirePresent(@Nullable String raw) {
         if (raw == null || raw.isBlank()) {
             throw malformed();
         }

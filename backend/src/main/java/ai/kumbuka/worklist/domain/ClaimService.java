@@ -124,7 +124,7 @@ public class ClaimService {
         Duration lease = requirePositive(duration);
 
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        Claim held = claims.lockByItem(item);
+        Claim held = claims.lockByItem(item).orElse(null);
         if (held != null && held.liveAt(now)) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_HELD,
@@ -157,7 +157,7 @@ public class ClaimService {
     public Map<String, Object> release(UUID scopeId, UUID itemId, String subject,
             String receipt) {
         Item item = requireItem(scopeId, itemId);
-        Claim claim = claims.lockByItem(item);
+        Claim claim = claims.lockByItem(item).orElse(null);
         if (claim == null || !claim.liveAt(clock.instant())) {
             throw new WorklistException(
                 WorklistException.Reason.CLAIM_ABSENT,
@@ -213,7 +213,7 @@ public class ClaimService {
         Duration lease = requirePositive(duration);
 
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        Item item = claims.nextClaimable(scopeId, now);
+        Item item = claims.nextClaimable(scopeId, now).orElse(null);
         if (item == null) {
             // Read `hasAnyItems` once: the answer is stable inside this
             // transaction, and calling it twice is a second query where a
@@ -226,7 +226,7 @@ public class ClaimService {
                 List.of());
         }
 
-        Claim held = claims.lockByItem(item);
+        Claim held = claims.lockByItem(item).orElse(null);
         if (held != null && held.liveAt(now)) {
             // A race we lost between reading and locking: another agent has
             // taken this exact row in the meantime. Reported as a routine
@@ -325,7 +325,7 @@ public class ClaimService {
     public static final String F_DURATION_SECONDS = "duration_seconds";
 
     private Item requireItem(UUID scopeId, UUID itemId) {
-        Item item = items.byId(itemId);
+        Item item = items.byId(itemId).orElse(null);
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,

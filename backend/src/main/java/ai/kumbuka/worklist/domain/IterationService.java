@@ -465,7 +465,7 @@ public class IterationService extends PlanningService {
 
     /** The iteration of that id in that scope, or a typed refusal. */
     private Iteration require(UUID scopeId, UUID iterationId) {
-        return requireIn(scopeId, planning.iterationById(iterationId));
+        return requireIn(scopeId, planning.iterationById(iterationId).orElse(null));
     }
 
     /**
@@ -474,7 +474,7 @@ public class IterationService extends PlanningService {
      * write it (C10.2, C11.1).
      */
     private Iteration requireLocked(UUID scopeId, UUID iterationId) {
-        return requireIn(scopeId, planning.lockIterationById(iterationId));
+        return requireIn(scopeId, planning.lockIterationById(iterationId).orElse(null));
     }
 
     private static Iteration requireIn(UUID scopeId, Iteration iteration) {

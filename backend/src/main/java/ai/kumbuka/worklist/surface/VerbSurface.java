@@ -26,10 +26,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -151,10 +154,13 @@ public class VerbSurface {
      * would answer with an address that resolves to a refusal on the next call.
      * The item allocator asks anyway; the two axes allocate from their own marks
      * and would not.
+     *
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
      */
     @Transactional
     public Result create(String subject, String rawScope, String rawView,
-                         VerbInput.Fields body) {
+                         VerbInput.@Nullable Fields body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         refuseWriteOnDeclaredView(in.view(), "create");
         addresses.requireView(in.scopeId(), in.view());
@@ -239,10 +245,15 @@ public class VerbSurface {
      * {@link VerbInput.Fields#withToken}. A write with no token is refused
      * before the domain is entered, because the domain's refusal would be about
      * a stale token and this one is about an absent one.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
      */
     @Transactional
     public Result update(String subject, String rawScope, String rawView, String rawId,
-                         String conflictToken, VerbInput.Fields body) {
+                         @Nullable String conflictToken, VerbInput.@Nullable Fields body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         refuseWriteOnDeclaredView(in.view(), "update");
         AddressParser.Target target = AddressParser.target(rawView, rawId);
@@ -275,10 +286,13 @@ public class VerbSurface {
      * question about the store, and a surface that answered it — by executing
      * something, or by refusing on its own authority — would be deciding a
      * specification gap in an adapter. See {@link ItemService#accept}.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
      */
     @Transactional
     public Result accept(String subject, String rawScope, String rawView, String rawId,
-                         String conflictToken) {
+                         @Nullable String conflictToken) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "accept");
         UUID id = resolve(in, target);
@@ -315,10 +329,15 @@ public class VerbSurface {
      * which values a scope closes with is its declaration, and that a withdrawal
      * is terminal is the platform's. A terminal status named here would be the
      * literal vocabulary the store was rebuilt to remove.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
      */
     @Transactional
     public Result withdraw(String subject, String rawScope, String rawView, String rawId,
-                           String conflictToken, VerbInput.Withdrawal body) {
+                           @Nullable String conflictToken, VerbInput.@Nullable Withdrawal body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "withdraw");
         UUID id = resolve(in, target);
@@ -336,10 +355,13 @@ public class VerbSurface {
      * an item: an item's terminality is a declared status reached through
      * {@code update}, and the asymmetry against the sibling scheme is a decision
      * — an item is mutable for its whole life, an exchange freezes.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
      */
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
-                        String conflictToken) {
+                        @Nullable String conflictToken) {
         return close(subject, rawScope, rawView, rawId, conflictToken, null);
     }
 
@@ -352,10 +374,14 @@ public class VerbSurface {
      * argument on an act that has no place for it. Adapters read the
      * body for {@code produced} and pass it here; the surface refuses a
      * non-null value on the milestone path.
+     *
+     * @param produced the produced-name; absent where the caller sent none
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
      */
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
-                        String conflictToken, String produced) {
+                        @Nullable String conflictToken, @Nullable String produced) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         requireWritable(target);
@@ -388,10 +414,13 @@ public class VerbSurface {
      * pointer being moved lives there, and a token of the iteration would guard
      * the wrong row: two callers advancing at once would both hold a valid
      * iteration token and both move the pointer.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
      */
     @Transactional
     public Result advance(String subject, String rawScope, String rawView,
-                          String conflictToken) {
+                          @Nullable String conflictToken) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITERATION.equals(in.view())) {
             throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "advance");
@@ -422,10 +451,17 @@ public class VerbSurface {
         return at(target, memberships.read(in.scopeId(), at.iterationId(), at.itemId()));
     }
 
-    /** Adds an item to an iteration, at the end of its order. */
+    /**
+     * Adds an item to an iteration, at the end of its order.
+     *
+     * @param rawItem       the item segment of the membership address; absent where
+     *                      the address carried none, which this surface refuses
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     */
     @Transactional
     public Result plan(String subject, String rawScope, String rawView, String rawIteration,
-                       String rawItem, String conflictToken) {
+                       @Nullable String rawItem, @Nullable String conflictToken) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
@@ -436,10 +472,17 @@ public class VerbSurface {
         return result;
     }
 
-    /** Removes it again. */
+    /**
+     * Removes it again.
+     *
+     * @param rawItem       the item segment of the membership address; absent where
+     *                      the address carried none, which this surface refuses
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     */
     @Transactional
     public Result unplan(String subject, String rawScope, String rawView, String rawIteration,
-                         String rawItem, String conflictToken) {
+                         @Nullable String rawItem, @Nullable String conflictToken) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
@@ -450,11 +493,18 @@ public class VerbSurface {
         return result;
     }
 
-    /** Changes a membership — its status in this iteration, above all. */
+    /**
+     * Changes a membership — its status in this iteration, above all.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
+     */
     @Transactional
     public Result updateMembership(String subject, String rawScope, String rawView,
-                                   String rawIteration, String rawItem, String conflictToken,
-                                   VerbInput.Fields body) {
+                                   String rawIteration, String rawItem, @Nullable String conflictToken,
+                                   VerbInput.@Nullable Fields body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
@@ -480,10 +530,13 @@ public class VerbSurface {
      * milestone or an iteration has no claim to take, and refusing the
      * mismatched view here says so as a category error rather than as a
      * cascaded not-found from the id lookup.
+     *
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
      */
     @Transactional
     public Result claim(String subject, String rawScope, String rawView, String rawId,
-                        VerbInput.Lease body) {
+                        VerbInput.@Nullable Lease body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "claim");
         UUID id = resolve(in, target);
@@ -501,10 +554,13 @@ public class VerbSurface {
      * checked against the row. A caller that has to present two proofs of hold
      * for the same act is a caller doing two things at once, and one of the
      * two would eventually stop meaning what it says.
+     *
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
      */
     @Transactional
     public Result release(String subject, String rawScope, String rawView, String rawId,
-                          VerbInput.Release body) {
+                          VerbInput.@Nullable Release body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "release");
         UUID id = resolve(in, target);
@@ -523,10 +579,13 @@ public class VerbSurface {
      * is exactly one. What is drawn is the oldest unclaimed addressable item,
      * and the domain runs the pick and the write in one transaction so the
      * two do not race.
+     *
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
      */
     @Transactional
     public Result claimNext(String subject, String rawScope, String rawView,
-                            VerbInput.Lease body) {
+                            VerbInput.@Nullable Lease body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         if (!Selector.ITEM.equals(in.view())) {
             throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "claim_next");
@@ -557,10 +616,15 @@ public class VerbSurface {
      * <p>Idempotent under the triple: reasserting an edge that already exists
      * writes nothing, exactly as the whole-set rewrite in {@code update}
      * treats an unchanged entry.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
      */
     @Transactional
     public Result relate(String subject, String rawScope, String rawView, String rawId,
-                         String conflictToken, VerbInput.Edge body) {
+                         @Nullable String conflictToken, VerbInput.@Nullable Edge body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "relate");
         UUID from = resolve(in, target);
@@ -575,10 +639,17 @@ public class VerbSurface {
         return at(target, answered);
     }
 
-    /** Withdraw one asserted edge from this item to another. */
+    /**
+     * Withdraw one asserted edge from this item to another.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param body          the body the transport carried; absent where it carried
+     *                      none, which this surface refuses where the verb needs one
+     */
     @Transactional
     public Result unrelate(String subject, String rawScope, String rawView, String rawId,
-                           String conflictToken, VerbInput.Edge body) {
+                           @Nullable String conflictToken, VerbInput.@Nullable Edge body) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "unrelate");
         UUID from = resolve(in, target);
@@ -640,9 +711,11 @@ public class VerbSurface {
      *
      * @param at the id part where the call carried one, so that a caller who got
      *           the address wrong is told about the address first
+     * @param at            the id segment of the address; absent where the address
+     *                      names a collection
      */
     @Transactional
-    public void uncarried(String subject, String rawScope, String rawView, String at,
+    public void uncarried(String subject, String rawScope, String rawView, @Nullable String at,
                           String verb) {
         entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
@@ -658,9 +731,12 @@ public class VerbSurface {
      * "Not carried" says the act does not exist here and never will, and a caller
      * that believes it stops asking. This one says the act belongs here and is
      * not ready, which is a different thing to plan around.
+     *
+     * @param at            the id segment of the address; absent where the address
+     *                      names a collection
      */
     @Transactional
-    public void unbuilt(String subject, String rawScope, String rawView, String at,
+    public void unbuilt(String subject, String rawScope, String rawView, @Nullable String at,
                         String verb) {
         entry(subject, rawScope, rawView, Access.READ);
         if (at != null) {
@@ -721,23 +797,30 @@ public class VerbSurface {
 
     /** The row one address names, with the vocabulary checked on the way. */
     private UUID resolve(Entry in, AddressParser.Target target) {
-        if (target.isCurrent()) {
+        Long number = target.number();
+        if (number == null) {
+            // The moving pointer: what Target.isCurrent() says, read here off
+            // the component itself so the compiler sees the number is present.
             return addresses.currentIteration(in.scopeId());
         }
         return switch (target.view()) {
-            case Selector.ITEM -> addresses.itemAt(in.scopeId(), target.number());
-            case Selector.ITERATION -> addresses.iterationAt(in.scopeId(), target.number());
-            case Selector.MILESTONE -> addresses.milestoneAt(in.scopeId(), target.number());
-            case Selector.WORKSTREAM -> addresses.workstreamAt(in.scopeId(), target.number());
+            case Selector.ITEM -> addresses.itemAt(in.scopeId(), number);
+            case Selector.ITERATION -> addresses.iterationAt(in.scopeId(), number);
+            case Selector.MILESTONE -> addresses.milestoneAt(in.scopeId(), number);
+            case Selector.WORKSTREAM -> addresses.workstreamAt(in.scopeId(), number);
             default -> throw unreachableView(target.view());
         };
     }
 
-    /** Both rows a membership address names, resolved in the order it is written. */
+    /**
+     * Both rows a membership address names, resolved in the order it is written.
+     * {@link AddressParser#membership} parses both numbers or refuses, so a
+     * membership target carries both.
+     */
     private Membership membership(Entry in, AddressParser.Target target) {
         return new Membership(
-            addresses.iterationAt(in.scopeId(), target.number()),
-            addresses.itemAt(in.scopeId(), target.member()));
+            addresses.iterationAt(in.scopeId(), Objects.requireNonNull(target.number())),
+            addresses.itemAt(in.scopeId(), Objects.requireNonNull(target.member())));
     }
 
     // ======================================================================
@@ -785,7 +868,7 @@ public class VerbSurface {
         return target;
     }
 
-    private static String requireToken(String presented) {
+    private static String requireToken(@Nullable String presented) {
         if (presented == null || presented.isBlank()) {
             throw new SurfaceException(RefusalCode.CONFLICT_TOKEN_MISSING);
         }
@@ -798,7 +881,7 @@ public class VerbSurface {
      * when nothing arrived (DEC-0043 R17: an absent body and a body of nulls
      * are the same call).
      */
-    private static <T> T required(T body, String... arguments) {
+    private static <T> T required(@Nullable T body, String... arguments) {
         if (body == null) {
             throw SurfaceException.missing(arguments);
         }
@@ -806,7 +889,7 @@ public class VerbSurface {
     }
 
     /** A lease duration, refused when the body arrives without a positive one. */
-    private static Duration requireLease(VerbInput.Lease body) {
+    private static Duration requireLease(VerbInput.@Nullable Lease body) {
         VerbInput.Lease lease = required(body, DURATION);
         if (lease.durationSeconds() == null) {
             throw SurfaceException.missing(DURATION);
@@ -821,7 +904,7 @@ public class VerbSurface {
      * A mandatory text argument that names a declared value or an address,
      * refused by its declared name and never by what arrived.
      */
-    private static String requireLabel(String name, String raw) {
+    private static String requireLabel(String name, @Nullable String raw) {
         String candidate = requireText(name, raw);
         if (UUID_SHAPE.matcher(candidate).matches()) {
             throw SurfaceException.invalid(name);
@@ -830,7 +913,7 @@ public class VerbSurface {
     }
 
     /** A mandatory text argument, refused by its declared name when absent or empty. */
-    private static String requireText(String name, String raw) {
+    private static String requireText(String name, @Nullable String raw) {
         if (raw == null) {
             throw SurfaceException.missing(name);
         }
@@ -876,7 +959,7 @@ public class VerbSurface {
     public record Result(AddressParser.Target address, Map<String, Object> fields) {
 
         /**
-         * The conflict token the answer carries, or null.
+         * The conflict token the answer carries, where it carries one.
          *
          * <p>Read off the projection here so that an adapter dressing this in a
          * transport header does not have to know the domain's field names. The
@@ -885,9 +968,9 @@ public class VerbSurface {
          * because that is where HTTP looks for it. One value, two places it is
          * legible from, and this method is the single place that knows both.
          */
-        public String conflictToken() {
-            Object token = fields.get(Field.CONFLICT_TOKEN.canonicalName());
-            return token == null ? null : String.valueOf(token);
+        public Optional<String> conflictToken() {
+            return Optional.ofNullable(fields.get(Field.CONFLICT_TOKEN.canonicalName()))
+                .map(String::valueOf);
         }
     }
 
@@ -899,11 +982,13 @@ public class VerbSurface {
      * changed shape. A bare array cannot grow a sibling field, and this
      * surface is a published contract from the day it answers.
      *
-     * <p>{@code next} is the cursor to the rest, null exactly when nothing
+     * <p>{@code next} is the cursor to the rest, absent exactly when nothing
      * follows. A silent ceiling is the sprint-169 defect one layer up — an
      * answer that reads complete and is not.
+     *
+     * @param next the cursor to the rest; absent exactly when nothing follows
      */
-    public record Listing(List<Result> objects, String next) {
+    public record Listing(List<Result> objects, @Nullable String next) {
     }
 
     /** Everything one call needs once the first two stages have held. */

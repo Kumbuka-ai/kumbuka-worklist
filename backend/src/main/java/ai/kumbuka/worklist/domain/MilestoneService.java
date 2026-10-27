@@ -282,7 +282,7 @@ public class MilestoneService extends PlanningService {
         }
 
         if (Milestone.ACTIVE.equals(status)) {
-            Milestone current = planning.activeMilestone(milestone.scopeId);
+            Milestone current = planning.activeMilestone(milestone.scopeId).orElse(null);
             if (current != null && !current.id.equals(milestone.id)) {
                 current.status = Milestone.PLANNED;
                 current.stamp(clock.instant());
@@ -332,7 +332,7 @@ public class MilestoneService extends PlanningService {
      * not true of the call.
      */
     private Milestone require(UUID scopeId, UUID milestoneId) {
-        return requireIn(scopeId, planning.milestoneById(milestoneId));
+        return requireIn(scopeId, planning.milestoneById(milestoneId).orElse(null));
     }
 
     /**
@@ -340,7 +340,7 @@ public class MilestoneService extends PlanningService {
      * checks the milestone's token loads it here (C10.2, C11.1).
      */
     private Milestone requireLocked(UUID scopeId, UUID milestoneId) {
-        return requireIn(scopeId, planning.lockMilestoneById(milestoneId));
+        return requireIn(scopeId, planning.lockMilestoneById(milestoneId).orElse(null));
     }
 
     private static Milestone requireIn(UUID scopeId, Milestone milestone) {

@@ -1,7 +1,15 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jspecify.annotations.Nullable;
 
 import java.util.UUID;
 
@@ -31,9 +39,12 @@ public class ConfiguredTenantResolver implements TenantResolver {
      * configuration validation, with a conversion message that names the key
      * and nothing else. Reading it raw is what lets the refusal say which
      * variable to set and why there is no default.
+     *
+     * <p>Absent only before the container has injected it; the guard refuses
+     * an absent value as unconfigured.
      */
     @ConfigProperty(name = TenantConfigurationGuard.KEY)
-    String tenantId;
+    @Nullable String tenantId;
 
     @Override
     public UUID currentTenant() {

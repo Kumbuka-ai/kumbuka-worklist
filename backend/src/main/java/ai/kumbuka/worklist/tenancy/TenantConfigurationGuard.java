@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import io.quarkus.runtime.StartupEvent;
@@ -6,6 +13,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.interceptor.Interceptor;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jspecify.annotations.Nullable;
 
 import java.util.UUID;
 
@@ -70,8 +78,13 @@ public class TenantConfigurationGuard {
     public static final String KEY = "worklist.tenant-id";
     public static final String ENV_VAR = "WORKLIST_TENANT_ID";
 
+    /**
+     * The configured tenant, as the raw string. Absent only before the
+     * container has injected it; {@link #requireUsable} refuses an absent
+     * value as unconfigured, like a blank one.
+     */
     @ConfigProperty(name = KEY)
-    String tenantId;
+    @Nullable String tenantId;
 
     void onStart(@Observes @Priority(Interceptor.Priority.PLATFORM_BEFORE) StartupEvent event) {
         requireUsable(tenantId);
@@ -88,7 +101,7 @@ public class TenantConfigurationGuard {
      * @throws TenantNotConfigured when the value is absent, blank, the
      *                             sentinel, or not a uuid
      */
-    public static UUID requireUsable(String raw) {
+    public static UUID requireUsable(@Nullable String raw) {
         if (raw == null || raw.isBlank()) {
             throw new TenantNotConfigured(
                 "it carries no value at all. An EMPTY environment variable is not an "

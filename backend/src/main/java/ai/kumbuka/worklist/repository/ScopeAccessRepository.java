@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -98,18 +105,18 @@ public class ScopeAccessRepository {
             .getSingleResult();
     }
 
-    /** The bound tenant of this transaction, or null when nothing is bound. */
+    /** The bound tenant of this transaction; absent when nothing is bound. */
     @Transactional
-    public Object boundTenant() {
-        return em.createNativeQuery(
-            "SELECT NULLIF(current_setting('app.tenant_id', true), '')").getSingleResult();
+    public Optional<Object> boundTenant() {
+        return Optional.ofNullable(em.createNativeQuery(
+            "SELECT NULLIF(current_setting('app.tenant_id', true), '')").getSingleResult());
     }
 
-    /** The bound subject of this transaction, or null when nothing is bound. */
+    /** The bound subject of this transaction; absent when nothing is bound. */
     @Transactional
-    public Object boundSubject() {
-        return em.createNativeQuery(
-            "SELECT NULLIF(current_setting('app.subject', true), '')").getSingleResult();
+    public Optional<Object> boundSubject() {
+        return Optional.ofNullable(em.createNativeQuery(
+            "SELECT NULLIF(current_setting('app.subject', true), '')").getSingleResult());
     }
 
     /**

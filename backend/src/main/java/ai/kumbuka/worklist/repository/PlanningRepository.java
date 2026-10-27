@@ -21,6 +21,7 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.TypedQuery;
 import jakarta.transaction.Transactional;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -28,6 +29,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -70,25 +72,39 @@ public class PlanningRepository {
     // The goal axis
     // ------------------------------------------------------------------
 
-    /** The milestone of that id, or null. Scope membership is checked by the caller. */
+    /**
+     * The milestone of that id, if there is one. Scope membership is checked by
+     * the caller.
+     *
+     * @param milestoneId the id, or absent where the caller holds none; an absent id
+     *            names no milestone
+     */
     @Transactional
-    public Milestone milestoneById(UUID milestoneId) {
-        return milestoneId == null ? null : em.find(Milestone.class, milestoneId);
+    public Optional<Milestone> milestoneById(@Nullable UUID milestoneId) {
+        return milestoneId == null ? Optional.empty()
+            : Optional.ofNullable(em.find(Milestone.class, milestoneId));
     }
 
     /**
      * The milestone of that id, locked and read as it stands under the lock,
-     * or null (C10.2, C11.1). Every write that checks its token loads it here.
+     * if there is one (C10.2, C11.1). Every write that checks its token loads
+     * it here.
+     *
+     * @param milestoneId the id, or absent where the caller holds none; an absent id
+     *            names no milestone
      */
     @Transactional
-    public Milestone lockMilestoneById(UUID milestoneId) {
-        Milestone milestone = milestoneId == null ? null
-            : em.find(Milestone.class, milestoneId, LockModeType.PESSIMISTIC_WRITE);
-        return milestone == null ? null : underLock(milestone);
+    public Optional<Milestone> lockMilestoneById(@Nullable UUID milestoneId) {
+        if (milestoneId == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(
+                em.find(Milestone.class, milestoneId, LockModeType.PESSIMISTIC_WRITE))
+            .map(this::underLock);
     }
 
     /**
-     * The milestone at that number in a scope, or null.
+     * The milestone at that number in a scope, if there is one.
      *
      * <p>The surface addresses by number and the store is keyed by a surrogate
      * id; this is where the one becomes the other. Numbers on this axis come
@@ -96,7 +112,7 @@ public class PlanningRepository {
      * scope and number identifies at most one row for the life of the scope.
      */
     @Transactional
-    public Milestone milestoneByNumber(UUID scopeId, long number) {
+    public Optional<Milestone> milestoneByNumber(UUID scopeId, long number) {
         return first(em.createQuery(
                 "SELECT m FROM Milestone m WHERE m.scopeId = :scope AND m.number = :number",
                 Milestone.class)
@@ -129,7 +145,7 @@ public class PlanningRepository {
     }
 
     /**
-     * The scope's active milestone, or null.
+     * The scope's active milestone, if there is one.
      *
      * <p>At most one exists, held by a partial unique index rather than by
      * this query. What the query is for is the demotion: setting one active
@@ -137,7 +153,7 @@ public class PlanningRepository {
      * have to hold across two.
      */
     @Transactional
-    public Milestone activeMilestone(UUID scopeId) {
+    public Optional<Milestone> activeMilestone(UUID scopeId) {
         return first(em.createQuery(
                 "SELECT m FROM Milestone m WHERE m.scopeId = :scope AND m.status = :status",
                 Milestone.class)
@@ -157,27 +173,39 @@ public class PlanningRepository {
     // The time axis
     // ------------------------------------------------------------------
 
-    /** The iteration of that id, or null. */
+    /**
+     * The iteration of that id, if there is one.
+     *
+     * @param iterationId the id, or absent where the caller holds none; an absent id
+     *            names no iteration
+     */
     @Transactional
-    public Iteration iterationById(UUID iterationId) {
-        return iterationId == null ? null : em.find(Iteration.class, iterationId);
+    public Optional<Iteration> iterationById(@Nullable UUID iterationId) {
+        return iterationId == null ? Optional.empty()
+            : Optional.ofNullable(em.find(Iteration.class, iterationId));
     }
 
     /**
      * The iteration of that id, locked and read as it stands under the lock,
-     * or null (C10.2, C11.1). Every write that checks its token, its own or
-     * one presented for a membership, loads it here.
+     * if there is one (C10.2, C11.1). Every write that checks its token, its
+     * own or one presented for a membership, loads it here.
+     *
+     * @param iterationId the id, or absent where the caller holds none; an absent id
+     *            names no iteration
      */
     @Transactional
-    public Iteration lockIterationById(UUID iterationId) {
-        Iteration iteration = iterationId == null ? null
-            : em.find(Iteration.class, iterationId, LockModeType.PESSIMISTIC_WRITE);
-        return iteration == null ? null : underLock(iteration);
+    public Optional<Iteration> lockIterationById(@Nullable UUID iterationId) {
+        if (iterationId == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(
+                em.find(Iteration.class, iterationId, LockModeType.PESSIMISTIC_WRITE))
+            .map(this::underLock);
     }
 
-    /** The iteration at that number in a scope, or null. See {@link #milestoneByNumber}. */
+    /** The iteration at that number in a scope, if there is one. See {@link #milestoneByNumber}. */
     @Transactional
-    public Iteration iterationByNumber(UUID scopeId, long number) {
+    public Optional<Iteration> iterationByNumber(UUID scopeId, long number) {
         return first(em.createQuery(
                 "SELECT i FROM Iteration i WHERE i.scopeId = :scope AND i.number = :number",
                 Iteration.class)
@@ -235,11 +263,11 @@ public class PlanningRepository {
     // Membership
     // ------------------------------------------------------------------
 
-    /** One membership, or null. */
+    /** One membership, if there is one. */
     @Transactional
-    public IterationMembership membership(UUID scopeId, long iterationNumber, long itemNumber) {
-        return em.find(IterationMembership.class,
-            new IterationMembership.Key(scopeId, iterationNumber, itemNumber));
+    public Optional<IterationMembership> membership(UUID scopeId, long iterationNumber, long itemNumber) {
+        return Optional.ofNullable(em.find(IterationMembership.class,
+            new IterationMembership.Key(scopeId, iterationNumber, itemNumber)));
     }
 
     /** Every membership of an iteration, in its sequence. */
@@ -295,9 +323,9 @@ public class PlanningRepository {
     // The scope's settings
     // ------------------------------------------------------------------
 
-    /** The scope's settings row, or null if the scope has not been opened. */
+    /** The scope's settings row; absent if the scope has not been opened. */
     @Transactional
-    public ScopeSetting settingOf(UUID scopeId) {
+    public Optional<ScopeSetting> settingOf(UUID scopeId) {
         return first(settingQuery(scopeId));
     }
 
@@ -311,10 +339,10 @@ public class PlanningRepository {
      * on its own counters.
      */
     @Transactional
-    public ScopeSetting lockSettingOf(UUID scopeId) {
-        ScopeSetting setting = first(settingQuery(scopeId)
-            .setLockMode(LockModeType.PESSIMISTIC_WRITE));
-        return setting == null ? null : underLock(setting);
+    public Optional<ScopeSetting> lockSettingOf(UUID scopeId) {
+        return first(settingQuery(scopeId)
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE))
+            .map(this::underLock);
     }
 
     private TypedQuery<ScopeSetting> settingQuery(UUID scopeId) {
@@ -355,11 +383,11 @@ public class PlanningRepository {
         em.refresh(row);
     }
 
-    private static <T> T first(TypedQuery<T> query) {
+    private static <T> Optional<T> first(TypedQuery<T> query) {
         try {
-            return query.setMaxResults(1).getSingleResult();
+            return Optional.of(query.setMaxResults(1).getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 

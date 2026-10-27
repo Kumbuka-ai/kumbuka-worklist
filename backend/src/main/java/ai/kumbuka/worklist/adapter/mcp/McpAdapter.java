@@ -31,10 +31,12 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -118,13 +120,13 @@ public class McpAdapter {
     @Inject ObjectMapper json;
 
     @POST
-    public Response rpc(Map<String, Object> request) {
+    public Response rpc(@Nullable Map<String, Object> request) {
         if (request == null || !JSONRPC.equals(request.get(KEY_JSONRPC))) {
             return error(null, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolEnvelope"));
         }
 
         Object id = request.get(KEY_ID);
-        String method = string(request, "method");
+        String method = string(request, "method").orElse("");
 
         // A notification carries no id and takes no answer. Answering one is a
         // protocol error on our side, not a courtesy.
@@ -132,7 +134,7 @@ public class McpAdapter {
             return Response.accepted().build();
         }
 
-        return switch (method == null ? "" : method) {
+        return switch (method) {
             case "initialize" -> result(id, initialize());
             case "tools/list" -> result(id, Map.of("tools", tools()));
             case "tools/call" -> result(id, call(arguments(request, "params")));
@@ -172,7 +174,7 @@ public class McpAdapter {
      * every refusal in this service is a call that was made and answered.
      */
     private Map<String, Object> call(Map<String, Object> params) {
-        String tool = string(params, KEY_NAME);
+        String tool = string(params, KEY_NAME).orElse("");
         Map<String, Object> arguments = present(arguments(params, "arguments"));
 
         try {
@@ -218,8 +220,7 @@ public class McpAdapter {
      * declares and never the name that arrived (R19); nothing is accepted and
      * discarded.
      */
-    private void requireDeclared(String tool, Map<String, Object> in) {
-        List<String> declared = McpTools.argumentsOf(tool);
+    private void requireDeclared(List<String> declared, Map<String, Object> in) {
         if (declared.containsAll(in.keySet())) {
             return;
         }
@@ -232,10 +233,8 @@ public class McpAdapter {
     // ======================================================================
 
     private Object invoke(String tool, Map<String, Object> in) {
-        if (McpTools.argumentsOf(tool) != null) {
-            requireDeclared(tool, in);
-        }
-        return switch (tool == null ? "" : tool) {
+        McpTools.argumentsOf(tool).ifPresent(declared -> requireDeclared(declared, in));
+        return switch (tool) {
             case "create" -> create(in);
             case "read" -> read(in);
             case "update" -> update(in);
@@ -268,26 +267,28 @@ public class McpAdapter {
     private Object create(Map<String, Object> in) {
         String scope = required(in, ARG_SCOPE);
         return dressed(scope, verbs.create(caller.subject(), scope,
-            required(in, ARG_SELECTOR), fields(in)));
+            required(in, ARG_SELECTOR), fields(in).orElse(null)));
     }
 
     private Object read(Map<String, Object> in) {
         Address at = address(in);
-        return dressed(at.scope(), at.isMembership()
+        String member = at.member();
+        return dressed(at.scope(), member != null
             ? verbs.readMembership(caller.subject(), at.scope(), at.view(), at.head(),
-                at.member())
+                member)
             : verbs.read(caller.subject(), at.scope(), at.view(), at.head()));
     }
 
     private Object update(Map<String, Object> in) {
         Address at = address(in);
         String token = required(in, ARG_TOKEN);
+        String member = at.member();
 
-        return dressed(at.scope(), at.isMembership()
+        return dressed(at.scope(), member != null
             ? verbs.updateMembership(caller.subject(), at.scope(), at.view(), at.head(),
-                at.member(), token, fields(in))
+                member, token, fields(in).orElse(null))
             : verbs.update(caller.subject(), at.scope(), at.view(), at.head(), token,
-                fields(in)));
+                fields(in).orElse(null)));
     }
 
     private Object query(Map<String, Object> in) {
@@ -350,7 +351,7 @@ public class McpAdapter {
     private Object claim(Map<String, Object> in) {
         Address at = address(in);
         return dressed(at.scope(), verbs.claim(caller.subject(), at.scope(), at.view(),
-            at.head(), new VerbInput.Lease(requireLong(in))));
+            at.head(), new VerbInput.Lease(requireLong(in).orElse(null))));
     }
     // NOTE: the actor is derived from `subject` inside the surface and
     // handed to the domain; both adapters pass the same value along the same
@@ -366,7 +367,7 @@ public class McpAdapter {
         String scope = required(in, ARG_SCOPE);
         return dressed(scope, verbs.claimNext(caller.subject(), scope,
             required(in, ARG_SELECTOR),
-            new VerbInput.Lease(requireLong(in))));
+            new VerbInput.Lease(requireLong(in).orElse(null))));
     }
 
     private Object relate(Map<String, Object> in) {
@@ -400,12 +401,11 @@ public class McpAdapter {
      * visibility.
      */
     private Object refused(Map<String, Object> in, String verb, boolean unbuilt) {
-        String raw = optional(in, ARG_ADDRESS);
-        AddressParser.Parts at = raw == null ? null : AddressParser.uri(raw);
+        Optional<AddressParser.Parts> at = optional(in, ARG_ADDRESS).map(AddressParser::uri);
 
-        String scope = at == null ? required(in, ARG_SCOPE) : at.scope();
-        String view = at == null ? required(in, ARG_SELECTOR) : at.view();
-        String id = at == null ? null : at.id();
+        String scope = at.map(AddressParser.Parts::scope).orElseGet(() -> required(in, ARG_SCOPE));
+        String view = at.map(AddressParser.Parts::view).orElseGet(() -> required(in, ARG_SELECTOR));
+        String id = at.map(AddressParser.Parts::id).orElse(null);
 
         if (unbuilt) {
             verbs.unbuilt(caller.subject(), scope, view, id, verb);
@@ -426,12 +426,11 @@ public class McpAdapter {
      * receives the parts the REST path already carries separately. Doing it the
      * other way — a surface that took one string — would make the REST adapter
      * join what it had, which is a round trip through a form neither side needs.
+     *
+     * @param member the membership's item segment; absent where the address
+     *               names an object rather than a membership
      */
-    private record Address(String scope, String view, String head, String member) {
-
-        boolean isMembership() {
-            return member != null;
-        }
+    private record Address(String scope, String view, String head, @Nullable String member) {
     }
 
     private Address address(Map<String, Object> in) {
@@ -446,22 +445,22 @@ public class McpAdapter {
     /**
      * The field map of a write.
      *
-     * <p>Absent is null and not an empty map, so that the surface can tell "no
+     * <p>Absent and not an empty map, so that the surface can tell "no
      * arguments arrived" from "an empty object arrived" — the first is a call
      * that forgot something and the second is a caller asking for nothing to
      * change, which the domain answers by writing nothing at all.
      */
     @SuppressWarnings("unchecked")
-    private VerbInput.Fields fields(Map<String, Object> in) {
+    private Optional<VerbInput.Fields> fields(Map<String, Object> in) {
         Object raw = in.get(ARG_FIELDS);
         if (raw == null) {
-            return null;
+            return Optional.empty();
         }
         if (!(raw instanceof Map)) {
             visibleFirst(in, ARG_FIELDS);
             throw SurfaceException.invalid(ARG_FIELDS);
         }
-        return new VerbInput.Fields((Map<String, Object>) raw);
+        return Optional.of(new VerbInput.Fields((Map<String, Object>) raw));
     }
 
     private static Payloads.ObjectResponse dressed(String scope, VerbSurface.Result result) {
@@ -469,7 +468,7 @@ public class McpAdapter {
     }
 
     private String required(Map<String, Object> in, String name) {
-        String value = optional(in, name);
+        String value = optional(in, name).orElse(null);
         if (value == null || value.isBlank()) {
             visibleFirst(in, name);
         }
@@ -489,7 +488,7 @@ public class McpAdapter {
      * argument is the address or the scope itself -- there is nothing to
      * resolve and the argument's own refusal stands.
      */
-    private void visibleFirst(Map<String, Object> in, String refused) {
+    private void visibleFirst(Map<String, Object> in, @Nullable String refused) {
         Object address = ARG_ADDRESS.equals(refused) ? null : in.get(ARG_ADDRESS);
         Object scope = ARG_SCOPE.equals(refused) ? null : in.get(ARG_SCOPE);
         if (address instanceof String text && !text.isBlank()) {
@@ -500,9 +499,8 @@ public class McpAdapter {
         }
     }
 
-    private static String optional(Map<String, Object> in, String name) {
-        Object value = in.get(name);
-        return value == null ? null : value.toString();
+    private static Optional<String> optional(Map<String, Object> in, String name) {
+        return Optional.ofNullable(in.get(name)).map(Object::toString);
     }
 
     /**
@@ -514,18 +512,18 @@ public class McpAdapter {
      * or non-numeric value is a typed refusal — the domain will refuse a
      * non-positive one for its own reason.
      */
-    private Long requireLong(Map<String, Object> in) {
+    private Optional<Long> requireLong(Map<String, Object> in) {
         Object value = in.get(ARG_DURATION);
         if (value == null) {
             // Refused by the surface, behind the scope check.
-            return null;
+            return Optional.empty();
         }
         if (value instanceof Number number) {
-            return number.longValue();
+            return Optional.of(number.longValue());
         }
         if (value instanceof CharSequence text) {
             try {
-                return Long.parseLong(text.toString().trim());
+                return Optional.of(Long.parseLong(text.toString().trim()));
             } catch (NumberFormatException notNumeric) {
                 // fall through to the refusal below
             }
@@ -535,14 +533,13 @@ public class McpAdapter {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> arguments(Map<String, Object> envelope, String key) {
+    private static Map<String, Object> arguments(@Nullable Map<String, Object> envelope, String key) {
         Object value = envelope == null ? null : envelope.get(key);
         return value instanceof Map ? (Map<String, Object>) value : Map.of();
     }
 
-    private static String string(Map<String, Object> envelope, String key) {
-        Object value = envelope == null ? null : envelope.get(key);
-        return value == null ? null : value.toString();
+    private static Optional<String> string(@Nullable Map<String, Object> envelope, String key) {
+        return Optional.ofNullable(envelope == null ? null : envelope.get(key)).map(Object::toString);
     }
 
     // ======================================================================
@@ -588,7 +585,8 @@ public class McpAdapter {
         return Response.ok(envelope).build();
     }
 
-    private static Response error(Object id, int code, String message) {
+    /** @param id the request's id; absent where the request carried none to answer under */
+    private static Response error(@Nullable Object id, int code, String message) {
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put(KEY_JSONRPC, JSONRPC);
         envelope.put(KEY_ID, id);
