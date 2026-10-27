@@ -84,10 +84,10 @@ import java.time.temporal.ChronoUnit;
  * a convention: a write path that forgot it would flush a changed row under
  * the token it had, and a second writer holding that token would get through.
  * So the lifecycle callback {@link #refuseAnUnstampedWrite()} turns the
- * convention into a refusal: the persistence context calls it for
- * every root it found changed, and a change that did not pass the stamp is
- * refused with an {@link IllegalStateException}, which rolls the transaction
- * back. A create is a persist and never reaches it; a write that changes
+ * convention into a refusal: the persistence context calls it for every
+ * root it found changed, and a root changed by a write that never passed the
+ * stamp is refused with an {@link IllegalStateException}, which rolls the
+ * transaction back. A create is a persist and never reaches it; a write that changes
  * nothing flushes nothing and never reaches it either.
  *
  * <p>The flag and the callback sit here, once, rather than on each of the
