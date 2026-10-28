@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -48,18 +49,18 @@ public class SelectorRepository {
     @Inject EntityManager em;
     @Inject Clock clock;
 
-    /** The selector of that token in a scope, or null. */
+    /** The selector of that token in a scope, if there is one. */
     @Transactional
-    public Selector find(UUID scopeId, String token) {
+    public Optional<Selector> find(UUID scopeId, String token) {
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT s FROM Selector s WHERE s.scopeId = :scope AND s.token = :token",
                     Selector.class)
                 .setParameter(P_SCOPE, scopeId)
                 .setParameter(P_TOKEN, token)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
@@ -75,7 +76,7 @@ public class SelectorRepository {
 
     /**
      * The selector's SCOPE-WIDE number space, locked for the caller's
-     * transaction, or null when it has none.
+     * transaction; absent when it has none.
      *
      * <p>The lock is what makes two concurrent acceptances serialise rather
      * than collide, and taking it in the accepting transaction is what makes a
@@ -94,16 +95,16 @@ public class SelectorRepository {
      * reading a column that is due to be dropped.
      */
     @Transactional
-    public NumberSpace lockSpace(Long selectorPk) {
-        NumberSpace space = single(spaceQuery("s.selectorPk = :selector")
-            .setParameter(P_SELECTOR, selectorPk)
-            .setLockMode(LockModeType.PESSIMISTIC_WRITE));
-        return space == null ? null : underLock(space);
+    public Optional<NumberSpace> lockSpace(Long selectorPk) {
+        return single(spaceQuery("s.selectorPk = :selector")
+                .setParameter(P_SELECTOR, selectorPk)
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE))
+            .map(this::underLock);
     }
 
-    /** The selector's number space without a lock, for a read that only reports it. */
+    /** The selector's number space without a lock, for a read that only reports it; absent when it has none. */
     @Transactional
-    public NumberSpace space(Long selectorPk) {
+    public Optional<NumberSpace> space(Long selectorPk) {
         return single(spaceQuery("s.selectorPk = :selector")
             .setParameter(P_SELECTOR, selectorPk));
     }
@@ -123,11 +124,11 @@ public class SelectorRepository {
             "SELECT s FROM NumberSpace s WHERE " + predicate, NumberSpace.class);
     }
 
-    private static NumberSpace single(TypedQuery<NumberSpace> query) {
+    private static Optional<NumberSpace> single(TypedQuery<NumberSpace> query) {
         try {
-            return query.getSingleResult();
+            return Optional.of(query.getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 

@@ -106,11 +106,9 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
             .type(MediaType.APPLICATION_JSON)
             .entity(RefusalPayload.of(e));
 
-        if (e.allow() != null) {
-            // A 405 without Allow refuses without saying what would have worked,
-            // which is the one thing the status is required to carry.
-            response.header(HttpHeaders.ALLOW, e.allow());
-        }
+        // A 405 without Allow refuses without saying what would have worked,
+        // which is the one thing the status is required to carry.
+        e.allow().ifPresent(allow -> response.header(HttpHeaders.ALLOW, allow));
         return response.build();
     }
 

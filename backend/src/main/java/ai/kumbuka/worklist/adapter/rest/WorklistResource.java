@@ -34,9 +34,11 @@ import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The REST exposition of the verb surface.
@@ -135,14 +137,14 @@ public class WorklistResource {
     @Path("{selector}")
     public Response collectionPost(@PathParam("scope") String scope,
                                    @PathParam("selector") String segment,
-                                   @HeaderParam("If-Match") String ifMatch,
-                                   String body) {
+                                   @HeaderParam("If-Match") @Nullable String ifMatch,
+                                   @Nullable String body) {
         var split = CustomMethod.split(segment, CustomMethod.Depth.COLLECTION);
         if (split.isEmpty()) {
             // No colon: a plain collection address, and create is the one
             // writing verb whose set semantics is declared as exactly one.
             return created(scope, verbs.create(caller.subject(), scope, segment,
-                Payloads.fields(readObject(body))));
+                readObject(body).map(Payloads::fields).orElse(null)));
         }
 
         CustomMethod.Split at = split.get();
@@ -154,14 +156,14 @@ public class WorklistResource {
                 COLLECTION_ALLOW);
         }
 
-        return switch (at.method()) {
+        return switch (at.known()) {
             case ADVANCE -> {
                 arguments(scope, body);
                 yield ok(scope, verbs.advance(caller.subject(), scope, at.address(),
-                    unquote(ifMatch)));
+                    unquote(ifMatch).orElse(null)));
             }
             case CLAIM_NEXT -> ok(scope, verbs.claimNext(caller.subject(), scope,
-                at.address(), lease(scope, arguments(scope, body, DURATION))));
+                at.address(), lease(scope, arguments(scope, body, DURATION)).orElse(null)));
             case VALIDATE -> {
                 arguments(scope, body);
                 yield ok(scope, verbs.validate(caller.subject(), scope, at.address()));
@@ -273,10 +275,10 @@ public class WorklistResource {
     public Response update(@PathParam("scope") String scope,
                            @PathParam("selector") String selector,
                            @PathParam("id") String id,
-                           @HeaderParam("If-Match") String ifMatch,
-                           String body) {
+                           @HeaderParam("If-Match") @Nullable String ifMatch,
+                           @Nullable String body) {
         return ok(scope, verbs.update(caller.subject(), scope, selector, id,
-            unquote(ifMatch), Payloads.fields(readObject(body))));
+            unquote(ifMatch).orElse(null), readObject(body).map(Payloads::fields).orElse(null)));
     }
 
     /**
@@ -296,15 +298,15 @@ public class WorklistResource {
     public Response itemPost(@PathParam("scope") String scope,
                              @PathParam("selector") String selector,
                              @PathParam("id") String segment,
-                             @HeaderParam("If-Match") String ifMatch,
-                             String body) {
+                             @HeaderParam("If-Match") @Nullable String ifMatch,
+                             @Nullable String body) {
         CustomMethod.Split at = CustomMethod.split(segment, CustomMethod.Depth.ITEM)
             .filter(CustomMethod.Split::isKnown)
             .orElseThrow(() -> new SurfaceException(
                 RefusalCode.WRITE_ON_TRUNCATED_ADDRESS,
                 ITEM_ALLOW));
 
-        return dispatch(at, scope, selector, unquote(ifMatch), body);
+        return dispatch(at, scope, selector, unquote(ifMatch).orElse(null), body);
     }
 
     /**
@@ -315,28 +317,28 @@ public class WorklistResource {
      * table and the routing cannot drift apart.
      */
     private Response dispatch(CustomMethod.Split at, String scope, String selector,
-                              String token, String body) {
+                              @Nullable String token, @Nullable String body) {
         String subject = caller.subject();
         String id = at.address();
 
-        return switch (at.method()) {
+        return switch (at.known()) {
             case ACCEPT -> {
                 arguments(scope, body);
                 yield ok(scope, verbs.accept(subject, scope, selector, id, token));
             }
             case WITHDRAW -> ok(scope, verbs.withdraw(subject, scope, selector, id, token,
-                withdrawal(scope, arguments(scope, body, STATUS))));
+                withdrawal(scope, arguments(scope, body, STATUS)).orElse(null)));
             case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token,
-                text(scope, arguments(scope, body, PRODUCED), PRODUCED)));
+                text(scope, arguments(scope, body, PRODUCED), PRODUCED).orElse(null)));
 
             case CLAIM -> ok(scope, verbs.claim(subject, scope, selector, id,
-                lease(scope, arguments(scope, body, DURATION))));
+                lease(scope, arguments(scope, body, DURATION)).orElse(null)));
             case RELEASE -> ok(scope, verbs.release(subject, scope, selector, id,
-                release(scope, arguments(scope, body, RECEIPT))));
+                release(scope, arguments(scope, body, RECEIPT)).orElse(null)));
             case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
-                edge(scope, arguments(scope, body, TO_ITEM, TYPE))));
+                edge(scope, arguments(scope, body, TO_ITEM, TYPE)).orElse(null)));
             case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
-                edge(scope, arguments(scope, body, TO_ITEM, TYPE))));
+                edge(scope, arguments(scope, body, TO_ITEM, TYPE)).orElse(null)));
 
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
@@ -374,9 +376,9 @@ public class WorklistResource {
                          @PathParam("selector") String selector,
                          @PathParam("id") String id,
                          @PathParam("member") String member,
-                         @HeaderParam("If-Match") String ifMatch) {
+                         @HeaderParam("If-Match") @Nullable String ifMatch) {
         return created(scope, verbs.plan(caller.subject(), scope, selector, id, member,
-            unquote(ifMatch)));
+            unquote(ifMatch).orElse(null)));
     }
 
     /**
@@ -394,9 +396,9 @@ public class WorklistResource {
                            @PathParam("selector") String selector,
                            @PathParam("id") String id,
                            @PathParam("member") String member,
-                           @HeaderParam("If-Match") String ifMatch) {
+                           @HeaderParam("If-Match") @Nullable String ifMatch) {
         return ok(scope, verbs.unplan(caller.subject(), scope, selector, id, member,
-            unquote(ifMatch)));
+            unquote(ifMatch).orElse(null)));
     }
 
     @PATCH
@@ -405,10 +407,10 @@ public class WorklistResource {
                                      @PathParam("selector") String selector,
                                      @PathParam("id") String id,
                                      @PathParam("member") String member,
-                                     @HeaderParam("If-Match") String ifMatch,
-                                     String body) {
+                                     @HeaderParam("If-Match") @Nullable String ifMatch,
+                                     @Nullable String body) {
         return ok(scope, verbs.updateMembership(caller.subject(), scope, selector, id, member,
-            unquote(ifMatch), Payloads.fields(readObject(body))));
+            unquote(ifMatch).orElse(null), readObject(body).map(Payloads::fields).orElse(null)));
     }
 
     // ======================================================================
@@ -426,7 +428,7 @@ public class WorklistResource {
      * refusal in their own words is how two callers come to believe two different
      * things about one surface.
      */
-    private Response uncarried(String scope, String view, String id, String verb) {
+    private Response uncarried(String scope, String view, @Nullable String id, String verb) {
         verbs.uncarried(caller.subject(), scope, view, id, verb);
         throw unreachable(verb);
     }
@@ -468,10 +470,7 @@ public class WorklistResource {
      */
     private static Response tagged(Response.ResponseBuilder response,
                                    VerbSurface.Result result) {
-        String token = result.conflictToken();
-        if (token != null) {
-            response.tag(new EntityTag(token));
-        }
+        result.conflictToken().ifPresent(token -> response.tag(new EntityTag(token)));
         return response.build();
     }
 
@@ -482,12 +481,12 @@ public class WorklistResource {
     /**
      * Deserialises a JSON object body, after the verb has been decided.
      *
-     * <p>An absent body is null rather than an error: some verbs take one and
+     * <p>An absent body is absent rather than an error: some verbs take one and
      * some do not, and which is which is the verb's business rather than the
      * transport's. The verb refuses a missing body where it needs one, with a
      * message that says what was missing.
      */
-    private Map<String, Object> readObject(String body) {
+    private Optional<Map<String, Object>> readObject(@Nullable String body) {
         return read(body, OBJECT);
     }
 
@@ -513,12 +512,13 @@ public class WorklistResource {
      * the same call as one that never sent it (R17). An absent body is an
      * empty one.
      */
-    private Map<String, Object> arguments(String scope, String body, String... declared) {
-        Map<String, Object> in = readObject(body);
+    private Map<String, Object> arguments(String scope, @Nullable String body, String... declared) {
         Map<String, Object> present = new LinkedHashMap<>();
-        if (in == null) {
+        Optional<Map<String, Object>> read = readObject(body);
+        if (read.isEmpty()) {
             return present;
         }
+        Map<String, Object> in = read.get();
         java.util.List<String> names = java.util.List.of(declared);
         if (!names.containsAll(in.keySet())) {
             // A stranger is answered NOT_FOUND whatever else is wrong with the
@@ -534,40 +534,41 @@ public class WorklistResource {
         return present;
     }
 
-    /** An argument that takes text, or null when it did not arrive. */
-    private String text(String scope, Map<String, Object> arguments, String name) {
+    /** An argument that takes text, where it arrived. */
+    private Optional<String> text(String scope, Map<String, Object> arguments, String name) {
         Object value = arguments.get(name);
         if (value == null) {
-            return null;
+            return Optional.empty();
         }
         if (!(value instanceof String text)) {
             throw invalid(scope, name);
         }
-        return text;
+        return Optional.of(text);
     }
 
-    private VerbInput.Withdrawal withdrawal(String scope, Map<String, Object> arguments) {
-        return arguments.isEmpty() ? null
-            : new VerbInput.Withdrawal(text(scope, arguments, STATUS));
+    private Optional<VerbInput.Withdrawal> withdrawal(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? Optional.empty()
+            : Optional.of(new VerbInput.Withdrawal(text(scope, arguments, STATUS).orElse(null)));
     }
 
-    private VerbInput.Release release(String scope, Map<String, Object> arguments) {
-        return arguments.isEmpty() ? null
-            : new VerbInput.Release(text(scope, arguments, RECEIPT));
+    private Optional<VerbInput.Release> release(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? Optional.empty()
+            : Optional.of(new VerbInput.Release(text(scope, arguments, RECEIPT).orElse(null)));
     }
 
-    private VerbInput.Edge edge(String scope, Map<String, Object> arguments) {
-        return arguments.isEmpty() ? null
-            : new VerbInput.Edge(text(scope, arguments, TO_ITEM), text(scope, arguments, TYPE));
+    private Optional<VerbInput.Edge> edge(String scope, Map<String, Object> arguments) {
+        return arguments.isEmpty() ? Optional.empty()
+            : Optional.of(new VerbInput.Edge(text(scope, arguments, TO_ITEM).orElse(null),
+                text(scope, arguments, TYPE).orElse(null)));
     }
 
-    private VerbInput.Lease lease(String scope, Map<String, Object> arguments) {
+    private Optional<VerbInput.Lease> lease(String scope, Map<String, Object> arguments) {
         if (arguments.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         Object value = arguments.get(DURATION);
         if (value instanceof Integer || value instanceof Long) {
-            return new VerbInput.Lease(((Number) value).longValue());
+            return Optional.of(new VerbInput.Lease(((Number) value).longValue()));
         }
         throw invalid(scope, DURATION);
     }
@@ -582,20 +583,20 @@ public class WorklistResource {
         return SurfaceException.invalid(name);
     }
 
-    private <T> T read(String body, Class<T> shape) {
+    private <T> Optional<T> read(@Nullable String body, Class<T> shape) {
         return read(body, json.getTypeFactory().constructType(shape));
     }
 
-    private <T> T read(String body, TypeReference<T> shape) {
+    private <T> Optional<T> read(@Nullable String body, TypeReference<T> shape) {
         return read(body, json.getTypeFactory().constructType(shape));
     }
 
-    private <T> T read(String body, com.fasterxml.jackson.databind.JavaType shape) {
+    private <T> Optional<T> read(@Nullable String body, com.fasterxml.jackson.databind.JavaType shape) {
         if (body == null || body.isBlank()) {
-            return null;
+            return Optional.empty();
         }
         try {
-            return json.readValue(body, shape);
+            return Optional.ofNullable(json.readValue(body, shape));
         } catch (JsonProcessingException e) {
             // The parser's own message quotes the body back, so it stays in
             // here (DEC-0043 R18).
@@ -609,15 +610,15 @@ public class WorklistResource {
      * <p>Done here and not in the surface: the quoting is the transport's, and a
      * surface that had to know about it would be a surface that knows about HTTP.
      */
-    private static String unquote(String raw) {
+    private static Optional<String> unquote(@Nullable String raw) {
         if (raw == null) {
-            return null;
+            return Optional.empty();
         }
         String value = raw.trim();
         value = value.startsWith("W/") ? value.substring(2) : value;
-        return value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")
+        return Optional.of(value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")
             ? value.substring(1, value.length() - 1)
-            : value;
+            : value);
     }
 
     private static IllegalStateException unreachable(String verb) {

@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The tools the MCP exposition declares: the verbs this service carries, and
@@ -62,14 +63,10 @@ public final class McpTools {
         return SurfaceDeclaration.verbs().stream().map(v -> v.name().name()).toList();
     }
 
-    /**
-     * The argument names one tool declares, or {@code null} for a name that is
-     * no declared tool.
-     */
-    public static List<String> argumentsOf(String tool) {
+    /** The argument names one tool declares; absent for a name that is no declared tool. */
+    public static Optional<List<String>> argumentsOf(String tool) {
         return SurfaceDeclaration.verb(tool)
-            .map(SurfaceDeclaration.Verb::argumentNames)
-            .orElse(null);
+            .map(SurfaceDeclaration.Verb::argumentNames);
     }
 
     /**

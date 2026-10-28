@@ -90,7 +90,7 @@ public class VocabularyRegistry {
         // side of the retry line the first success fell on. Sprint 180.4 also
         // makes the name the wire form for the write path, and a duplicate
         // declaration would produce two rows the lookup cannot distinguish.
-        ItemStatus existing = vocabulary.statusByName(scopeId, name.trim());
+        ItemStatus existing = vocabulary.statusByName(scopeId, name.trim()).orElse(null);
         if (existing != null) {
             return existing;
         }
@@ -124,7 +124,7 @@ public class VocabularyRegistry {
      */
     @Transactional
     public ItemStatus requireStatus(UUID scopeId, Long statusId) {
-        ItemStatus status = vocabulary.statusByPk(statusId);
+        ItemStatus status = vocabulary.statusByPk(statusId).orElse(null);
         if (status == null || !status.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
@@ -139,7 +139,7 @@ public class VocabularyRegistry {
      */
     @Transactional
     public ItemStatus statusByPk(Long pk) {
-        return vocabulary.statusByPk(pk);
+        return vocabulary.statusByPk(pk).orElse(null);
     }
 
     /**
@@ -152,7 +152,7 @@ public class VocabularyRegistry {
      */
     @Transactional
     public ItemStatus statusByName(UUID scopeId, String name) {
-        return vocabulary.statusByName(scopeId, name);
+        return vocabulary.statusByName(scopeId, name).orElse(null);
     }
 
     /**
@@ -201,7 +201,7 @@ public class VocabularyRegistry {
                 List.of());
         }
 
-        AttributeDefinition existing = vocabulary.definitionByKey(scopeId, key);
+        AttributeDefinition existing = vocabulary.definitionByKey(scopeId, key).orElse(null);
         if (existing != null) {
             return existing;
         }
@@ -235,7 +235,7 @@ public class VocabularyRegistry {
      */
     @Transactional
     public AttributeDefinition requireAttribute(UUID scopeId, String key) {
-        AttributeDefinition definition = vocabulary.definitionByKey(scopeId, key);
+        AttributeDefinition definition = vocabulary.definitionByKey(scopeId, key).orElse(null);
         if (definition == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
@@ -247,7 +247,7 @@ public class VocabularyRegistry {
     /** The declaration of that surrogate, or null; the read path's second key form. */
     @Transactional
     public AttributeDefinition attributeByPk(Long pk) {
-        return vocabulary.definitionByPk(pk);
+        return vocabulary.definitionByPk(pk).orElse(null);
     }
 
     /** Withdraw an attribute. Its key stays occupied; the items keep their values. */
@@ -276,7 +276,7 @@ public class VocabularyRegistry {
         // Idempotent by name, as declaring an attribute is by key: the name is
         // unique within its definition since V18, so a second declaration of
         // the same name is the same statement made twice.
-        AttributeOption existing = vocabulary.optionByName(definition.pk, name.trim());
+        AttributeOption existing = vocabulary.optionByName(definition.pk, name.trim()).orElse(null);
         if (existing != null) {
             return existing;
         }
@@ -307,7 +307,7 @@ public class VocabularyRegistry {
      */
     @Transactional
     public AttributeOption requireOptionNamed(AttributeDefinition definition, String name) {
-        AttributeOption option = vocabulary.optionByName(definition.pk, name);
+        AttributeOption option = vocabulary.optionByName(definition.pk, name).orElse(null);
         if (option == null) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
@@ -319,7 +319,7 @@ public class VocabularyRegistry {
     /** The option of that surrogate, or null; the read path's second value form. */
     @Transactional
     public AttributeOption optionByPk(Long pk) {
-        return vocabulary.optionByPk(pk);
+        return vocabulary.optionByPk(pk).orElse(null);
     }
 
     // ------------------------------------------------------------------
@@ -341,7 +341,7 @@ public class VocabularyRegistry {
         // Idempotent for the same reason declareStatus is: the name is the
         // wire form of a relation entry, and a second row under the same name
         // would make the lookup ambiguous.
-        RelationType existing = vocabulary.relationTypeByName(scopeId, name.trim());
+        RelationType existing = vocabulary.relationTypeByName(scopeId, name.trim()).orElse(null);
         if (existing != null) {
             return existing;
         }
@@ -366,7 +366,7 @@ public class VocabularyRegistry {
     /** The relation type of that identity in this scope, or a typed refusal. */
     @Transactional
     public RelationType requireRelationType(UUID scopeId, Long typeId) {
-        RelationType type = vocabulary.relationTypeByPk(typeId);
+        RelationType type = vocabulary.relationTypeByPk(typeId).orElse(null);
         if (type == null || !type.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
@@ -378,7 +378,7 @@ public class VocabularyRegistry {
     /** The relation type of that surrogate, or null — the form an edge holds. */
     @Transactional
     public RelationType relationTypeByPk(Long pk) {
-        return vocabulary.relationTypeByPk(pk);
+        return vocabulary.relationTypeByPk(pk).orElse(null);
     }
 
     /**
@@ -390,7 +390,7 @@ public class VocabularyRegistry {
      */
     @Transactional
     public RelationType relationTypeByName(UUID scopeId, String name) {
-        return vocabulary.relationTypeByName(scopeId, name);
+        return vocabulary.relationTypeByName(scopeId, name).orElse(null);
     }
 
     /** Withdraw a relation type. The edges carrying it stay readable. */

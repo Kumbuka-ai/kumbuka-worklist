@@ -13,6 +13,7 @@ import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
@@ -51,14 +52,14 @@ public final class Payloads {
     //
     // The translation runs in this direction and only in this direction. The
     // adapter knows the surface; the surface does not know the adapter, which is
-    // what keeps the two out of an import cycle. Every one of these passes null
-    // through untouched: a missing body is refused by the surface, after the
-    // scope has been resolved, and refusing it here would move that answer in
-    // front of a check the check order puts first.
+    // what keeps the two out of an import cycle. A missing body is not refused
+    // here: the caller hands the surface its absence, and the surface refuses it
+    // after the scope has been resolved -- refusing it here would move that
+    // answer in front of a check the check order puts first.
 
-    /** The fields behind a create or an update, or null when no body arrived. */
+    /** The fields behind a create or an update. */
     public static VerbInput.Fields fields(Map<String, Object> body) {
-        return body == null ? null : new VerbInput.Fields(body);
+        return new VerbInput.Fields(body);
     }
 
 
@@ -114,10 +115,13 @@ public final class Payloads {
      * the last one here. It is absent exactly when nothing follows — the one
      * field that says whether more follows, so that no flag beside it can say
      * something else.
+     *
+     * @param nextCursor the cursor to the rest; absent exactly when nothing
+     *                   follows, and then left out of the answer
      */
     public record Listing(List<ObjectResponse> objects,
                           @JsonInclude(JsonInclude.Include.NON_NULL)
-                          @JsonProperty("next_cursor") String nextCursor) {
+                          @JsonProperty("next_cursor") @Nullable String nextCursor) {
     }
 
     /**

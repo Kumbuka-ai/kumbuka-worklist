@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.surface;
 
 import io.quarkus.qute.i18n.MessageBundles;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -16,6 +17,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -51,10 +53,12 @@ public final class RefusalCatalogue {
     /**
      * What a refusal's texts may draw on.
      *
-     * @param attempted the verb the refusal concerns, where the text names it
-     * @param bound     the bound the text names, where it names one
+     * @param attempted the verb the refusal concerns, where the text names it;
+     *                  absent where the text names no verb
+     * @param bound     the bound the text names, where it names one; absent
+     *                  where the text names no bound
      */
-    public record Context(VerbName attempted, Bound bound) {
+    public record Context(@Nullable VerbName attempted, @Nullable Bound bound) {
 
         public static final Context NONE = new Context(null, null);
     }
@@ -66,9 +70,10 @@ public final class RefusalCatalogue {
             + render(RefusalRemedies.class, name, context);
     }
 
-    /** The bound a code's text names, read from the declaration. */
-    public static Bound boundOf(RefusalCode code) {
-        return code == RefusalCode.PAGE_SIZE_REJECTED ? SurfaceDeclaration.PAGE_SIZE_MAX : null;
+    /** The bound a code's text names, read from the declaration, where it names one. */
+    public static Optional<Bound> boundOf(RefusalCode code) {
+        return code == RefusalCode.PAGE_SIZE_REJECTED
+            ? Optional.of(SurfaceDeclaration.PAGE_SIZE_MAX) : Optional.empty();
     }
 
     /** A protocol error, message and remedy joined. */

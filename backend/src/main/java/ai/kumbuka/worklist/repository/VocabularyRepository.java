@@ -18,10 +18,12 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.transaction.Transactional;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -58,39 +60,43 @@ public class VocabularyRepository {
     // ------------------------------------------------------------------
 
     /**
-     * The declared status of that surrogate, or null.
+     * The declared status of that surrogate, if there is one.
      *
      * <p>The surrogate is what an item's {@code status_pk} holds (ADR-0042),
      * so this is the lookup a reference resolves through. The tenant is bound
      * by row-level security; scope membership is checked by the caller.
      */
     @Transactional
-    public ItemStatus statusByPk(Long pk) {
-        return pk == null ? null : byPk(ItemStatus.class, pk);
+    public Optional<ItemStatus> statusByPk(@Nullable Long pk) {
+        return pk == null ? Optional.empty() : byPk(ItemStatus.class, pk);
     }
 
     /**
-     * The declared status a scope carries under that name, or null.
+     * The declared status a scope carries under that name, if there is one.
      *
      * <p>The wire form of status is the display name, and the write path
      * needs the reverse of {@link #statusByPk} to turn a name back into an
      * identity. Names are unique per scope on the declaration table, so at
      * most one row answers.
+     *
+     * @param scopeId the scope, or absent where the caller holds none
+     * @param name    the name, or absent where the caller was given none; an
+     *                absent or blank name names no status
      */
     @Transactional
-    public ItemStatus statusByName(UUID scopeId, String name) {
+    public Optional<ItemStatus> statusByName(@Nullable UUID scopeId, @Nullable String name) {
         if (scopeId == null || name == null || name.isBlank()) {
-            return null;
+            return Optional.empty();
         }
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT s FROM ItemStatus s WHERE s.scopeId = :scope "
                         + "AND s.name = :name", ItemStatus.class)
                 .setParameter(P_SCOPE, scopeId)
                 .setParameter("name", name)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
@@ -108,25 +114,25 @@ public class VocabularyRepository {
     // Attribute definitions and their options
     // ------------------------------------------------------------------
 
-    /** The definition of that key in a scope, or null. */
+    /** The definition of that key in a scope, if there is one. */
     @Transactional
-    public AttributeDefinition definitionByKey(UUID scopeId, String key) {
+    public Optional<AttributeDefinition> definitionByKey(UUID scopeId, String key) {
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT d FROM AttributeDefinition d WHERE d.scopeId = :scope "
                         + "AND d.key = :key", AttributeDefinition.class)
                 .setParameter(P_SCOPE, scopeId)
                 .setParameter(P_KEY, key)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
-    /** The definition of that surrogate, or null. */
+    /** The definition of that surrogate, if there is one; an absent surrogate names none. */
     @Transactional
-    public AttributeDefinition definitionByPk(Long pk) {
-        return pk == null ? null : byPk(AttributeDefinition.class, pk);
+    public Optional<AttributeDefinition> definitionByPk(@Nullable Long pk) {
+        return pk == null ? Optional.empty() : byPk(AttributeDefinition.class, pk);
     }
 
     /** Every definition a scope declared, by rank then key. */
@@ -139,28 +145,28 @@ public class VocabularyRepository {
             .getResultList();
     }
 
-    /** The option of that surrogate, or null. */
+    /** The option of that surrogate, if there is one; an absent surrogate names none. */
     @Transactional
-    public AttributeOption optionByPk(Long pk) {
-        return pk == null ? null : byPk(AttributeOption.class, pk);
+    public Optional<AttributeOption> optionByPk(@Nullable Long pk) {
+        return pk == null ? Optional.empty() : byPk(AttributeOption.class, pk);
     }
 
     /**
-     * The option of a definition under that name, or null.
+     * The option of a definition under that name, if there is one.
      *
      * <p>Names are unique per definition since V18, so at most one row answers.
      */
     @Transactional
-    public AttributeOption optionByName(Long definitionPk, String name) {
+    public Optional<AttributeOption> optionByName(Long definitionPk, String name) {
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT o FROM AttributeOption o WHERE o.definitionPk = :definition "
                         + "AND o.name = :name", AttributeOption.class)
                 .setParameter("definition", definitionPk)
                 .setParameter("name", name)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
@@ -178,32 +184,36 @@ public class VocabularyRepository {
     // Relation types
     // ------------------------------------------------------------------
 
-    /** The relation type of that surrogate, or null. */
+    /** The relation type of that surrogate, if there is one; an absent surrogate names none. */
     @Transactional
-    public RelationType relationTypeByPk(Long pk) {
-        return pk == null ? null : byPk(RelationType.class, pk);
+    public Optional<RelationType> relationTypeByPk(@Nullable Long pk) {
+        return pk == null ? Optional.empty() : byPk(RelationType.class, pk);
     }
 
     /**
-     * The relation type a scope carries under that name, or null.
+     * The relation type a scope carries under that name, if there is one.
      *
      * <p>Reverse of {@link #relationTypeByPk}. Names are unique per scope on
      * the declaration table, so at most one row answers.
+     *
+     * @param scopeId the scope, or absent where the caller holds none
+     * @param name    the name, or absent where the caller was given none; an
+     *                absent or blank name names no relation type
      */
     @Transactional
-    public RelationType relationTypeByName(UUID scopeId, String name) {
+    public Optional<RelationType> relationTypeByName(@Nullable UUID scopeId, @Nullable String name) {
         if (scopeId == null || name == null || name.isBlank()) {
-            return null;
+            return Optional.empty();
         }
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT r FROM RelationType r WHERE r.scopeId = :scope "
                         + "AND r.name = :name", RelationType.class)
                 .setParameter(P_SCOPE, scopeId)
                 .setParameter("name", name)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
@@ -238,12 +248,11 @@ public class VocabularyRepository {
     }
 
     /** A declared value by its surrogate; the tenant is bound by row-level security. */
-    private <T> T byPk(Class<T> type, Long pk) {
+    private <T> Optional<T> byPk(Class<T> type, Long pk) {
         return em.createQuery(
                 "SELECT v FROM " + type.getSimpleName() + " v WHERE v.pk = :pk", type)
             .setParameter("pk", pk)
             .getResultStream()
-            .findFirst()
-            .orElse(null);
+            .findFirst();
     }
 }

@@ -7,7 +7,10 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A typed refusal the surface itself produces, as distinct from one the domain
@@ -30,10 +33,12 @@ import java.util.List;
 public class SurfaceException extends RuntimeException {
 
     private final transient RefusalCode reason;
-    private final transient String allow;
+    /** The {@code Allow} header value; absent where the status requires none. */
+    private final transient @Nullable String allow;
     private final transient List<String> offenders;
     private final transient List<String> accepts;
-    private final transient String attempted;
+    /** The declared verb the refusal's text names; absent where it names none. */
+    private final transient @Nullable String attempted;
 
     public SurfaceException(RefusalCode reason) {
         this(reason, null);
@@ -42,9 +47,9 @@ public class SurfaceException extends RuntimeException {
     /**
      * @param allow the {@code Allow} header value, where the status requires
      *              one. 405 without it is a refusal that does not say what
-     *              would have worked.
+     *              would have worked. Absent where the status requires none.
      */
-    public SurfaceException(RefusalCode reason, String allow) {
+    public SurfaceException(RefusalCode reason, @Nullable String allow) {
         this(reason, allow, List.of(), List.of(), null);
     }
 
@@ -54,10 +59,13 @@ public class SurfaceException extends RuntimeException {
      * @param offenders the declared argument paths the refusal concerns
      * @param accepts   the names the call declares, carried by a refusal of a
      *                  name the call does not declare
-     * @param attempted the declared verb the refusal's text names, or null
+     * @param allow     the {@code Allow} header value; absent where the status
+     *                  requires none
+     * @param attempted the declared verb the refusal's text names; absent where
+     *                  it names none
      */
-    public SurfaceException(RefusalCode reason, String allow, List<String> offenders,
-                            List<String> accepts, String attempted) {
+    public SurfaceException(RefusalCode reason, @Nullable String allow, List<String> offenders,
+                            List<String> accepts, @Nullable String attempted) {
         super(reason.name());
         this.reason = reason;
         this.allow = allow;
@@ -99,8 +107,9 @@ public class SurfaceException extends RuntimeException {
         return reason;
     }
 
-    public String allow() {
-        return allow;
+    /** The {@code Allow} header value, where the status requires one. */
+    public Optional<String> allow() {
+        return Optional.ofNullable(allow);
     }
 
     public List<String> offenders() {
@@ -111,8 +120,8 @@ public class SurfaceException extends RuntimeException {
         return accepts;
     }
 
-    /** The declared verb the refusal's text names, or null. */
-    public String attempted() {
-        return attempted;
+    /** The declared verb the refusal's text names, where it names one. */
+    public Optional<String> attempted() {
+        return Optional.ofNullable(attempted);
     }
 }

@@ -87,7 +87,7 @@ public class AddressRegistry {
     @Transactional
     public UUID itemAt(UUID scopeId, long number) {
         selectors.require(scopeId, Selector.ITEM);
-        Item item = items.byAddress(scopeId, number);
+        Item item = items.byAddress(scopeId, number).orElse(null);
         if (item == null) {
             throw absent(WorklistException.Reason.ITEM_UNKNOWN);
         }
@@ -98,7 +98,7 @@ public class AddressRegistry {
     @Transactional
     public UUID iterationAt(UUID scopeId, long number) {
         selectors.require(scopeId, Selector.ITERATION);
-        Iteration iteration = planning.iterationByNumber(scopeId, number);
+        Iteration iteration = planning.iterationByNumber(scopeId, number).orElse(null);
         if (iteration == null) {
             throw absent(WorklistException.Reason.ITERATION_UNKNOWN);
         }
@@ -109,7 +109,7 @@ public class AddressRegistry {
     @Transactional
     public UUID milestoneAt(UUID scopeId, long number) {
         selectors.require(scopeId, Selector.MILESTONE);
-        Milestone milestone = planning.milestoneByNumber(scopeId, number);
+        Milestone milestone = planning.milestoneByNumber(scopeId, number).orElse(null);
         if (milestone == null) {
             throw absent(WorklistException.Reason.MILESTONE_UNKNOWN);
         }
@@ -126,7 +126,7 @@ public class AddressRegistry {
     @Transactional
     public UUID workstreamAt(UUID scopeId, long number) {
         selectors.require(scopeId, Selector.WORKSTREAM);
-        Workstream workstream = workstreams.findByNumber(scopeId, number);
+        Workstream workstream = workstreams.findByNumber(scopeId, number).orElse(null);
         if (workstream == null) {
             throw absent(WorklistException.Reason.WORKSTREAM_UNKNOWN);
         }
@@ -149,10 +149,10 @@ public class AddressRegistry {
     @Transactional
     public UUID currentIteration(UUID scopeId) {
         selectors.require(scopeId, Selector.ITERATION);
-        ScopeSetting setting = planning.settingOf(scopeId);
+        ScopeSetting setting = planning.settingOf(scopeId).orElse(null);
         Long currentNumber = setting == null ? null : setting.currentIterationNumber;
         UUID current = currentNumber == null ? null
-            : planning.iterationByNumber(scopeId, currentNumber).id;
+            : planning.iterationByNumber(scopeId, currentNumber).orElseThrow().id;
 
         if (current == null) {
             throw new WorklistException(

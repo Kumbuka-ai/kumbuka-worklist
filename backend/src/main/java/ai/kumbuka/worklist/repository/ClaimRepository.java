@@ -21,6 +21,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -50,7 +51,7 @@ public class ClaimRepository {
     // ------------------------------------------------------------------
 
     /**
-     * The claim on that item, or null.
+     * The claim on that item, if there is one.
      *
      * <p>Whether it is live is a decision the caller makes against
      * {@link Claim#liveAt(Instant)} — this repository does not filter by
@@ -59,12 +60,12 @@ public class ClaimRepository {
      * row.
      */
     @Transactional
-    public Claim byItem(Item item) {
-        return em.find(Claim.class, new Claim.Key(item.scopeId, item.number));
+    public Optional<Claim> byItem(Item item) {
+        return Optional.ofNullable(em.find(Claim.class, new Claim.Key(item.scopeId, item.number)));
     }
 
     /**
-     * The claim on that item, locked for the caller's transaction, or null.
+     * The claim on that item, locked for the caller's transaction, if there is one.
      *
      * <p>Taken by {@code claim} and {@code release} in one place, so that the
      * two calls that must not interleave cannot. Without it, two concurrent
@@ -76,10 +77,10 @@ public class ClaimRepository {
      * rather than exceptional.
      */
     @Transactional
-    public Claim lockByItem(Item item) {
-        Claim claim = em.find(Claim.class, new Claim.Key(item.scopeId, item.number),
-            LockModeType.PESSIMISTIC_WRITE);
-        return claim == null ? null : underLock(claim);
+    public Optional<Claim> lockByItem(Item item) {
+        return Optional.ofNullable(em.find(Claim.class, new Claim.Key(item.scopeId, item.number),
+                LockModeType.PESSIMISTIC_WRITE))
+            .map(this::underLock);
     }
 
     // ------------------------------------------------------------------
@@ -114,7 +115,7 @@ public class ClaimRepository {
     // ------------------------------------------------------------------
 
     /**
-     * The next unclaimed item in a scope, at the given moment, or null.
+     * The next unclaimed item in a scope, at the given moment, if there is one.
      *
      * <p>Unclaimed means: no claim row exists, or the row that exists has
      * lapsed at {@code now}. Both are one draw, and it is one query rather than
@@ -132,7 +133,7 @@ public class ClaimRepository {
      * caller, so a caller cannot claim a raw row by asking twice.
      */
     @Transactional
-    public Item nextClaimable(UUID scopeId, Instant now) {
+    public Optional<Item> nextClaimable(UUID scopeId, Instant now) {
         List<Item> candidates = em.createQuery(
                 "SELECT i FROM Item i "
                     + "WHERE i.scopeId = :scope AND i.number IS NOT NULL "
@@ -146,7 +147,7 @@ public class ClaimRepository {
             .setParameter("now", now)
             .setMaxResults(1)
             .getResultList();
-        return candidates.isEmpty() ? null : candidates.get(0);
+        return candidates.stream().findFirst();
     }
 
     /**

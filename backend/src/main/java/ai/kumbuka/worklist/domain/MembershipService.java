@@ -127,7 +127,7 @@ public class MembershipService extends PlanningService {
         iteration.requireCurrentToken(conflictToken);
         Item item = refuseUnplannable(scopeId, itemId);
 
-        if (planning.membership(scopeId, iteration.number, item.number) != null) {
+        if (planning.membership(scopeId, iteration.number, item.number).isPresent()) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_PRESENT,
                 List.of(ADDRESS));
@@ -266,7 +266,7 @@ public class MembershipService extends PlanningService {
      * — same scope, milestone not closed.
      */
     private Item refuseUnplannable(UUID scopeId, UUID itemId) {
-        Item item = items.byId(itemId);
+        Item item = items.byId(itemId).orElse(null);
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
@@ -286,7 +286,7 @@ public class MembershipService extends PlanningService {
                 List.of(ADDRESS));
         }
 
-        Milestone milestone = planning.milestoneByNumber(scopeId, item.milestoneNumber);
+        Milestone milestone = planning.milestoneByNumber(scopeId, item.milestoneNumber).orElse(null);
         if (milestone == null || !milestone.onTheProductPath()) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
@@ -334,7 +334,7 @@ public class MembershipService extends PlanningService {
     }
 
     private Iteration requireIteration(UUID scopeId, UUID iterationId) {
-        return requireOpen(scopeId, planning.iterationById(iterationId));
+        return requireOpen(scopeId, planning.iterationById(iterationId).orElse(null));
     }
 
     /**
@@ -344,7 +344,7 @@ public class MembershipService extends PlanningService {
      * on (C10.2, C11.1).
      */
     private Iteration requireLockedIteration(UUID scopeId, UUID iterationId) {
-        return requireOpen(scopeId, planning.lockIterationById(iterationId));
+        return requireOpen(scopeId, planning.lockIterationById(iterationId).orElse(null));
     }
 
     private static Iteration requireOpen(UUID scopeId, Iteration iteration) {
@@ -362,10 +362,10 @@ public class MembershipService extends PlanningService {
     }
 
     private IterationMembership require(Iteration iteration, UUID itemId) {
-        Item item = items.byId(itemId);
+        Item item = items.byId(itemId).orElse(null);
         IterationMembership membership = item == null || !item.scopeId.equals(iteration.scopeId)
             ? null
-            : planning.membership(iteration.scopeId, iteration.number, item.number);
+            : planning.membership(iteration.scopeId, iteration.number, item.number).orElse(null);
         if (membership == null) {
             throw new WorklistException(
                 WorklistException.Reason.MEMBERSHIP_UNKNOWN,
@@ -403,7 +403,7 @@ public class MembershipService extends PlanningService {
      * names the item by its identity; only the stored reference changed form.
      */
     private UUID itemIdOf(UUID scopeId, Long itemNumber) {
-        Item item = items.byAddress(scopeId, itemNumber);
+        Item item = items.byAddress(scopeId, itemNumber).orElse(null);
         return item == null ? null : item.id;
     }
 

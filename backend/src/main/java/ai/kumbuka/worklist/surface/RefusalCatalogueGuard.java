@@ -37,7 +37,7 @@ public class RefusalCatalogueGuard {
         VerbName anyVerb = SurfaceDeclaration.carried().get(0);
         for (RefusalCode code : RefusalCode.values()) {
             RefusalCatalogue.message(code,
-                new RefusalCatalogue.Context(anyVerb, RefusalCatalogue.boundOf(code)));
+                new RefusalCatalogue.Context(anyVerb, RefusalCatalogue.boundOf(code).orElse(null)));
         }
         LOG.infof("refusal catalogue served: %d codes", RefusalCode.values().length);
     }

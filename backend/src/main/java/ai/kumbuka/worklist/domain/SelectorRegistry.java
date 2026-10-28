@@ -173,7 +173,7 @@ public class SelectorRegistry {
                 List.of(SELECTOR_ARGUMENT));
         }
 
-        NumberSpace space = selectors.lockSpace(selector.pk);
+        NumberSpace space = selectors.lockSpace(selector.pk).orElse(null);
         if (space == null) {
             // A selector without its space is a row that predates the
             // declaration path above, or one written around it. Reported
@@ -212,7 +212,7 @@ public class SelectorRegistry {
     @Transactional
     public long carryMarkForward(UUID scopeId, String token, long mark) {
         Selector selector = require(scopeId, token);
-        NumberSpace space = selectors.lockSpace(selector.pk);
+        NumberSpace space = selectors.lockSpace(selector.pk).orElseThrow();
 
         long standing = space.highWaterMark;
         if (mark < standing) {
@@ -242,10 +242,10 @@ public class SelectorRegistry {
     @Transactional
     public long markOf(UUID scopeId, String token) {
         Selector selector = require(scopeId, token);
-        return selectors.space(selector.pk).highWaterMark;
+        return selectors.space(selector.pk).orElseThrow().highWaterMark;
     }
 
     private Selector find(UUID scopeId, String token) {
-        return selectors.find(scopeId, token);
+        return selectors.find(scopeId, token).orElse(null);
     }
 }

@@ -1,7 +1,15 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
+import org.jspecify.annotations.Nullable;
 
 import java.util.UUID;
 
@@ -17,12 +25,12 @@ import java.util.UUID;
 public class StringUuidConverter implements AttributeConverter<String, UUID> {
 
     @Override
-    public UUID convertToDatabaseColumn(String attribute) {
+    public @Nullable UUID convertToDatabaseColumn(@Nullable String attribute) {
         return attribute == null ? null : UUID.fromString(attribute);
     }
 
     @Override
-    public String convertToEntityAttribute(UUID dbData) {
+    public @Nullable String convertToEntityAttribute(@Nullable UUID dbData) {
         return dbData == null ? null : dbData.toString();
     }
 }

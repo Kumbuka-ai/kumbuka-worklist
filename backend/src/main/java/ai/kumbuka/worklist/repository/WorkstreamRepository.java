@@ -23,6 +23,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -44,78 +45,76 @@ public class WorkstreamRepository {
     @Inject EntityManager em;
     @Inject Clock clock;
 
-    /** The workstream of that id in a scope, or null. */
+    /** The workstream of that id in a scope, if there is one. */
     @Transactional
-    public Workstream find(UUID scopeId, UUID id) {
+    public Optional<Workstream> find(UUID scopeId, UUID id) {
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT w FROM Workstream w WHERE w.scopeId = :scope AND w.id = :id",
                     Workstream.class)
                 .setParameter(P_SCOPE, scopeId)
                 .setParameter(P_ID, id)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
     /**
      * The workstream of that id in a scope, locked and read as it stands under
-     * the lock, or null (C10.2, C11.1). Every write that checks its token
-     * loads it here.
+     * the lock, if there is one (C10.2, C11.1). Every write that checks its
+     * token loads it here.
      */
     @Transactional
-    public Workstream lock(UUID scopeId, UUID id) {
-        Workstream workstream = find(scopeId, id);
-        if (workstream == null) {
-            return null;
-        }
-        em.lock(workstream, LockModeType.PESSIMISTIC_WRITE);
-        return underLock(workstream);
+    public Optional<Workstream> lock(UUID scopeId, UUID id) {
+        return find(scopeId, id).map(workstream -> {
+            em.lock(workstream, LockModeType.PESSIMISTIC_WRITE);
+            return underLock(workstream);
+        });
     }
 
-    /** The workstream of that token in a scope, or null. */
+    /** The workstream of that token in a scope, if there is one. */
     @Transactional
-    public Workstream findByToken(UUID scopeId, String token) {
+    public Optional<Workstream> findByToken(UUID scopeId, String token) {
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT w FROM Workstream w WHERE w.scopeId = :scope AND w.token = :token",
                     Workstream.class)
                 .setParameter(P_SCOPE, scopeId)
                 .setParameter(P_TOKEN, token)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
-    /** The workstream of that number in a scope, or null. */
+    /** The workstream of that number in a scope, if there is one. */
     @Transactional
-    public Workstream findByNumber(UUID scopeId, long number) {
+    public Optional<Workstream> findByNumber(UUID scopeId, long number) {
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT w FROM Workstream w WHERE w.scopeId = :scope AND w.number = :n",
                     Workstream.class)
                 .setParameter(P_SCOPE, scopeId)
                 .setParameter("n", number)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 
-    /** The default workstream of that scope, or null before V8 has seeded it. */
+    /** The default workstream of that scope; absent before V8 has seeded it. */
     @Transactional
-    public Workstream findDefault(UUID scopeId) {
+    public Optional<Workstream> findDefault(UUID scopeId) {
         try {
-            return em.createQuery(
+            return Optional.of(em.createQuery(
                     "SELECT w FROM Workstream w WHERE w.scopeId = :scope "
                         + "AND w.isDefault = true",
                     Workstream.class)
                 .setParameter(P_SCOPE, scopeId)
-                .getSingleResult();
+                .getSingleResult());
         } catch (NoResultException absent) {
-            return null;
+            return Optional.empty();
         }
     }
 

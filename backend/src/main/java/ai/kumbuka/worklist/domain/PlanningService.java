@@ -66,7 +66,7 @@ public abstract class PlanningService {
      * selector is declared before an address is allocated.
      */
     protected ScopeSetting requireSetting(UUID scopeId) {
-        return requirePresent(planning.settingOf(scopeId));
+        return requirePresent(planning.settingOf(scopeId).orElse(null));
     }
 
     /**
@@ -76,7 +76,7 @@ public abstract class PlanningService {
      * C11.1).
      */
     protected ScopeSetting requireLockedSetting(UUID scopeId) {
-        return requirePresent(planning.lockSettingOf(scopeId));
+        return requirePresent(planning.lockSettingOf(scopeId).orElse(null));
     }
 
     private static ScopeSetting requirePresent(ScopeSetting setting) {

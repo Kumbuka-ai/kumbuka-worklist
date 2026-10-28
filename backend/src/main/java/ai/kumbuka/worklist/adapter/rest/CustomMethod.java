@@ -1,4 +1,13 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.adapter.rest;
+
+import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
@@ -201,13 +210,21 @@ public enum CustomMethod {
      * A segment taken apart: what addresses, what acts, and which verb it is if
      * this depth carries one by that name.
      *
-     * @param method null when no verb of this depth is spelled that way, which is
-     *               a different thing from the segment carrying no verb
+     * @param method absent when no verb of this depth is spelled that way, which
+     *               is a different thing from the segment carrying no verb
      */
-    public record Split(String address, String verb, CustomMethod method) {
+    public record Split(String address, String verb, @Nullable CustomMethod method) {
 
         public boolean isKnown() {
             return method != null;
+        }
+
+        /** The verb this split names, on a split {@link #isKnown} admitted. */
+        public CustomMethod known() {
+            if (method == null) {
+                throw new IllegalStateException("a split that names no verb has no known verb");
+            }
+            return method;
         }
     }
 }

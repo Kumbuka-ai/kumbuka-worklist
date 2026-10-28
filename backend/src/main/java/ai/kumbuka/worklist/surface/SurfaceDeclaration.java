@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.SortKey;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -72,12 +73,12 @@ public final class SurfaceDeclaration {
      *
      * @param defaultValue the value an optional argument takes when it is left
      *                     out or sent as null (DEC-0043 R17), as the caller
-     *                     would write it; {@code null} for a mandatory one and
-     *                     for an optional one whose absence means "unset"
+     *                     would write it; absent for a mandatory one and for an
+     *                     optional one whose absence means "unset"
      * @param values       the fixed set the argument takes, empty where it is free
      */
     public record Argument(ArgumentName name, ArgumentType type, boolean required,
-                           String defaultValue, List<Value> values,
+                           @Nullable String defaultValue, List<Value> values,
                            Function<ArgumentDescriptions, String> description) {
     }
 
@@ -150,7 +151,7 @@ public final class SurfaceDeclaration {
         return new Argument(name(name), type, true, null, List.of(), description);
     }
 
-    private static Argument optional(String name, ArgumentType type, String defaultValue,
+    private static Argument optional(String name, ArgumentType type, @Nullable String defaultValue,
                                      Function<ArgumentDescriptions, String> description) {
         return new Argument(name(name), type, false, defaultValue, List.of(), description);
     }

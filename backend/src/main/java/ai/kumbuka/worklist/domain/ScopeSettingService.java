@@ -86,7 +86,7 @@ public class ScopeSettingService extends PlanningService {
         Map<Field, Object> given = Field.resolve(Addressed.SETTING, arguments);
         refuseUnsettableChanges(Addressed.SETTING, Map.of(), given);
 
-        if (planning.settingOf(scopeId) != null) {
+        if (planning.settingOf(scopeId).isPresent()) {
             throw new WorklistException(
                 WorklistException.Reason.SETTING_PRESENT,
                 List.of());
@@ -247,7 +247,7 @@ public class ScopeSettingService extends PlanningService {
      */
     private Map<String, Object> projectOf(ScopeSetting setting, List<Notice> warnings) {
         Iteration current = setting.currentIterationNumber == null ? null
-            : planning.iterationByNumber(setting.scopeId, setting.currentIterationNumber);
+            : planning.iterationByNumber(setting.scopeId, setting.currentIterationNumber).orElse(null);
         return project(setting, current == null ? null : current.id, warnings);
     }
 
