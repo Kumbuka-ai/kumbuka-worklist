@@ -157,10 +157,11 @@ public class Item extends AggregateRoot {
      * by {@code ItemService}, not by a database constraint, because the
      * check spans two tables and a check constraint cannot join.
      *
-     * <p>Field is left {@code nullable = false = false} implicitly through the
-     * V10 migration; the entity does not mark it {@code nullable = false} to
-     * keep the entity forward-compatible with a service that runs against a
-     * schema at V9 (backfilled but not narrowed).
+     * <p>The column is NOT NULL since V19, which narrows it after V18 added
+     * it nullable and backfilled it. The mapping does not repeat that with
+     * {@code nullable = false}; the NOT NULL is the database's, and
+     * {@code ItemService} sees to it that a create always names a
+     * workstream, falling back to the scope's default.
      */
     @Column(name = "workstream_number")
     public Long workstreamNumber;
