@@ -30,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The conflict token is the modification column at microsecond precision,
  * written by the application from the injected clock as {@code max(now,
  * previous + 1 µs)} on every write that changes the root, and left as it is
- * by a write that changes nothing (C10.1, C20.1).
+ * by a write that changes nothing (C10.1, C20.1). Each of the five roots is
+ * shown on its own, because each moves its own column.
  *
  * <p>The clock is the test's: {@link SettableClock} holds one instant, so two
  * writes fall into the same microsecond by construction and the expected
@@ -44,7 +45,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * random uuid, so the three cases that expect an instant failed on the first
  * token they read ({@code expected: "2031-03-04T05:06:07.123456Z" but was} a
  * uuid); the case on the write that changes nothing was green there too, as
- * it must be.
+ * it must be. The cases for the milestone, the workstream and the scope
+ * setting came after the rule; they were seen red against a stamp that took
+ * the clock as it stood, without {@code max(now, previous + 1 µs)}
+ * ({@code expected: "2031-03-04T05:06:07.123457Z" but was:
+ * "2031-03-04T05:06:07.123456Z"}).
  */
 @QuarkusTest
 @TestProfile(SettableClock.Profile.class)
@@ -55,6 +60,8 @@ class ConflictTokenIT {
 
     @Inject ItemService items;
     @Inject IterationService iterations;
+    @Inject MilestoneService milestones;
+    @Inject WorkstreamService workstreams;
     @Inject ScopeSettingService settings;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
@@ -148,6 +155,71 @@ class ConflictTokenIT {
         assertThat(storedToken("iteration", idOf(created))).isEqualTo(tokenOf(once));
     }
 
+    @Test
+    void a_milestone_takes_its_token_the_same_way() throws SQLException {
+        Map<String, Object> created = milestones.create(scope, Map.of(
+            Field.TITLE.canonicalName(), "first",
+            Field.KIND.canonicalName(), Milestone.GOAL,
+            Field.VISION.canonicalName(), "a vision",
+            Field.MISSION.canonicalName(), "a mission"));
+        assertThat(tokenOf(created)).isEqualTo(token(T));
+
+        Map<String, Object> once = milestones.update(scope, idOf(created), Map.of(
+            Field.TITLE.canonicalName(), "second",
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created)));
+        Map<String, Object> twice = milestones.update(scope, idOf(created), Map.of(
+            Field.TITLE.canonicalName(), "third",
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(once)));
+        Map<String, Object> same = milestones.update(scope, idOf(created), Map.of(
+            Field.TITLE.canonicalName(), "third",
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(twice)));
+
+        assertThat(tokenOf(once)).isEqualTo(token(T.plus(1, ChronoUnit.MICROS)));
+        assertThat(tokenOf(twice)).isEqualTo(token(T.plus(2, ChronoUnit.MICROS)));
+        assertThat(tokenOf(same)).as("a no-op keeps it").isEqualTo(tokenOf(twice));
+        assertThat(storedToken("milestone", idOf(created))).isEqualTo(tokenOf(twice));
+    }
+
+    @Test
+    void a_workstream_takes_its_token_the_same_way() throws SQLException {
+        Workstream created = workstreams.declare(scope, "tokened", "first");
+        assertThat(created.conflictToken()).isEqualTo(token(T));
+
+        String once = workstreams.update(scope, created.id, "second",
+            created.conflictToken()).conflictToken();
+        String twice = workstreams.update(scope, created.id, "third", once).conflictToken();
+        String same = workstreams.update(scope, created.id, "third", twice).conflictToken();
+
+        assertThat(once).isEqualTo(token(T.plus(1, ChronoUnit.MICROS)));
+        assertThat(twice).isEqualTo(token(T.plus(2, ChronoUnit.MICROS)));
+        assertThat(same).as("a no-op keeps it").isEqualTo(twice);
+        assertThat(tokenOf(workstreams.read(scope, created.id))).isEqualTo(twice);
+        assertThat(storedToken("workstream", created.id)).isEqualTo(twice);
+    }
+
+    @Test
+    void a_scope_setting_takes_its_token_the_same_way() throws SQLException {
+        Field warn = Field.WARN_PLANNED_ITERATIONS;
+        Map<String, Object> created = settings.read(scope);
+
+        Map<String, Object> once = settings.update(scope, Map.of(
+            warn.canonicalName(), 8,
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created)));
+        Map<String, Object> twice = settings.update(scope, Map.of(
+            warn.canonicalName(), 7,
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(once)));
+        Map<String, Object> same = settings.update(scope, Map.of(
+            warn.canonicalName(), 7,
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(twice)));
+
+        assertThat(tokenOf(once))
+            .as("the settings were created a day earlier, so the first write takes the clock")
+            .isEqualTo(token(T));
+        assertThat(tokenOf(twice)).isEqualTo(token(T.plus(1, ChronoUnit.MICROS)));
+        assertThat(tokenOf(same)).as("a no-op keeps it").isEqualTo(tokenOf(twice));
+        assertThat(storedToken("scope_setting", "scope_id", scope)).isEqualTo(tokenOf(twice));
+    }
+
     // -----------------------------------------------------------------------
 
     private Map<String, Object> item(String title) {
@@ -164,10 +236,15 @@ class ConflictTokenIT {
 
     /** What the row's {@code conflict_token} column holds, read under the runtime role. */
     private static String storedToken(String table, UUID id) throws SQLException {
+        return storedToken(table, "id", id);
+    }
+
+    /** The same, for a table whose row is named by another column than {@code id}. */
+    private static String storedToken(String table, String key, UUID id) throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, PlanningFixture.boundTenant());
             try (var st = c.prepareStatement(
-                    "SELECT conflict_token FROM worklist." + table + " WHERE id = ?")) {
+                    "SELECT conflict_token FROM worklist." + table + " WHERE " + key + " = ?")) {
                 st.setObject(1, id);
                 try (ResultSet rows = st.executeQuery()) {
                     assertThat(rows.next()).as("the row is there").isTrue();

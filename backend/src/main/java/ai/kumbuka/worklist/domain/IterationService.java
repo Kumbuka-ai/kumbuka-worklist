@@ -176,7 +176,6 @@ public class IterationService extends PlanningService {
             return current;
         }
 
-        iteration.stamp(clock.instant());
         planning.flushAndRefresh(iteration);
         LOG.infof("iteration %d updated in scope %s", iteration.number, scopeId);
         return project(iteration, List.of());
@@ -322,11 +321,24 @@ public class IterationService extends PlanningService {
         return selectors.allocate(scopeId, iterationSelector);
     }
 
+    /**
+     * Apply the settable fields that actually differ, and report whether any
+     * did.
+     *
+     * <p>The iteration is stamped at the FIRST field that changes it, not
+     * after the last. A reorder reads the memberships and flushes them, and a
+     * read or a flush after the title was set would meet the changed iteration
+     * not yet stamped, which is refused there. So a caller of this method
+     * does not stamp again.
+     */
     private boolean applyEffectiveChanges(Iteration iteration, Map<String, Object> current,
             Map<Field, Object> settable) {
         boolean changed = false;
         for (Map.Entry<Field, Object> entry : settable.entrySet()) {
-            changed |= applyOne(iteration, current, entry.getKey(), entry.getValue());
+            if (applyOne(iteration, current, entry.getKey(), entry.getValue()) && !changed) {
+                iteration.stamp(clock.instant());
+                changed = true;
+            }
         }
         return changed;
     }

@@ -8,10 +8,10 @@
 -- V23: every foreign key names its target table.
 --
 -- A foreign key is named `fk_<table>_<target>` (C18.3), so a refusal of the
--- database names both tables. V19 named five keys against that: two shorten
--- the target (`definition` for attribute_definition, `type` for
--- relation_type, `status` for item_status) and two do not name it at all
--- (`from`, `to`). V4 gave their predecessors the same names without the
+-- database names both tables. V19 named five keys against that: three
+-- shorten the target (`status` for item_status, `definition` for
+-- attribute_definition, `type` for relation_type) and two do not name it at
+-- all (`from` and `to`, both for item). V4 gave their predecessors the same names without the
 -- suffix; those keys went with the columns they held when V20 dropped the
 -- uuid references, so the five of V19 are the ones left to rename.
 --

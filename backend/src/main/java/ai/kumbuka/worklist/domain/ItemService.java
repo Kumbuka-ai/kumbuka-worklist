@@ -281,7 +281,6 @@ public class ItemService {
         rest.remove(Field.STATUS);
         rest.remove(Field.WORKSTREAM_ID);
         if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
-            item.stamp(clock.instant());
             items.flush();
         }
 
@@ -374,7 +373,6 @@ public class ItemService {
             return current;
         }
 
-        item.stamp(clock.instant());
         items.flushAndRefresh(item);
         LOG.infof("item updated in scope %s", scopeId);
         return project(item);
@@ -686,12 +684,21 @@ public class ItemService {
      * it is comparing like with like. Comparing against the entity would mean
      * comparing a token a caller sent with a uuid the row holds, and every
      * such comparison would report a change.
+     *
+     * <p>The item is stamped at the FIRST field that changes it, not after
+     * the last. The fields after it resolve their values through queries, and
+     * a query lets the persistence context flush the changed item first; an
+     * item changed and not yet stamped is refused at that flush. So a caller
+     * of this method does not stamp again.
      */
     private boolean applyEffectiveChanges(Item item, Map<String, Object> current,
             Map<Field, Object> settable) {
         boolean changed = false;
         for (Map.Entry<Field, Object> entry : settable.entrySet()) {
-            changed |= applyOne(item, current, entry.getKey(), entry.getValue());
+            if (applyOne(item, current, entry.getKey(), entry.getValue()) && !changed) {
+                item.stamp(clock.instant());
+                changed = true;
+            }
         }
         return changed;
     }
