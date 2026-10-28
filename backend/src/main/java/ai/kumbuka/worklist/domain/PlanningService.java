@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.repository.PlanningRepository;
 import jakarta.inject.Inject;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -16,7 +17,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -79,7 +80,8 @@ public abstract class PlanningService {
         return requirePresent(planning.lockSettingOf(scopeId).orElse(null));
     }
 
-    private static ScopeSetting requirePresent(ScopeSetting setting) {
+    /** @param setting the scope's row; absent where the scope was never opened */
+    private static ScopeSetting requirePresent(@Nullable ScopeSetting setting) {
         if (setting == null) {
             throw new WorklistException(
                 WorklistException.Reason.SETTING_ABSENT,
@@ -141,7 +143,8 @@ public abstract class PlanningService {
     }
 
     /**
-     * A caller's value as a whole number, or a refusal naming the field.
+     * A caller's value as a whole number, empty where the caller gave none, or
+     * a refusal naming the field.
      *
      * <p>Rendered and re-read rather than cast, for the same reason the item
      * domain renders its identities: a caller echoing a read answer back may
@@ -149,18 +152,17 @@ public abstract class PlanningService {
      * became in transit, and refusing one of those would make the round trip
      * depend on which route the value took.
      */
-    protected static Integer whole(Field field, Object raw) {
-        String rendered = ItemFields.text(field, raw == null ? null : String.valueOf(raw));
-        if (rendered == null) {
-            return null;
-        }
-        try {
-            return Integer.valueOf(rendered);
-        } catch (NumberFormatException notANumber) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(field.path()));
-        }
+    protected static Optional<Integer> whole(Field field, @Nullable Object raw) {
+        return ItemFields.text(field, raw == null ? null : String.valueOf(raw))
+            .map(rendered -> {
+                try {
+                    return Integer.valueOf(rendered);
+                } catch (NumberFormatException notANumber) {
+                    throw new WorklistException(
+                        WorklistException.Reason.INVALID_VALUE,
+                        List.of(field.path()));
+                }
+            });
     }
 
     /**
@@ -170,14 +172,10 @@ public abstract class PlanningService {
      * service to fall back on. Inventing a value here would be the service
      * deciding something the caller is the only one who knows.
      */
-    protected static String required(Field field, Object raw) {
-        String value = ItemFields.text(field, raw);
-        if (value == null) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(field.path()));
-        }
-        return value;
+    protected static String required(Field field, @Nullable Object raw) {
+        return ItemFields.text(field, raw).orElseThrow(() -> new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            List.of(field.path())));
     }
 
     /**
@@ -191,11 +189,12 @@ public abstract class PlanningService {
      * constraint violation would arrive at JTA commit, outside the typed
      * refusal model, and reach the caller as an internal error.
      *
-     * <p>Null is passed through: nullability is the field's own question and
-     * is checked separately. The refusal here says "too long", not "missing".
+     * <p>An absent value never reaches this check: nullability is the field's
+     * own question and is checked separately. The refusal here says "too
+     * long", not "missing".
      */
     protected static String capped(Field field, String value, int max) {
-        if (value == null || value.length() <= max) {
+        if (value.length() <= max) {
             return value;
         }
         throw new WorklistException(
@@ -223,18 +222,18 @@ public abstract class PlanningService {
     }
 
     /**
-     * The warning a cardinality threshold produces, or null for none.
+     * The warning a cardinality threshold produces, if it produces one.
      *
      * <p>Both numbers come from the scope's row and neither is written into
      * this file. A warning admits the write and says so; the limit beside it
      * refuses. The warning exists so that the limit is met deliberately
      * rather than discovered at the moment it refuses.
      */
-    protected static Notice warningAt(int reached, int warnAt, Notice notice) {
+    protected static Optional<Notice> warningAt(int reached, int warnAt, Notice notice) {
         // A fixed notice: the numbers are the scope's settings and travel in
         // the read of those settings, never in a statement of the platform
         // (DEC-0043 R18).
-        return reached < warnAt ? null : notice;
+        return reached < warnAt ? Optional.empty() : Optional.of(notice);
     }
 
     /**
@@ -255,7 +254,8 @@ public abstract class PlanningService {
     }
 
     /** The warnings of one write, as the answer carries them. Empty is the normal case. */
-    protected static List<Notice> warnings(Notice... produced) {
-        return Arrays.stream(produced).filter(Objects::nonNull).toList();
+    @SafeVarargs
+    protected static List<Notice> warnings(Optional<Notice>... produced) {
+        return Arrays.stream(produced).flatMap(Optional::stream).toList();
     }
 }

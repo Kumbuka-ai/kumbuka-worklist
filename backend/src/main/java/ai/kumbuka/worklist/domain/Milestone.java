@@ -13,9 +13,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -119,13 +121,13 @@ public class Milestone extends AggregateRoot {
     @Column(name = "status", nullable = false)
     public String status = PLANNED;
 
-    /** The north star in a sentence. Null on a marker, and constrained to be. */
+    /** The north star in a sentence. Absent on a marker, and constrained to be. */
     @Column(name = "vision")
-    public String vision;
+    public @Nullable String vision;
 
-    /** What the milestone contains and why it is cut where it is. Null on a marker. */
+    /** What the milestone contains and why it is cut where it is. Absent on a marker. */
     @Column(name = "mission")
-    public String mission;
+    public @Nullable String mission;
 
     /** The order of the axis, and never the alphabetical one. */
     @Column(name = "rank", nullable = false)
@@ -159,8 +161,8 @@ public class Milestone extends AggregateRoot {
     }
 
     @Override
-    protected Instant changeTime() {
-        return updatedAt;
+    protected Optional<Instant> changeTime() {
+        return Optional.ofNullable(updatedAt);
     }
 
     @Override

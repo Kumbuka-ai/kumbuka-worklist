@@ -13,8 +13,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -91,9 +93,9 @@ public class Iteration extends AggregateRoot {
     @Column(name = "rank", nullable = false)
     public int rank;
 
-    /** When it was closed, or null while it is open. A fact, not a status. */
+    /** When it was closed; absent while it is open. A fact, not a status. */
     @Column(name = "closed_at")
-    public Instant closedAt;
+    public @Nullable Instant closedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     public Instant createdAt;
@@ -117,8 +119,8 @@ public class Iteration extends AggregateRoot {
     }
 
     @Override
-    protected Instant changeTime() {
-        return updatedAt;
+    protected Optional<Instant> changeTime() {
+        return Optional.ofNullable(updatedAt);
     }
 
     @Override

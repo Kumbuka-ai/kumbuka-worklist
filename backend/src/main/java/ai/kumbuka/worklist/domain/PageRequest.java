@@ -7,6 +7,8 @@
  */
 package ai.kumbuka.worklist.domain;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,11 +24,11 @@ import java.util.UUID;
  * service's to answer.
  *
  * @param scopeId the scope the page is of; a cursor is bound to it
- * @param after   where the previous page ended, or null on the first page
+ * @param after   where the previous page ended; absent on the first page
  */
 public record PageRequest(UUID scopeId, String view, Map<QueryFilter, Object> filters,
                           int pageSize, SortKey sort, SortKey.Direction direction,
-                          PageCursor.Position after) {
+                          PageCursor.@Nullable Position after) {
 
     public PageRequest {
         filters = Map.copyOf(filters);

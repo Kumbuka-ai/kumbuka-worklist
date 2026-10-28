@@ -15,6 +15,7 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -75,9 +76,9 @@ public class SelectorRegistry {
                 List.of(SELECTOR_ARGUMENT));
         }
 
-        Selector existing = find(scopeId, token);
-        if (existing != null) {
-            return existing;
+        Optional<Selector> existing = find(scopeId, token);
+        if (existing.isPresent()) {
+            return existing.get();
         }
 
         Selector selector = new Selector();
@@ -135,13 +136,9 @@ public class SelectorRegistry {
      */
     @Transactional
     public Selector require(UUID scopeId, String token) {
-        Selector selector = find(scopeId, token);
-        if (selector == null) {
-            throw new WorklistException(
-                WorklistException.Reason.SELECTOR_UNDECLARED,
-                List.of(SELECTOR_ARGUMENT));
-        }
-        return selector;
+        return find(scopeId, token).orElseThrow(() -> new WorklistException(
+            WorklistException.Reason.SELECTOR_UNDECLARED,
+            List.of(SELECTOR_ARGUMENT)));
     }
 
     /**
@@ -245,7 +242,7 @@ public class SelectorRegistry {
         return selectors.space(selector.pk).orElseThrow().highWaterMark;
     }
 
-    private Selector find(UUID scopeId, String token) {
-        return selectors.find(scopeId, token).orElse(null);
+    private Optional<Selector> find(UUID scopeId, String token) {
+        return selectors.find(scopeId, token);
     }
 }

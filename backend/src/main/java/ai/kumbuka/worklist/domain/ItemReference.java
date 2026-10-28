@@ -13,6 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 
@@ -89,9 +90,9 @@ public class ItemReference extends TenantScoped {
     @Column(name = "ordinal", nullable = false)
     public int ordinal;
 
-    /** What a reader sees instead of the raw target. Optional. */
+    /** What a reader sees instead of the raw target. Optional: absent where none was given. */
     @Column(name = "label")
-    public String label;
+    public @Nullable String label;
 
     /** The pointer itself. Positioned, never followed. */
     @Column(name = "target", nullable = false)

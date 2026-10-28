@@ -338,7 +338,7 @@ public class WorkstreamService {
         fields.put("is_default", workstream.isDefault);
         fields.put("created_at", workstream.createdAt);
         fields.put("updated_at", workstream.updatedAt);
-        fields.put("conflict_token", workstream.conflictToken());
+        fields.put("conflict_token", workstream.conflictToken().orElse(null));
         return fields;
     }
 

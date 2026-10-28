@@ -76,9 +76,7 @@ public record RefusalPayload(String reason, String message, @Nullable Object dat
             return new RefusalPayload(code.name(), message(code, null), null);
         }
         Map<String, Object> data = dataOf(code, e.offenders(), e.accepts());
-        if (e.currentToken() != null) {
-            data.put(CONFLICT_TOKEN, e.currentToken());
-        }
+        e.currentToken().ifPresent(token -> data.put(CONFLICT_TOKEN, token));
         return new RefusalPayload(code.name(), message(code, null), data.isEmpty() ? null : data);
     }
 

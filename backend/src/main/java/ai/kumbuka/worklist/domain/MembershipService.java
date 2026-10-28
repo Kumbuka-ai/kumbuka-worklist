@@ -14,10 +14,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -87,7 +89,7 @@ public class MembershipService extends PlanningService {
     @Transactional
     public List<UUID> query(UUID scopeId) {
         return planning.plannedItemNumbers(scopeId).stream()
-            .map(number -> itemIdOf(scopeId, number))
+            .map(number -> itemIdOf(scopeId, number).orElse(null))
             .toList();
     }
 
@@ -347,7 +349,11 @@ public class MembershipService extends PlanningService {
         return requireOpen(scopeId, planning.lockIterationById(iterationId).orElse(null));
     }
 
-    private static Iteration requireOpen(UUID scopeId, Iteration iteration) {
+    /**
+     * @param iteration the iteration the id named; absent where it names none,
+     *                  which is refused like an iteration of another scope
+     */
+    private static Iteration requireOpen(UUID scopeId, @Nullable Iteration iteration) {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
@@ -388,12 +394,12 @@ public class MembershipService extends PlanningService {
         fields.put(Field.SCOPE.canonicalName(), slugOf(membership.scopeId));
         fields.put(Field.ITERATION_ID.canonicalName(), iteration.number);
         fields.put(Field.ITEM_ID.canonicalName(),
-            itemIdOf(membership.scopeId, membership.itemNumber));
+            itemIdOf(membership.scopeId, membership.itemNumber).orElse(null));
         fields.put(Field.POSITION.canonicalName(), membership.position);
         fields.put(Field.MEMBERSHIP_STATUS.canonicalName(), membership.status);
         fields.put(Field.CREATED_AT.canonicalName(), membership.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), membership.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken());
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken().orElse(null));
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }
@@ -401,10 +407,10 @@ public class MembershipService extends PlanningService {
     /**
      * The identity of the item a membership holds by number. The answer still
      * names the item by its identity; only the stored reference changed form.
+     * Empty where no item of the scope carries that number.
      */
-    private UUID itemIdOf(UUID scopeId, Long itemNumber) {
-        Item item = items.byAddress(scopeId, itemNumber).orElse(null);
-        return item == null ? null : item.id;
+    private Optional<UUID> itemIdOf(UUID scopeId, Long itemNumber) {
+        return items.byAddress(scopeId, itemNumber).map(item -> item.id);
     }
 
     /** The slug of a scope, or the scope's id when the access row is absent. */

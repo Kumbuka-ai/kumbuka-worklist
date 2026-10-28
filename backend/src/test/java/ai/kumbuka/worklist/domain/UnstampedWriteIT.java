@@ -140,7 +140,7 @@ class UnstampedWriteIT {
         Map<String, Object> after = workstreams.read(scope, created.id);
         assertThat(after.get(Field.DESCRIPTION.canonicalName())).as("nothing of it is stored")
             .isEqualTo("as declared");
-        assertThat(tokenOf(after)).isEqualTo(created.conflictToken());
+        assertThat(tokenOf(after)).isEqualTo(created.conflictToken().orElseThrow());
     }
 
     @Test

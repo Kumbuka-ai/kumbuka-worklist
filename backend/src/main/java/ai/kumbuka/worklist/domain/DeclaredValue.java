@@ -12,6 +12,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 
@@ -88,9 +89,9 @@ public abstract class DeclaredValue extends TenantScoped {
     @Column(name = "name", nullable = false)
     public String name;
 
-    /** Optional, and a place rather than an obligation. */
+    /** Optional, and a place rather than an obligation; absent where none was given. */
     @Column(name = "description")
-    public String description;
+    public @Nullable String description;
 
     /** The order of the vocabulary, and never the alphabetical one. */
     @Column(name = "rank", nullable = false)

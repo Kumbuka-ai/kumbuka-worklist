@@ -7,6 +7,8 @@
  */
 package ai.kumbuka.worklist.domain;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -16,11 +18,11 @@ import java.util.function.Function;
  * to the rest when there is any.
  *
  * <p>{@code next} is the cursor that continues after the last object here, and
- * null exactly when nothing follows. A hidden ceiling — an answer that reads
+ * absent exactly when nothing follows. A hidden ceiling — an answer that reads
  * complete and is not — is the sprint-169 defect one layer up; this shape
  * cannot express one.
  */
-public record Page(List<Map<String, Object>> objects, String next) {
+public record Page(List<Map<String, Object>> objects, @Nullable String next) {
 
     /**
      * The page from at most {@code pageSize + 1} rows the store returned in the

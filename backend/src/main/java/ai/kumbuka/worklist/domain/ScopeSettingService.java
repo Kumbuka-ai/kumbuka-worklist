@@ -12,11 +12,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -163,13 +165,11 @@ public class ScopeSettingService extends PlanningService {
 
     /** One of the four numbers V4 leaves without a default, refused by name when absent. */
     private static int mandatory(Field field, Map<Field, Object> given) {
-        Integer value = whole(field, given.get(field));
-        if (value == null || value <= 0) {
-            throw new WorklistException(
+        return whole(field, given.get(field))
+            .filter(value -> value > 0)
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                List.of(field.path()));
-        }
-        return value;
+                List.of(field.path())));
     }
 
     private boolean applyEffectiveChanges(ScopeSetting setting, Map<String, Object> current,
@@ -221,17 +221,15 @@ public class ScopeSettingService extends PlanningService {
      * at flush, under JTA, outside the typed refusal model. The constraint
      * stays — it is the mechanism — and this is the message.
      */
-    private static int positive(Field field, Object value) {
-        Integer number = whole(field, value);
-        if (number == null || number <= 0) {
-            throw new WorklistException(
+    private static int positive(Field field, @Nullable Object value) {
+        return whole(field, value)
+            .filter(number -> number > 0)
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                List.of(field.path()));
-        }
-        return number;
+                List.of(field.path())));
     }
 
-    private static boolean moved(Object held, Object wanted, Runnable write) {
+    private static boolean moved(@Nullable Object held, @Nullable Object wanted, Runnable write) {
         if (Objects.equals(held == null ? null : String.valueOf(held),
                 wanted == null ? null : String.valueOf(wanted))) {
             return false;
@@ -260,8 +258,11 @@ public class ScopeSettingService extends PlanningService {
      * caller sets, reads back or round-trips; putting them in the answer
      * would invite a write that carried them, and a mark a caller can carry
      * is a mark that can be carried backwards.
+     *
+     * @param currentIterationId the current iteration's identity; absent where
+     *                           the scope has no current iteration
      */
-    static Map<String, Object> project(ScopeSetting setting, UUID currentIterationId,
+    static Map<String, Object> project(ScopeSetting setting, @Nullable UUID currentIterationId,
             List<Notice> warnings) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.SCOPE.canonicalName(), setting.scopeId);
@@ -278,7 +279,7 @@ public class ScopeSettingService extends PlanningService {
             List.of(setting.defaultColumns));
         fields.put(Field.CREATED_AT.canonicalName(), setting.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), setting.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), setting.conflictToken());
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), setting.conflictToken().orElse(null));
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }

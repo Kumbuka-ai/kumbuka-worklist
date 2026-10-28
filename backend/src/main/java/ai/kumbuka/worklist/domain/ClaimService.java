@@ -15,6 +15,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -250,8 +251,11 @@ public class ClaimService {
 
     /**
      * Writes the lease into the row the caller holds locked, or a new row.
+     *
+     * @param held the item's claim row, locked; absent where the item has never
+     *             been claimed, and then a new row is inserted
      */
-    private Claim award(Claim held, Item item, String subject, Instant now, Duration lease) {
+    private Claim award(@Nullable Claim held, Item item, String subject, Instant now, Duration lease) {
         Claim claim = held == null ? new Claim() : held;
         claim.itemNumber = item.number;
         claim.scopeId = item.scopeId;
