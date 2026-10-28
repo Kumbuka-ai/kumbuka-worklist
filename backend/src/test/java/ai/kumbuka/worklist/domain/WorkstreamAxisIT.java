@@ -143,7 +143,7 @@ class WorkstreamAxisIT {
     @Test
     void rename_is_refused_once_an_item_points_at_the_workstream() {
         Workstream ws = workstreams.declare(scope, "beta", "beta description");
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item in beta",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
@@ -176,7 +176,7 @@ class WorkstreamAxisIT {
 
         // A withdrawn workstream cannot take new items — refuseWithdrawn
         // fires through ItemService.resolveWorkstream.
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item under a withdrawn ws",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,

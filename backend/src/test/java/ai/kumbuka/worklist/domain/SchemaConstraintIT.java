@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -461,51 +468,63 @@ class SchemaConstraintIT {
     }
 
     // ==================================================================
-    // The per-selector counter.
+    // The per-view counter.
     // ==================================================================
 
     /**
-     * Exactly one counter per selector in a scope, and none without a
-     * selector.
+     * Exactly one counter per view in a scope, none without a key, and none
+     * for a view that is not one of the four.
      *
-     * <p>The uniqueness rule is expressed directly by
-     * {@code uq_number_space_selector} over {@code (tenant_id, scope_id,
-     * selector_pk)}; {@code selector_pk NOT NULL} makes that ordinary rather
-     * than partial. A row without a selector is refused at the column, and a
-     * second row for the same selector is refused at the index.
+     * <p>Since V24 the counter's key is {@code (tenant_id, scope_id, view)},
+     * unique by {@code uq_number_space_view} and bounded by
+     * {@code ck_number_space_view}. The selector key of V20,
+     * {@code uq_number_space_selector}, stands beside it until the contraction
+     * release; the counters below are written the way the previous image
+     * writes them, by selector alone, and the V24 trigger fills the view.
      */
     @Test
-    void a_scope_holds_exactly_one_counter_per_selector() throws SQLException {
+    void a_scope_holds_exactly_one_counter_per_view() throws SQLException {
+        UUID scope = UUID.randomUUID();
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenant);
-            Long first = insertSelector(c);
-            Long second = insertSelector(c);
-            insertNumberSpace(c, first);
-            insertNumberSpace(c, second);
+            Long item = insertSelector(c, scope, Selector.ITEM);
+            Long iteration = insertSelector(c, scope, Selector.ITERATION);
+            Long milestone = insertSelector(c, scope, Selector.MILESTONE);
+            insertNumberSpace(c, scope, item, null);
+            insertNumberSpace(c, scope, iteration, null);
             c.commit();
 
-            assertThatThrownBy(() -> insertNumberSpace(c, first))
-                .as("RED STATE, observed: a second counter for the same selector must "
-                    + "be refused. Two of them would mean the selector's position has "
-                    + "two answers, and every allocation would pick whichever the query "
-                    + "happened to find")
+            assertThatThrownBy(() -> insertNumberSpace(c, scope, milestone, Selector.ITEM))
+                .as("RED STATE, observed: a second counter for the same view must be "
+                    + "refused, even under a selector that has none yet. Two of them would "
+                    + "mean the view's position has two answers, and every allocation would "
+                    + "pick whichever the query happened to find")
                 .isInstanceOf(SQLException.class)
-                .hasMessageContaining("uq_number_space_selector");
+                .hasMessageContaining("uq_number_space_view");
             c.rollback();
 
             Db.bindTenant(c, tenant);
-            assertThatThrownBy(() -> insertNumberSpace(c, null))
-                .as("RED STATE, observed: a counter without a selector must be refused. "
-                    + "There is no scope-wide row beside the per-selector ones; every "
-                    + "counter belongs to a view")
+            assertThatThrownBy(() -> insertNumberSpace(c, scope, null, null))
+                .as("RED STATE, observed: a counter with neither key must be refused. "
+                    + "There is no scope-wide row beside the per-view ones; every counter "
+                    + "belongs to a view")
                 .isInstanceOf(SQLException.class)
                 .hasMessageContaining("selector_pk");
             c.rollback();
 
             Db.bindTenant(c, tenant);
-            assertThat(count(c, "number_space"))
-                .as("one per selector, and no other")
-                .isEqualTo(2);
+            assertThatThrownBy(() -> insertNumberSpace(c, scope, milestone, "sprint"))
+                .as("RED STATE, observed: a counter for a token that names none of the four "
+                    + "views must be refused at the column")
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("ck_number_space_view");
+            c.rollback();
+
+            Db.bindTenant(c, tenant);
+            assertThat(viewsOf(c, scope))
+                .as("one per view, and no other — each carrying the view of the selector "
+                    + "it was written under")
+                .containsExactly(Selector.ITEM, Selector.ITERATION);
             c.commit();
         }
     }
@@ -807,19 +826,15 @@ class SchemaConstraintIT {
         }
     }
 
-    private Long insertSelector(Connection c) throws SQLException {
+    private Long insertSelector(Connection c, UUID scope, String token) throws SQLException {
         try (var st = c.prepareStatement("""
                 INSERT INTO worklist.selector (tenant_id, scope_id, token)
                 VALUES (?, ?, ?)
                 RETURNING pk
                 """)) {
             st.setObject(1, tenant);
-            st.setObject(2, SCOPE);
-            // Lower case, because the form constraint says so since V6, and
-            // deliberately not one of the three views: this class plants rows to
-            // prove a constraint on, and the constraint checks form only.
-            st.setString(3, "t" + UUID.randomUUID().toString().replace("-", "")
-                .substring(0, 12));
+            st.setObject(2, scope);
+            st.setString(3, token);
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -827,20 +842,37 @@ class SchemaConstraintIT {
         }
     }
 
-    private void insertNumberSpace(Connection c, Long selectorPk) throws SQLException {
+    /** A counter, naming the selector, the view, both or neither, as a writer may. */
+    private void insertNumberSpace(Connection c, UUID scope, Long selectorPk, String view)
+            throws SQLException {
         try (var st = c.prepareStatement("""
-                INSERT INTO worklist.number_space (selector_pk, tenant_id, scope_id)
-                VALUES (?, ?, ?)
+                INSERT INTO worklist.number_space (selector_pk, view, tenant_id, scope_id)
+                VALUES (?, ?, ?, ?)
                 """)) {
             if (selectorPk == null) {
                 st.setNull(1, java.sql.Types.BIGINT);
             } else {
                 st.setLong(1, selectorPk);
             }
-            st.setObject(2, tenant);
-            st.setObject(3, SCOPE);
+            st.setString(2, view);
+            st.setObject(3, tenant);
+            st.setObject(4, scope);
             st.executeUpdate();
         }
+    }
+
+    private List<String> viewsOf(Connection c, UUID scope) throws SQLException {
+        List<String> views = new ArrayList<>();
+        try (var st = c.prepareStatement(
+                "SELECT view FROM worklist.number_space WHERE scope_id = ? ORDER BY view")) {
+            st.setObject(1, scope);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    views.add(rs.getString(1));
+                }
+            }
+        }
+        return views;
     }
 
     private Long insertStatus(Connection c) throws SQLException {

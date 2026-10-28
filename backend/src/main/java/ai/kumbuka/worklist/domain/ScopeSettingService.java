@@ -123,7 +123,7 @@ public class ScopeSettingService extends PlanningService {
         // because a caller opening a scope has no verb to declare a view
         // with, and no reason to know that one exists.
         for (String view : Selector.VIEWS) {
-            selectors.declare(scopeId, view);
+            selectors.open(scopeId, view);
         }
 
         LOG.infof("scope %s opened, and the three views seeded", scopeId);

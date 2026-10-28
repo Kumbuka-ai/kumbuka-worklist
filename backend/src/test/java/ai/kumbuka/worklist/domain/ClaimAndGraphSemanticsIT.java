@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -42,7 +49,7 @@ class ClaimAndGraphSemanticsIT {
     @BeforeEach
     void aScopeOfItsOwn() {
         scope = UUID.randomUUID();
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
             true, false, false, false).pk;
     }

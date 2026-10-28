@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -76,8 +83,8 @@ class MilestoneWorkstreamDecouplingIT {
         settings.create(scope, Map.of(
             "max_planned_iterations", 10, "warn_planned_iterations", 9,
             "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
-        selectors.declare(scope, Selector.ITEM);
-        selectors.declare(scope, Selector.MILESTONE);
+        selectors.open(scope, Selector.ITEM);
+        selectors.open(scope, Selector.MILESTONE);
     }
 
     /**

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -39,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <h2>The red state, and how it was observed</h2>
  *
  * <p>The seeding half was observed against {@link ScopeSettingService#create}:
- * removing the {@code selectors.declare} loop makes
+ * removing the {@code selectors.open} loop makes
  * {@link #a_freshly_opened_scope_carries_its_three_seeded_views} fail, and
  * {@link ItemService#create} refuses with {@code SELECTOR_UNDECLARED} before
  * reaching the allocation. Measured 2026-09-07 against the current build.
@@ -90,7 +97,7 @@ class ScopeOpeningProbeIT {
             "max_memberships_per_iteration", 10,
             "warn_memberships_per_iteration", 9));
 
-        assertThat(selectors.inScope(scope).stream().map(s -> s.token).toList())
+        assertThat(selectors.inScope(scope))
             .as("the scope-opening call is one act, and it seeds the three views the "
                 + "platform's object model names — item, iteration and milestone. A "
                 + "caller opening a scope has no verb to declare a view with, so the "

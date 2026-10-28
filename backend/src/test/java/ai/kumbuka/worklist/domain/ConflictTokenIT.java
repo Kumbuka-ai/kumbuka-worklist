@@ -74,7 +74,7 @@ class ConflictTokenIT {
     void aScopeOfItsOwn() {
         clock.set(T.minusSeconds(86_400));
         scope = UUID.randomUUID();
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
             true, false, false, false).name;
         settings.create(scope, Map.of(

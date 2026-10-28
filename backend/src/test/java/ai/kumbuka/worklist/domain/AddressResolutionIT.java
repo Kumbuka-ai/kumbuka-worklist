@@ -63,7 +63,7 @@ class AddressResolutionIT {
     void each_view_names_its_own_absence() {
         UUID scope = UUID.randomUUID();
         for (String view : Selector.VIEWS) {
-            selectors.declare(scope, view);
+            selectors.open(scope, view);
         }
 
         assertThat(refusalFrom(() -> addresses.itemAt(scope, 999)).reason())
@@ -93,7 +93,7 @@ class AddressResolutionIT {
     @Test
     void the_pointer_addresses_nothing_while_a_scope_works_no_iteration() {
         UUID scope = UUID.randomUUID();
-        selectors.declare(scope, Selector.ITERATION);
+        selectors.open(scope, Selector.ITERATION);
 
         WorklistException refusal = refusalFrom(() -> addresses.currentIteration(scope));
 

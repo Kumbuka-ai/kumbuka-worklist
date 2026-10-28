@@ -375,7 +375,7 @@ class MarkerProbeIT {
             "max_memberships_per_iteration", 10,
             "warn_memberships_per_iteration", 1));
         for (String view : Selector.VIEWS) {
-            selectors.declare(SCOPE_ID, view);
+            selectors.open(SCOPE_ID, view);
         }
         vocabulary.declareStatus(SCOPE_ID, OPEN, 1, true, false, false, false);
         vocabulary.declareStatus(SCOPE_ID, DONE, 2, false, false, true, true);

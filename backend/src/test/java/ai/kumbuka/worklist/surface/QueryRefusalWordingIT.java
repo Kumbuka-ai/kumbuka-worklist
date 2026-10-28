@@ -305,7 +305,7 @@ class QueryRefusalWordingIT {
             "max_memberships_per_iteration", 10,
             "warn_memberships_per_iteration", 9));
         for (String view : Selector.VIEWS) {
-            selectors.declare(SCOPE_ID, view);
+            selectors.open(SCOPE_ID, view);
         }
         vocabulary.declareStatus(SCOPE_ID, "open", 1, true, false, false, false);
         workstreams.requireDefault(SCOPE_ID);
@@ -314,7 +314,7 @@ class QueryRefusalWordingIT {
         }
 
         SurfaceFixture.publishScope(SPARSE, SPARSE_ID, "project", false);
-        selectors.declare(SPARSE_ID, Selector.ITEM);
+        selectors.open(SPARSE_ID, Selector.ITEM);
 
         SurfaceFixture.publishScope(PRIVATE, PRIVATE_ID, "private", false);
     }

@@ -215,7 +215,7 @@ class TenantBindingEdgeCaseIT {
             // reason: an item acquires its address at creation, so the view it
             // is addressed under has to exist first — and a selector is
             // tenant-scoped like the vocabulary above it.
-            selectors.declare(scope, ai.kumbuka.worklist.domain.Selector.ITEM);
+            selectors.open(scope, ai.kumbuka.worklist.domain.Selector.ITEM);
             var created = items.create(scope,
                 java.util.Map.of("title", "count-probe", "status", status));
             assertThat(created.get("title")).isEqualTo("count-probe");

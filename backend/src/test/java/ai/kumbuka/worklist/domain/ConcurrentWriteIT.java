@@ -65,7 +65,7 @@ class ConcurrentWriteIT {
     @BeforeEach
     void aScopeOfItsOwn() {
         scope = UUID.randomUUID();
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
             true, false, false, false).name;
         settings.create(scope, Map.of(

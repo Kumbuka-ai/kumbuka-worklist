@@ -15,17 +15,24 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The address spaces of a scope: which selectors exist, and what number comes
- * next in each.
+ * The address spaces of a scope: which views are open in it, and what number
+ * comes next in each.
  *
- * <p>Two things live here because they are the same thing seen twice. A
- * selector is the head of an address; a number space is the tail of the same
- * address; and the rule that makes both work — that an address is issued once
- * and never again — is one rule, kept in one place.
+ * <p>Two things live here because they are the same thing seen twice. A view
+ * is the head of an address; a number space is the tail of the same address;
+ * and the rule that makes both work — that an address is issued once and
+ * never again — is one rule, kept in one place.
+ *
+ * <h2>The views are constants, the counters are the scope's</h2>
+ *
+ * Which views exist is {@link Selector#VIEWS} and nothing else. What a scope
+ * holds is one {@link NumberSpace} per view it has opened, keyed by the view
+ * (V24), and that counter is the whole answer to both questions asked here:
+ * a view is open in a scope when its counter is there, and its next number is
+ * the counter plus one. No answer is read off a selector row.
  *
  * <p>{@code @TenantBound} at class level, so the database session setting is
  * bound inside every transaction. Both layers of the enforcement model move
@@ -45,21 +52,26 @@ public class SelectorRegistry {
     @Inject SelectorRepository selectors;
 
     /**
-     * Declare a selector. This is the ONLY way one comes into existence.
+     * Open a view in a scope. This is the ONLY way a view comes to resolve
+     * there.
      *
-     * <p>No other method here or anywhere else inserts into this table, and
-     * that is the whole design rather than an implementation choice: a
-     * service that creates a selector on first use answers {@code FAET-1}
-     * by opening a second address space, and afterwards nothing distinguishes
-     * the typo from the intention — both exist, both have items under them.
+     * <p>No other method here or anywhere else opens a counter, and that is
+     * the whole design rather than an implementation choice: a service that
+     * opens an address space on first use answers a misspelt view by opening
+     * a second one, and afterwards nothing distinguishes the typo from the
+     * intention.
      *
-     * <p>Declaring one that already exists returns the existing one rather
-     * than refusing. Declaration is a statement that the space should exist,
-     * and it is either true or it was already true; a caller retrying after a
-     * timeout should not have to tell those two apart.
+     * <p>Opening one that is already open changes nothing. Opening is a
+     * statement that the space should exist, and it is either true or it was
+     * already true; a caller retrying after a timeout should not have to tell
+     * those two apart. The mark of an open view is never reset by it.
+     *
+     * <p>The counter opens at zero, here rather than lazily on the first
+     * allocation, because a lazily created mark is a mark that two concurrent
+     * first allocations both try to create.
      */
     @Transactional
-    public Selector declare(UUID scopeId, String token) {
+    public void open(UUID scopeId, String token) {
         if (token == null || !Selector.TOKEN_PATTERN.matcher(token).matches()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
@@ -76,73 +88,32 @@ public class SelectorRegistry {
                 List.of(SELECTOR_ARGUMENT));
         }
 
-        Optional<Selector> existing = find(scopeId, token);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
+        selectors.open(scopeId, token);
+        LOG.infof("view %s open in scope %s", token, scopeId);
+    }
 
-        Selector selector = new Selector();
-        selector.scopeId = scopeId;
-        selector.token = token;
-        selectors.insert(selector);
-
-        // The address space opens with the selector, at zero. Created here
-        // rather than lazily on the first allocation, because a lazily
-        // created mark is a mark that two concurrent first allocations both
-        // try to create, and the loser sees a constraint violation rather
-        // than a number.
-        NumberSpace space = new NumberSpace();
-        space.selectorPk = selector.pk;
-        space.scopeId = scopeId;
-        space.highWaterMark = 0L;
-        selectors.insert(space);
-
-        LOG.infof("selector %s declared in scope %s", token, scopeId);
-        return selector;
+    /** The views open in a scope, by token. */
+    @Transactional
+    public List<String> inScope(UUID scopeId) {
+        return selectors.views(scopeId);
     }
 
     /**
-     * Withdraw a selector: nothing new is accepted under it, and everything
-     * already accepted keeps resolving.
+     * Nothing, when the view is open in the scope; a typed refusal naming the
+     * argument otherwise.
      *
-     * <p>The token stays occupied. That is the point — a released token could
-     * be declared again to mean something else, and every address ever issued
-     * under the first meaning would quietly resolve to the second.
+     * <p>A token that is none of the four views is refused the same way, and
+     * without asking the store: it cannot be open anywhere.
      */
     @Transactional
-    public Selector withdraw(UUID scopeId, String token) {
-        Selector selector = require(scopeId, token);
-        if (Selector.WITHDRAWN.equals(selector.status)) {
-            return selector;
+    public void require(UUID scopeId, String view) {
+        if (!Selector.VIEWS.contains(view) || selectors.space(scopeId, view).isEmpty()) {
+            throw undeclared();
         }
-        selector.status = Selector.WITHDRAWN;
-        selectors.flush();
-        LOG.infof("selector %s withdrawn in scope %s", token, scopeId);
-        return selector;
-    }
-
-    /** Every selector of a scope, declared and withdrawn alike, by token. */
-    @Transactional
-    public List<Selector> inScope(UUID scopeId) {
-        return selectors.inScope(scopeId);
     }
 
     /**
-     * The selector of that token, or a typed refusal naming it.
-     *
-     * <p>The refusal names the token AND says what to do about it, because
-     * "no such selector" and "you have to declare it first" are the same fact
-     * and only the second one is actionable.
-     */
-    @Transactional
-    public Selector require(UUID scopeId, String token) {
-        return find(scopeId, token).orElseThrow(() -> new WorklistException(
-            WorklistException.Reason.SELECTOR_UNDECLARED,
-            List.of(SELECTOR_ARGUMENT)));
-    }
-
-    /**
-     * The next number in a selector's space, and the mark moved to match.
+     * The next number in a view's space, and the mark moved to match.
      *
      * <p>The row is locked for the length of the transaction, so two callers
      * allocating at once are serialised and get different numbers rather than
@@ -155,38 +126,21 @@ public class SelectorRegistry {
      * place this differs from a sequence, and it is the safe direction —
      * a number is reused only when nothing ever saw it.
      *
-     * <p><strong>Each selector reads its own counter.</strong> The three
-     * views — item, iteration, milestone — each carry a {@link NumberSpace}
-     * row of their own, and the address form carries the view, so
-     * {@code .../item/1}, {@code .../iteration/1} and {@code .../milestone/1}
-     * are three different addresses. There is no scope-wide counter beside
-     * them.
+     * <p><strong>Each view reads its own counter.</strong> The address form
+     * carries the view, so {@code .../item/1}, {@code .../iteration/1} and
+     * {@code .../milestone/1} are three different addresses. There is no
+     * scope-wide counter beside them.
      */
     @Transactional
-    public long allocate(UUID scopeId, Selector selector) {
-        if (Selector.WITHDRAWN.equals(selector.status)) {
-            throw new WorklistException(
-                WorklistException.Reason.SELECTOR_WITHDRAWN,
-                List.of(SELECTOR_ARGUMENT));
-        }
-
-        NumberSpace space = selectors.lockSpace(selector.pk).orElse(null);
-        if (space == null) {
-            // A selector without its space is a row that predates the
-            // declaration path above, or one written around it. Reported
-            // rather than repaired: creating the missing space here would
-            // silently accept the second case.
-            throw new WorklistException(
-                WorklistException.Reason.SELECTOR_UNDECLARED,
-                List.of(SELECTOR_ARGUMENT));
-        }
+    public long allocate(UUID scopeId, String view) {
+        NumberSpace space = lock(scopeId, view);
 
         space.highWaterMark = space.highWaterMark + 1;
         selectors.flush();
 
         long allocated = space.highWaterMark;
-        LOG.debugf("number %d allocated under selector %s in scope %s",
-            allocated, selector.token, scopeId);
+        LOG.debugf("number %d allocated under view %s in scope %s",
+            allocated, view, scopeId);
         return allocated;
     }
 
@@ -196,20 +150,11 @@ public class SelectorRegistry {
      *
      * <p>Forward only. Moving a mark back is not a smaller version of moving
      * it forward — it is the act of handing out numbers that are already in
-     * use, which is the one thing the mark exists to prevent. The refusal
-     * carries both values so the caller can see by how much it was wrong.
-     *
-     * <p>{@code require} above guarantees the selector was declared, and
-     * {@link #declare} opens the {@link NumberSpace} row for it in the same
-     * transaction — so the space is present here by invariant. The
-     * corresponding null check lives one method up, in {@link #allocate},
-     * where every acceptance passes; a broken invariant surfaces there as a
-     * typed refusal rather than as a rare-path NPE.
+     * use, which is the one thing the mark exists to prevent.
      */
     @Transactional
-    public long carryMarkForward(UUID scopeId, String token, long mark) {
-        Selector selector = require(scopeId, token);
-        NumberSpace space = selectors.lockSpace(selector.pk).orElseThrow();
+    public long carryMarkForward(UUID scopeId, String view, long mark) {
+        NumberSpace space = lock(scopeId, view);
 
         long standing = space.highWaterMark;
         if (mark < standing) {
@@ -221,28 +166,45 @@ public class SelectorRegistry {
         space.highWaterMark = mark;
 
         selectors.flush();
-        LOG.infof("high-water mark of selector %s in scope %s carried to %d",
-            token, scopeId, mark);
+        LOG.infof("high-water mark of view %s in scope %s carried to %d",
+            view, scopeId, mark);
         return mark;
     }
 
     /**
-     * The current mark of a selector: the highest number ever handed out
-     * under it.
+     * The current mark of a view: the highest number ever handed out under
+     * it.
      *
      * <p>A caller asking where a space stands is asking what the next number
-     * will be built on. Each selector has one counter; this reads it.
-     *
-     * <p>The space is present by the same invariant {@link #carryMarkForward}
-     * relies on: a declared selector always has one.
+     * will be built on. Each view has one counter; this reads it.
      */
     @Transactional
-    public long markOf(UUID scopeId, String token) {
-        Selector selector = require(scopeId, token);
-        return selectors.space(selector.pk).orElseThrow().highWaterMark;
+    public long markOf(UUID scopeId, String view) {
+        if (!Selector.VIEWS.contains(view)) {
+            throw undeclared();
+        }
+        return selectors.space(scopeId, view)
+            .orElseThrow(SelectorRegistry::undeclared).highWaterMark;
     }
 
-    private Optional<Selector> find(UUID scopeId, String token) {
-        return selectors.find(scopeId, token);
+    /** The view's counter under lock, or the refusal for a view not open in the scope. */
+    private NumberSpace lock(UUID scopeId, String view) {
+        if (!Selector.VIEWS.contains(view)) {
+            throw undeclared();
+        }
+        return selectors.lockSpace(scopeId, view).orElseThrow(SelectorRegistry::undeclared);
+    }
+
+    /**
+     * The refusal for a view that is not open in the scope.
+     *
+     * <p>Named SELECTOR_UNDECLARED, and it says what to do about it, because
+     * "no such view here" and "the scope has to be opened first" are the same
+     * fact and only the second one is actionable.
+     */
+    private static WorklistException undeclared() {
+        return new WorklistException(
+            WorklistException.Reason.SELECTOR_UNDECLARED,
+            List.of(SELECTOR_ARGUMENT));
     }
 }

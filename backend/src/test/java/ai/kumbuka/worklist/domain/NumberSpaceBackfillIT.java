@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -24,7 +31,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * <h2>Why the state is planted by hand</h2>
  *
  * Every fresh scope opened through the verb surface carries its scope-wide
- * counter — {@code SelectorRegistry.declare} opens it with the selector, so a
+ * counter — {@code SelectorRegistry.open} opens it with the view, so a
  * scope born through this test never falls into the shape V15 exists to
  * repair. To measure V15, the shape has to be constructed: the counter row
  * is dropped from a freshly opened scope, so the next {@code create} refuses
@@ -66,9 +73,9 @@ class NumberSpaceBackfillIT {
         tenant = UUID.fromString(
             ConfigProvider.getConfig().getValue("worklist.tenant-id", String.class));
         scope = UUID.randomUUID();
-        selectors.declare(scope, Selector.ITEM);
-        selectors.declare(scope, Selector.MILESTONE);
-        selectors.declare(scope, Selector.ITERATION);
+        selectors.open(scope, Selector.ITEM);
+        selectors.open(scope, Selector.MILESTONE);
+        selectors.open(scope, Selector.ITERATION);
         settings.create(scope, Map.of(
             "max_planned_iterations", 10, "warn_planned_iterations", 9,
             "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));

@@ -19,16 +19,16 @@ import java.time.Instant;
 /**
  * The high-water mark of one address space.
  *
- * <h2>One counter per selector</h2>
+ * <h2>One counter per view</h2>
  *
- * One row per selector. Each view — item, iteration, milestone — has its own
- * counter, and that row is the one position. There is no scope-wide counter
+ * One row per view and scope. Each view — item, iteration, milestone,
+ * workstream — has its own counter, and that row is the one position. There is no scope-wide counter
  * beside them: the address form carries the view, so {@code .../item/1},
  * {@code .../iteration/1} and {@code .../milestone/1} are three different
  * addresses already, and a bare number that had to disambiguate itself
  * across them would solve a problem the address form does not have.
  *
- * <p>The key is a surrogate rather than the selector so the ORM key stays
+ * <p>The key is a surrogate rather than the view so the ORM key stays
  * outside the tenancy axis, which the shared superclass owns and no caller
  * names.
  *
@@ -76,13 +76,19 @@ public class NumberSpace extends TenantScoped {
     public Long pk;
 
     /**
-     * The selector whose address space this is.
+     * The view whose address space this is: one of {@link Selector#VIEWS}.
      *
-     * <p>Immutable and never null: a counter belongs to one selector and
-     * does not migrate between address spaces.
+     * <p>Immutable and never null: a counter belongs to one view and does
+     * not migrate between address spaces. Together with the scope it is the
+     * counter's key (V24); there is one counter per view and scope.
+     *
+     * <p>The store still carries {@code selector_pk} beside it until the
+     * contraction release. It is not mapped: the repository names it nowhere,
+     * and the trigger of V24 fills it from this column on every insert, so the
+     * previous image still finds the selector its counters hang on.
      */
-    @Column(name = "selector_pk", updatable = false, nullable = false)
-    public Long selectorPk;
+    @Column(name = "view", updatable = false, nullable = false)
+    public String view;
 
     // No workstream. There was one counter shape per (scope, workstream) for
     // the `milestone` selector between 2026-09-08 and V12; V12 moved every

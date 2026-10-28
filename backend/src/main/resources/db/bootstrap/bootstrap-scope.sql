@@ -1,3 +1,9 @@
+-- Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+-- SPDX-License-Identifier: AGPL-3.0-only
+-- This file is part of Kumbuka and is licensed under the GNU Affero
+-- General Public License v3.0 only. See the LICENSE file in the
+-- repository root for the full licence text.
+
 -- ===========================================================================
 -- bootstrap-scope.sql — declare a scope so the service can be used in it.
 --
@@ -129,8 +135,8 @@ ON CONFLICT DO NOTHING;
 -- Ratified 2026-09-08: the fourth view. Every scope opens with a default
 -- workstream that catches everything not explicitly filed elsewhere; its
 -- identity is fixed by the `is_default` flag and only its description is
--- settable. Number 1 is reserved for it, and the number space for the
--- workstream selector is advanced to match.
+-- settable. Number 1 is reserved for it, and the workstream counter is
+-- advanced to match below, once it is open.
 --
 -- No milestone counter is opened here for the default workstream — the
 -- existing per-scope milestone counter is repurposed as the default's per
@@ -147,49 +153,39 @@ VALUES
      true)
 ON CONFLICT DO NOTHING;
 
--- Advance the workstream selector's own counter so the next declare
--- allocates 2 rather than colliding at 1.
-UPDATE worklist.number_space ns
-SET high_water_mark = GREATEST(ns.high_water_mark, 1)
-FROM worklist.selector s
-WHERE ns.tenant_id   = :'tenant_id'
-  AND ns.scope_id    = :'scope_id'
-  AND ns.selector_pk = s.pk
-  AND s.token        = 'workstream';
 
--- The scope-wide counters for the item, iteration and milestone selectors.
+-- The counters, one per view.
 --
--- `SelectorRegistry.allocate` reads a selector's one counter row and
--- refuses typed with SELECTOR_UNDECLARED when it is missing.
--- `SelectorRegistry.declare` opens that row alongside the selector — a
--- scope opened through the verb surface therefore always has one — but
--- this bootstrap seeds the selectors directly through DML, so the counter
--- rows have to be seeded here too.
+-- A view is open in a scope when its counter is there: since V24 the service
+-- finds a counter by (tenant, scope, view) and reads nothing else to decide
+-- whether an address under the view resolves. `SelectorRegistry.open` opens
+-- the counter alongside the selector row — a scope opened through the verb
+-- surface therefore always has one — but this bootstrap seeds the selectors
+-- directly through DML, so the counter rows have to be seeded here too. The
+-- counter names its view and its selector both; V24's trigger would fill
+-- either one left out.
 --
--- Milestone returned to scope-wide with V12 (2026-09-09). The per-
--- workstream row an earlier bootstrap seeded here is retired: it belongs
--- to the shape V12 retracted, and V15 (2026-09-12) removes any that
--- survive elsewhere. Item's counter is seeded here as well so this file
--- reads as ONE step — every selector this bootstrap declares carries the
--- row that answers when it is used.
---
--- The insert stops naming `number_space.workstream_id` as of 2026-09-28.
--- It only ever wrote NULL into it here, so nothing changes about the row
--- that lands; what changes is that this file no longer has to be edited in
--- the same breath as the column's DROP.
---
--- The default workstream is number 1; its counter is advanced with
--- GREATEST(mark, 1) above so the next `declare` allocates 2. Item,
--- iteration and milestone all open at zero, which is what the store
--- carries for a scope with nothing in it yet.
+-- All four open at zero, which is what the store carries for a scope with
+-- nothing in it yet. Until 2026-10-28 the `workstream` counter was missing
+-- here and only the update below named it, so it matched nothing; V24 opened
+-- the counter for every scope bootstrapped that way.
 INSERT INTO worklist.number_space
-    (tenant_id, scope_id, selector_pk, high_water_mark)
-SELECT :'tenant_id', :'scope_id', s.pk, 0
+    (tenant_id, scope_id, selector_pk, view, high_water_mark)
+SELECT :'tenant_id', :'scope_id', s.pk, s.token, 0
 FROM worklist.selector s
 WHERE s.tenant_id = :'tenant_id'
   AND s.scope_id  = :'scope_id'
-  AND s.token IN ('item', 'iteration', 'milestone')
 ON CONFLICT DO NOTHING;
+
+-- Advance the workstream counter past the default workstream's number 1, so
+-- the next declare allocates 2 rather than colliding at 1. After the insert
+-- above, and not before it: an update ahead of the counter it moves matches
+-- nothing and moves nothing.
+UPDATE worklist.number_space
+SET high_water_mark = GREATEST(high_water_mark, 1)
+WHERE tenant_id = :'tenant_id'
+  AND scope_id  = :'scope_id'
+  AND view      = 'workstream';
 
 -- ---------------------------------------------------------------------------
 -- The status vocabulary, and its four predicates.
@@ -422,6 +418,5 @@ SELECT number, kind, title FROM worklist.milestone
  WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id' ORDER BY number;
 
 \echo '--- counters ---'
-SELECT s.token, n.high_water_mark
-  FROM worklist.number_space n JOIN worklist.selector s ON s.pk = n.selector_pk
- WHERE n.tenant_id = :'tenant_id' AND n.scope_id = :'scope_id' ORDER BY s.token;
+SELECT view, high_water_mark FROM worklist.number_space
+ WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id' ORDER BY view;

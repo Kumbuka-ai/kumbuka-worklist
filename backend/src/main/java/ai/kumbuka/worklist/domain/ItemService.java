@@ -247,8 +247,7 @@ public class ItemService {
         // closed one SELECTOR_WITHDRAWN rather than something about a
         // status. The allocation is safe here because the transaction rolls
         // it back cleanly if a later check refuses.
-        Selector view = selectors.require(scopeId, Selector.ITEM);
-        long number = selectors.allocate(scopeId, view);
+        long number = selectors.allocate(scopeId, Selector.ITEM);
 
         ItemStatus initialStatus = resolveStatus(scopeId, given.get(Field.STATUS));
 

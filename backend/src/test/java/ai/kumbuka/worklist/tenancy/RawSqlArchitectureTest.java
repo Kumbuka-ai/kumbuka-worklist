@@ -126,6 +126,9 @@ class RawSqlArchitectureTest {
      * this red, so the reason is read again whenever the SQL changes.
      */
     static final Map<String, NativeUse> NATIVE = Map.of(
+        "repository.SelectorRepository", new NativeUse(2, "opens a view: the selector row "
+            + "kept for the previous image and the counter, each an INSERT ... ON CONFLICT DO "
+            + "NOTHING, which JPQL cannot express"),
         "repository.ScopeAccessRepository", new NativeUse(5, "reads the platform's "
             + "subject-filtered scope directory, a view no entity of this service maps, and "
             + "binds and reads the session settings app.subject and app.tenant_id"),

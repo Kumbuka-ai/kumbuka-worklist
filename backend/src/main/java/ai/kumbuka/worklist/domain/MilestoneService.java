@@ -220,8 +220,7 @@ public class MilestoneService extends PlanningService {
      */
     private long allocateNumber(UUID scopeId) {
         requireSetting(scopeId);
-        Selector milestoneSelector = selectors.require(scopeId, Selector.MILESTONE);
-        return selectors.allocate(scopeId, milestoneSelector);
+        return selectors.allocate(scopeId, Selector.MILESTONE);
     }
 
     /**

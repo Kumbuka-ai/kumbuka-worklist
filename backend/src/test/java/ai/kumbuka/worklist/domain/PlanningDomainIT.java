@@ -756,7 +756,7 @@ class PlanningDomainIT {
         // The item view, declared before anything is created under it: an item
         // acquires its address at creation, so the view it is addressed under
         // has to exist by then. Declaring is idempotent.
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         String statusName = vocabulary.requireStatus(scope, statusId).name;
         return (UUID) items.create(scope, Map.of(
             "title", title, "status", statusName)).get("id");

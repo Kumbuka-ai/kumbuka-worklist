@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -75,9 +82,9 @@ class LifecycleChainIT {
         scope = UUID.randomUUID();
         // Selectors — the two axes and the item view. Declaring one twice is
         // idempotent, so a fresh scope opens its address spaces here.
-        selectors.declare(scope, Selector.ITEM);
-        selectors.declare(scope, Selector.MILESTONE);
-        selectors.declare(scope, Selector.ITERATION);
+        selectors.open(scope, Selector.ITEM);
+        selectors.open(scope, Selector.MILESTONE);
+        selectors.open(scope, Selector.ITERATION);
 
         // Cardinality limits are the scope's own — the service admits or
         // refuses against these numbers, so the test writes them.

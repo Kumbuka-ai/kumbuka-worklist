@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import io.quarkus.test.common.QuarkusTestResource;
@@ -416,7 +423,10 @@ class ItemDomainIsolationIT {
                 """)) {
             st.setObject(1, tenant);
             st.setObject(2, SCOPE);
-            st.setString(3, freshToken());
+            // A view, because a counter under it must name one of the four
+            // since V24; the tenants are fresh per method, so the token
+            // cannot collide.
+            st.setString(3, ai.kumbuka.worklist.domain.Selector.ITEM);
             return returnedPk(st);
         }
     }

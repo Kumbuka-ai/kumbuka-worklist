@@ -69,7 +69,7 @@ class ItemWorkstreamInvariantIT {
 
     @Test
     void create_without_a_workstream_falls_to_the_scopes_default() {
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         Workstream defaultWs = workstreams.requireDefault(scope);
 
         Map<String, Object> item = items.create(scope, Map.of(
@@ -81,7 +81,7 @@ class ItemWorkstreamInvariantIT {
 
     @Test
     void create_with_a_named_workstream_uses_it() {
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
 
         Map<String, Object> item = items.create(scope, Map.of(
@@ -94,7 +94,7 @@ class ItemWorkstreamInvariantIT {
 
     @Test
     void create_refuses_an_unknown_workstream() {
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "orphan item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
@@ -108,7 +108,7 @@ class ItemWorkstreamInvariantIT {
 
     @Test
     void create_refuses_a_uuid_where_a_workstream_token_is_expected() {
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "malformed ws",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
@@ -136,7 +136,7 @@ class ItemWorkstreamInvariantIT {
 
     @Test
     void moving_the_item_to_another_workstream_without_a_milestone_passes() {
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
         Workstream backend = workstreams.declare(scope, "backend", "backend stream");
 
@@ -150,7 +150,7 @@ class ItemWorkstreamInvariantIT {
 
     @Test
     void clearing_the_workstream_is_refused() {
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
         UUID itemId = createItem("no-clear item", mobile.id);
 

@@ -123,8 +123,8 @@ class WorkstreamViewIT {
     void aWorkstreamOfItsOwn() {
         SurfaceFixture.stage();
         SurfaceFixture.asMember(identity);
-        selectors.declare(SCOPE_ID, Selector.WORKSTREAM);
-        selectors.declare(SCOPE_ID, Selector.MILESTONE);
+        selectors.open(SCOPE_ID, Selector.WORKSTREAM);
+        selectors.open(SCOPE_ID, Selector.MILESTONE);
         Workstream declared = declareAWorkstream(SCOPE_ID);
         workstreamNumber = declared.number;
     }
@@ -313,7 +313,7 @@ class WorkstreamViewIT {
     @Test
     void every_view_of_the_platform_answers_query_without_a_500() {
         for (String view : Selector.VIEWS) {
-            selectors.declare(SCOPE_ID, view);
+            selectors.open(SCOPE_ID, view);
         }
         for (String view : Selector.VIEWS) {
             int status = given()

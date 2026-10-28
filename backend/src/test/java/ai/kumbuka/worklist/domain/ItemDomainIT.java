@@ -548,24 +548,13 @@ class ItemDomainIT {
             .isEmpty();
     }
 
-    /** A declared view that was withdrawn accepts nothing further. */
-    @Test
-    void a_withdrawn_view_accepts_nothing_further() {
-        UUID closingScope = UUID.randomUUID();
-        selectors.declare(closingScope, Selector.ITEM);
-        selectors.withdraw(closingScope, Selector.ITEM);
-
-        WorklistException refusal = catchWorklistException(() ->
-            items.create(closingScope, Map.of(
-                "title", "after the withdrawal",
-                "status", statusNameOf(openStatus()))));
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SELECTOR_WITHDRAWN);
-
-        assertThat(selectors.inScope(closingScope).stream().map(s -> s.token).toList())
-            .as("and the token stays occupied, so it cannot be declared again to mean "
-                + "something else — every address ever issued under it keeps resolving")
-            .contains(Selector.ITEM);
-    }
+    // A withdrawn view used to be probed here: a selector row set to
+    // `withdrawn` refused every create with SELECTOR_WITHDRAWN. Since V24 the
+    // views are constants and no selector row is read, so a withdrawn view is
+    // a state the service cannot be in — V24 refuses to run over one, and
+    // that refusal is what `NumberSpaceViewMigrationIT
+    // #a_withdrawn_selector_stops_the_migration` observes. No surface ever
+    // withdrew a view; the registry's `withdraw` had no caller outside tests.
 
     /**
      * The item selector's counter is the one position, and every allocation
@@ -1318,26 +1307,28 @@ class ItemDomainIT {
     @Test
     void a_malformed_selector_token_is_refused() {
         WorklistException refusal =
-            catchWorklistException(() -> selectors.declare(SCOPE, "1-not-a-selector"));
+            catchWorklistException(() -> selectors.open(SCOPE, "1-not-a-selector"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(selectors.inScope(SCOPE).stream().map(s -> s.token).toList())
+        assertThat(selectors.inScope(SCOPE))
             .doesNotContain("1-not-a-selector");
     }
 
-    /** Declaring twice is the same statement made twice, not a collision. */
+    /** Opening twice is the same statement made twice, not a collision. */
     @Test
-    void declaring_a_view_twice_returns_the_one_that_exists() {
+    void opening_a_view_twice_leaves_the_one_that_exists() {
         UUID freshScope = UUID.randomUUID();
-        Long first = selectors.declare(freshScope, Selector.MILESTONE).pk;
+        selectors.open(freshScope, Selector.MILESTONE);
+        selectors.carryMarkForward(freshScope, Selector.MILESTONE, 7L);
 
-        assertThat(selectors.declare(freshScope, Selector.MILESTONE).pk)
-            .as("declaration states that the space should exist, and a retry after a "
+        selectors.open(freshScope, Selector.MILESTONE);
+        assertThat(selectors.inScope(freshScope))
+            .as("opening states that the space should exist, and a retry after a "
                 + "timeout should not have to tell 'created' from 'already there'")
-            .isEqualTo(first);
+            .containsExactly(Selector.MILESTONE);
         assertThat(selectors.markOf(freshScope, Selector.MILESTONE))
-            .as("and the second declaration did not reset the address space")
-            .isZero();
+            .as("and the second opening did not reset the address space")
+            .isEqualTo(7L);
     }
 
     // ==================================================================
@@ -1801,7 +1792,7 @@ class ItemDomainIT {
      * see it.
      */
     private void itemView() {
-        selectors.declare(SCOPE, Selector.ITEM);
+        selectors.open(SCOPE, Selector.ITEM);
     }
 
     /** A created item, returning its id. */

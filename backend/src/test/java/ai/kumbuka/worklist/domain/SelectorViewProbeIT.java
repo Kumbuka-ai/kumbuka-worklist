@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  *
  * <h2>The red state, and how it was observed</h2>
  *
- * The refusal is one block in {@code SelectorRegistry.declare}. Removing it —
+ * The refusal is one block in {@code SelectorRegistry.open}. Removing it —
  * which is exactly what this file's absence would have looked like — makes
  * {@link #a_token_outside_the_three_views_is_refused_and_not_declared} fail:
  * the foreign token passes the form check, is inserted, and comes back in the
@@ -73,7 +73,7 @@ class SelectorViewProbeIT {
     void a_token_outside_the_three_views_is_refused_and_not_declared() {
         UUID scope = UUID.randomUUID();
 
-        WorklistException refusal = refusalFrom(() -> selectors.declare(scope, FOREIGN_TOKEN));
+        WorklistException refusal = refusalFrom(() -> selectors.open(scope, FOREIGN_TOKEN));
 
         assertThat(refusal.reason())
             .as("a typed refusal naming the class of the problem, so that a caller can "
@@ -89,7 +89,7 @@ class SelectorViewProbeIT {
 
         // RED STATE, by its trace: with the refusal removed the token passes the
         // form check and is inserted, and this is where it would be.
-        assertThat(selectors.inScope(scope).stream().map(s -> s.token).toList())
+        assertThat(selectors.inScope(scope))
             .as("RED STATE, observed by its absence: without the view check the token is "
                 + "well formed, so it would be declared — and the scope would carry a "
                 + "fourth address space for a kind of thing this service does not hold")
@@ -109,12 +109,10 @@ class SelectorViewProbeIT {
         UUID scope = UUID.randomUUID();
 
         for (String view : Selector.VIEWS) {
-            Selector declared = selectors.declare(scope, view);
-            assertThat(declared.token).isEqualTo(view);
-            assertThat(declared.status).isEqualTo(Selector.DECLARED);
+            selectors.open(scope, view);
         }
 
-        assertThat(selectors.inScope(scope).stream().map(s -> s.token).toList())
+        assertThat(selectors.inScope(scope))
             .as("all three, and only three: the address spaces of a scope are the views it "
                 + "can hold, and there is no fourth")
             .containsExactlyInAnyOrderElementsOf(Selector.VIEWS);
@@ -135,12 +133,12 @@ class SelectorViewProbeIT {
     void upper_case_is_a_form_error_and_not_a_vocabulary_one() {
         UUID scope = UUID.randomUUID();
 
-        assertThat(refusalFrom(() -> selectors.declare(scope, "Item")).reason())
+        assertThat(refusalFrom(() -> selectors.open(scope, "Item")).reason())
             .as("upper case is rejected rather than folded, and it is rejected by the form "
                 + "check — which runs first and needs to know nothing about views")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
 
-        assertThat(refusalFrom(() -> selectors.declare(scope, "ITEM")).reason())
+        assertThat(refusalFrom(() -> selectors.open(scope, "ITEM")).reason())
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
 
         assertThat(selectors.inScope(scope))
