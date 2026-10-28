@@ -13,13 +13,11 @@ import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceDeclaration;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbName;
-import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * The one refusal envelope, from DEC-0042: {@code reason}, {@code message},
@@ -53,19 +51,12 @@ import java.util.Map;
  * @param data the machine-readable detail; absent where the refusal has none,
  *             and then left out of the envelope rather than sent empty
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
-public record RefusalPayload(String reason, String message, @Nullable Object data) {
+public record RefusalPayload(
+    @JsonProperty("reason") String reason,
+    @JsonProperty("message") String message,
+    @JsonProperty("data") @Nullable RefusalDataPayload data) {
 
     private static final Logger LOG = Logger.getLogger(RefusalPayload.class);
-
-    /** The member {@code offenders} travels under, inside {@code data}. */
-    public static final String OFFENDERS = "offenders";
-
-    /** The member the declared names travel under, inside {@code data} (DEC-0042). */
-    public static final String ACCEPTS = "accepts";
-
-    /** The member a reference to an unexpected failure travels under, inside {@code data}. */
-    public static final String REFERENCE = "reference";
 
     /** A domain refusal, in the envelope. */
     public static RefusalPayload of(WorklistException e) {
@@ -75,20 +66,15 @@ public record RefusalPayload(String reason, String message, @Nullable Object dat
             // existence the answer is refusing to confirm.
             return new RefusalPayload(code.name(), message(code, null), null);
         }
-        Map<String, Object> data = dataOf(code, e.offenders(), e.accepts());
-        e.currentToken().ifPresent(token -> data.put(CONFLICT_TOKEN, token));
-        return new RefusalPayload(code.name(), message(code, null), data.isEmpty() ? null : data);
+        return new RefusalPayload(code.name(), message(code, null),
+            dataOf(code, e.offenders(), e.accepts(), e.currentToken().orElse(null)));
     }
-
-    /** The member the object's current conflict token travels under on a {@code CONFLICT}. */
-    public static final String CONFLICT_TOKEN = "conflict_token";
 
     /** A surface refusal, in the same envelope. */
     public static RefusalPayload of(SurfaceException e) {
-        Map<String, Object> data = dataOf(e.reason(), e.offenders(), e.accepts());
         return new RefusalPayload(e.reason().name(),
             message(e.reason(), e.attempted().map(VerbName::declared).orElse(null)),
-            data.isEmpty() ? null : data);
+            dataOf(e.reason(), e.offenders(), e.accepts(), null));
     }
 
     /**
@@ -98,7 +84,8 @@ public record RefusalPayload(String reason, String message, @Nullable Object dat
      */
     public static RefusalPayload unexpected(String reference) {
         RefusalCode code = RefusalCode.UNEXPECTED_FAILURE;
-        return new RefusalPayload(code.name(), message(code, null), Map.of(REFERENCE, reference));
+        return new RefusalPayload(code.name(), message(code, null),
+            new RefusalDataPayload(null, null, null, reference));
     }
 
     /** @param attempted the verb the text names; absent where it names none */
@@ -108,17 +95,19 @@ public record RefusalPayload(String reason, String message, @Nullable Object dat
     }
 
     /**
-     * The detail under {@code data}, made of declared paths only; empty where
+     * The detail under {@code data}, made of declared paths only; absent where
      * there is none. The envelope then carries no {@code data} rather than an
-     * empty one: an empty map is a member, and a caller reading the key set
+     * empty one: an empty object is a member, and a caller reading the key set
      * would see a difference where the node says there is none.
+     *
+     * @param conflictToken the object's current token; absent except for a stale one
      */
-    private static Map<String, Object> dataOf(RefusalCode code, List<String> offenders,
-                                              List<String> accepts) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        put(data, OFFENDERS, declared(code, offenders));
-        put(data, ACCEPTS, declared(code, accepts));
-        return data;
+    private static @Nullable RefusalDataPayload dataOf(RefusalCode code, List<String> offenders,
+                                                       List<String> accepts,
+                                                       @Nullable String conflictToken) {
+        RefusalDataPayload data = new RefusalDataPayload(present(declared(code, offenders)),
+            present(declared(code, accepts)), conflictToken, null);
+        return data.isEmpty() ? null : data;
     }
 
     private static List<String> declared(RefusalCode code, List<String> spellings) {
@@ -132,9 +121,8 @@ public record RefusalPayload(String reason, String message, @Nullable Object dat
         return names;
     }
 
-    private static void put(Map<String, Object> data, String member, List<String> paths) {
-        if (!paths.isEmpty()) {
-            data.put(member, paths);
-        }
+    /** @return the paths; absent where there are none, so the member is left out */
+    private static @Nullable List<String> present(List<String> paths) {
+        return paths.isEmpty() ? null : paths;
     }
 }

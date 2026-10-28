@@ -5,7 +5,7 @@
  * General Public License v3.0 only. See the LICENSE file in the
  * repository root for the full licence text.
  */
-package ai.kumbuka.worklist.surface;
+package ai.kumbuka.worklist.contract;
 
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
@@ -14,16 +14,19 @@ import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.SelectorRegistry;
 import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import ai.kumbuka.worklist.domain.WorkstreamService;
+import ai.kumbuka.worklist.surface.SurfaceFixture;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestIdentityAssociation;
 import io.restassured.http.ContentType;
 import io.restassured.path.json.JsonPath;
+import io.restassured.response.Response;
 import jakarta.inject.Inject;
 import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -44,12 +47,23 @@ import static io.restassured.RestAssured.given;
  * default both times. The REST bodies get the same treatment, with the absent
  * body as a third spelling of the same call.
  *
- * <p>The second half reads the declaration: every optional argument names its
+ * <p>Inside {@code fields} the same holds one level down (C7.4): a field sent as
+ * {@code null} is the field not sent, on {@code create} and {@code update} and
+ * over both surfaces. On an update that means the field keeps its value; a
+ * field is emptied by the empty string, never by {@code null}.
+ *
+ * <p>The last half reads the declaration: every optional argument names its
  * default and says that {@code null} does the same as leaving it out.
+ *
+ * <p>RED STATE, observed 2026-10-28 against the service before the fields map
+ * dropped a {@code null}: {@code {"description":null}} in {@code fields} ended
+ * every create and update with {@code UNEXPECTED_FAILURE} -- {@code isError}
+ * over MCP, 500 over REST -- because the map was copied with
+ * {@code Map.copyOf}, which refuses a null value.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
-class NullArgumentProbeIT {
+class NullIsAbsentIT {
 
     private static final String SCOPE = "null-probe";
     private static final UUID SCOPE_ID = UUID.fromString("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b");
@@ -141,6 +155,110 @@ class NullArgumentProbeIT {
         org.assertj.core.api.Assertions.assertThat(
                 answer.getList("result.structuredContent.data.offenders", String.class))
             .containsExactly("address");
+    }
+
+    // ======================================================================
+    // Inside fields
+    // ======================================================================
+
+    /** The fields only one item carries, which two items never share. */
+    private static final List<String> OWN = List.of("id", "number", "created_at", "changed_at",
+        "conflict_token");
+
+    @Test
+    void a_create_with_a_field_sent_as_null_is_the_create_without_it_on_both_surfaces() {
+        Map<String, Object> nulled = args("title", "created around a null", "status", "open",
+            "description", null);
+        Map<String, Object> plain = args("title", "created around a null", "status", "open");
+        SoftAssertions soft = new SoftAssertions();
+
+        JsonPath overMcpNull = call("create", args("scope", SCOPE, "selector", Selector.ITEM,
+            "fields", nulled));
+        JsonPath overMcpPlain = call("create", args("scope", SCOPE, "selector", Selector.ITEM,
+            "fields", plain));
+        soft.assertThat(overMcpNull.getBoolean("result.isError"))
+            .as("create over MCP with description null is made: %s", overMcpNull.prettify())
+            .isFalse();
+        soft.assertThat(ownless(overMcpNull.getMap("result.structuredContent.fields")))
+            .as("create over MCP with description null answers as the create without it")
+            .isEqualTo(ownless(overMcpPlain.getMap("result.structuredContent.fields")));
+
+        Response overRestNull = restCreate(nulled);
+        Response overRestPlain = restCreate(plain);
+        soft.assertThat(overRestNull.statusCode())
+            .as("create over REST with description null is made: %s", overRestNull.asString())
+            .isEqualTo(201);
+        soft.assertThat(ownless(overRestNull.jsonPath().getMap("fields")))
+            .as("create over REST with description null answers as the create without it")
+            .isEqualTo(ownless(overRestPlain.jsonPath().getMap("fields")));
+        soft.assertAll();
+    }
+
+    @Test
+    void an_update_with_a_field_sent_as_null_keeps_the_field_on_both_surfaces() {
+        Map<String, Object> written = args("title", "to be updated", "status", "open",
+            "description", "kept");
+        Map<String, Object> nulled = args("title", "updated around a null", "description", null);
+        Map<String, Object> plain = args("title", "updated around a null");
+        SoftAssertions soft = new SoftAssertions();
+
+        JsonPath overMcpNull = mcpUpdate(mcpCreate(written), nulled);
+        JsonPath overMcpPlain = mcpUpdate(mcpCreate(written), plain);
+        soft.assertThat(overMcpNull.getBoolean("result.isError"))
+            .as("update over MCP with description null is made: %s", overMcpNull.prettify())
+            .isFalse();
+        soft.assertThat(overMcpNull.getString("result.structuredContent.fields.description"))
+            .as("update over MCP with description null keeps the description")
+            .isEqualTo("kept");
+        soft.assertThat(ownless(overMcpNull.getMap("result.structuredContent.fields")))
+            .as("update over MCP with description null answers as the update without it")
+            .isEqualTo(ownless(overMcpPlain.getMap("result.structuredContent.fields")));
+
+        Response overRestNull = restUpdate(restCreate(written), nulled);
+        Response overRestPlain = restUpdate(restCreate(written), plain);
+        soft.assertThat(overRestNull.statusCode())
+            .as("update over REST with description null is made: %s", overRestNull.asString())
+            .isEqualTo(200);
+        soft.assertThat(overRestNull.jsonPath().getString("fields.description"))
+            .as("update over REST with description null keeps the description")
+            .isEqualTo("kept");
+        soft.assertThat(ownless(overRestNull.jsonPath().getMap("fields")))
+            .as("update over REST with description null answers as the update without it")
+            .isEqualTo(ownless(overRestPlain.jsonPath().getMap("fields")));
+        soft.assertAll();
+    }
+
+    /** @param fields absent where the call was refused, which leaves nothing to compare */
+    private static Map<String, Object> ownless(@Nullable Map<String, Object> fields) {
+        Map<String, Object> shared = fields == null ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(fields);
+        OWN.forEach(shared::remove);
+        return shared;
+    }
+
+    private static JsonPath mcpCreate(Map<String, Object> fields) {
+        return call("create", args("scope", SCOPE, "selector", Selector.ITEM, "fields", fields));
+    }
+
+    private static JsonPath mcpUpdate(JsonPath created, Map<String, Object> fields) {
+        return call("update", args(
+            "address", created.getString("result.structuredContent.address"),
+            "conflict_token", created.getString("result.structuredContent.fields.conflict_token"),
+            "fields", fields));
+    }
+
+    private static Response restCreate(Map<String, Object> fields) {
+        return given().contentType(ContentType.JSON).body(fields)
+            .when().post("/api/" + SCOPE + "/" + Selector.ITEM);
+    }
+
+    private static Response restUpdate(Response created, Map<String, Object> fields) {
+        String token = created.jsonPath().getString("fields.conflict_token");
+        return given().contentType(ContentType.JSON)
+            .header("If-Match", "\"" + token + "\"")
+            .body(fields)
+            .when().patch("/api/" + SCOPE + "/" + Selector.ITEM + "/"
+                + created.jsonPath().getString("fields.number"));
     }
 
     @Test

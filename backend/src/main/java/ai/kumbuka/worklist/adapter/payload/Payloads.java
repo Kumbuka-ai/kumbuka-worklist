@@ -11,21 +11,15 @@ import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.NoticeTexts;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import org.jspecify.annotations.Nullable;
 
-import java.util.List;
 import java.util.Map;
 
 /**
  * The wire shapes of the verb surface.
  *
- * <p>They are records in one file rather than a package of classes because they
- * are one contract: the payload contracts behind the verbs are the named gap in
- * the specification, and scattering a provisional shape across a dozen files
- * makes it look more settled than it is. When the shapes are specified, this file
- * is what gets replaced.
+ * <p>The shapes themselves are the records of this package, one per answer
+ * (C7.1); this class holds the two translations between them and the verb
+ * surface.
  *
  * <p><strong>No shape here carries a subject.</strong> Authorship is derived from
  * the token and never accepted from a caller, so a field for it would be a field
@@ -62,17 +56,13 @@ public final class Payloads {
         return new VerbInput.Fields(body);
     }
 
-
-
-
-
     // ----------------------------------------------------------------------
     // Verb answer to wire shape
     // ----------------------------------------------------------------------
 
     /** One object, at its address. */
-    public static ObjectResponse of(String scope, VerbSurface.Result result) {
-        return new ObjectResponse(
+    public static ObjectPayload of(String scope, VerbSurface.Result result) {
+        return new ObjectPayload(
             AddressParser.render(scope, result.address()), worded(result.fields()));
     }
 
@@ -82,53 +72,9 @@ public final class Payloads {
     }
 
     /** A set of them. */
-    public static Listing of(String scope, VerbSurface.Listing listing) {
-        return new Listing(listing.objects().stream()
+    public static ListingPayload of(String scope, VerbSurface.Listing listing) {
+        return new ListingPayload(listing.objects().stream()
             .map(result -> of(scope, result))
             .toList(), listing.next());
     }
-
-
-
-
-
-
-    /**
-     * One object as it goes out: its address, and what the domain projected.
-     *
-     * <p>The field map is passed through unaltered. An adapter that reshaped it
-     * would be a second naming of the same values — which is the defect the
-     * canonical field catalogue was built to remove, reintroduced one layer out.
-     */
-    public record ObjectResponse(String address, Map<String, Object> fields) {
-    }
-
-    /**
-     * A listing.
-     *
-     * <p>An object around the list rather than the bare array, so that anything a
-     * listing later needs to say about itself is an added key rather than a
-     * changed shape.
-     *
-     * <p>{@code next_cursor} is the way to the rest: passed back as the
-     * {@code after} argument of the same query, it answers the objects after
-     * the last one here. It is absent exactly when nothing follows — the one
-     * field that says whether more follows, so that no flag beside it can say
-     * something else.
-     *
-     * @param nextCursor the cursor to the rest; absent exactly when nothing
-     *                   follows, and then left out of the answer
-     */
-    public record Listing(List<ObjectResponse> objects,
-                          @JsonInclude(JsonInclude.Include.NON_NULL)
-                          @JsonProperty("next_cursor") @Nullable String nextCursor) {
-    }
-
-    /**
-     * A refusal, in the one shape every refusal takes.
-     *
-     * <p>The reason is for a caller and is stable; the message is for a human and
-     * names the specifics. A caller matching on prose is a caller that breaks
-     * when somebody improves the wording.
-     */
 }

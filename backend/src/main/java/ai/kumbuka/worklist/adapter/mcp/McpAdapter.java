@@ -7,8 +7,19 @@
  */
 package ai.kumbuka.worklist.adapter.mcp;
 
+import ai.kumbuka.worklist.adapter.payload.CapabilitiesPayload;
+import ai.kumbuka.worklist.adapter.payload.EmptyPayload;
+import ai.kumbuka.worklist.adapter.payload.InitializePayload;
+import ai.kumbuka.worklist.adapter.payload.ObjectPayload;
 import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
+import ai.kumbuka.worklist.adapter.payload.RpcErrorBodyPayload;
+import ai.kumbuka.worklist.adapter.payload.RpcErrorPayload;
+import ai.kumbuka.worklist.adapter.payload.RpcResultPayload;
+import ai.kumbuka.worklist.adapter.payload.ServerInfoPayload;
+import ai.kumbuka.worklist.adapter.payload.TextContentPayload;
+import ai.kumbuka.worklist.adapter.payload.ToolListPayload;
+import ai.kumbuka.worklist.adapter.payload.ToolResultPayload;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.SortKey;
@@ -136,7 +147,7 @@ public class McpAdapter {
 
         return switch (method) {
             case "initialize" -> result(id, initialize());
-            case "tools/list" -> result(id, Map.of("tools", tools()));
+            case "tools/list" -> result(id, new ToolListPayload(McpTools.declared()));
             case "tools/call" -> result(id, call(arguments(request, "params")));
             // The method that arrived is the caller's and never comes back
             // (DEC-0043 R19); the answer names the methods this server speaks.
@@ -148,21 +159,10 @@ public class McpAdapter {
     // The three methods
     // ======================================================================
 
-    private static Map<String, Object> initialize() {
-        return Map.of(
-            "protocolVersion", PROTOCOL_VERSION,
-            "capabilities", Map.of("tools", Map.of()),
-            "serverInfo", Map.of("name", "kumbuka-worklist", "version", "0.4.2"));
-    }
-
-    /** The declared tools, in the shape MCP asks for them. */
-    private static List<Map<String, Object>> tools() {
-        return McpTools.declared().stream()
-            .map(t -> Map.<String, Object>of(
-                KEY_NAME, t.name(),
-                "description", t.description(),
-                "inputSchema", t.inputSchema()))
-            .toList();
+    private static InitializePayload initialize() {
+        return new InitializePayload(PROTOCOL_VERSION,
+            new CapabilitiesPayload(new EmptyPayload()),
+            new ServerInfoPayload("kumbuka-worklist", "0.4.2"));
     }
 
     /**
@@ -173,7 +173,7 @@ public class McpAdapter {
      * it is worth keeping: a JSON-RPC error says the call could not be made, and
      * every refusal in this service is a call that was made and answered.
      */
-    private Map<String, Object> call(Map<String, Object> params) {
+    private ToolResultPayload call(Map<String, Object> params) {
         String tool = string(params, KEY_NAME).orElse("");
         Map<String, Object> arguments = present(arguments(params, "arguments"));
 
@@ -463,7 +463,7 @@ public class McpAdapter {
         return Optional.of(new VerbInput.Fields((Map<String, Object>) raw));
     }
 
-    private static Payloads.ObjectResponse dressed(String scope, VerbSurface.Result result) {
+    private static ObjectPayload dressed(String scope, VerbSurface.Result result) {
         return Payloads.of(scope, result);
     }
 
@@ -555,16 +555,13 @@ public class McpAdapter {
      * answer as JSON, written by the mapper that writes {@code structuredContent}
      * — not the payload's {@code toString()}, which no client can parse.
      */
-    private Map<String, Object> content(Object payload, boolean isError) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("content", List.of(Map.of("type", "text", "text", asJson(payload))));
-        result.put("structuredContent", payload);
-        result.put("isError", isError);
-        return result;
+    private ToolResultPayload content(Object payload, boolean isError) {
+        return new ToolResultPayload(List.of(TextContentPayload.text(asJson(payload))), payload,
+            isError);
     }
 
     /**
-     * The payload as JSON. Every payload is a record or map this service built,
+     * The payload as JSON. Every payload is a record this service built,
      * so a failure here is ours and not the caller's: it surfaces as a 500
      * rather than as a text that silently says something else.
      */
@@ -578,19 +575,12 @@ public class McpAdapter {
     }
 
     private static Response result(Object id, Object payload) {
-        Map<String, Object> envelope = new LinkedHashMap<>();
-        envelope.put(KEY_JSONRPC, JSONRPC);
-        envelope.put(KEY_ID, id);
-        envelope.put("result", payload);
-        return Response.ok(envelope).build();
+        return Response.ok(new RpcResultPayload(JSONRPC, id, payload)).build();
     }
 
     /** @param id the request's id; absent where the request carried none to answer under */
     private static Response error(@Nullable Object id, int code, String message) {
-        Map<String, Object> envelope = new LinkedHashMap<>();
-        envelope.put(KEY_JSONRPC, JSONRPC);
-        envelope.put(KEY_ID, id);
-        envelope.put("error", Map.of("code", code, "message", message));
-        return Response.ok(envelope).build();
+        return Response.ok(new RpcErrorPayload(JSONRPC, id, new RpcErrorBodyPayload(code, message)))
+            .build();
     }
 }

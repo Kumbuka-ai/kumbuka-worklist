@@ -7,6 +7,9 @@
  */
 package ai.kumbuka.worklist.adapter.mcp;
 
+import ai.kumbuka.worklist.adapter.payload.SchemaPayload;
+import ai.kumbuka.worklist.adapter.payload.SchemaValuePayload;
+import ai.kumbuka.worklist.adapter.payload.ToolPayload;
 import ai.kumbuka.worklist.surface.ArgumentDescriptions;
 import ai.kumbuka.worklist.surface.SurfaceDeclaration;
 import ai.kumbuka.worklist.surface.ToolDescriptions;
@@ -38,22 +41,19 @@ public final class McpTools {
     private McpTools() {
     }
 
-    /** One declared tool: its name, what it does, and what it takes. */
-    public record Tool(String name, String description, Map<String, Object> inputSchema) {
-    }
-
     /** The tools, in the order of the declaration. */
-    public static List<Tool> declared() {
+    public static List<ToolPayload> declared() {
         return declared(MessageBundles.get(ToolDescriptions.class),
             MessageBundles.get(ArgumentDescriptions.class),
             MessageBundles.get(ValueDescriptions.class));
     }
 
     /** The tools, worded by the bundles given. */
-    public static List<Tool> declared(ToolDescriptions tools, ArgumentDescriptions arguments,
-                                      ValueDescriptions values) {
+    public static List<ToolPayload> declared(ToolDescriptions tools,
+                                             ArgumentDescriptions arguments,
+                                             ValueDescriptions values) {
         return SurfaceDeclaration.verbs().stream()
-            .map(verb -> new Tool(verb.name().name(), verb.description().apply(tools),
+            .map(verb -> new ToolPayload(verb.name().name(), verb.description().apply(tools),
                 schema(verb, arguments, values)))
             .toList();
     }
@@ -77,33 +77,21 @@ public final class McpTools {
      * accepted and ignored (DEC-0043 R4). A fixed value set is closed with
      * {@code enum}, and {@code oneOf} carries a description per value.
      */
-    private static Map<String, Object> schema(SurfaceDeclaration.Verb verb,
-                                              ArgumentDescriptions arguments,
-                                              ValueDescriptions values) {
-        Map<String, Object> properties = new LinkedHashMap<>();
+    private static SchemaPayload schema(SurfaceDeclaration.Verb verb,
+                                        ArgumentDescriptions arguments,
+                                        ValueDescriptions values) {
+        Map<String, SchemaPayload> properties = new LinkedHashMap<>();
         List<String> mandatory = new ArrayList<>();
         for (SurfaceDeclaration.Argument argument : verb.arguments()) {
-            Map<String, Object> property = new LinkedHashMap<>();
-            property.put("type", argument.type().json());
-            property.put("description", argument.description().apply(arguments));
-            if (!argument.values().isEmpty()) {
-                property.put("enum", argument.values().stream()
-                    .map(SurfaceDeclaration.Value::name).toList());
-                property.put("oneOf", argument.values().stream()
-                    .map(v -> Map.<String, Object>of("const", v.name(),
-                        "description", v.description().apply(values)))
-                    .toList());
-            }
-            properties.put(argument.name().name(), Map.copyOf(property));
+            properties.put(argument.name().name(), SchemaPayload.property(
+                argument.type().json(), argument.description().apply(arguments),
+                argument.values().stream()
+                    .map(v -> new SchemaValuePayload(v.name(), v.description().apply(values)))
+                    .toList()));
             if (argument.required()) {
                 mandatory.add(argument.name().name());
             }
         }
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", "object");
-        schema.put("properties", properties);
-        schema.put("required", List.copyOf(mandatory));
-        schema.put("additionalProperties", false);
-        return Map.copyOf(schema);
+        return SchemaPayload.object(properties, List.copyOf(mandatory));
     }
 }
