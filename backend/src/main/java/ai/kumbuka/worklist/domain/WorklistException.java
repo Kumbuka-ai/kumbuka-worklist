@@ -7,7 +7,10 @@
  */
 package ai.kumbuka.worklist.domain;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A typed refusal, naming what was refused and why.
@@ -456,7 +459,8 @@ public class WorklistException extends RuntimeException {
     private final transient Reason reason;
     private final transient List<String> offenders;
     private final transient List<String> accepts;
-    private final transient String currentToken;
+    /** The object's token on a {@code CONFLICT}; absent on every other refusal. */
+    private final transient @Nullable String currentToken;
 
     public WorklistException(Reason reason) {
         this(reason, List.of());
@@ -477,7 +481,7 @@ public class WorklistException extends RuntimeException {
     }
 
     private WorklistException(Reason reason, List<String> offenders, List<String> accepts,
-                              String currentToken) {
+                              @Nullable String currentToken) {
         super(reason.name());
         this.reason = reason;
         this.offenders = List.copyOf(offenders);
@@ -505,14 +509,19 @@ public class WorklistException extends RuntimeException {
      *
      * <p>State, not input: it is what the caller's own read would answer at
      * this moment (DEC-0041), and it saves the caller a second call to learn
-     * what it should have sent.
+     * what it should have sent. Absent on every other refusal, and on a
+     * conflict over an object not yet inserted, which carries no token.
      */
-    public String currentToken() {
-        return currentToken;
+    public Optional<String> currentToken() {
+        return Optional.ofNullable(currentToken);
     }
 
-    /** A {@code CONFLICT} on {@code conflict_token}, carrying the object's current token. */
-    public static WorklistException conflict(String currentToken) {
+    /**
+     * A {@code CONFLICT} on {@code conflict_token}, carrying the object's current token.
+     *
+     * @param currentToken the token; absent where the object has none yet
+     */
+    public static WorklistException conflict(@Nullable String currentToken) {
         return new WorklistException(Reason.CONFLICT, List.of("conflict_token"), List.of(),
             currentToken);
     }

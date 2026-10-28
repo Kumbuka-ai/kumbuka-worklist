@@ -183,12 +183,12 @@ class ConflictTokenIT {
     @Test
     void a_workstream_takes_its_token_the_same_way() throws SQLException {
         Workstream created = workstreams.declare(scope, "tokened", "first");
-        assertThat(created.conflictToken()).isEqualTo(token(T));
+        assertThat(created.conflictToken().orElseThrow()).isEqualTo(token(T));
 
         String once = workstreams.update(scope, created.id, "second",
-            created.conflictToken()).conflictToken();
-        String twice = workstreams.update(scope, created.id, "third", once).conflictToken();
-        String same = workstreams.update(scope, created.id, "third", twice).conflictToken();
+            created.conflictToken().orElseThrow()).conflictToken().orElseThrow();
+        String twice = workstreams.update(scope, created.id, "third", once).conflictToken().orElseThrow();
+        String same = workstreams.update(scope, created.id, "third", twice).conflictToken().orElseThrow();
 
         assertThat(once).isEqualTo(token(T.plus(1, ChronoUnit.MICROS)));
         assertThat(twice).isEqualTo(token(T.plus(2, ChronoUnit.MICROS)));

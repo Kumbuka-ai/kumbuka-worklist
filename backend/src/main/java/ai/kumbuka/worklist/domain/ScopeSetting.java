@@ -14,8 +14,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -88,9 +90,12 @@ public class ScopeSetting extends AggregateRoot {
     @Column(name = "scope_id", nullable = false, updatable = false)
     public UUID scopeKey;
 
-    /** The iteration being worked, or null. A pointer, unambiguous by construction. */
+    /**
+     * The iteration being worked; absent where none is. A pointer, unambiguous
+     * by construction.
+     */
     @Column(name = "current_iteration_number")
-    public Long currentIterationNumber;
+    public @Nullable Long currentIterationNumber;
 
     /** The hard limit on iterations that are open at once. Refuses. */
     @Column(name = "max_planned_iterations", nullable = false)
@@ -143,8 +148,8 @@ public class ScopeSetting extends AggregateRoot {
     }
 
     @Override
-    protected Instant changeTime() {
-        return updatedAt;
+    protected Optional<Instant> changeTime() {
+        return Optional.ofNullable(updatedAt);
     }
 
     @Override

@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -132,8 +133,8 @@ public class Workstream extends AggregateRoot {
     }
 
     @Override
-    protected Instant changeTime() {
-        return updatedAt;
+    protected Optional<Instant> changeTime() {
+        return Optional.ofNullable(updatedAt);
     }
 
     @Override

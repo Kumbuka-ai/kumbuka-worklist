@@ -90,9 +90,9 @@ class ItemFieldsTest {
 
     @Test
     void blank_text_is_the_same_absence_as_null() {
-        assertThat(ItemFields.text(Field.DESCRIPTION, null)).isNull();
-        assertThat(ItemFields.text(Field.DESCRIPTION, "   ")).isNull();
-        assertThat(ItemFields.text(Field.DESCRIPTION, " on file ")).isEqualTo("on file");
+        assertThat(ItemFields.text(Field.DESCRIPTION, null)).isEmpty();
+        assertThat(ItemFields.text(Field.DESCRIPTION, "   ")).isEmpty();
+        assertThat(ItemFields.text(Field.DESCRIPTION, " on file ")).contains("on file");
     }
 
     /**

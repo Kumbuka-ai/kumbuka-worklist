@@ -127,7 +127,7 @@ class ItemDomainIT {
                 + "out what it should have sent")
             .containsExactly("conflict_token");
         assertThat(refusal.currentToken()).as("and the current token travels as state")
-            .isEqualTo(currentToken);
+            .contains(currentToken);
 
         // What the absent mechanism would have left behind: the second
         // writer's title, and a token rotated a second time. Neither is here.
@@ -1719,7 +1719,7 @@ class ItemDomainIT {
      * and the item as its canonical address.
      */
     private Map<String, Object> relation(Long typeId, UUID target) {
-        String typeName = vocabulary.relationTypeByPk(typeId).name;
+        String typeName = vocabulary.relationTypeByPk(typeId).orElseThrow().name;
         return Map.of("type", typeName, "item", addressOfItem(target));
     }
 

@@ -15,6 +15,7 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -134,16 +135,17 @@ public class VocabularyRegistry {
     }
 
     /**
-     * The declared status of that surrogate, or null — the form an item's
-     * reference holds. Scope membership is the caller's to check.
+     * The declared status of that surrogate, if there is one — the form an
+     * item's reference holds. Scope membership is the caller's to check.
      */
     @Transactional
-    public ItemStatus statusByPk(Long pk) {
-        return vocabulary.statusByPk(pk).orElse(null);
+    public Optional<ItemStatus> statusByPk(Long pk) {
+        return vocabulary.statusByPk(pk);
     }
 
     /**
-     * The declared status a scope carries under that display name, or null.
+     * The declared status a scope carries under that display name, if there
+     * is one.
      *
      * <p>The reverse of {@link #statusByPk}, exposed for the write path. The
      * wire form of a status is the display name — a caller writing an item
@@ -151,8 +153,8 @@ public class VocabularyRegistry {
      * the row stores.
      */
     @Transactional
-    public ItemStatus statusByName(UUID scopeId, String name) {
-        return vocabulary.statusByName(scopeId, name).orElse(null);
+    public Optional<ItemStatus> statusByName(UUID scopeId, String name) {
+        return vocabulary.statusByName(scopeId, name);
     }
 
     /**
@@ -244,10 +246,13 @@ public class VocabularyRegistry {
         return definition;
     }
 
-    /** The declaration of that surrogate, or null; the read path's second key form. */
+    /**
+     * The declaration of that surrogate, if there is one; the read path's
+     * second key form.
+     */
     @Transactional
-    public AttributeDefinition attributeByPk(Long pk) {
-        return vocabulary.definitionByPk(pk).orElse(null);
+    public Optional<AttributeDefinition> attributeByPk(Long pk) {
+        return vocabulary.definitionByPk(pk);
     }
 
     /** Withdraw an attribute. Its key stays occupied; the items keep their values. */
@@ -316,10 +321,13 @@ public class VocabularyRegistry {
         return option;
     }
 
-    /** The option of that surrogate, or null; the read path's second value form. */
+    /**
+     * The option of that surrogate, if there is one; the read path's second
+     * value form.
+     */
     @Transactional
-    public AttributeOption optionByPk(Long pk) {
-        return vocabulary.optionByPk(pk).orElse(null);
+    public Optional<AttributeOption> optionByPk(Long pk) {
+        return vocabulary.optionByPk(pk);
     }
 
     // ------------------------------------------------------------------
@@ -375,22 +383,26 @@ public class VocabularyRegistry {
         return type;
     }
 
-    /** The relation type of that surrogate, or null — the form an edge holds. */
+    /**
+     * The relation type of that surrogate, if there is one — the form an edge
+     * holds.
+     */
     @Transactional
-    public RelationType relationTypeByPk(Long pk) {
-        return vocabulary.relationTypeByPk(pk).orElse(null);
+    public Optional<RelationType> relationTypeByPk(Long pk) {
+        return vocabulary.relationTypeByPk(pk);
     }
 
     /**
-     * The relation type a scope carries under that display name, or null.
+     * The relation type a scope carries under that display name, if there is
+     * one.
      *
      * <p>The reverse of {@link #relationTypeByPk}, exposed for the write
      * path — the wire form of a relation type is the display name and this
      * turns it back into the identity the edge stores.
      */
     @Transactional
-    public RelationType relationTypeByName(UUID scopeId, String name) {
-        return vocabulary.relationTypeByName(scopeId, name).orElse(null);
+    public Optional<RelationType> relationTypeByName(UUID scopeId, String name) {
+        return vocabulary.relationTypeByName(scopeId, name);
     }
 
     /** Withdraw a relation type. The edges carrying it stay readable. */

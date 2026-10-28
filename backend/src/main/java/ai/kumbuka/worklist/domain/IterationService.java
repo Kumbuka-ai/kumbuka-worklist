@@ -14,6 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -21,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -137,10 +139,7 @@ public class IterationService extends PlanningService {
         iteration.description = required(Field.DESCRIPTION, given.get(Field.DESCRIPTION));
         iteration.number = allocateNumber(scopeId);
 
-        Integer rank = whole(Field.RANK, given.get(Field.RANK));
-        if (rank != null) {
-            iteration.rank = rank;
-        }
+        whole(Field.RANK, given.get(Field.RANK)).ifPresent(rank -> iteration.rank = rank);
 
         planning.insert(iteration);
         planning.flushAndRefresh(iteration);
@@ -215,10 +214,14 @@ public class IterationService extends PlanningService {
      * NAMES what was produced. The check is presence rather than form —
      * a specification, a concept, a set of corpus nodes qualify on the same
      * conditions as a release — but empty and whitespace-only are refused.
+     *
+     * @param produced what the iteration produced; absent where the caller
+     *                 named nothing, which is refused as
+     *                 {@code ITERATION_PRODUCED_MISSING}
      */
     @Transactional
     public Map<String, Object> close(UUID scopeId, UUID iterationId,
-            String produced, String conflictToken) {
+            @Nullable String produced, String conflictToken) {
         String producedNamed = requireNamed(produced);
 
         Iteration iteration = requireLocked(scopeId, iterationId);
@@ -256,7 +259,7 @@ public class IterationService extends PlanningService {
      * naming that reduces to nothing is exactly the abstention the rule
      * exists against.
      */
-    private static String requireNamed(String produced) {
+    private static String requireNamed(@Nullable String produced) {
         if (produced != null && !produced.isBlank()) {
             return produced.strip();
         }
@@ -361,8 +364,8 @@ public class IterationService extends PlanningService {
                 return moved(held, description, () -> iteration.description = description);
             }
             case RANK -> {
-                Integer rank = whole(field, value);
-                return rank != null && moved(held, rank, () -> iteration.rank = rank);
+                Optional<Integer> rank = whole(field, value);
+                return rank.isPresent() && moved(held, rank.get(), () -> iteration.rank = rank.get());
             }
             case ORDER -> {
                 return applyOrder(iteration, value);
@@ -466,7 +469,7 @@ public class IterationService extends PlanningService {
             List.of(ADDRESS));
     }
 
-    private static boolean moved(Object held, Object wanted, Runnable write) {
+    private static boolean moved(@Nullable Object held, @Nullable Object wanted, Runnable write) {
         if (Objects.equals(held == null ? null : String.valueOf(held),
                 wanted == null ? null : String.valueOf(wanted))) {
             return false;
@@ -489,7 +492,11 @@ public class IterationService extends PlanningService {
         return requireIn(scopeId, planning.lockIterationById(iterationId).orElse(null));
     }
 
-    private static Iteration requireIn(UUID scopeId, Iteration iteration) {
+    /**
+     * @param iteration the iteration the id named; absent where it names none,
+     *                  which is refused like an iteration of another scope
+     */
+    private static Iteration requireIn(UUID scopeId, @Nullable Iteration iteration) {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
@@ -516,7 +523,7 @@ public class IterationService extends PlanningService {
         fields.put(Field.CLOSED_AT.canonicalName(), iteration.closedAt);
         fields.put(Field.CREATED_AT.canonicalName(), iteration.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), iteration.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken());
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), iteration.conflictToken().orElse(null));
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }
@@ -549,14 +556,12 @@ public class IterationService extends PlanningService {
     }
 
     /**
-     * The canonical address of an item as {@code worklist://<slug>/item/<number>},
-     * or null when either half is unavailable. A membership holds the item's
-     * number (ADR-0042), so the address needs no lookup.
+     * The canonical address of an item as {@code worklist://<slug>/item/<number>}.
+     * A membership holds the item's number (ADR-0042), so the address needs
+     * no lookup. Neither half is ever absent: the item number is half of the
+     * membership's key, and {@link #slugOf} falls back to the scope's id.
      */
     private static String itemAddressOf(String scopeSlug, Long itemNumber) {
-        if (itemNumber == null || scopeSlug == null) {
-            return null;
-        }
         return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + itemNumber;
     }
 }

@@ -11,9 +11,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Transient;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 
 /**
  * A row a caller may hold a view of, and the two acts that keep that view
@@ -133,8 +135,11 @@ public abstract class AggregateRoot extends TenantScoped {
     /** Move this root's own modification timestamp, under whatever name it has. */
     protected abstract void touch(Instant at);
 
-    /** This root's own modification timestamp, under whatever name it has. */
-    protected abstract Instant changeTime();
+    /**
+     * This root's own modification timestamp, under whatever name it has;
+     * absent on a root not yet born, which has none.
+     */
+    protected abstract Optional<Instant> changeTime();
 
     /** Set this root's creation timestamp. */
     protected abstract void created(Instant at);
@@ -204,9 +209,8 @@ public abstract class AggregateRoot extends TenantScoped {
      * column stores, as ISO-8601 text. Opaque to the caller by contract.
      * Absent on a root not yet inserted, which has no timestamp to render.
      */
-    public String conflictToken() {
-        Instant at = changeTime();
-        return at == null ? null : render(at);
+    public Optional<String> conflictToken() {
+        return changeTime().map(AggregateRoot::render);
     }
 
     /**
@@ -218,23 +222,26 @@ public abstract class AggregateRoot extends TenantScoped {
      * learn what it should have sent will end up reading before every write,
      * and a caller that reads in order to overwrite has stopped detecting
      * conflicts.
+     *
+     * @param presented the token the caller sent; absent where it sent none,
+     *                  which is refused like a stale one
      */
-    public void requireCurrentToken(Object presented) {
-        String current = conflictToken();
-        if (presented != null && current != null && current.equals(String.valueOf(presented))) {
+    public void requireCurrentToken(@Nullable Object presented) {
+        Optional<String> current = conflictToken();
+        if (presented != null && current.isPresent() && current.get().equals(String.valueOf(presented))) {
             return;
         }
-        throw WorklistException.conflict(current);
+        throw WorklistException.conflict(current.orElse(null));
     }
 
     /** {@code max(now, previous + 1 µs)}, at the microsecond the column stores. */
     private Instant following(Instant now) {
         Instant at = now.truncatedTo(ChronoUnit.MICROS);
-        Instant previous = changeTime();
-        if (previous == null) {
+        Optional<Instant> previous = changeTime();
+        if (previous.isEmpty()) {
             return at;
         }
-        Instant floor = previous.truncatedTo(ChronoUnit.MICROS).plus(1, ChronoUnit.MICROS);
+        Instant floor = previous.get().truncatedTo(ChronoUnit.MICROS).plus(1, ChronoUnit.MICROS);
         return at.isBefore(floor) ? floor : at;
     }
 

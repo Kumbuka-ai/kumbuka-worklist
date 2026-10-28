@@ -7,6 +7,8 @@
  */
 package ai.kumbuka.worklist.domain;
 
+import org.jspecify.annotations.Nullable;
+
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -62,8 +64,9 @@ import java.util.UUID;
  *                contract is not silently dropped
  * @param offered the sorts the calling surface offers
  */
-public record QuerySpec(Object filter, Object pageSize, Object after, Object sort,
-                        Object direction, List<String> untaken, Set<SortKey> offered) {
+public record QuerySpec(@Nullable Object filter, @Nullable Object pageSize, @Nullable Object after,
+                        @Nullable Object sort, @Nullable Object direction, List<String> untaken,
+                        Set<SortKey> offered) {
 
     /** The page size when a caller does not name one. */
     public static final int DEFAULT_PAGE_SIZE = 50;
@@ -120,7 +123,9 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         SortKey key = sortOf(view, sort, offered);
         SortKey.Direction way = directionOf(direction);
         return new PageRequest(scopeId, view, filters, size, key, way,
-            PageCursor.decode(cursorOf(after), scopeId, view, filters, key, way));
+            cursorOf(after)
+                .map(cursor -> PageCursor.decode(cursor, scopeId, view, filters, key, way))
+                .orElse(null));
     }
 
     /** The arguments {@code query} declares, which a refusal of any other name answers with. */
@@ -142,7 +147,7 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
             List.of(), ARGUMENTS);
     }
 
-    private static Map<String, Object> filterOf(Object raw) {
+    private static Map<String, Object> filterOf(@Nullable Object raw) {
         if (raw == null) {
             return Map.of();
         }
@@ -174,20 +179,19 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
         return filter;
     }
 
-    private static int pageSizeOf(Object raw) {
+    private static int pageSizeOf(@Nullable Object raw) {
         if (raw == null) {
             return DEFAULT_PAGE_SIZE;
         }
-        Long number = wholeNumber(raw);
-        if (number == null || number < 1 || number > MAX_PAGE_SIZE) {
-            throw new WorklistException(
+        return wholeNumber(raw)
+            .filter(number -> number >= 1 && number <= MAX_PAGE_SIZE)
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.PAGE_SIZE_REJECTED,
-                List.of(PAGE_SIZE_ARGUMENT));
-        }
-        return number.intValue();
+                List.of(PAGE_SIZE_ARGUMENT)))
+            .intValue();
     }
 
-    private static SortKey sortOf(String view, Object raw, Set<SortKey> offered) {
+    private static SortKey sortOf(String view, @Nullable Object raw, Set<SortKey> offered) {
         if (raw == null) {
             return DEFAULT_SORT;
         }
@@ -200,7 +204,7 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
     }
 
 
-    private static SortKey.Direction directionOf(Object raw) {
+    private static SortKey.Direction directionOf(@Nullable Object raw) {
         if (raw == null) {
             return DEFAULT_DIRECTION;
         }
@@ -211,23 +215,24 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
                 List.of(DIRECTION_ARGUMENT)));
     }
 
-    private static String cursorOf(Object raw) {
+    private static Optional<String> cursorOf(@Nullable Object raw) {
         if (raw == null) {
-            return null;
+            return Optional.empty();
         }
         if (!(raw instanceof String text) || text.isBlank()) {
             throw PageCursor.malformed();
         }
-        return text;
+        return Optional.of(text);
     }
 
     /**
-     * A whole number from a JSON number or from decimal digits, or null.
+     * A whole number from a JSON number or from decimal digits, if the value
+     * is one.
      *
      * <p>Both forms, because REST carries every argument as text and an MCP
      * client may too; a fraction, a word or an empty string is not one.
      */
-    static Long wholeNumber(Object raw) {
+    static Optional<Long> wholeNumber(@Nullable Object raw) {
         try {
             BigDecimal value = switch (raw) {
                 case Integer i -> BigDecimal.valueOf(i);
@@ -236,9 +241,9 @@ public record QuerySpec(Object filter, Object pageSize, Object after, Object sor
                 case String s when s.strip().matches("-?\\d{1,18}") -> new BigDecimal(s.strip());
                 case null, default -> null;
             };
-            return value == null ? null : value.longValueExact();
+            return value == null ? Optional.empty() : Optional.of(value.longValueExact());
         } catch (ArithmeticException | NumberFormatException notWhole) {
-            return null;
+            return Optional.empty();
         }
     }
 }

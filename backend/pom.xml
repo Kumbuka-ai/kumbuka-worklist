@@ -236,14 +236,6 @@
                 each request before the provider runs, as an @Inject field is by
                 CDI, which NullAway already recognises.
 
-                ONE PACKAGE IS EXCLUDED FOR NOW: ai.kumbuka.worklist.domain is
-                treated as unannotated code (UnannotatedSubPackages), so NullAway
-                neither checks it nor trusts its signatures. The package is being
-                reworked by a parallel change at the same time, and annotating it
-                here would collide with that work. A follow-up change removes the
-                UnannotatedSubPackages option and brings domain to zero findings;
-                until then this is the one place the rule does not yet bind.
-
                 Error Prone runs inside javac and reaches into its internals;
                 the compiler is forked so that the -J flags opening them stay in
                 this file, and so hold for every build of it, the container's
@@ -264,7 +256,7 @@
                                 <arg>-Xmaxerrs</arg>
                                 <arg>10000</arg>
                                 <arg>--should-stop=ifError=FLOW</arg>
-                                <arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=ai.kumbuka.worklist -XepOpt:NullAway:UnannotatedSubPackages=ai.kumbuka.worklist.domain -XepOpt:NullAway:ExcludedFieldAnnotations=jakarta.ws.rs.core.Context -XepDisableWarningsInGeneratedCode</arg>
+                                <arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=ai.kumbuka.worklist -XepOpt:NullAway:ExcludedFieldAnnotations=jakarta.ws.rs.core.Context -XepDisableWarningsInGeneratedCode</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>

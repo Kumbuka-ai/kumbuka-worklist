@@ -162,11 +162,9 @@ public enum QueryFilter {
         static final Form NUMBER = new Form() {
             @Override
             Object read(QueryFilter filter, Object raw) {
-                Long number = QuerySpec.wholeNumber(raw);
-                if (number == null || number < 1) {
-                    throw refused(filter);
-                }
-                return number;
+                return QuerySpec.wholeNumber(raw)
+                    .filter(number -> number >= 1)
+                    .orElseThrow(() -> refused(filter));
             }
         };
 

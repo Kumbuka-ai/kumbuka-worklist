@@ -87,7 +87,7 @@ public final class PageCursor {
 
     /**
      * The position a cursor continues after, checked against the query it is
-     * passed back to; null for no cursor.
+     * passed back to.
      *
      * @throws WorklistException {@code CURSOR_MALFORMED} for a cursor this
      *         service did not hand out, {@code CURSOR_FOREIGN} for one handed
@@ -96,9 +96,6 @@ public final class PageCursor {
     static Position decode(String cursor, UUID scopeId, String view,
                            Map<QueryFilter, Object> filters, SortKey sort,
                            SortKey.Direction direction) {
-        if (cursor == null) {
-            return null;
-        }
         String[] parts = plain(cursor).split("\\|", -1);
         if (parts.length != FIELDS || !VERSION.equals(parts[0])) {
             throw malformed();

@@ -127,7 +127,7 @@ class PlanningDomainIT {
                 + "out what it should have sent")
             .containsExactly("conflict_token");
         assertThat(refusal.currentToken()).as("and the current token travels as state")
-            .isEqualTo(token(iteration));
+            .contains(token(iteration));
 
         // What the absent rotation would have left behind: the second item in
         // the iteration, planned under a token that was already spent.

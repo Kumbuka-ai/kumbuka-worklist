@@ -16,6 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -167,11 +169,9 @@ public class ItemService {
     }
 
     private Long statusFilter(UUID scopeId, String name) {
-        ItemStatus status = vocabulary.statusByName(scopeId, name);
-        if (status == null) {
-            throw undeclaredFilterValue(QueryFilter.ITEM_STATUS);
-        }
-        return status.pk;
+        return vocabulary.statusByName(scopeId, name)
+            .orElseThrow(() -> undeclaredFilterValue(QueryFilter.ITEM_STATUS))
+            .pk;
     }
 
     private Long milestoneFilter(UUID scopeId, long number) {
@@ -233,12 +233,10 @@ public class ItemService {
                 notSettable);
         }
 
-        String title = ItemFields.text(Field.TITLE, given.get(Field.TITLE));
-        if (title == null) {
-            throw new WorklistException(
+        String title = ItemFields.text(Field.TITLE, given.get(Field.TITLE))
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                List.of(Field.TITLE.path()));
-        }
+                List.of(Field.TITLE.path())));
 
         // The view is required and the address allocated BEFORE the
         // vocabulary is looked up: a scope that has not declared the item
@@ -400,12 +398,10 @@ public class ItemService {
                 List.of(WITHDRAW_STATUS));
         }
         ItemFields.refuseUuidShape(WITHDRAW_STATUS, statusName);
-        ItemStatus status = vocabulary.statusByName(scopeId, statusName);
-        if (status == null) {
-            throw new WorklistException(
+        ItemStatus status = vocabulary.statusByName(scopeId, statusName)
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                List.of(WITHDRAW_STATUS));
-        }
+                List.of(WITHDRAW_STATUS)));
         if (!status.closed) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
@@ -454,7 +450,7 @@ public class ItemService {
         }
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName, TYPE);
 
-        ItemRelation edge = findEdge(item, target.number, type.pk);
+        ItemRelation edge = findEdge(item, target.number, type.pk).orElse(null);
         boolean changed;
         if (edge == null) {
             edge = new ItemRelation();
@@ -501,12 +497,11 @@ public class ItemService {
         Item target = resolveItemAddress(scopeId, toItemAddress, TO_ITEM);
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName, TYPE);
 
-        ItemRelation edge = findEdge(item, target.number, type.pk);
-        if (edge == null || ItemRelation.WITHDRAWN.equals(edge.status)) {
-            throw new WorklistException(
+        ItemRelation edge = findEdge(item, target.number, type.pk)
+            .filter(found -> !ItemRelation.WITHDRAWN.equals(found.status))
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.RELATION_UNKNOWN,
-                List.of(TO_ITEM, TYPE));
-        }
+                List.of(TO_ITEM, TYPE)));
 
         edge.status = ItemRelation.WITHDRAWN;
         item.stamp(clock.instant());
@@ -515,14 +510,14 @@ public class ItemService {
         return project(item);
     }
 
-    private ItemRelation findEdge(Item from, Long toItemNumber, Long relationTypePk) {
+    private Optional<ItemRelation> findEdge(Item from, Long toItemNumber, Long relationTypePk) {
         for (ItemRelation edge : items.edgesOf(from)) {
             if (edge.toItemNumber.equals(toItemNumber)
                     && edge.relationTypePk.equals(relationTypePk)) {
-                return edge;
+                return Optional.of(edge);
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
@@ -629,9 +624,10 @@ public class ItemService {
         path.add(here);
         onStack.add(here);
         for (ItemRelation edge : items.assertedRelations(here)) {
-            RelationType type = vocabulary.relationTypeByPk(edge.relationTypePk);
+            boolean blocks = vocabulary.relationTypeByPk(edge.relationTypePk)
+                .map(type -> type.blocks).orElse(false);
             Item next = byNumber.get(edge.toItemNumber);
-            if (type != null && type.blocks && next != null) {
+            if (blocks && next != null) {
                 walkForCycles(next, byNumber, path, onStack, cycles, seen);
             }
         }
@@ -704,16 +700,13 @@ public class ItemService {
     }
 
     private boolean applyOne(Item item, Map<String, Object> current, Field field,
-            Object value) {
+            @Nullable Object value) {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
-                String title = ItemFields.text(field, value);
-                if (title == null) {
-                    throw new WorklistException(
-                        WorklistException.Reason.INVALID_VALUE,
-                        List.of(field.path()));
-                }
+                String title = ItemFields.text(field, value).orElseThrow(() -> new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(field.path())));
                 if (Objects.equals(held, title)) {
                     return false;
                 }
@@ -721,7 +714,7 @@ public class ItemService {
                 return true;
             }
             case DESCRIPTION -> {
-                String description = ItemFields.text(field, value);
+                String description = ItemFields.text(field, value).orElse(null);
                 if (Objects.equals(held, description)) {
                     return false;
                 }
@@ -768,16 +761,17 @@ public class ItemService {
      * milestones in the table and positions on the axis, and they are rows
      * for exactly that reason.
      */
-    private boolean applyMilestone(Item item, Object held, Field field, Object value) {
-        Long milestoneNumber = milestoneNumberOrRefuse(field, value);
-        if (ItemFields.unchangedAsText(held, milestoneNumber)) {
+    private boolean applyMilestone(Item item, @Nullable Object held, Field field,
+            @Nullable Object value) {
+        Optional<Long> wanted = milestoneNumberOrRefuse(field, value);
+        if (ItemFields.unchangedAsText(held, wanted.orElse(null))) {
             return false;
         }
-        if (milestoneNumber == null) {
+        if (wanted.isEmpty()) {
             item.milestoneNumber = null;
             return true;
         }
-        Milestone milestone = planning.milestoneByNumber(item.scopeId, milestoneNumber).orElse(null);
+        Milestone milestone = planning.milestoneByNumber(item.scopeId, wanted.get()).orElse(null);
         if (milestone == null) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
@@ -799,23 +793,23 @@ public class ItemService {
     }
 
     /**
-     * A caller's value as a milestone number, or null when the field carries
+     * A caller's value as a milestone number, empty when the field carries
      * the empty absence, or a typed refusal naming what was given.
      */
-    private static Long milestoneNumberOrRefuse(Field field, Object raw) {
+    private static Optional<Long> milestoneNumberOrRefuse(Field field, @Nullable Object raw) {
         if (raw == null) {
-            return null;
+            return Optional.empty();
         }
         if (raw instanceof Number given) {
             long value = given.longValue();
             if (value <= 0) {
                 throw milestoneFormRefusal(field);
             }
-            return value;
+            return Optional.of(value);
         }
         String rendered = String.valueOf(raw).trim();
         if (rendered.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         ItemFields.refuseUuidShape(field.path(), rendered);
         try {
@@ -823,7 +817,7 @@ public class ItemService {
             if (value <= 0) {
                 throw milestoneFormRefusal(field);
             }
-            return value;
+            return Optional.of(value);
         } catch (NumberFormatException notANumber) {
             throw milestoneFormRefusal(field);
         }
@@ -846,13 +840,11 @@ public class ItemService {
      * milestone the item carries is unaffected: several workstreams reach
      * one milestone together (TAR-0002 section 4, V12).
      */
-    private boolean applyWorkstream(Item item, Object held, Field field, Object value) {
-        String token = ItemFields.text(field, value);
-        if (token == null) {
-            throw new WorklistException(
-                WorklistException.Reason.ITEM_WORKSTREAM_MISSING,
-                List.of(field.path()));
-        }
+    private boolean applyWorkstream(Item item, @Nullable Object held, Field field,
+            @Nullable Object value) {
+        String token = ItemFields.text(field, value).orElseThrow(() -> new WorklistException(
+            WorklistException.Reason.ITEM_WORKSTREAM_MISSING,
+            List.of(field.path())));
         ItemFields.refuseUuidShape(field.path(), token);
         if (ItemFields.unchangedAsText(held, token)) {
             return false;
@@ -872,11 +864,12 @@ public class ItemService {
      * {@code WorkstreamService.withdraw} refuses; the branch below trusts
      * that. A uuid is a typed refusal.
      */
-    private Workstream resolveWorkstream(UUID scopeId, Object value) {
-        String token = ItemFields.text(Field.WORKSTREAM_ID, value);
-        if (token == null) {
+    private Workstream resolveWorkstream(UUID scopeId, @Nullable Object value) {
+        Optional<String> named = ItemFields.text(Field.WORKSTREAM_ID, value);
+        if (named.isEmpty()) {
             return workstreams.requireDefault(scopeId);
         }
+        String token = named.get();
         ItemFields.refuseUuidShape(Field.WORKSTREAM_ID.path(), token);
         Workstream workstream = workstreamByToken(scopeId, token, Field.WORKSTREAM_ID.path());
         workstreams.refuseWithdrawn(workstream);
@@ -916,23 +909,19 @@ public class ItemService {
      * the scope declared the status under. A uuid on the wire is a form
      * refusal, and an unknown name is refused as an undeclared value.
      */
-    private boolean applyStatus(Item item, Object held, Field field, Object value) {
-        String name = ItemFields.text(field, value);
-        if (name == null) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(field.path()));
-        }
+    private boolean applyStatus(Item item, @Nullable Object held, Field field,
+            @Nullable Object value) {
+        String name = ItemFields.text(field, value).orElseThrow(() -> new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            List.of(field.path())));
         ItemFields.refuseUuidShape(field.path(), name);
         if (ItemFields.unchangedAsText(held, name)) {
             return false;
         }
-        ItemStatus status = vocabulary.statusByName(item.scopeId, name);
-        if (status == null) {
-            throw new WorklistException(
+        ItemStatus status = vocabulary.statusByName(item.scopeId, name)
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                List.of(field.path()));
-        }
+                List.of(field.path())));
         item.statusPk = status.pk;
         return true;
     }
@@ -944,21 +933,15 @@ public class ItemService {
      * message so the caller sees the field-level error rather than a
      * confusing shape hint.
      */
-    private ItemStatus resolveStatus(UUID scopeId, Object value) {
-        String name = ItemFields.text(Field.STATUS, value);
-        if (name == null) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(Field.STATUS.path()));
-        }
+    private ItemStatus resolveStatus(UUID scopeId, @Nullable Object value) {
+        String name = ItemFields.text(Field.STATUS, value).orElseThrow(() -> new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            List.of(Field.STATUS.path())));
         ItemFields.refuseUuidShape(Field.STATUS.path(), name);
-        ItemStatus status = vocabulary.statusByName(scopeId, name);
-        if (status == null) {
-            throw new WorklistException(
+        return vocabulary.statusByName(scopeId, name)
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                List.of(Field.STATUS.path()));
-        }
-        return status;
+                List.of(Field.STATUS.path())));
     }
 
     /**
@@ -1021,13 +1004,11 @@ public class ItemService {
      * (ADR-0042), unique within its attribute since V18; a uuid is a form
      * refusal that names the field, as it is for a status or a workstream.
      */
-    private AttributeOption optionNamed(AttributeDefinition definition, Object given) {
-        String name = given == null ? null : ItemFields.text(Field.ATTRIBUTES, String.valueOf(given));
-        if (name == null) {
-            throw new WorklistException(
+    private AttributeOption optionNamed(AttributeDefinition definition, @Nullable Object given) {
+        String name = ItemFields.text(Field.ATTRIBUTES, given == null ? null : String.valueOf(given))
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
-                List.of(Field.ATTRIBUTES.path()));
-        }
+                List.of(Field.ATTRIBUTES.path())));
         ItemFields.refuseUuidShape(Field.ATTRIBUTES.path(), name);
         return vocabulary.requireOptionNamed(definition, name);
     }
@@ -1133,7 +1114,12 @@ public class ItemService {
         for (int position = 0; position < wanted.size(); position++) {
             Map<String, Object> entry = wanted.get(position);
             String label = (String) entry.get(ItemFields.LABEL);
+            // ItemFields.references refuses an entry without a target, so
+            // every entry that reaches this line carries one.
             String target = (String) entry.get(ItemFields.TARGET);
+            if (target == null) {
+                throw new IllegalStateException("a normalised reference carries a target");
+            }
 
             if (position >= living.size()) {
                 ItemReference row = new ItemReference();
@@ -1251,20 +1237,18 @@ public class ItemService {
      * through here would be the same silent-acceptance defect the name
      * regime exists to remove.
      */
-    private RelationType resolveRelationTypeByName(UUID scopeId, String name, String argument) {
+    private RelationType resolveRelationTypeByName(UUID scopeId, @Nullable String name,
+            String argument) {
         if (name == null || name.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 List.of(argument));
         }
         ItemFields.refuseUuidShape(argument, name);
-        RelationType type = vocabulary.relationTypeByName(scopeId, name);
-        if (type == null) {
-            throw new WorklistException(
+        return vocabulary.relationTypeByName(scopeId, name)
+            .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
-                List.of(argument));
-        }
-        return type;
+                List.of(argument)));
     }
 
     /**
@@ -1276,7 +1260,7 @@ public class ItemService {
      * dangling. The number is looked up against the item's own address
      * space; a number that names nothing is a not-found and not a form error.
      */
-    private Item resolveItemAddress(UUID scopeId, String address, String argument) {
+    private Item resolveItemAddress(UUID scopeId, @Nullable String address, String argument) {
         if (address == null || address.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
@@ -1335,7 +1319,11 @@ public class ItemService {
         return requireIn(scopeId, items.lockById(itemId).orElse(null));
     }
 
-    private static Item requireIn(UUID scopeId, Item item) {
+    /**
+     * @param item the item the id named; absent where it names none, which is
+     *             refused like an item of another scope
+     */
+    private static Item requireIn(UUID scopeId, @Nullable Item item) {
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN,
@@ -1368,16 +1356,16 @@ public class ItemService {
         fields.put(Field.NUMBER.canonicalName(), item.number);
         fields.put(Field.TITLE.canonicalName(), item.title);
         fields.put(Field.DESCRIPTION.canonicalName(), item.description);
-        fields.put(Field.STATUS.canonicalName(), statusNameOf(item.statusPk));
+        fields.put(Field.STATUS.canonicalName(), statusNameOf(item.statusPk).orElse(null));
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
         fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneNumber);
         fields.put(Field.WORKSTREAM_ID.canonicalName(),
-            workstreamTokenOf(item.scopeId, item.workstreamNumber));
+            workstreamTokenOf(item.scopeId, item.workstreamNumber).orElse(null));
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken());
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken().orElse(null));
         return fields;
     }
 
@@ -1401,22 +1389,21 @@ public class ItemService {
         }
     }
 
-    /** The display name of a declared status, or null. */
-    private String statusNameOf(Long statusPk) {
+    /** The display name of a declared status, if it has one. */
+    private Optional<String> statusNameOf(@Nullable Long statusPk) {
         if (statusPk == null) {
-            return null;
+            return Optional.empty();
         }
-        ItemStatus status = vocabulary.statusByPk(statusPk);
-        return status == null ? null : status.name;
+        return vocabulary.statusByPk(statusPk).map(status -> status.name);
     }
 
-    /** The token of a workstream in a scope, or null. */
-    private String workstreamTokenOf(UUID scopeId, Long workstreamNumber) {
+    /** The token of a workstream in a scope, if it has one. */
+    private Optional<String> workstreamTokenOf(UUID scopeId, @Nullable Long workstreamNumber) {
         if (workstreamNumber == null) {
-            return null;
+            return Optional.empty();
         }
-        Workstream workstream = workstreamRepository.findByNumber(scopeId, workstreamNumber).orElse(null);
-        return workstream == null ? null : workstream.token;
+        return workstreamRepository.findByNumber(scopeId, workstreamNumber)
+            .map(workstream -> workstream.token);
     }
 
     /**
@@ -1434,9 +1421,10 @@ public class ItemService {
     private Map<String, Object> declaredAttributes(Item item) {
         Map<String, Object> answer = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : item.attributes.entrySet()) {
-            AttributeDefinition definition = vocabulary.attributeByPk(surrogateOrNull(entry.getKey()));
-            if (definition != null) {
-                answer.put(definition.key, answeredValue(definition, entry.getValue()));
+            Optional<AttributeDefinition> definition =
+                surrogateOf(entry.getKey()).flatMap(vocabulary::attributeByPk);
+            if (definition.isPresent()) {
+                answer.put(definition.get().key, answeredValue(definition.get(), entry.getValue()));
             }
         }
         return ItemFields.attributes(answer);
@@ -1458,15 +1446,18 @@ public class ItemService {
     }
 
     private Object answeredOption(Object stored) {
-        AttributeOption option = vocabulary.optionByPk(surrogateOrNull(String.valueOf(stored)));
-        return option == null ? stored : option.name;
+        return surrogateOf(String.valueOf(stored))
+            .flatMap(vocabulary::optionByPk)
+            .<Object>map(option -> option.name)
+            .orElse(stored);
     }
 
-    private static Long surrogateOrNull(String stored) {
+    /** The surrogate a stored key or value holds, if it holds one. */
+    private static Optional<Long> surrogateOf(String stored) {
         try {
-            return Long.valueOf(stored);
+            return Optional.of(Long.valueOf(stored));
         } catch (NumberFormatException notASurrogate) {
-            return null;
+            return Optional.empty();
         }
     }
 
@@ -1498,32 +1489,32 @@ public class ItemService {
         List<Map<String, Object>> answer = new ArrayList<>();
         for (ItemRelation relation : items.assertedRelations(item)) {
             Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put(ItemFields.TYPE, relationTypeNameOf(relation.relationTypePk));
-            entry.put(ItemFields.ITEM, itemAddressOf(scopeSlug, relation.toItemNumber));
+            entry.put(ItemFields.TYPE, relationTypeNameOf(relation.relationTypePk).orElse(null));
+            entry.put(ItemFields.ITEM, itemAddressOf(scopeSlug, relation.toItemNumber).orElse(null));
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);
     }
 
-    /** The display name of a declared relation type, or null. */
-    private String relationTypeNameOf(Long typePk) {
+    /** The display name of a declared relation type, if it has one. */
+    private Optional<String> relationTypeNameOf(@Nullable Long typePk) {
         if (typePk == null) {
-            return null;
+            return Optional.empty();
         }
-        RelationType type = vocabulary.relationTypeByPk(typePk);
-        return type == null ? null : type.name;
+        return vocabulary.relationTypeByPk(typePk).map(type -> type.name);
     }
 
     /**
      * The canonical address of an item as {@code worklist://<slug>/item/<number>},
-     * or null when either half is unavailable. An edge holds the other item's
+     * empty when either half is unavailable. An edge holds the other item's
      * number (ADR-0042), and an edge cannot leave its scope, so the address
      * needs no lookup.
      */
-    private static String itemAddressOf(String scopeSlug, Long toItemNumber) {
+    private static Optional<String> itemAddressOf(@Nullable String scopeSlug,
+            @Nullable Long toItemNumber) {
         if (toItemNumber == null || scopeSlug == null) {
-            return null;
+            return Optional.empty();
         }
-        return "worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + toItemNumber;
+        return Optional.of("worklist://" + scopeSlug + "/" + Selector.ITEM + "/" + toItemNumber);
     }
 }

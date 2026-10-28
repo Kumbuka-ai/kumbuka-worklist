@@ -13,11 +13,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -261,16 +263,18 @@ public class MilestoneService extends PlanningService {
                 return applyStatus(milestone, held, field, value);
             }
             case VISION -> {
-                String vision = capped(field, ItemFields.text(field, value), VISION_MAX);
+                String vision = ItemFields.text(field, value)
+                    .map(text -> capped(field, text, VISION_MAX)).orElse(null);
                 return moved(held, vision, () -> milestone.vision = vision);
             }
             case MISSION -> {
-                String mission = capped(field, ItemFields.text(field, value), MISSION_MAX);
+                String mission = ItemFields.text(field, value)
+                    .map(text -> capped(field, text, MISSION_MAX)).orElse(null);
                 return moved(held, mission, () -> milestone.mission = mission);
             }
             case RANK -> {
-                Integer rank = whole(field, value);
-                return rank != null && moved(held, rank, () -> milestone.rank = rank);
+                Optional<Integer> rank = whole(field, value);
+                return rank.isPresent() && moved(held, rank.get(), () -> milestone.rank = rank.get());
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable on a milestone and has no application");
@@ -286,7 +290,8 @@ public class MilestoneService extends PlanningService {
      * partial unique index refuses, and it would refuse the write that was
      * removing the condition.
      */
-    private boolean applyStatus(Milestone milestone, Object held, Field field, Object value) {
+    private boolean applyStatus(Milestone milestone, @Nullable Object held, Field field,
+            @Nullable Object value) {
         String status = oneOf(field, required(field, value),
             Milestone.STATUSES);
         if (ItemFields.unchangedAsText(held, status)) {
@@ -326,7 +331,7 @@ public class MilestoneService extends PlanningService {
             List.of(Field.KIND.path()));
     }
 
-    private static boolean moved(Object held, Object wanted, Runnable write) {
+    private static boolean moved(@Nullable Object held, @Nullable Object wanted, Runnable write) {
         if (Objects.equals(held == null ? null : String.valueOf(held),
                 wanted == null ? null : String.valueOf(wanted))) {
             return false;
@@ -355,7 +360,11 @@ public class MilestoneService extends PlanningService {
         return requireIn(scopeId, planning.lockMilestoneById(milestoneId).orElse(null));
     }
 
-    private static Milestone requireIn(UUID scopeId, Milestone milestone) {
+    /**
+     * @param milestone the milestone the id named; absent where it names none,
+     *                  which is refused like a milestone of another scope
+     */
+    private static Milestone requireIn(UUID scopeId, @Nullable Milestone milestone) {
         if (milestone == null || !milestone.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.MILESTONE_UNKNOWN,
@@ -392,7 +401,7 @@ public class MilestoneService extends PlanningService {
         // `Field.RETRACTED` carries the sentence one who still sends it gets.
         fields.put(Field.CREATED_AT.canonicalName(), milestone.createdAt);
         fields.put(Field.UPDATED_AT.canonicalName(), milestone.updatedAt);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), milestone.conflictToken());
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(), milestone.conflictToken().orElse(null));
         fields.put(Field.WARNINGS.canonicalName(), warnings);
         return fields;
     }

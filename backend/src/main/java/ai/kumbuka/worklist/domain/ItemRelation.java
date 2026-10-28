@@ -12,6 +12,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.Nullable;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -102,10 +103,14 @@ public class ItemRelation extends ScopeKeyed {
 
         private static final long serialVersionUID = 1L;
 
-        public UUID scopeId;
-        public Long fromItemNumber;
-        public Long toItemNumber;
-        public Long relationTypePk;
+        /*
+         * Absent only in the instance the persistence provider builds through
+         * the no-argument constructor before it sets the key from the row.
+         */
+        public @Nullable UUID scopeId;
+        public @Nullable Long fromItemNumber;
+        public @Nullable Long toItemNumber;
+        public @Nullable Long relationTypePk;
 
         public Key() {
             // Required by the persistence provider.

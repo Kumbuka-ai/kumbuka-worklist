@@ -12,6 +12,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.Nullable;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -128,9 +129,13 @@ public class IterationMembership extends ScopeKeyed {
 
         private static final long serialVersionUID = 1L;
 
-        public UUID scopeId;
-        public Long iterationNumber;
-        public Long itemNumber;
+        /*
+         * Absent only in the instance the persistence provider builds through
+         * the no-argument constructor before it sets the key from the row.
+         */
+        public @Nullable UUID scopeId;
+        public @Nullable Long iterationNumber;
+        public @Nullable Long itemNumber;
 
         public Key() {
         }

@@ -7,6 +7,8 @@
  */
 package ai.kumbuka.worklist.domain;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -15,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 
@@ -71,7 +74,7 @@ final class ItemFields {
         "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     /** Whether the rendered form of a value looks like a UUID. */
-    static boolean looksLikeUuid(Object raw) {
+    static boolean looksLikeUuid(@Nullable Object raw) {
         if (raw == null) {
             return false;
         }
@@ -99,16 +102,16 @@ final class ItemFields {
     }
 
     /**
-     * A caller's value as text, or null.
+     * A caller's value as text, if it carries any.
      *
-     * <p>An empty or blank string is null. A Markdown cell cannot tell the
+     * <p>An empty or blank string is no text. A Markdown cell cannot tell the
      * two apart and so needed a filler token; here they are the same absence,
      * and accepting both spellings of it would mean two rows that differ only
      * in which spelling of "nothing" they carry.
      */
-    static String text(Field field, Object raw) {
+    static Optional<String> text(Field field, @Nullable Object raw) {
         if (raw == null) {
-            return null;
+            return Optional.empty();
         }
         if (!(raw instanceof CharSequence)) {
             throw new WorklistException(
@@ -116,7 +119,7 @@ final class ItemFields {
                 List.of(field.path()));
         }
         String value = raw.toString().trim();
-        return value.isEmpty() ? null : value;
+        return value.isEmpty() ? Optional.empty() : Optional.of(value);
     }
 
     /**
@@ -127,7 +130,7 @@ final class ItemFields {
      * entity has an array, and refusing either would make the round trip
      * depend on which route the value took.
      */
-    static List<String> tokens(Field field, Object raw) {
+    static List<String> tokens(Field field, @Nullable Object raw) {
         List<String> out = new ArrayList<>(rawTokens(field, raw));
         out.sort(Comparator.naturalOrder());
         return List.copyOf(out);
@@ -142,7 +145,7 @@ final class ItemFields {
      * iteration's membership sequence is what it is because of the order —
      * so sorting it would destroy the thing being written.
      */
-    static List<String> tokensInOrder(Field field, Object raw) {
+    static List<String> tokensInOrder(Field field, @Nullable Object raw) {
         return List.copyOf(rawTokens(field, raw));
     }
 
@@ -154,23 +157,21 @@ final class ItemFields {
      * — a blank label is the same absence as no label — so that a round trip
      * through JSON compares equal to what came out of the store.
      */
-    static List<Map<String, Object>> references(Object raw) {
+    static List<Map<String, Object>> references(@Nullable Object raw) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Object element : elements(Field.REFERENCES, raw)) {
             Map<?, ?> entry = entry(Field.REFERENCES, element);
-            String target = text(Field.REFERENCES, entry.get(TARGET));
-            if (target == null) {
-                throw new WorklistException(
+            String target = text(Field.REFERENCES, entry.get(TARGET))
+                .orElseThrow(() -> new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
-                    List.of(Field.REFERENCES.path()));
-            }
+                    List.of(Field.REFERENCES.path())));
             // An ordinary unmodifiable map rather than Map.copyOf: the label
             // is optional, and Map.copyOf refuses a null value outright. An
             // entry with no label would raise from inside the normalisation,
             // which reads as a broken conversion rather than as the absent
             // label it actually is.
             Map<String, Object> normalised = new LinkedHashMap<>();
-            normalised.put(LABEL, text(Field.REFERENCES, entry.get(LABEL)));
+            normalised.put(LABEL, text(Field.REFERENCES, entry.get(LABEL)).orElse(null));
             normalised.put(TARGET, target);
             out.add(Collections.unmodifiableMap(normalised));
         }
@@ -193,22 +194,22 @@ final class ItemFields {
      * into the shape the domain reads: two strings per entry, in a stable
      * order.
      */
-    static List<Map<String, Object>> relations(Object raw) {
+    static List<Map<String, Object>> relations(@Nullable Object raw) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Object element : elements(Field.RELATIONS, raw)) {
             Map<?, ?> entry = entry(Field.RELATIONS, element);
-            String type = text(Field.RELATIONS, entry.get(TYPE));
-            String item = text(Field.RELATIONS, entry.get(ITEM));
-            if (type == null || item == null) {
+            Optional<String> type = text(Field.RELATIONS, entry.get(TYPE));
+            Optional<String> item = text(Field.RELATIONS, entry.get(ITEM));
+            if (type.isEmpty() || item.isEmpty()) {
                 throw new WorklistException(
                     WorklistException.Reason.INVALID_VALUE,
                     List.of(Field.RELATIONS.path()));
             }
-            refuseUuidShape(Field.RELATIONS.path(), type);
-            refuseUuidShape(Field.RELATIONS.path(), item);
+            refuseUuidShape(Field.RELATIONS.path(), type.get());
+            refuseUuidShape(Field.RELATIONS.path(), item.get());
             Map<String, Object> normalised = new LinkedHashMap<>();
-            normalised.put(TYPE, type);
-            normalised.put(ITEM, item);
+            normalised.put(TYPE, type.get());
+            normalised.put(ITEM, item.get());
             Map<String, Object> frozen = Map.copyOf(normalised);
             if (!out.contains(frozen)) {
                 out.add(frozen);
@@ -228,7 +229,7 @@ final class ItemFields {
      * left as they came: what a value may be is the declared attribute's type,
      * and that question is answered where the declaration can be read.
      */
-    static Map<String, Object> attributes(Object raw) {
+    static Map<String, Object> attributes(@Nullable Object raw) {
         if (raw == null) {
             return Map.of();
         }
@@ -271,14 +272,14 @@ final class ItemFields {
      * instant as its ISO form, and treating those as different values would
      * turn every honest round trip into a refusal.
      */
-    static boolean unchangedAsText(Object current, Object incoming) {
+    static boolean unchangedAsText(@Nullable Object current, @Nullable Object incoming) {
         return Objects.equals(
             current == null ? null : String.valueOf(current),
             incoming == null ? null : String.valueOf(incoming));
     }
 
     /** A collection or an array as elements, or a refusal naming the field. */
-    private static Collection<?> elements(Field field, Object raw) {
+    private static Collection<?> elements(Field field, @Nullable Object raw) {
         if (raw == null) {
             return List.of();
         }
@@ -315,7 +316,7 @@ final class ItemFields {
     }
 
     /** The distinct, trimmed, non-empty renderings of a caller's collection. */
-    private static List<String> rawTokens(Field field, Object raw) {
+    private static List<String> rawTokens(Field field, @Nullable Object raw) {
         List<String> out = new ArrayList<>();
         for (Object element : elements(field, raw)) {
             // Rendered rather than type-checked, unlike a scalar field. A

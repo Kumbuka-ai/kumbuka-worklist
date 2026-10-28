@@ -15,10 +15,12 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -126,9 +128,11 @@ public class Item extends AggregateRoot {
      * <p>The design lives in the document a reference points at. Without the
      * boundary the description grows into a specification held in the wrong
      * service.
+     *
+     * <p>Absent where the item carries no description.
      */
     @Column(name = "description")
-    public String description;
+    public @Nullable String description;
 
     /**
      * The declared status. Mandatory: an item always has one, and which
@@ -138,7 +142,8 @@ public class Item extends AggregateRoot {
     public Long statusPk;
 
     /**
-     * The goal axis, including the three marker rows, or null.
+     * The goal axis, including the three marker rows; absent where the item is
+     * on no milestone.
      *
      * <p>Read and never written through the item verbs. Setting it is a
      * planning act, and the planning layer's verbs are a separate piece of
@@ -146,7 +151,7 @@ public class Item extends AggregateRoot {
      * a property of the schema and not of whoever writes that verb.
      */
     @Column(name = "milestone_number")
-    public Long milestoneNumber;
+    public @Nullable Long milestoneNumber;
 
     /**
      * The workstream this item belongs to. Mandatory, once V10 lands.
@@ -234,8 +239,8 @@ public class Item extends AggregateRoot {
     }
 
     @Override
-    protected Instant changeTime() {
-        return changedAt;
+    protected Optional<Instant> changeTime() {
+        return Optional.ofNullable(changedAt);
     }
 
     @Override
