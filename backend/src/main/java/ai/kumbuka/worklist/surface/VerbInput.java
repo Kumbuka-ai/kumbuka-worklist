@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.surface;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -45,15 +46,26 @@ public final class VerbInput {
     /**
      * The canonical field map of a write, exactly as the caller wrote it.
      *
-     * <p>Carried through untouched. The one thing the surface adds is the
-     * conflict token, and it adds it because the token arrives in the transport
-     * ({@code If-Match}) while the domain reads it as a field — see
-     * {@link #withToken}.
+     * <p>Carried through untouched but for one reading: a field written as
+     * JSON {@code null} is a field not sent (C7.4, DEC-0043 R17), so it is
+     * left out here, once, for both adapters. An update then leaves it as it
+     * is, and a create gives it the value a create without it gives. The one
+     * thing the surface adds is the conflict token, and it adds it because the
+     * token arrives in the transport ({@code If-Match}) while the domain reads
+     * it as a field — see {@link #withToken}.
      */
     public record Fields(Map<String, Object> values) {
 
         public Fields {
-            values = values == null ? Map.of() : Map.copyOf(values);
+            Map<String, Object> present = new LinkedHashMap<>();
+            if (values != null) {
+                values.forEach((name, value) -> {
+                    if (value != null) {
+                        present.put(name, value);
+                    }
+                });
+            }
+            values = Collections.unmodifiableMap(present);
         }
 
         /**

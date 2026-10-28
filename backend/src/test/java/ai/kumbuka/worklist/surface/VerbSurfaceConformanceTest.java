@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.adapter.mcp.McpTools;
+import ai.kumbuka.worklist.adapter.payload.ToolPayload;
 import ai.kumbuka.worklist.adapter.rest.CustomMethod;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.Path;
@@ -22,7 +23,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -239,7 +239,7 @@ class VerbSurfaceConformanceTest {
         Set<String> carried = VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED);
 
         Set<String> declared = tools().stream()
-            .map(McpTools.Tool::name)
+            .map(ToolPayload::name)
             .collect(Collectors.toCollection(LinkedHashSet::new));
 
         assertThat(declared)
@@ -252,13 +252,13 @@ class VerbSurfaceConformanceTest {
 
     @Test
     void every_mcp_tool_declares_a_closed_argument_schema() {
-        for (McpTools.Tool tool : tools()) {
-            assertThat(tool.inputSchema())
+        for (ToolPayload tool : tools()) {
+            assertThat(tool.inputSchema().additionalProperties())
                 .as("the schema of '%s' must close additionalProperties: an argument the "
                     + "surface does not know is one a caller believes in, and accepting it "
                     + "silently is how a client comes to depend on a field nobody reads",
                     tool.name())
-                .containsEntry("additionalProperties", false);
+                .isFalse();
         }
     }
 
@@ -269,15 +269,11 @@ class VerbSurfaceConformanceTest {
      * workstream view can be listed at all.
      */
     @Test
-    @SuppressWarnings("unchecked")
     void the_query_selector_names_every_view_the_service_lists() {
-        McpTools.Tool query = tools().stream()
+        ToolPayload query = tools().stream()
             .filter(tool -> tool.name().equals("query"))
             .findFirst().orElseThrow();
-        Map<String, Object> properties =
-            (Map<String, Object>) query.inputSchema().get("properties");
-        String selector = String.valueOf(
-            ((Map<String, Object>) properties.get("selector")).get("description"));
+        String selector = query.inputSchema().properties().get("selector").description();
         assertThat(selector).as("query's selector is described by its own text")
             .isEqualTo("selectorQuery");
         assertThat(argumentText("selectorQuery"))
@@ -289,7 +285,7 @@ class VerbSurfaceConformanceTest {
      * bundle method that words it: the words themselves are Quarkus's to
      * render, and this probe reads the shape.
      */
-    private static java.util.List<McpTools.Tool> tools() {
+    private static java.util.List<ToolPayload> tools() {
         return McpTools.declared(named(ai.kumbuka.worklist.surface.ToolDescriptions.class),
             named(ai.kumbuka.worklist.surface.ArgumentDescriptions.class),
             named(ai.kumbuka.worklist.surface.ValueDescriptions.class));

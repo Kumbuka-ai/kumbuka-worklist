@@ -8,7 +8,11 @@
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.surface.DeclarationDocument;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.security.Authenticated;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -42,11 +46,32 @@ import java.util.Map;
 @Produces(MediaType.APPLICATION_JSON)
 public class DeclarationResource {
 
+    @Inject ObjectMapper json;
+
     @GET
     public Response declaration() {
         Map<String, Object> document = DeclarationDocument.document();
-        return Response.ok(document)
+        return Response.ok(written(document))
             .tag(new EntityTag(String.valueOf(document.get(DeclarationDocument.VERSION))))
             .build();
+    }
+
+    /**
+     * The document with every member written, one without a value as
+     * {@code null}: the form its version is taken over. Every other answer
+     * leaves such a member out (C7.2); written that way here, the document
+     * would no longer be the content its version is the hash of. The
+     * declaration keeps its form until its own reshaping decides it.
+     */
+    private String written(Map<String, Object> document) {
+        try {
+            return json.copy()
+                .setDefaultPropertyInclusion(JsonInclude.Value.construct(
+                    JsonInclude.Include.ALWAYS, JsonInclude.Include.ALWAYS))
+                .writeValueAsString(document);
+        } catch (JsonProcessingException unwritable) {
+            throw new IllegalStateException("the declaration could not be written as JSON",
+                unwritable);
+        }
     }
 }
