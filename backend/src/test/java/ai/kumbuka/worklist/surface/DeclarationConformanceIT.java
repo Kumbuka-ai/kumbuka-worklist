@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import ai.kumbuka.worklist.CounterProbe;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -49,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
+@CounterProbe
 class DeclarationConformanceIT {
 
     private static final Pattern HEX64 = Pattern.compile("[0-9a-f]{64}");

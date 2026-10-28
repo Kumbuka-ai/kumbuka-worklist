@@ -1,5 +1,13 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.boundary;
 
+import ai.kumbuka.worklist.tenancy.MigrationHarness;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import ai.kumbuka.worklist.tenancy.TenantMigrationCallback;
 import org.flywaydb.core.Flyway;
@@ -7,7 +15,6 @@ import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -50,15 +57,11 @@ class ServiceRoleAttributeGuardIT {
     private static final String MIGRATOR = "attribute_guard_migrator";
     private static final String MIGRATOR_PASSWORD = "test-only-guard-password";
 
-    private static PostgreSQLContainer<?> postgres;
+    private static MigrationHarness postgres;
 
     @BeforeAll
     static void startDatabase() throws SQLException {
-        postgres = new PostgreSQLContainer<>(SubstrateDatabaseResource.POSTGRES_IMAGE)
-            .withDatabaseName("kumbuka")
-            .withUsername("postgres_admin")
-            .withPassword("test-only-admin-password");
-        postgres.start();
+        postgres = MigrationHarness.start();
 
         asSuperuser("CREATE ROLE " + MIGRATOR + " LOGIN CREATEROLE NOSUPERUSER "
                 + "NOBYPASSRLS PASSWORD '" + MIGRATOR_PASSWORD + "'",
@@ -72,7 +75,7 @@ class ServiceRoleAttributeGuardIT {
     @AfterAll
     static void stopDatabase() {
         if (postgres != null) {
-            postgres.stop();
+            postgres.close();
         }
     }
 
@@ -127,12 +130,12 @@ class ServiceRoleAttributeGuardIT {
         asSuperuser("DROP DATABASE IF EXISTS " + name,
             "CREATE DATABASE " + name,
             "GRANT CREATE ON DATABASE " + name + " TO " + MIGRATOR);
-        return postgres.getJdbcUrl().replace("/kumbuka?", "/" + name + "?");
+        return postgres.jdbcUrl().replace("/kumbuka?", "/" + name + "?");
     }
 
     private static void asSuperuser(String... statements) throws SQLException {
-        try (Connection c = DriverManager.getConnection(postgres.getJdbcUrl(),
-                postgres.getUsername(), postgres.getPassword());
+        try (Connection c = DriverManager.getConnection(postgres.jdbcUrl(),
+                postgres.username(), postgres.password());
              Statement s = c.createStatement()) {
             for (String statement : statements) {
                 s.execute(statement);
