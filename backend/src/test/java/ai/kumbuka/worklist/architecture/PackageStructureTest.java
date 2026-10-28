@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.architecture;
 
 import org.junit.jupiter.api.Test;
@@ -19,10 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <h2>Existence is not required, only membership</h2>
  *
- * A service may be missing a package. The worklist has no verb surface yet,
- * and that is deliberate: it is left unbuilt so that the rule set gets a first
- * consumer rather than another input. An empty {@code surface} is therefore not
- * a defect. What is a defect is a package that is not one of the eight.
+ * A service may be missing a package, and an absent one is not a defect: a
+ * layer the service does not need yet is built as its own step, under these
+ * guards rather than before them. What is a defect is a package that is not
+ * one of the eight.
  *
  * <p>The check runs over {@code src/main}. Test sources carry fixtures,
  * probes and the guards themselves, which are not layers of the service and

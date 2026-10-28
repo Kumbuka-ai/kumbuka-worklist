@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -6,7 +13,6 @@ import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -63,22 +69,18 @@ class MigrationCallbackWitnessIT {
     private static final String MIGRATOR = "witness_migrator";
     private static final String MIGRATOR_PASSWORD = "test-only-witness-password";
 
-    private static PostgreSQLContainer<?> postgres;
+    private static MigrationHarness postgres;
 
     @BeforeAll
     static void startDatabase() throws SQLException {
-        postgres = new PostgreSQLContainer<>(SubstrateDatabaseResource.POSTGRES_IMAGE)
-            .withDatabaseName("kumbuka")
-            .withUsername("postgres_admin")
-            .withPassword("test-only-admin-password");
-        postgres.start();
+        postgres = MigrationHarness.start();
 
         // The migrating role: CREATEROLE and, critically, NOT BYPASSRLS. A
         // privileged migrator would walk past the policy, and the negative
         // case below would pass for the wrong reason — the DML would succeed
         // whether the callback ran or not.
-        try (Connection c = DriverManager.getConnection(postgres.getJdbcUrl(),
-                postgres.getUsername(), postgres.getPassword());
+        try (Connection c = DriverManager.getConnection(postgres.jdbcUrl(),
+                postgres.username(), postgres.password());
              Statement s = c.createStatement()) {
             s.execute("CREATE ROLE " + MIGRATOR + " LOGIN CREATEROLE NOSUPERUSER "
                 + "NOBYPASSRLS PASSWORD '" + MIGRATOR_PASSWORD + "'");
@@ -94,20 +96,20 @@ class MigrationCallbackWitnessIT {
      * negative case would pass without ever attempting the write it is about.
      */
     private static String freshDatabase(String name) throws SQLException {
-        try (Connection c = DriverManager.getConnection(postgres.getJdbcUrl(),
-                postgres.getUsername(), postgres.getPassword());
+        try (Connection c = DriverManager.getConnection(postgres.jdbcUrl(),
+                postgres.username(), postgres.password());
              Statement s = c.createStatement()) {
             s.execute("DROP DATABASE IF EXISTS " + name);
             s.execute("CREATE DATABASE " + name);
             s.execute("GRANT CREATE ON DATABASE " + name + " TO " + MIGRATOR);
         }
-        return postgres.getJdbcUrl().replace("/kumbuka?", "/" + name + "?");
+        return postgres.jdbcUrl().replace("/kumbuka?", "/" + name + "?");
     }
 
     @AfterAll
     static void stopDatabase() {
         if (postgres != null) {
-            postgres.stop();
+            postgres.close();
         }
     }
 
@@ -151,7 +153,7 @@ class MigrationCallbackWitnessIT {
         migrate(url, true);
 
         try (Connection c = DriverManager.getConnection(url,
-                postgres.getUsername(), postgres.getPassword());
+                postgres.username(), postgres.password());
              Statement s = c.createStatement();
              ResultSet rs = s.executeQuery(
                  "SELECT name FROM worklist.item_status ORDER BY name")) {

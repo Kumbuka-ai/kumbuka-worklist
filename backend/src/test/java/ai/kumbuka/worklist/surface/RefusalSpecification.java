@@ -1,5 +1,13 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.surface;
 
+import ai.kumbuka.worklist.CounterProbe;
 import java.util.List;
 
 /**
@@ -42,6 +50,7 @@ import java.util.List;
  * which is the node's own clause and holds whatever the message is. The
  * literal is what additionally binds them to the other hop.
  */
+@CounterProbe
 public final class RefusalSpecification {
 
     private RefusalSpecification() {
