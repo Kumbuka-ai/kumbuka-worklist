@@ -62,7 +62,7 @@ class McpProjectionIT {
         SurfaceFixture.stage();
         SurfaceFixture.asMember(identity);
         for (String view : Selector.VIEWS) {
-            selectors.declare(SCOPE_ID, view);
+            selectors.open(SCOPE_ID, view);
         }
     }
 

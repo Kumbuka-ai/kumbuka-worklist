@@ -47,12 +47,12 @@ import java.util.UUID;
  *
  * <h2>The allocation is per selector and there is no second position</h2>
  *
- * Each view — item, iteration, milestone — draws from its own
+ * Each view — item, iteration, milestone, workstream — draws from its own
  * {@link NumberSpace} row, and that row is the one position. There used to
  * be an {@code allocation_mode} column on this row with a second,
  * scope-wide, expressible position beside it; the two differed only in
  * which counter the allocator read. It was removed on the class reading
- * of the selector: the three views are three different classes of thing,
+ * of the selector: the views are different classes of thing,
  * and {@code .../item/1}, {@code .../iteration/1} and {@code .../milestone/1}
  * are three different addresses already, so a bare number that had to
  * disambiguate itself across them was solving a problem the address form
@@ -82,9 +82,6 @@ public class ScopeSetting extends AggregateRoot {
      * <p>The same column as the inherited {@link #scopeId}, mapped twice and
      * written once, here; the inherited mapping is overridden read-only so
      * every other class keeps reading {@code scopeId} as on every other table.
-     * The uuid column {@code id}, which V5 added as a key free of the tenancy
-     * axis, is no longer mapped: the next release drops it (ADR-0042), and an
-     * image that mapped it could not start against that schema.
      */
     @Id
     @Column(name = "scope_id", nullable = false, updatable = false)

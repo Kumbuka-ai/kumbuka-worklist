@@ -135,7 +135,7 @@ class MilestoneWorkstreamRetractionIT {
     void twoScopes() {
         SurfaceFixture.stage();
         SurfaceFixture.asMember(identity);
-        selectors.declare(SURFACE_SCOPE, Selector.MILESTONE);
+        selectors.open(SURFACE_SCOPE, Selector.MILESTONE);
         openTheSurfaceScope();
 
         scope = UUID.randomUUID();
@@ -143,8 +143,8 @@ class MilestoneWorkstreamRetractionIT {
         settings.create(scope, Map.of(
             "max_planned_iterations", 10, "warn_planned_iterations", 9,
             "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
-        selectors.declare(scope, Selector.ITEM);
-        selectors.declare(scope, Selector.MILESTONE);
+        selectors.open(scope, Selector.ITEM);
+        selectors.open(scope, Selector.MILESTONE);
     }
 
     // =======================================================================

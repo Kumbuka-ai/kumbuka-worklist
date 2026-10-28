@@ -293,7 +293,7 @@ class ItemFieldsTest {
     // ------------------------------------------------------------------
 
     @Test
-    void the_selector_token_pattern_accepts_the_three_views_and_rejects_upper_case() {
+    void the_selector_token_pattern_accepts_every_view_and_rejects_upper_case() {
         for (String view : Selector.VIEWS) {
             assertThat(Selector.TOKEN_PATTERN.matcher(view).matches())
                 .as("'%s' is a view and the form has to admit it", view)
@@ -326,13 +326,13 @@ class ItemFieldsTest {
     }
 
     /**
-     * The form admits more than the three, and the three are decided elsewhere.
+     * The form admits more than the views, and the views are decided elsewhere.
      *
      * <p>Form and vocabulary are two stages of the ratified check order: a
      * malformed token is decidable without knowing any scope, and which tokens
      * this platform admits is a different statement in a different place. If the
-     * pattern were narrowed to the three literals, a token outside them would be
-     * a grammar error rather than the typed refusal that names the three — and
+     * pattern were narrowed to the four literals, a token outside them would be
+     * a grammar error rather than the typed refusal {@code VIEW_UNKNOWN} — and
      * the red probe on the view check would have nothing left to observe.
      */
     @Test

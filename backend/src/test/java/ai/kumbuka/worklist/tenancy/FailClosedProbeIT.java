@@ -233,7 +233,7 @@ class FailClosedProbeIT {
      * idempotent, so a second call under the same tenant costs one query.
      */
     private void itemView() {
-        selectors.declare(SCOPE, ai.kumbuka.worklist.domain.Selector.ITEM);
+        selectors.open(SCOPE, ai.kumbuka.worklist.domain.Selector.ITEM);
     }
 
     /**

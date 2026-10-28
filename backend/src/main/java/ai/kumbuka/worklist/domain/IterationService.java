@@ -320,8 +320,7 @@ public class IterationService extends PlanningService {
      * view.
      */
     private long allocateNumber(UUID scopeId) {
-        Selector iterationSelector = selectors.require(scopeId, Selector.ITERATION);
-        return selectors.allocate(scopeId, iterationSelector);
+        return selectors.allocate(scopeId, Selector.ITERATION);
     }
 
     /**

@@ -241,7 +241,7 @@ class KeysetPagingIT {
             "max_memberships_per_iteration", 10,
             "warn_memberships_per_iteration", 9));
         for (String view : Selector.VIEWS) {
-            selectors.declare(id, view);
+            selectors.open(id, view);
         }
         vocabulary.declareStatus(id, "open", 1, true, false, false, false);
         workstreams.requireDefault(id);

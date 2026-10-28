@@ -244,7 +244,7 @@ class VerbVocabularyGuardTest {
      * away. {@code read_membership} and {@code update_membership} are the same
      * two verbs at the address that grows a segment — Java cannot spell one name
      * twice with different parameters here, and a membership is addressed under
-     * its iteration rather than as a fourth view. {@code uncarried} and
+     * its iteration rather than as a view of its own. {@code uncarried} and
      * {@code unbuilt} are how the two classes of non-acting verb are refused;
      * they are the surface's own vocabulary for saying no, not acts of their
      * own. {@code require_visible} is the scope stage alone, which an adapter

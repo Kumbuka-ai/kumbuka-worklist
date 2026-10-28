@@ -100,8 +100,8 @@ public class WorkstreamService {
      * construction, and its identity comes from its {@code is_default}
      * flag rather than from any name a caller might name.
      *
-     * <p>The lazy path also ensures the workstream selector and the
-     * workstream selector's number-space row exist for the scope, so a
+     * <p>The lazy path also ensures the workstream view is open — its
+     * number-space row exists — for the scope, so a
      * scope opened outside the bootstrap path (a test fixture) has the
      * same shape as one opened through it.
      */
@@ -111,11 +111,10 @@ public class WorkstreamService {
         if (defaultWs != null) {
             return defaultWs;
         }
-        // Ensure the workstream selector exists in this scope. `declare`
-        // is idempotent — it returns the existing selector row and opens
-        // its number-space row if that is missing too.
-        Selector workstreamSelector = selectors.declare(scopeId, Selector.WORKSTREAM);
-        long number = selectors.allocate(scopeId, workstreamSelector);
+        // Ensure the workstream view is open in this scope. `open` is
+        // idempotent — it leaves an open view and its mark as they are.
+        selectors.open(scopeId, Selector.WORKSTREAM);
+        long number = selectors.allocate(scopeId, Selector.WORKSTREAM);
 
         Workstream defaultRow = new Workstream();
         defaultRow.scopeId     = scopeId;
@@ -132,7 +131,7 @@ public class WorkstreamService {
         // (TAR-0002 section 4, REQ-0148 obsolete), so no per-workstream
         // milestone-counter row is opened here. The scope-wide milestone
         // number_space row is planted by bootstrap or by the first
-        // `selectors.declare(scope, MILESTONE)` call.
+        // `selectors.open(scope, MILESTONE)` call.
 
         LOG.infof("default workstream created lazily in scope %s (number %d)",
             scopeId, number);
@@ -167,8 +166,7 @@ public class WorkstreamService {
                 List.of(TOKEN));
         }
 
-        Selector workstreamSelector = selectors.require(scopeId, Selector.WORKSTREAM);
-        long number = selectors.allocate(scopeId, workstreamSelector);
+        long number = selectors.allocate(scopeId, Selector.WORKSTREAM);
 
         Workstream workstream = new Workstream();
         workstream.scopeId     = scopeId;

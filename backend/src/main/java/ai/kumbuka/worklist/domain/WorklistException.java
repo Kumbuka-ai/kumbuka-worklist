@@ -157,13 +157,13 @@ public class WorklistException extends RuntimeException {
         SELECTOR_WITHDRAWN,
 
         /**
-         * The token is well formed and names none of the three views.
+         * The token is well formed and names none of the four views.
          *
          * <p>Kept apart from {@link #SELECTOR_UNDECLARED}, which says that a
          * view exists and this scope has not declared it yet — a state a
          * caller fixes by declaring. This one says the token could never name
          * anything here, whatever the scope does, and no declaration fixes
-         * it. Collapsing the two would send a caller off to declare a fourth
+         * it. Collapsing the two would send a caller off to declare a fifth
          * view that cannot exist.
          */
         VIEW_UNKNOWN,

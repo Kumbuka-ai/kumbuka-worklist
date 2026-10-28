@@ -34,7 +34,7 @@
 # own not-found. That is the coverage half.
 #
 # `read` and `update` appear twice because a membership is addressed under its
-# iteration, as a second id segment. That is not a fourth view: the address
+# iteration, as a second id segment. That is not a view of its own: the address
 # grows a segment, and the verb is the same word aimed at a different thing.
 
 class	verb	method	path	depth	repeat

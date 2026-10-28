@@ -487,7 +487,7 @@ class PlanningRefusalIT {
     private UUID onPath(String title) {
         // The item view, declared before anything is created under it: the
         // address is allocated at creation now. Declaring is idempotent.
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         UUID item = (UUID) items.create(scope, Map.of(
             "title", title, "status", vocabulary.requireStatus(scope, openStatus).name)).get("id");
         UUID milestone = (UUID) milestones.create(scope, Map.of(

@@ -74,7 +74,7 @@ class RefusalEnvelopeIT {
 
     @BeforeEach
     void declareTheItemView() {
-        selectors.declare(SCOPE_ID, Selector.ITEM);
+        selectors.open(SCOPE_ID, Selector.ITEM);
     }
 
     // =======================================================================

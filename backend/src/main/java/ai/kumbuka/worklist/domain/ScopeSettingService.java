@@ -58,14 +58,14 @@ public class ScopeSettingService extends PlanningService {
     private static final Logger LOG = Logger.getLogger(ScopeSettingService.class);
 
     /**
-     * The scope-opening act seeds the three views through this registry.
+     * The scope-opening act seeds the four views through this registry.
      *
-     * <p>Without the seeding the three views would have to be declared
+     * <p>Without the seeding the four views would have to be declared
      * separately by a caller who knew — a fixture, because nothing outside
      * this service reaches the declaration path. That would not scale: a
-     * scope opened through the surface would either carry three follow-up
-     * declarations or would refuse every item, iteration and milestone
-     * created under it. Seeding on open is what makes {@code create} a call
+     * scope opened through the surface would either carry four follow-up
+     * declarations or would refuse every item, iteration, milestone and
+     * workstream created under it. Seeding on open is what makes {@code create} a call
      * that opens a scope end to end.
      */
     @Inject SelectorRegistry selectors;
@@ -114,19 +114,19 @@ public class ScopeSettingService extends PlanningService {
         planning.insert(setting);
         planning.flushAndRefresh(setting);
 
-        // Seed the three views the platform's object model fixes. Each
+        // Seed the four views the platform's object model fixes. Each
         // declaration is idempotent, so a fixture that already declared one
         // of them (the older test setup, the imports of the predecessor's
         // corpus) collides with nothing here. What is new is that a scope
-        // opened THROUGH this verb no longer needs its three declarations to
+        // opened THROUGH this verb no longer needs its four declarations to
         // be arranged from outside — the surface projection depends on that,
         // because a caller opening a scope has no verb to declare a view
         // with, and no reason to know that one exists.
         for (String view : Selector.VIEWS) {
-            selectors.declare(scopeId, view);
+            selectors.open(scopeId, view);
         }
 
-        LOG.infof("scope %s opened, and the three views seeded", scopeId);
+        LOG.infof("scope %s opened, and the four views seeded", scopeId);
         return projectOf(setting, List.of());
     }
 

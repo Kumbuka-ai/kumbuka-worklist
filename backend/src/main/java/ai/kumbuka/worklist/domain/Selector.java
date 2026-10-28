@@ -7,61 +7,40 @@
  */
 package ai.kumbuka.worklist.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-
-import java.time.Instant;
 import java.util.List;
 
 /**
- * The declared head of an address — the {@code item} of
- * {@code worklist://kumbuka/item/562}.
+ * The head of an address — the {@code item} of
+ * {@code worklist://kumbuka/item/562} — and the four values it can take.
  *
- * <h2>The selector is the view, and no longer the item's family</h2>
+ * <h2>The selector is the view, and the views are constants</h2>
  *
  * A token names one of the {@linkplain #VIEWS platform views} onto what a
  * scope holds: its items, its iterations, its milestones, its workstreams. It
  * used to name the family of an item — {@code FEAT}, {@code CHORE},
  * {@code BUG} — and each family was an address space of its own. That is what
- * changed: the families are no longer a number space, one counter serves the
- * whole scope, and what stands at the head of an address now says which KIND
- * of thing is at the other end of it.
+ * changed: the families are no longer a number space, and what stands at the
+ * head of an address now says which KIND of thing is at the other end of it.
  *
  * <p>The views are platform vocabulary and not a scope's declaration. A scope
  * declares which statuses and attributes its items carry; it does not declare
- * that iterations exist. {@link SelectorRegistry#declare} therefore refuses a
- * token outside {@link #VIEWS} — the check is in the domain rather than in a
- * constraint, because "these views and no others" is a statement about the
- * platform's object model, and a scope-local table is the wrong place to keep
- * one.
+ * that iterations exist. So the four live here, as constants of the service,
+ * and nowhere as a row a scope could hold or lack. What a scope does hold is
+ * one {@link NumberSpace} per view, keyed by the view's token: that counter is
+ * what an address under the view resolves through, and opening it is what
+ * opens the view in a scope ({@link SelectorRegistry#open}).
  *
- * <h2>Two properties survive the change unaltered, and both are refusals</h2>
+ * <p>Until the contraction release, the store still carries a row per view
+ * and scope in {@code worklist.selector}, written beside every counter so the
+ * previous image runs after a rollback. Nothing in this image reads it.
  *
- * <p><strong>A selector is never created implicitly.</strong> Not by the first
- * item that mentions it, not by any verb other than the one whose entire
- * purpose is to declare it. That the set is now closed makes the rule easier
- * to keep and does not replace it: a scope still has to have its three rows
- * before an address under them resolves.
+ * <h2>A view is never opened implicitly</h2>
  *
- * <p><strong>A selector is never renamed.</strong> Every address ever issued
- * under one resolves through this row, so a rename breaks all of them at once
- * and without a sound. Withdrawal is a status instead, and a withdrawn
- * selector keeps its token so that the token cannot come to mean something
- * else. The database refuses a rename through a trigger the runtime role
- * cannot drop.
+ * Not by the first item that mentions it, not by any verb. That the set is
+ * closed makes the rule easier to keep and does not replace it: a scope still
+ * has to have its counters before an address under them resolves.
  */
-@Entity
-@Table(name = "selector", schema = "worklist")
-public class Selector extends TenantScoped {
-
-    /** A selector that may still be used. */
-    public static final String DECLARED = "declared";
-    /** Withdrawn: resolvable for what already exists, closed to anything new. */
-    public static final String WITHDRAWN = "withdrawn";
+public final class Selector {
 
     /** The view onto a scope's items. */
     public static final String ITEM = "item";
@@ -133,31 +112,6 @@ public class Selector extends TenantScoped {
     public static final java.util.regex.Pattern TOKEN_PATTERN =
         java.util.regex.Pattern.compile("^[a-z][a-z0-9]*+(?:-[a-z0-9]++)*+$");
 
-    /**
-     * The row's identity inside this service: the surrogate every key onto it
-     * targets (ADR-0042), allocated by the store, never part of an answer.
-     *
-     * <p>The uuid column {@code id} the store still carries is not mapped. The
-     * image before this one reads it, and the store fills it by default; the
-     * next release drops it, and an image that mapped it could not start
-     * against that schema.
-     */
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "pk", nullable = false, updatable = false)
-    public Long pk;
-
-
-    /** One of the tokens in {@link #VIEWS}. Immutable. */
-    @Column(name = "token", nullable = false, updatable = false)
-    public String token;
-
-    @Column(name = "status", nullable = false)
-    public String status = DECLARED;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    public Instant createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    public Instant updatedAt;
+    private Selector() {
+    }
 }

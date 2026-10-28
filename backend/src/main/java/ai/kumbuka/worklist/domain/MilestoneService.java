@@ -75,8 +75,9 @@ public class MilestoneService extends PlanningService {
     static final int MISSION_MAX = 1500;
 
     /**
-     * The number spaces the three axes allocate from live under their
-     * selector, and the milestone selector is the one this allocator reads.
+     * The number spaces the views allocate from are this registry's, one per
+     * view and scope (V24), and the milestone view's is the one this allocator
+     * reads.
      */
     @Inject SelectorRegistry selectors;
     @Inject ScopeAccessRepository scopeAccess;
@@ -220,8 +221,7 @@ public class MilestoneService extends PlanningService {
      */
     private long allocateNumber(UUID scopeId) {
         requireSetting(scopeId);
-        Selector milestoneSelector = selectors.require(scopeId, Selector.MILESTONE);
-        return selectors.allocate(scopeId, milestoneSelector);
+        return selectors.allocate(scopeId, Selector.MILESTONE);
     }
 
     /**

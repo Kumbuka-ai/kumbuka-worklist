@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.boundary;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -35,10 +42,12 @@ class TriggerFunctionSecurityGuardIT {
     /**
      * The functions ADR-0042 leaves in the schema, named here rather than read
      * from it. The sync functions of V18 were scaffolding and went with V20;
-     * the immutability guard of a primary object's address stays.
+     * the immutability guard of a primary object's address stays. V24 adds the
+     * trigger that fills a counter's view or selector from the other, until the
+     * contraction release drops the selector.
      */
     private static final List<String> REFERENCE_FUNCTIONS = List.of(
-        "primary_address_is_immutable");
+        "primary_address_is_immutable", "number_space_fills_view_and_selector");
 
     private static final String PINNED_PATH = "search_path=worklist, pg_temp";
 

@@ -150,7 +150,7 @@ class ItemMilestoneAssignmentIT {
         settings.create(otherScope, Map.of(
             "max_planned_iterations", 5, "warn_planned_iterations", 4,
             "max_memberships_per_iteration", 5, "warn_memberships_per_iteration", 4));
-        selectors.declare(otherScope, Selector.MILESTONE);
+        selectors.open(otherScope, Selector.MILESTONE);
         UUID foreignMilestone = (UUID) milestones.create(otherScope, Map.of(
             Field.TITLE.canonicalName(), "another scope's goal",
             Field.VISION.canonicalName(), "elsewhere")).get(Field.ID.canonicalName());
@@ -284,7 +284,7 @@ class ItemMilestoneAssignmentIT {
     // ==================================================================
 
     private UUID itemAt(String title) {
-        selectors.declare(scope, Selector.ITEM);
+        selectors.open(scope, Selector.ITEM);
         String openName = vocabulary.requireStatus(scope, openStatus).name;
         return (UUID) items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
@@ -303,7 +303,7 @@ class ItemMilestoneAssignmentIT {
     }
 
     private UUID milestoneAt(String title, boolean asGoal) {
-        selectors.declare(scope, Selector.MILESTONE);
+        selectors.open(scope, Selector.MILESTONE);
         Map<String, Object> arguments = asGoal
             ? Map.of(Field.TITLE.canonicalName(), title,
                 Field.VISION.canonicalName(), "the north star of " + title)
@@ -319,7 +319,7 @@ class ItemMilestoneAssignmentIT {
      * marker" without inventing an argument the verb catalogue does not carry.
      */
     private UUID markerAt() {
-        selectors.declare(scope, Selector.MILESTONE);
+        selectors.open(scope, Selector.MILESTONE);
         UUID id = UUID.randomUUID();
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, PlanningFixture.boundTenant());

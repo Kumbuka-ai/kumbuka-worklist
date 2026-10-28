@@ -102,7 +102,7 @@ class NoUuidLabelsAtSurfaceIT {
         SurfaceFixture.asMember(identity);
 
         for (String view : Selector.VIEWS) {
-            selectors.declare(SCOPE_ID, view);
+            selectors.open(SCOPE_ID, view);
         }
         openStatusName = vocabulary
             .declareStatus(SCOPE_ID, "guard-open", 1, true, false, false, false).name;

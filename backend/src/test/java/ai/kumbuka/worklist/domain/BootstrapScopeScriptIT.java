@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -87,8 +94,11 @@ class BootstrapScopeScriptIT {
         assertThat(declared.get("relation_types")).containsExactly("depends_on");
         assertThat(declared.get("workstreams")).containsExactly("1:default:true");
         assertThat(declared.get("counters"))
-            .as("the counters the script opens, by the selector they count for")
-            .containsExactly("item:0", "iteration:0", "milestone:0");
+            .as("the counters the script opens, by view, with their mark and the selector "
+                + "they still name: one per view, the workstream counter past the default "
+                + "workstream's number 1")
+            .containsExactly("item:0:item", "iteration:0:iteration", "milestone:0:milestone",
+                "workstream:1:workstream");
 
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the first item of a bootstrapped scope",
@@ -177,10 +187,10 @@ class BootstrapScopeScriptIT {
                  WHERE tenant_id = ?::uuid AND scope_id = ?::uuid ORDER BY number
                 """));
             rows.put("counters", column(c, scope, """
-                SELECT s.token || ':' || n.high_water_mark
+                SELECT n.view || ':' || n.high_water_mark || ':' || s.token
                   FROM worklist.number_space n
                   JOIN worklist.selector s ON s.tenant_id = n.tenant_id AND s.pk = n.selector_pk
-                 WHERE n.tenant_id = ?::uuid AND n.scope_id = ?::uuid ORDER BY s.token
+                 WHERE n.tenant_id = ?::uuid AND n.scope_id = ?::uuid ORDER BY n.view
                 """));
             c.rollback();
         }
