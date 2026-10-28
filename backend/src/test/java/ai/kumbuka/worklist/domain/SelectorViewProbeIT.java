@@ -19,29 +19,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
- * The selector is the view, and a token outside the three is refused rather
+ * The selector is the view, and a token outside the views is refused rather
  * than declared.
  *
  * <h2>What is being defended</h2>
  *
  * The selector used to be the item's family — {@code FEAT}, {@code CHORE},
  * {@code BUG} — and a scope could declare as many as it liked. It is the view
- * now, and there are three of them: they are the platform's object model rather
- * than a scope's vocabulary. A fourth declared token would open an address
+ * now, and there are four of them: they are the platform's object model rather
+ * than a scope's vocabulary. A fifth declared token would open an address
  * space for a kind of thing this service does not hold, and every address
  * issued under it would resolve to nothing while looking perfectly well formed.
  *
  * <p>This is the one place that can refuse it. The database constraint checks
  * the FORM — lower case, a leading letter, interior hyphens — because form is
  * decidable without knowing anything about a deployment. Which tokens name
- * views is not form, and a constraint carrying the three literals would answer
+ * views is not form, and a constraint carrying the four literals would answer
  * a caller with a constraint violation where a typed refusal belongs.
  *
  * <h2>The red state, and how it was observed</h2>
  *
  * The refusal is one block in {@code SelectorRegistry.open}. Removing it —
  * which is exactly what this file's absence would have looked like — makes
- * {@link #a_token_outside_the_three_views_is_refused_and_not_declared} fail:
+ * {@link #a_token_outside_the_views_is_refused_and_not_declared} fail:
  * the foreign token passes the form check, is inserted, and comes back in the
  * scope's list of address spaces. Measured on 2026-09-05, with {@code sprint}
  * as the token, which is well formed and is the name of something this platform
@@ -70,7 +70,7 @@ class SelectorViewProbeIT {
     @Inject SelectorRegistry selectors;
 
     @Test
-    void a_token_outside_the_three_views_is_refused_and_not_declared() {
+    void a_token_outside_the_views_is_refused_and_not_declared() {
         UUID scope = UUID.randomUUID();
 
         WorklistException refusal = refusalFrom(() -> selectors.open(scope, FOREIGN_TOKEN));
@@ -82,9 +82,8 @@ class SelectorViewProbeIT {
             .isEqualTo(WorklistException.Reason.VIEW_UNKNOWN);
         assertThat(refusal.offenders()).containsExactly("selector");
         assertThat(refusal.getMessage())
-            .as("and the message names the three, because the remedy is to pick one of "
-                + "them and a refusal that withheld the list would send the caller reading "
-                + "source")
+            .as("and the message is the reason's code and nothing else: the views are "
+                + "Selector.VIEWS, and the code is what a caller matches on")
             .isEqualTo("VIEW_UNKNOWN");
 
         // RED STATE, by its trace: with the refusal removed the token passes the
@@ -92,7 +91,7 @@ class SelectorViewProbeIT {
         assertThat(selectors.inScope(scope))
             .as("RED STATE, observed by its absence: without the view check the token is "
                 + "well formed, so it would be declared — and the scope would carry a "
-                + "fourth address space for a kind of thing this service does not hold")
+                + "fifth address space for a kind of thing this service does not hold")
             .doesNotContain(FOREIGN_TOKEN);
     }
 
@@ -113,8 +112,8 @@ class SelectorViewProbeIT {
         }
 
         assertThat(selectors.inScope(scope))
-            .as("all three, and only three: the address spaces of a scope are the views it "
-                + "can hold, and there is no fourth")
+            .as("all four, and only four: the address spaces of a scope are the views it "
+                + "can hold, and there is no fifth")
             .containsExactlyInAnyOrderElementsOf(Selector.VIEWS);
     }
 

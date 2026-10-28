@@ -349,7 +349,7 @@ public class WorklistResource {
     }
 
     // ======================================================================
-    // The membership binding: a second id segment, and no fourth view
+    // The membership binding: a second id segment, and no view of its own
     // ======================================================================
 
     @GET

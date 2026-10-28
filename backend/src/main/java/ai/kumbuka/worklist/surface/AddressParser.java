@@ -108,7 +108,7 @@ public final class AddressParser {
     /**
      * What an address points at, once the grammar has held.
      *
-     * @param view   one of the three, always present
+     * @param view   one of the four views, always present
      * @param number the object's number; absent for {@link #CURRENT}
      * @param member the item number of a membership; absent when the address
      *               names the iteration itself
@@ -207,7 +207,7 @@ public final class AddressParser {
      *
      * <p>A membership is addressed <strong>under</strong> its iteration, as a
      * second id segment, because that is what it is: it has no life of its own
-     * and it belongs to the iteration's aggregate. It is not a fourth view. A
+     * and it belongs to the iteration's aggregate. It is not a view of its own. A
      * view for it would say it is a kind of thing a scope holds, and it would
      * need a number space of its own to be addressed in — which is the point at
      * which a relation starts pretending to be an object.

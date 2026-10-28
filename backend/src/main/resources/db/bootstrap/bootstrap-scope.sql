@@ -95,13 +95,14 @@
 BEGIN;
 
 -- ---------------------------------------------------------------------------
--- The scope settings row, and the three views with it.
+-- The scope settings row, and the four views with it.
 --
--- Creating this row is what opens the scope: the service seeds the three
--- selectors — `item`, `iteration`, `milestone` — as part of the same act. They
--- are the classes of thing this service reasons about, they are fixed by the
--- platform, and they are not the estate's own vocabulary. What an item is
--- ABOUT is a declared attribute further down, never a selector.
+-- Creating this row is what opens the scope: the service seeds the four
+-- selectors — `item`, `iteration`, `milestone`, `workstream` — as part of the
+-- same act. They are the classes of thing this service reasons about, they
+-- are fixed by the platform, and they are not the estate's own vocabulary.
+-- What an item is ABOUT is a declared attribute further down, never a
+-- selector.
 --
 -- The four cardinality thresholds are NOT NULL with no default, so they are
 -- stated here rather than inherited. The values are the predecessor's ratified
@@ -138,11 +139,9 @@ ON CONFLICT DO NOTHING;
 -- settable. Number 1 is reserved for it, and the workstream counter is
 -- advanced to match below, once it is open.
 --
--- No milestone counter is opened here for the default workstream — the
--- existing per-scope milestone counter is repurposed as the default's per
--- V9's backfill logic, which for a scope opened after V9 needs the same
--- shape from the start: the milestone counter belongs to the default
--- workstream from the outset.
+-- No milestone counter is opened here for the default workstream: since V12
+-- the milestone counter is scope-wide and belongs to no workstream, and it
+-- opens with the other counters below.
 -- ---------------------------------------------------------------------------
 INSERT INTO worklist.workstream
     (tenant_id, scope_id, number, token, description, is_default)

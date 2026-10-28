@@ -560,8 +560,8 @@ class ItemDomainIT {
      * The item selector's counter is the one position, and every allocation
      * advances exactly it.
      *
-     * <p>The item, iteration and milestone selectors each have a counter of
-     * their own; there is no scope-wide row beside them. A creation on the
+     * <p>The item, iteration, milestone and workstream views each have a
+     * counter of their own; there is no scope-wide row beside them. A creation on the
      * item axis moves the item counter and nothing else, and what the
      * registry reports as the standing mark is that counter.
      */

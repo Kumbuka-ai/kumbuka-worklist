@@ -120,8 +120,9 @@ public class AddressRegistry {
      * The workstream at that number, or a typed refusal.
      *
      * <p>Ratified 2026-09-08 as the fourth view. Its counter runs
-     * per-scope like {@code item} and {@code iteration}; the milestone is
-     * the outlier whose counter runs per-workstream.
+     * per-scope like those of {@code item}, {@code iteration} and
+     * {@code milestone}; since V12 there is no counter that runs
+     * per-workstream.
      */
     @Transactional
     public UUID workstreamAt(UUID scopeId, long number) {

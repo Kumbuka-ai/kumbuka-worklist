@@ -685,7 +685,7 @@ class ItemDomainIsolationIT {
      * A selector token the check constraints accept, unique per call.
      *
      * <p>Lower case, because the form constraint says so since V6. It is
-     * deliberately not one of the three views: what this class plants are rows
+     * deliberately not one of the views: what this class plants are rows
      * to prove isolation on, and the constraint checks FORM only — which view
      * tokens a deployment admits is the domain's refusal and not the database's.
      * A token here that happened to be a view would collide with the rows the

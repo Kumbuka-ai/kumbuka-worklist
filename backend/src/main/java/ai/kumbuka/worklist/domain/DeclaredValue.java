@@ -74,11 +74,6 @@ public abstract class DeclaredValue extends TenantScoped {
     /**
      * The row's identity inside this service: the surrogate every key onto it
      * targets (ADR-0042), allocated by the store, never part of an answer.
-     *
-     * <p>The uuid column {@code id} the store still carries is not mapped. The
-     * image before this one reads it, and the store fills it by default; the
-     * next release drops it, and an image that mapped it could not start
-     * against that schema.
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

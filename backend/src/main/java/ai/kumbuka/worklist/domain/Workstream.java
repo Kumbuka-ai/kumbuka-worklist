@@ -46,7 +46,7 @@ import java.util.UUID;
  * <h2>Numbering is the same mechanism as the other three views</h2>
  *
  * The address is {@code worklist://<scope>/workstream/<n>}. The counter
- * lives in the workstream selector's own {@code number_space} row and is
+ * lives in the workstream view's own {@code number_space} row and is
  * advanced through {@link SelectorRegistry#allocate}. The number belongs
  * to the row and is never reused.
  */
