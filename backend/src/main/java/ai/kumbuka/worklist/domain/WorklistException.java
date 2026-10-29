@@ -292,12 +292,12 @@ public class WorklistException extends RuntimeException {
 
         /**
          * The iteration still holds memberships that are neither done nor
-         * dropped, and the refusal names them.
+         * dropped.
          *
          * <p>Closing over live memberships would decide for the operator what
-         * happened to each one. Naming them is the point: a refusal that only
-         * states the rule sends the reader back to the store to find out what
-         * it was talking about.
+         * happened to each one. The refusal names the iteration's address as
+         * its offender, not the live memberships; the contract has no member
+         * that would carry them.
          */
         ITERATION_INCOMPLETE,
 
@@ -314,8 +314,10 @@ public class WorklistException extends RuntimeException {
          * The item may not enter an iteration: it is not actionable, or it
          * carries no milestone, or its milestone is off the product path.
          *
-         * <p>The refusal names the value it found, because all three cases
-         * read the same from outside and the remedy for each is different.
+         * <p>All three cases carry the same offender, {@code address}; the
+         * refusal does not say which of them it found, although the remedy for
+         * each is different. The contract has no member that would carry the
+         * value.
          */
         ITEM_UNPLANNABLE,
 

@@ -296,7 +296,7 @@ public class WorkstreamService {
         return workstream;
     }
 
-    /** True when the workstream may still accept new pointers. */
+    /** Refuses a withdrawn workstream, which accepts no new pointers. */
     public void refuseWithdrawn(Workstream workstream) {
         if (!Workstream.WITHDRAWN.equals(workstream.status)) {
             return;

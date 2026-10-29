@@ -183,11 +183,12 @@ public class IterationService extends PlanningService {
     /**
      * Close an iteration: it is done with, and it stays readable.
      *
-     * <p>The refusal in front of it NAMES the memberships that are neither
-     * done nor dropped. Closing over them would carry an outcome onto each
-     * item that nobody chose, and the concept is explicit that doing so is a
-     * deliberate, separately expressed act — which this service does not
-     * provide and does not fake.
+     * <p>The refusal in front of it stands while memberships remain that are
+     * neither done nor dropped. It names the iteration's address as its
+     * offender, not the memberships themselves. Closing over them would carry
+     * an outcome onto each item that nobody chose, and the concept is
+     * explicit that doing so is a deliberate, separately expressed act —
+     * which this service does not provide and does not fake.
      *
      * <p><strong>What this close does NOT do</strong> is carry each
      * membership's outcome onto its item. That would mean writing an item's
@@ -449,12 +450,12 @@ public class IterationService extends PlanningService {
     }
 
     /**
-     * The close refuses while live memberships stand, and it names them.
+     * The close refuses while live memberships stand.
      *
-     * <p>Naming them is the point. A refusal that only states the rule sends
-     * the reader back to the store to work out which rows it meant, and the
-     * whole value of checking where the check runs is that the answer is
-     * right there.
+     * <p>The refusal carries {@code address} as its only offender: it says
+     * that the iteration still holds live memberships, not which ones. The
+     * reader lists the iteration's memberships to find them; naming them in
+     * the refusal itself would need a member the contract does not have.
      */
     private void refuseLiveMemberships(Iteration iteration) {
         boolean live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()

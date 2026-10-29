@@ -27,7 +27,8 @@ import java.util.Optional;
  * The tools the MCP exposition declares: the verbs this service carries, and
  * nothing else.
  *
- * <p><strong>Generated, never written.</strong> Each tool is one verb of
+ * <p><strong>Derived, never written.</strong> The list is built from the
+ * declaration each time it is asked for. Each tool is one verb of
  * {@link SurfaceDeclaration}: its name, its arguments with their JSON types,
  * which are required, the fixed value sets, and the texts the message bundles
  * hold for the verb, each argument and each value. Nothing here says anything

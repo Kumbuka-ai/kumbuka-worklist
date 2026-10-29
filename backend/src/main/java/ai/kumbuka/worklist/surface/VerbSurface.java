@@ -771,10 +771,9 @@ public class VerbSurface {
      * the order is the ratified one and a per-scope declaration is the direction
      * of travel.
      *
-     * @param at the id part where the call carried one, so that a caller who got
-     *           the address wrong is told about the address first
-     * @param at            the id segment of the address; absent where the address
-     *                      names a collection
+     * @param at the id segment of the address, absent where the address names a
+     *           collection; checked first, so that a caller who got the address
+     *           wrong is told about the address first
      */
     @Transactional
     public void uncarried(String subject, String rawScope, String rawView, @Nullable String at,
