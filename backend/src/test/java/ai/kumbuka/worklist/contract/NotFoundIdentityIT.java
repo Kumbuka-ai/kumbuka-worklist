@@ -46,10 +46,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>The rule on the envelope is {@link #notFoundOffences}: {@code data} is
  * absent, not merely free of the caller's values.
  *
- * <p>RED STATE, observed 2026-10-29 against the catch-all before this change,
- * which handed the framework's 404 back as it came: {@link
+ * <p>RED STATE, observed 2026-10-29 against the tree before this change
+ * ({@code 34e4390}, with this class copied in), whose catch-all handed the
+ * framework's 404 back as it came: {@link
  * #the_framework_s_not_found_answers_the_same_bytes_as_the_three_causes} turned
- * red, the framework's body being no envelope. The rule's own red state runs on
+ * red, the framework's body for {@code /api/nothing} being no envelope; the
+ * two MCP cases turned red there too, for the tool name that tree did not yet
+ * take. The rule's own red state runs on
  * every build in {@link #the_check_reports_a_not_found_that_carries_data}.
  */
 @QuarkusTest

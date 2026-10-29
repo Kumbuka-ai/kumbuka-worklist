@@ -44,9 +44,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>RED STATE, observed 2026-10-29 against the tree before this change
  * ({@code 34e4390}, with this class copied in): the framework's 404 and 405 came
- * without the envelope, a path below {@code /api/declaration} was routed to a
- * scope of that name, and an argument the call does not declare on an
- * invisible scope was answered {@code NOT_FOUND} 404.
+ * without the envelope, a create below {@code /api/declaration} answered 404
+ * where {@code ADDRESS_MALFORMED} 400 belongs, and an argument the call does
+ * not declare on an invisible scope was answered {@code NOT_FOUND} 404; every
+ * case turned red, the two MCP cases also for the tool names that tree did not
+ * yet take.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)

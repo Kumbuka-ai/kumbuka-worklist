@@ -53,10 +53,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>RED STATE, observed 2026-10-29 against the adapter before this change
  * (the tree of {@code 34e4390}, with this class copied in): {@code ping}
- * answered -32601, the tool list named bare verbs where the declaration names
- * {@code worklist_<verb>}, an unknown tool answered a tool result where the
- * protocol error belongs, and {@code serverInfo.version} was {@code 0.4.2}
- * under a POM of {@code 0.4.2-SNAPSHOT}.
+ * answered no result, the tool list named bare verbs where the declaration
+ * names {@code worklist_<verb>}, an unknown tool answered a tool result where
+ * the protocol error belongs, and {@code serverInfo.version} was {@code 0.4.2}
+ * under a POM of {@code 0.4.2-SNAPSHOT}; six of nine cases turned red.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
