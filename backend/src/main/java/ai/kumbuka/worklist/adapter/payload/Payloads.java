@@ -62,8 +62,8 @@ public final class Payloads {
 
     /** One object, at its address. */
     public static ObjectPayload of(String scope, VerbSurface.Result result) {
-        return new ObjectPayload(
-            AddressParser.render(scope, result.address()), worded(result.fields()));
+        return new ObjectPayload(AddressParser.render(scope, result.address()),
+            worded(result.fields()), result.conflictToken().orElse(null));
     }
 
     @SuppressWarnings("unchecked")

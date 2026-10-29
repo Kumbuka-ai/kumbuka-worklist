@@ -508,7 +508,7 @@ public final class SurfaceDeclaration {
 
     /** The name a verb is called under on every surface: {@code worklist_<verb>}. */
     public static String call(Verb verb) {
-        return DeclarationDocument.SCHEME + "_" + verb.name().name();
+        return verb.name().toolName();
     }
 
     /**

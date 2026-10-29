@@ -17,12 +17,15 @@ import java.util.List;
  * What a refusal's caller acts on. Each member means one thing on every
  * service (DEC-0042); a member with no value is absent.
  *
+ * @param attempted the call as the caller's surface names it (C6.2); absent
+ *                  where the refusal fell before the request became a call
  * @param offenders absent where the refusal concerns no declared argument
  * @param accepts absent except where a call lists what it accepts
  * @param conflictToken absent except for a stale token
  * @param reference absent except for an unexpected failure
  */
 public record RefusalDataPayload(
+    @JsonProperty("attempted") @Nullable String attempted,
     @JsonProperty("offenders") @Nullable List<String> offenders,
     @JsonProperty("accepts") @Nullable List<String> accepts,
     @JsonProperty("conflict_token") @Nullable String conflictToken,
@@ -31,6 +34,6 @@ public record RefusalDataPayload(
     /** Whether there is nothing to act on, so that the refusal carries no {@code data}. */
     @JsonIgnore
     boolean isEmpty() {
-        return offenders == null && accepts == null && conflictToken == null && reference == null;
+        return attempted == null && offenders == null && accepts == null && conflictToken == null && reference == null;
     }
 }

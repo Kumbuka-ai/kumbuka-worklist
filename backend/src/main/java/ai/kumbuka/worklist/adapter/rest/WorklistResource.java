@@ -28,7 +28,9 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.EntityTag;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
@@ -107,6 +109,8 @@ public class WorklistResource {
     @Inject VerbSurface verbs;
     @Inject CallerActor caller;
     @Inject ObjectMapper json;
+    @Inject CallContext context;
+    @Context HttpHeaders headers;
 
     // ======================================================================
     // The collection binding: create, query, and the collection transitions
@@ -132,6 +136,7 @@ public class WorklistResource {
         if (split.isEmpty()) {
             // No colon: a plain collection address, and create is the one
             // writing verb whose set semantics is declared as exactly one.
+            calling(CREATE);
             return created(scope, verbs.create(caller.subject(), scope, segment,
                 ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null)));
         }
@@ -145,6 +150,7 @@ public class WorklistResource {
                 CustomMethod.allow(CustomMethod.Depth.COLLECTION));
         }
 
+        calling(at.known().verb());
         return switch (at.known()) {
             case ADVANCE -> {
                 arguments(body);
@@ -197,6 +203,7 @@ public class WorklistResource {
     public Response collectionGet(@PathParam("scope") String scope,
                                   @PathParam("selector") String selector,
                                   jakarta.ws.rs.core.UriInfo info) {
+        calling("query");
         Map<String, Object> filter = new LinkedHashMap<>();
         Map<String, Object> paging = new LinkedHashMap<>();
         java.util.List<String> untaken = new java.util.ArrayList<>();
@@ -234,6 +241,7 @@ public class WorklistResource {
     public Response read(@PathParam("scope") String scope,
                          @PathParam("selector") String selector,
                          @PathParam("id") String id) {
+        calling(READ);
         return ok(scope, verbs.read(caller.subject(), scope, selector, id));
     }
 
@@ -245,6 +253,7 @@ public class WorklistResource {
                            @PathParam("id") String id,
                            @HeaderParam("If-Match") @Nullable String ifMatch,
                            @Nullable String body) {
+        calling(UPDATE);
         return ok(scope, verbs.update(caller.subject(), scope, selector, id,
             unquote(ifMatch).orElse(null), ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null)));
     }
@@ -274,6 +283,7 @@ public class WorklistResource {
                 RefusalCode.WRITE_ON_TRUNCATED_ADDRESS,
                 CustomMethod.allow(CustomMethod.Depth.ITEM)));
 
+        calling(at.known().verb());
         return dispatch(at, scope, selector, unquote(ifMatch).orElse(null), body);
     }
 
@@ -326,6 +336,7 @@ public class WorklistResource {
                                    @PathParam("selector") String selector,
                                    @PathParam("id") String id,
                                    @PathParam("member") String member) {
+        calling(READ);
         return ok(scope, verbs.readMembership(caller.subject(), scope, selector, id, member));
     }
 
@@ -345,6 +356,7 @@ public class WorklistResource {
                          @PathParam("id") String id,
                          @PathParam("member") String member,
                          @HeaderParam("If-Match") @Nullable String ifMatch) {
+        calling("plan");
         return created(scope, verbs.plan(caller.subject(), scope, selector, id, member,
             unquote(ifMatch).orElse(null)));
     }
@@ -365,6 +377,7 @@ public class WorklistResource {
                            @PathParam("id") String id,
                            @PathParam("member") String member,
                            @HeaderParam("If-Match") @Nullable String ifMatch) {
+        calling("unplan");
         return ok(scope, verbs.unplan(caller.subject(), scope, selector, id, member,
             unquote(ifMatch).orElse(null)));
     }
@@ -377,8 +390,26 @@ public class WorklistResource {
                                      @PathParam("member") String member,
                                      @HeaderParam("If-Match") @Nullable String ifMatch,
                                      @Nullable String body) {
+        calling(UPDATE);
         return ok(scope, verbs.updateMembership(caller.subject(), scope, selector, id, member,
             unquote(ifMatch).orElse(null), ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null)));
+    }
+
+    // ======================================================================
+    // The call the request became
+    // ======================================================================
+
+    private static final String CREATE = "create";
+    private static final String READ = "read";
+    private static final String UPDATE = "update";
+
+    /**
+     * Records the verb the route named, before anything about the call is
+     * read: from here on every refusal carries it as {@code attempted}, in the
+     * names of the surface the caller came through (C6.2).
+     */
+    private void calling(String verb) {
+        context.call(verb, ASSISTANT.equals(headers.getHeaderString(SURFACE)));
     }
 
     // ======================================================================

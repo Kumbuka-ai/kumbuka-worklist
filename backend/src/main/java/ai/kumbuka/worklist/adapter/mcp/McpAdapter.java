@@ -30,6 +30,7 @@ import ai.kumbuka.worklist.surface.ProtocolMessages;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.UnexpectedFailures;
 import ai.kumbuka.worklist.surface.VerbInput;
+import ai.kumbuka.worklist.surface.VerbName;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -212,24 +213,30 @@ public class McpAdapter {
      * response, never as a JSON-RPC error. The distinction is the protocol's and
      * it is worth keeping: a JSON-RPC error says the call could not be made, and
      * every refusal in this service is a call that was made and answered.
+     *
+     * <p>The route stands once the tool name has named a verb, so every
+     * refusal from here on carries {@code attempted}, the tool name (C6.2,
+     * C8.7) -- whichever spelling of it the call arrived under, since the
+     * declared one is what this surface names.
      */
     private ToolResultPayload call(String verb, Map<String, Object> arguments) {
+        String attempted = VerbName.declared(verb).toolName();
         try {
             return content(invoke(verb, arguments), false);
         } catch (SurfaceException e) {
             LOG.debugf("surface refusal: %s", e.reason().name());
-            return content(RefusalPayload.of(e), true);
+            return content(RefusalPayload.of(e, attempted), true);
         } catch (WorklistException e) {
             // The same envelope the REST path answers with, built by the same
             // method — which is what makes "one envelope, whichever hop" a
             // property of the construction and not a claim about it.
             LOG.debugf("domain refusal: %s", e.reason().name());
-            return content(RefusalPayload.of(e), true);
+            return content(RefusalPayload.of(e, attempted), true);
         } catch (RuntimeException e) {
             // DEC-0043 R13: a defect answers as one, with a reference the log
             // line shares, and nothing the exception said.
-            return content(RefusalPayload.unexpected(UnexpectedFailures.reference(verb, e)),
-                true);
+            return content(RefusalPayload.unexpected(UnexpectedFailures.reference(verb, e),
+                attempted), true);
         }
     }
 

@@ -12,6 +12,7 @@ import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.UnexpectedFailures;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -21,6 +22,7 @@ import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
@@ -95,6 +97,8 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
      */
     private static final Logger LOG = Logger.getLogger(RefusalMapper.class);
 
+    @Inject CallContext context;
+
     /**
      * Mapped per exception type rather than over {@code RuntimeException}.
      *
@@ -106,11 +110,21 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
      */
     @Override
     public Response toResponse(SurfaceException e) {
+        return answer(e, context.attempted().orElse(null));
+    }
+
+    /**
+     * A surface refusal as the REST surface answers it.
+     *
+     * @param attempted the call as the caller's surface names it; absent where
+     *                  the request had not become a call
+     */
+    static Response answer(SurfaceException e, @Nullable String attempted) {
         LOG.debugf("surface refusal: %s -> %d", e.reason().name(), e.reason().status());
 
         Response.ResponseBuilder response = Response.status(e.reason().status())
             .type(MediaType.APPLICATION_JSON)
-            .entity(RefusalPayload.of(e));
+            .entity(RefusalPayload.of(e, attempted));
 
         // A 405 without Allow refuses without saying what would have worked,
         // which is the one thing the status is required to carry.
@@ -121,6 +135,8 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
     /** The domain's refusals, on the same shape and the same discipline. */
     @Provider
     public static class Domain implements ExceptionMapper<WorklistException> {
+
+        @Inject CallContext context;
 
         @Override
         public Response toResponse(WorklistException e) {
@@ -133,7 +149,7 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
             return Response.status(status)
                 .type(MediaType.APPLICATION_JSON)
-                .entity(RefusalPayload.of(e))
+                .entity(RefusalPayload.of(e, context.attempted().orElse(null)))
                 .build();
         }
 
@@ -162,6 +178,7 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
     public static class Unexpected implements ExceptionMapper<Exception> {
 
         @Context UriInfo uri;
+        @Inject CallContext context;
 
         @Override
         public Response toResponse(Exception e) {
@@ -175,7 +192,8 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
             }
             return Response.status(RefusalCode.UNEXPECTED_FAILURE.status())
                 .type(MediaType.APPLICATION_JSON)
-                .entity(RefusalPayload.unexpected(UnexpectedFailures.reference(null, e)))
+                .entity(RefusalPayload.unexpected(UnexpectedFailures.reference(null, e),
+                    context.attempted().orElse(null)))
                 .build();
         }
 
@@ -208,9 +226,13 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
             };
         }
 
-        /** A surface refusal as the REST surface answers it, through the one mapping above. */
+        /**
+         * A surface refusal as the REST surface answers it, through the one
+         * mapping above. The framework refused before any route named a verb,
+         * so it carries no {@code attempted}.
+         */
         private static Response refusal(SurfaceException refused) {
-            return new RefusalMapper().toResponse(refused);
+            return answer(refused, null);
         }
     }
 }
