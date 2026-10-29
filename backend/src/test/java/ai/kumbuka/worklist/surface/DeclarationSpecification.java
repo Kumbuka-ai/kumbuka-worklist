@@ -92,8 +92,8 @@ public final class DeclarationSpecification {
 
     /** The members each answer shape carries at its top level. */
     public static final Map<String, List<String>> ANSWER_MEMBERS = Map.of(
-        "OBJECT", List.of("address", "fields"),
-        "OBJECT_CREATED", List.of("address", "fields"),
+        "OBJECT", List.of("address", "fields", "[conflict_token]"),
+        "OBJECT_CREATED", List.of("address", "fields", "[conflict_token]"),
         "OBJECT_LISTING", List.of("objects", "[next_cursor]"));
 
     /** The effect classes the worklist verbs take, in the order the declaration lists them. */
@@ -128,11 +128,12 @@ public final class DeclarationSpecification {
 
     public static final List<Verb> VERBS = List.of(
         new Verb("worklist_create", "CREATE", "OBJECT_CREATED",
-            List.of(SCOPE, Arg.view("item", "iteration", "milestone"), FIELDS),
+            List.of(SCOPE, Arg.view("item", "iteration", "milestone"), FIELDS,
+                Arg.opt("idempotency_key", "string", null)),
             reasons(WRITE, List.of("SELECTOR_DECLARED_NOT_WRITTEN", "FIELD_RETRACTED",
                 "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
                 "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "SETTING_ABSENT",
-                "CARDINALITY_EXCEEDED"))),
+                "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED"))),
         new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS),
             reasons(List.of("SELECTOR_UNDECLARED", "ITERATION_ABSENT"))),
         new Verb("worklist_update", "FIELD_WRITE", "OBJECT",

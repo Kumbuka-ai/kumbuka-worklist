@@ -16,14 +16,14 @@ import jakarta.persistence.Table;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 
 /**
  * One idempotency key spent in a scope (C10.4).
  *
  * <p>The key, the call it was spent on, a digest of that call's arguments and
- * the object it produced, by view and identity. Nothing the caller wrote is
- * held, and no caller: a key is spent within its scope (V25 gives the reason).
+ * the object it produced, by view and number: its address in the scope.
+ * Nothing the caller wrote is held, and no caller: a key is spent within its
+ * scope (V25 gives the reason).
  * The row speaks for its call for {@link #REMEMBERED_FOR}; after that a use of
  * the key writes over it.
  */
@@ -52,8 +52,8 @@ public class SpentKey extends TenantScoped {
     @Column(name = "produced_view", nullable = false)
     public String producedView;
 
-    @Column(name = "produced_id", nullable = false)
-    public UUID producedId;
+    @Column(name = "produced_number", nullable = false)
+    public long producedNumber;
 
     @Column(name = "first_seen_at", nullable = false)
     public Instant firstSeenAt;

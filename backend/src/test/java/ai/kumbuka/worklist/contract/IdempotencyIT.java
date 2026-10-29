@@ -193,7 +193,7 @@ class IdempotencyIT {
     }
 
     @Test
-    void the_ledger_holds_a_digest_and_an_identity_and_nothing_the_caller_wrote() {
+    void the_ledger_holds_a_digest_and_a_number_and_nothing_the_caller_wrote() {
         String key = key();
         String title = "a title the ledger never holds " + UUID.randomUUID();
         Map<String, Object> first = Mcp.answer(mcpCreate(Selector.ITEM,
@@ -205,8 +205,9 @@ class IdempotencyIT {
         Map<String, Object> row = rows.get(0);
         assertThat(row.get("argument_digest")).asString().startsWith("sha256:");
         assertThat(row.get("produced_view")).isEqualTo(Selector.ITEM);
-        assertThat(String.valueOf(row.get("produced_id")))
-            .isEqualTo(String.valueOf(fieldsOf(first).get("id")));
+        assertThat(((Number) row.get("produced_number")).longValue())
+            .as("the object by its number, as every reference between rows (ADR-0042)")
+            .isEqualTo(((Number) fieldsOf(first).get("number")).longValue());
         assertThat(row.values()).as("no column carries the title")
             .noneMatch(value -> String.valueOf(value).contains(title));
         assertThat(row).as("and none names the caller")

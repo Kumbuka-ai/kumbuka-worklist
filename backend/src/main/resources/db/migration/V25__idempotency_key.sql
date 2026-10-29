@@ -17,10 +17,10 @@
 --
 -- WHAT A ROW HOLDS
 --
--- The key, the call, a digest of its arguments and the identity of what it
--- produced. Nothing the caller wrote is stored: the digest is a SHA-256 of
--- the canonical arguments, and the arguments themselves are the object's
--- own columns where they belong at all.
+-- The key, the call, a digest of its arguments and the address of what it
+-- produced, as its view and its number. Nothing the caller wrote is stored:
+-- the digest is a SHA-256 of the canonical arguments, and the arguments
+-- themselves are the object's own columns where they belong at all.
 --
 -- No subject. A key is spent within a scope, not per caller. A row naming
 -- its caller would be a second record of who created what and when, kept
@@ -29,8 +29,9 @@
 -- collect (constraint audit-no-activity-monitoring). Two callers do not
 -- share a key by accident; a key is the caller's own random value.
 --
--- No foreign key to the object. One `create` serves three views, so the
--- produced identity points into one of three tables, named by
+-- The object is named by its number, as every reference between rows is
+-- (ADR-0042), never by its uuid. No foreign key: one `create` serves three
+-- views, so the number points into one of three tables, named by
 -- `produced_view`; and a foreign key would make "the object is gone" a state
 -- the store cannot reach, which C10.4 answers explicitly.
 --
@@ -50,14 +51,16 @@ CREATE TABLE worklist.idempotency_key (
     argument_digest  TEXT         NOT NULL,
 
     produced_view    TEXT         NOT NULL,
-    produced_id      UUID         NOT NULL,
+    produced_number  BIGINT       NOT NULL,
 
     first_seen_at    TIMESTAMPTZ  NOT NULL,
 
     CONSTRAINT uq_idempotency_key_once
         UNIQUE (tenant_id, scope_id, idempotency_key),
     CONSTRAINT ck_idempotency_key_view
-        CHECK (produced_view IN ('item', 'iteration', 'milestone'))
+        CHECK (produced_view IN ('item', 'iteration', 'milestone')),
+    CONSTRAINT ck_idempotency_key_number
+        CHECK (produced_number > 0)
 );
 
 ALTER TABLE worklist.idempotency_key ENABLE ROW LEVEL SECURITY;

@@ -41,7 +41,7 @@ public class IdempotencyService {
     @Inject Clock clock;
 
     /**
-     * The object a repeat of this call answers with, where the key was spent
+     * The number of the object a repeat of this call answers with, where the key was spent
      * on it within the last 24 hours; empty where the key is new here or its
      * row has expired.
      *
@@ -54,7 +54,7 @@ public class IdempotencyService {
      *                           or the object it produced no longer stands
      */
     @Transactional
-    public Optional<UUID> firstAnswer(UUID scopeId, String key, String call, String digest) {
+    public Optional<Long> firstAnswer(UUID scopeId, String key, String call, String digest) {
         keys.lockKeyUse(scopeId, key);
         Optional<SpentKey> held = keys.byKey(scopeId, key).filter(row -> row.standsAt(now()));
         if (held.isEmpty()) {
@@ -62,10 +62,10 @@ public class IdempotencyService {
         }
         SpentKey spent = held.get();
         if (!spent.records(call, digest)
-                || !keys.stands(scopeId, spent.producedView, spent.producedId)) {
+                || !keys.stands(scopeId, spent.producedView, spent.producedNumber)) {
             throw new WorklistException(WorklistException.Reason.IDEMPOTENCY_KEY_REUSED);
         }
-        return Optional.of(spent.producedId);
+        return Optional.of(spent.producedNumber);
     }
 
     /**
@@ -81,7 +81,7 @@ public class IdempotencyService {
         row.callName = call.name();
         row.argumentDigest = call.digest();
         row.producedView = call.view();
-        row.producedId = call.produced();
+        row.producedNumber = call.produced();
         row.firstSeenAt = now();
         if (held.isPresent()) {
             keys.flush();
@@ -96,9 +96,9 @@ public class IdempotencyService {
      * @param name     the call, as the declaration names it
      * @param digest   the digest of its arguments
      * @param view     the view of what it produced
-     * @param produced the identity of what it produced
+     * @param produced the number of what it produced, its address in the view
      */
-    public record Spent(String name, String digest, String view, UUID produced) {
+    public record Spent(String name, String digest, String view, long produced) {
     }
 
     private Instant now() {

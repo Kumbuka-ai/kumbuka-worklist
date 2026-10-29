@@ -7,12 +7,8 @@
  */
 package ai.kumbuka.worklist.repository;
 
-import ai.kumbuka.worklist.domain.Item;
-import ai.kumbuka.worklist.domain.Iteration;
-import ai.kumbuka.worklist.domain.Milestone;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.SpentKey;
-import ai.kumbuka.worklist.domain.TenantScoped;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -97,14 +93,19 @@ public class SpentKeyRepository {
      * not is a row that is no longer there, however it went.
      */
     @Transactional
-    public boolean stands(UUID scopeId, String view, UUID id) {
-        Class<? extends TenantScoped> type = switch (view) {
-            case Selector.ITEM -> Item.class;
-            case Selector.ITERATION -> Iteration.class;
-            case Selector.MILESTONE -> Milestone.class;
+    public boolean stands(UUID scopeId, String view, long number) {
+        String query = switch (view) {
+            case Selector.ITEM ->
+                "SELECT count(o) FROM Item o WHERE o.scopeId = :scope AND o.number = :number";
+            case Selector.ITERATION ->
+                "SELECT count(o) FROM Iteration o WHERE o.scopeId = :scope AND o.number = :number";
+            case Selector.MILESTONE ->
+                "SELECT count(o) FROM Milestone o WHERE o.scopeId = :scope AND o.number = :number";
             default -> throw new IllegalArgumentException("no view a create produces: " + view);
         };
-        TenantScoped found = em.find(type, id);
-        return found != null && scopeId.equals(found.scopeId);
+        return em.createQuery(query, Long.class)
+            .setParameter("scope", scopeId)
+            .setParameter("number", number)
+            .getSingleResult() > 0;
     }
 }

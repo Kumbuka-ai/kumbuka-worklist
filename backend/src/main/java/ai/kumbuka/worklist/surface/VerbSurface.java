@@ -179,7 +179,7 @@ public class VerbSurface {
         Map<String, Object> fields = required(body, FIELDS).values();
         String digest = CanonicalJson.version(Map.of(SELECTOR, in.view(), FIELDS, fields));
 
-        Optional<UUID> first = key.flatMap(given ->
+        Optional<Long> first = key.flatMap(given ->
             idempotency.firstAnswer(in.scopeId(), given, CREATE, digest));
         if (first.isPresent()) {
             LOG.debugf("create repeated under its key, answered by %s in scope %s",
@@ -194,28 +194,33 @@ public class VerbSurface {
             default -> throw unreachableView(in.view());
         };
         key.ifPresent(given -> idempotency.remember(in.scopeId(), given,
-            new IdempotencyService.Spent(CREATE, digest, in.view(), identityOf(created))));
+            new IdempotencyService.Spent(CREATE, digest, in.view(), numberOf(created))));
 
         Result result = at(in.view(), created);
         LOG.infof("create %s in scope %s", result.address().id(), in.scopeId());
         return result;
     }
 
-    /** The identity of what a create produced, read off its projection. */
-    private static UUID identityOf(Map<String, Object> created) {
-        if (!(created.get(Field.ID.canonicalName()) instanceof UUID id)) {
+    /** The number of what a create produced, read off its projection: its address in the view. */
+    private static long numberOf(Map<String, Object> created) {
+        if (!(created.get(Field.NUMBER.canonicalName()) instanceof Number number)) {
             throw new IllegalStateException(
-                "the answer of a create carries no identity, so its key has nothing to name");
+                "the answer of a create carries no number, so its key has nothing to name");
         }
-        return id;
+        return number.longValue();
     }
 
-    /** What a create produced, as it stands now: the answer to its repeat. */
-    private Map<String, Object> produced(Entry in, UUID id) {
+    /**
+     * What a create produced, as it stands now: the answer to its repeat. The
+     * ledger has found it standing under the key's lock, so it resolves.
+     */
+    private Map<String, Object> produced(Entry in, long number) {
         return switch (in.view()) {
-            case Selector.ITEM -> items.read(in.scopeId(), id);
-            case Selector.ITERATION -> iterations.read(in.scopeId(), id);
-            case Selector.MILESTONE -> milestones.read(in.scopeId(), id);
+            case Selector.ITEM -> items.read(in.scopeId(), addresses.itemAt(in.scopeId(), number));
+            case Selector.ITERATION ->
+                iterations.read(in.scopeId(), addresses.iterationAt(in.scopeId(), number));
+            case Selector.MILESTONE ->
+                milestones.read(in.scopeId(), addresses.milestoneAt(in.scopeId(), number));
             default -> throw unreachableView(in.view());
         };
     }
