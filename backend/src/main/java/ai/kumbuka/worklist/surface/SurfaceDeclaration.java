@@ -77,19 +77,10 @@ public final class SurfaceDeclaration {
 
     /**
      * One value of a fixed set an argument takes, with the text that describes it.
-     *
-     * @param inToolSchema whether the tool list of the assistant surface closes
-     *                     the argument with this value too. The declaration
-     *                     carries every value the service takes; the tool list
-     *                     offers what the assistant surface takes, which is
-     *                     fewer: a sort the REST surface alone offers
-     *                     ({@link SortKey#STANDARD}), and the views, which the
-     *                     tool list leaves open so that an unknown view is
-     *                     refused by the service in its check order and not by
-     *                     the schema.
+     * Every value is taken on both surfaces (C4.7): the tool list projects the
+     * declaration and declares no narrower set beside it.
      */
-    public record Value(String name, Function<ValueDescriptions, String> description,
-                        boolean inToolSchema) {
+    public record Value(String name, Function<ValueDescriptions, String> description) {
     }
 
     /**
@@ -110,9 +101,21 @@ public final class SurfaceDeclaration {
      *                     would write it; absent for a mandatory one and for an
      *                     optional one whose absence means "unset"
      * @param values       the fixed set the argument takes, empty where it is free
+     * @param openInTools  whether the tool list leaves the argument open rather
+     *                     than closing it with {@code values}: the views, so
+     *                     that an unknown view is refused by the service in its
+     *                     check order and not by the schema before it. An
+     *                     argument the tool list closes is closed with every
+     *                     declared value (C4.7)
+     * @param minimum      the least number an integer argument takes, absent
+     *                     where it has none (C5.4)
+     * @param maximum      the greatest number an integer argument takes, absent
+     *                     where it has none (C5.4)
      */
     public record Argument(ArgumentName name, ArgumentType type, boolean required,
                            @Nullable String defaultValue, List<Value> values,
+                           boolean openInTools, @Nullable Integer minimum,
+                           @Nullable Integer maximum,
                            Function<ArgumentDescriptions, String> description) {
 
         /** Where the argument travels; the top level for every argument here. */
@@ -203,12 +206,21 @@ public final class SurfaceDeclaration {
 
     private static Argument required(String name, ArgumentType type,
                                      Function<ArgumentDescriptions, String> description) {
-        return new Argument(name(name), type, true, null, List.of(), description);
+        return new Argument(name(name), type, true, null, List.of(), false, null, null,
+            description);
     }
 
     private static Argument optional(String name, ArgumentType type, @Nullable String defaultValue,
                                      Function<ArgumentDescriptions, String> description) {
-        return new Argument(name(name), type, false, defaultValue, List.of(), description);
+        return new Argument(name(name), type, false, defaultValue, List.of(), false, null, null,
+            description);
+    }
+
+    /** An optional argument of a fixed set, closed in the tool list with every value. */
+    private static Argument chosen(String name, String defaultValue, List<Value> values,
+                                   Function<ArgumentDescriptions, String> description) {
+        return new Argument(name(name), ArgumentType.STRING, false, defaultValue, values, false,
+            null, null, description);
     }
 
     private static final Argument SCOPE =
@@ -221,8 +233,10 @@ public final class SurfaceDeclaration {
         required("conflict_token", ArgumentType.STRING, ArgumentDescriptions::conflictToken);
     private static final Argument FIELDS =
         required(Field.FIELDS_ARGUMENT, ArgumentType.OBJECT, d -> d.fields(TITLE_MAX));
-    private static final Argument DURATION =
-        required("duration_seconds", ArgumentType.INTEGER, ArgumentDescriptions::durationSeconds);
+    /** A lease of no length is refused, so the least duration is one second. */
+    private static final Argument DURATION = new Argument(name("duration_seconds"),
+        ArgumentType.INTEGER, true, null, List.of(), false, 1, null,
+        ArgumentDescriptions::durationSeconds);
     private static final Argument TO_ITEM =
         required("to_item", ArgumentType.STRING, ArgumentDescriptions::toItem);
     private static final Argument TYPE =
@@ -236,7 +250,8 @@ public final class SurfaceDeclaration {
     private static Argument selector(Function<ArgumentDescriptions, String> description,
                                      String... views) {
         return new Argument(name("selector"), ArgumentType.STRING, true, null,
-            java.util.Arrays.stream(views).map(SurfaceDeclaration::view).toList(), description);
+            java.util.Arrays.stream(views).map(SurfaceDeclaration::view).toList(), true, null,
+            null, description);
     }
 
     private static Value view(String view) {
@@ -247,7 +262,7 @@ public final class SurfaceDeclaration {
             case Selector.WORKSTREAM -> ValueDescriptions::viewWorkstream;
             default -> throw new IllegalArgumentException("not one of the four views: " + view);
         };
-        return new Value(view, description, false);
+        return new Value(view, description);
     }
 
     // ======================================================================
@@ -301,24 +316,21 @@ public final class SurfaceDeclaration {
                 Selector.MILESTONE, Selector.WORKSTREAM),
             optional(QueryFilter.FILTER_ARGUMENT, ArgumentType.OBJECT, null,
                 ArgumentDescriptions::filter),
-            optional(QuerySpec.PAGE_SIZE_ARGUMENT, ArgumentType.INTEGER,
-                String.valueOf(QuerySpec.DEFAULT_PAGE_SIZE),
+            new Argument(name(QuerySpec.PAGE_SIZE_ARGUMENT), ArgumentType.INTEGER, false,
+                String.valueOf(QuerySpec.DEFAULT_PAGE_SIZE), List.of(), false,
+                QuerySpec.MIN_PAGE_SIZE, QuerySpec.MAX_PAGE_SIZE,
                 d -> d.pageSize(PAGE_SIZE_MAX, PAGE_SIZE_DEFAULT)),
             optional(QuerySpec.AFTER_ARGUMENT, ArgumentType.STRING, null,
                 ArgumentDescriptions::after),
-            new Argument(name(QuerySpec.SORT_ARGUMENT), ArgumentType.STRING, false,
-                QuerySpec.DEFAULT_SORT.wireName(),
-                List.of(new Value(SortKey.ID.wireName(), ValueDescriptions::sortId, true),
-                    new Value(SortKey.CREATED_AT.wireName(), ValueDescriptions::sortCreatedAt,
-                        true),
-                    new Value(SortKey.RANK.wireName(), ValueDescriptions::sortRank, false)),
+            chosen(QuerySpec.SORT_ARGUMENT, QuerySpec.DEFAULT_SORT.wireName(),
+                List.of(new Value(SortKey.ID.wireName(), ValueDescriptions::sortId),
+                    new Value(SortKey.CREATED_AT.wireName(), ValueDescriptions::sortCreatedAt),
+                    new Value(SortKey.RANK.wireName(), ValueDescriptions::sortRank)),
                 ArgumentDescriptions::sort),
-            new Argument(name(QuerySpec.DIRECTION_ARGUMENT), ArgumentType.STRING, false,
-                QuerySpec.DEFAULT_DIRECTION.wireName(),
-                List.of(new Value(SortKey.Direction.ASC.wireName(), ValueDescriptions::directionAsc,
-                        true),
+            chosen(QuerySpec.DIRECTION_ARGUMENT, QuerySpec.DEFAULT_DIRECTION.wireName(),
+                List.of(new Value(SortKey.Direction.ASC.wireName(), ValueDescriptions::directionAsc),
                     new Value(SortKey.Direction.DESC.wireName(),
-                        ValueDescriptions::directionDesc, true)),
+                        ValueDescriptions::directionDesc)),
                 ArgumentDescriptions::direction)),
         verb("accept", ToolDescriptions::accept, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
@@ -451,7 +463,8 @@ public final class SurfaceDeclaration {
      * no skill cannot use; a description over {@link #DESCRIPTION_BUDGET} is cut
      * by a caller that does not read it whole; and an argument with no
      * description leaves {@code ARGUMENT_MISSING} with nothing to say the value
-     * is; and a refusal a call names that the catalogue lacks is one the
+     * is; an argument declared twice is one a caller can send once; and a
+     * refusal a call names that the catalogue lacks is one the
      * declaration promises and cannot word. That every code of the catalogue
      * can be worded is {@link RefusalCatalogueGuard}'s.
      *
@@ -465,9 +478,11 @@ public final class SurfaceDeclaration {
             String description = verb.description().apply(tools);
             requireDescribed(call, description);
             requireWithinBudget(call, description);
-            requireDescribedArguments(call, verb.arguments().stream()
-                .collect(java.util.stream.Collectors.toMap(a -> a.name().name(),
-                    a -> a.description().apply(arguments), (a, b) -> a, LinkedHashMap::new)));
+            requireDistinctArguments(call, verb.argumentNames());
+            Map<String, @Nullable String> described = new LinkedHashMap<>();
+            verb.arguments().forEach(a -> described.put(a.name().name(),
+                a.description().apply(arguments)));
+            requireDescribedArguments(call, described);
             requireCatalogued(call, verb.reasons().stream().map(RefusalCode::name).toList(),
                 java.util.Arrays.stream(RefusalCode.values()).map(RefusalCode::name).toList());
         }
@@ -511,6 +526,25 @@ public final class SurfaceDeclaration {
                     "two calls are declared as '" + call + "'. A tool list is flat, so a "
                         + "duplicate name is a call one of whose declarations no caller can "
                         + "reach.");
+            }
+        }
+    }
+
+    /**
+     * Refuses a call that declares one argument twice.
+     *
+     * <p>Takes the names in the order the call gives them, before anything
+     * keys them: a map by name keeps one of the two and hides the other, and
+     * the input schema of the tool, an object keyed by name, would do the
+     * same to a caller.
+     */
+    public static void requireDistinctArguments(String call, List<String> arguments) {
+        Set<String> seen = new LinkedHashSet<>();
+        for (String argument : arguments) {
+            if (!seen.add(argument)) {
+                throw new IllegalStateException(
+                    call + " declares '" + argument + "' twice. A call's arguments are keyed "
+                        + "by name, so one of the two is an argument no caller can send.");
             }
         }
     }

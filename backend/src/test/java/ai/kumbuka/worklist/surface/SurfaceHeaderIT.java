@@ -97,7 +97,7 @@ class SurfaceHeaderIT {
         Response rank = assistant().queryParam("sort", "rank")
             .get(SurfaceFixture.collection(Selector.ITEM));
         assertThat(rank.statusCode()).isEqualTo(400);
-        assertThat(body(rank)).as("a sort the assistant surface does not offer")
+        assertThat(body(rank)).as("a sort the item view does not declare")
             .isEqualTo(Mcp.refusal(Mcp.call("worklist_query", Map.of(
                 "scope", SurfaceFixture.SCOPE, "selector", Selector.ITEM, "sort", "rank"))));
 

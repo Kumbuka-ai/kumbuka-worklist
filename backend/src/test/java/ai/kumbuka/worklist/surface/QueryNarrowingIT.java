@@ -410,22 +410,15 @@ class QueryNarrowingIT {
 
     @ParameterizedTest
     @EnumSource(Transport.class)
-    void every_view_pages_in_every_standard_sort_without_gap_or_double(Transport via) {
+    void every_view_pages_in_every_declared_sort_without_gap_or_double(Transport via) {
         for (String view : Selector.VIEWS) {
-            for (SortKey sort : SortKey.STANDARD) {
+            for (SortKey sort : SortKey.values()) {
+                if (!sort.declaredOn(view)) {
+                    continue;
+                }
                 for (SortKey.Direction direction : SortKey.Direction.values()) {
                     assertPagesCoverTheWhole(via, view, sort, direction);
                 }
-            }
-        }
-    }
-
-    /** The declared field beyond the standard pair, on the transport that offers it. */
-    @Test
-    void the_axes_page_by_rank_on_rest() {
-        for (String view : List.of(Selector.ITERATION, Selector.MILESTONE)) {
-            for (SortKey.Direction direction : SortKey.Direction.values()) {
-                assertPagesCoverTheWhole(Transport.REST, view, SortKey.RANK, direction);
             }
         }
     }
@@ -619,9 +612,17 @@ class QueryNarrowingIT {
         }
     }
 
-    @Test
-    void rest_sorts_the_axes_by_rank_then_number() {
-        List<Map<String, Object>> fields = Transport.REST.call(Selector.ITERATION, Map.of(),
+    /**
+     * Rank is a declared value of the sort, so the assistant surface takes it
+     * as REST does (C4.7).
+     *
+     * <p>RED STATE, observed 2026-10-29 with the MCP adapter offering the
+     * standard pair again: the MCP case was refused SORT_UNDECLARED.
+     */
+    @ParameterizedTest
+    @EnumSource(Transport.class)
+    void every_transport_sorts_the_axes_by_rank_then_number(Transport via) {
+        List<Map<String, Object>> fields = via.call(Selector.ITERATION, Map.of(),
             Map.of("sort", "rank")).fields();
         assertThat(fields).extracting(f -> ((Number) f.get("rank")).intValue())
             .as("the open iteration was ranked 1, the closed one 2")
@@ -629,10 +630,9 @@ class QueryNarrowingIT {
     }
 
     /**
-     * RED STATE, observed 2026-10-11 with the declaration and offer checks
-     * removed from {@code QuerySpec}: {@code rank} on the item view was answered
-     * on both transports, and {@code rank} on the assistant surface was
-     * answered. A name that is no sort key at all stays refused by the parse.
+     * RED STATE, observed 2026-10-11 with the declaration check removed from
+     * {@code QuerySpec}: {@code rank} on the item view was answered on both
+     * transports. A name that is no sort key at all stays refused by the parse.
      */
     @ParameterizedTest
     @EnumSource(Transport.class)
@@ -661,11 +661,6 @@ class QueryNarrowingIT {
             "ARGUMENT_INVALID", "direction", "direction up");
     }
 
-    @Test
-    void the_assistant_surface_offers_the_standard_sorts_only() {
-        assertRefused(Transport.MCP.call(Selector.MILESTONE, Map.of(), Map.of("sort", "rank")),
-            "SORT_UNDECLARED", "sort", "rank on the assistant surface");
-    }
 
     // ======================================================================
     // Probe group 4c — the assistant surface over REST, named by the hop
@@ -674,18 +669,19 @@ class QueryNarrowingIT {
     /**
      * A router that publishes {@code query} as an assistant tool reaches this
      * service over REST and says so with {@code Kumbuka-Surface: assistant}.
-     * The read is then made on the assistant surface: the sort the REST surface
-     * declares beyond the standard pair is refused there too (ADR-0049).
+     * The read is then made on the assistant surface, which offers every sort
+     * the view declares, as REST does (C4.7).
      *
-     * <p>RED STATE, observed 2026-10-12 with the header ignored in
-     * {@code WorklistResource.collectionGet}: {@code sort=rank} on the
-     * milestone view answered 200 with the header.
+     * <p>RED STATE, observed 2026-10-29 with the standard pair offered under
+     * the header again in {@code WorklistResource.collectionGet}:
+     * {@code sort=rank} on the milestone view was refused SORT_UNDECLARED with
+     * the header.
      */
     @Test
-    void the_assistant_header_offers_the_standard_sorts_only() {
+    void the_assistant_header_offers_every_declared_sort() {
         Answer named = Transport.rawIn(SCOPE, Selector.MILESTONE, Map.of("sort", "rank"),
             ASSISTANT);
-        assertRefused(named, "SORT_UNDECLARED", "sort", "rank under the assistant header");
+        assertThat(named.status()).as("with the header rank is offered").isEqualTo(200);
 
         Answer unnamed = Transport.rawIn(SCOPE, Selector.MILESTONE, Map.of("sort", "rank"), null);
         assertThat(unnamed.status()).as("without the header REST offers rank").isEqualTo(200);
@@ -772,17 +768,17 @@ class QueryNarrowingIT {
 
         stageSameNamedScopeInTenantB();
         try (AutoCloseable inB = tenants.bind(TENANT_B)) {
-            QuerySpec own = new QuerySpec(null, 1, null, null, null, List.of(), SortKey.STANDARD);
+            QuerySpec own = new QuerySpec(null, 1, null, null, null, List.of());
             String cursorOfB = verbs.query(SurfaceFixture.MEMBER, SCOPE, Selector.ITEM, own)
                 .next();
             assertThat(cursorOfB).as("the control: tenant B pages its own scope").isNotNull();
             assertThat(verbs.query(SurfaceFixture.MEMBER, SCOPE, Selector.ITEM,
-                    new QuerySpec(null, 1, cursorOfB, null, null, List.of(), SortKey.STANDARD))
+                    new QuerySpec(null, 1, cursorOfB, null, null, List.of()))
                 .objects()).as("and its own cursor continues it").hasSize(1);
 
             Throwable refused = org.assertj.core.api.Assertions.catchThrowable(() ->
                 verbs.query(SurfaceFixture.MEMBER, SCOPE, Selector.ITEM,
-                    new QuerySpec(null, 1, cursorOfA, null, null, List.of(), SortKey.STANDARD)));
+                    new QuerySpec(null, 1, cursorOfA, null, null, List.of())));
             assertThat(refused).isInstanceOf(WorklistException.class);
             WorklistException typed = (WorklistException) refused;
             assertThat(typed.reason()).isEqualTo(WorklistException.Reason.CURSOR_FOREIGN);

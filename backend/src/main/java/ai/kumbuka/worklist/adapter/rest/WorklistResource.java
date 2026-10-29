@@ -11,7 +11,6 @@ import ai.kumbuka.worklist.adapter.payload.ArgumentsPayload;
 import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
-import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
@@ -189,27 +188,15 @@ public class WorklistResource {
      * conversion of {@code page_size} to an integer is deliberately not used:
      * it answers an unreadable value with a bare 404 before any refusal of ours.
      *
-     * <p>This surface offers every sort a view declares
-     * ({@link SortKey#ALL}), the assistant surface the standard pair only.
-     *
-     * <p><strong>{@code Kumbuka-Surface: assistant}</strong> makes the read on
-     * the assistant surface, as kumbuka-dispatch does: a router that publishes
-     * {@code query} as an assistant tool reaches this service over REST and
-     * says so, and the answer is then the service MCP's — the standard sorts
-     * only, so a declared REST sort such as {@code rank} is refused there too
-     * (ADR-0049). The header decides nothing else; who calls and what they may
-     * see come from the verified identity as always. Any other value never
-     * reaches this method ({@link SurfaceHeaderFilter}). The answers of every
-     * other call carry no name of a verb that differs between the two surfaces
-     * yet, so {@code query} is the one call the header changes today.
+     * <p>Both surfaces offer every sort a view declares (C4.7), so
+     * {@code Kumbuka-Surface: assistant}, which {@link SurfaceHeaderFilter}
+     * checks on every call, changes nothing in the answer of this call.
      */
     @GET
     @Path("{selector}")
     public Response collectionGet(@PathParam("scope") String scope,
                                   @PathParam("selector") String selector,
-                                  @HeaderParam(SURFACE) java.util.List<String> surface,
                                   jakarta.ws.rs.core.UriInfo info) {
-        java.util.Set<SortKey> offered = offeredOn(surface);
         Map<String, Object> filter = new LinkedHashMap<>();
         Map<String, Object> paging = new LinkedHashMap<>();
         java.util.List<String> untaken = new java.util.ArrayList<>();
@@ -233,18 +220,9 @@ public class WorklistResource {
         }
         QuerySpec spec = new QuerySpec(filter, paging.get(QuerySpec.PAGE_SIZE_ARGUMENT),
             paging.get(QuerySpec.AFTER_ARGUMENT), paging.get(QuerySpec.SORT_ARGUMENT),
-            paging.get(QuerySpec.DIRECTION_ARGUMENT), untaken, offered);
+            paging.get(QuerySpec.DIRECTION_ARGUMENT), untaken);
         return Response.ok(Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec))).build();
-    }
-
-    /**
-     * The sorts the calling surface offers: every declared one on this
-     * surface, the standard pair when the header names the assistant. The
-     * header's value is the one {@link SurfaceHeaderFilter} lets through.
-     */
-    private static java.util.Set<SortKey> offeredOn(java.util.List<String> surface) {
-        return surface == null || surface.isEmpty() ? SortKey.ALL : SortKey.STANDARD;
     }
 
     // ======================================================================

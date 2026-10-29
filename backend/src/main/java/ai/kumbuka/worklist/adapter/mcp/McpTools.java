@@ -95,7 +95,10 @@ public final class McpTools {
      * <p>Closed rather than open, deliberately: an argument this surface does not
      * know is one a caller believes in, and it is refused by name rather than
      * accepted and ignored (DEC-0043 R4). A fixed value set is closed with
-     * {@code enum}, and {@code oneOf} carries a description per value.
+     * {@code enum}, every declared value in it (C4.7), and {@code oneOf} carries
+     * a description per value; an argument the declaration leaves open in the
+     * tool list -- the view -- carries none. A bound travels as JSON Schema
+     * spells it.
      */
     private static SchemaPayload schema(SurfaceDeclaration.Verb verb,
                                         ArgumentDescriptions arguments,
@@ -103,12 +106,13 @@ public final class McpTools {
         Map<String, SchemaPayload> properties = new LinkedHashMap<>();
         List<String> mandatory = new ArrayList<>();
         for (SurfaceDeclaration.Argument argument : verb.arguments()) {
-            properties.put(argument.name().name(), SchemaPayload.property(
-                argument.type().json(), argument.description().apply(arguments),
-                argument.values().stream()
-                    .filter(SurfaceDeclaration.Value::inToolSchema)
+            List<SchemaValuePayload> closed = argument.openInTools() ? List.of()
+                : argument.values().stream()
                     .map(v -> new SchemaValuePayload(v.name(), v.description().apply(values)))
-                    .toList()));
+                    .toList();
+            properties.put(argument.name().name(), SchemaPayload.property(
+                argument.type().json(), argument.description().apply(arguments), closed,
+                argument.minimum(), argument.maximum()));
             if (argument.required()) {
                 mandatory.add(argument.name().name());
             }

@@ -85,21 +85,23 @@ class McpProjectionIT {
     }
 
     /**
-     * The tool list offers the values the assistant surface takes, which are
-     * fewer than the declaration names: the sorts every transport offers, not
-     * the {@code rank} the REST surface adds, and no closed set on the view,
-     * whose unknown value the service refuses in its own check order. Written
-     * by hand, so that a value the declaration gains cannot reach the tool
-     * list unnoticed.
+     * The tool list projects the declaration (C4.7): a closed set carries every
+     * value the declaration names, the {@code rank} of the two planning axes
+     * among the sorts, and the view stays open, whose unknown value the service
+     * refuses in its own check order. A bound travels as JSON Schema spells it
+     * (C5.4). Written by hand, so that a value the declaration gains or loses
+     * cannot reach the tool list unnoticed.
      */
     @Test
-    void the_tool_list_closes_the_sort_to_the_standard_values_and_leaves_the_view_open() {
+    void the_tool_list_closes_the_sort_with_every_declared_value_and_leaves_the_view_open() {
         JsonPath list = rpc("tools/list", Map.of()).extract().jsonPath();
         String query = "result.tools.find { it.name == 'worklist_query' }.inputSchema.properties.";
 
         assertThat(list.getList(query + "sort.enum", String.class))
-            .as("the assistant surface sorts by id and created_at; rank is the REST surface's")
-            .containsExactly("id", "created_at");
+            .as("the assistant surface sorts by every declared sort, rank included")
+            .containsExactly("id", "created_at", "rank");
+        assertThat(list.getInt(query + "page_size.minimum")).isEqualTo(1);
+        assertThat(list.getInt(query + "page_size.maximum")).isEqualTo(200);
         assertThat(list.getList(query + "direction.enum", String.class))
             .containsExactly("asc", "desc");
         assertThat(list.getString(query + "selector.type"))

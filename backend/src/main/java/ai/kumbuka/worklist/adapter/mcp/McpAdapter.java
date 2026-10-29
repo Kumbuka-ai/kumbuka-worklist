@@ -23,7 +23,6 @@ import ai.kumbuka.worklist.adapter.payload.ToolListPayload;
 import ai.kumbuka.worklist.adapter.payload.ToolResultPayload;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
-import ai.kumbuka.worklist.domain.SortKey;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
@@ -336,10 +335,9 @@ public class McpAdapter {
         // string gets — an instanceof here that fell through to "no filter" is
         // exactly how a filter sent as a JSON string used to answer the whole
         // set. An argument that is none of them is handed on too and refused by
-        // name. This surface offers the standard sorts only.
+        // name. Every sort the view declares is offered here as on REST (C4.7).
         QuerySpec spec = new QuerySpec(in.get(ARG_FILTER), in.get(ARG_PAGE_SIZE),
-            in.get(ARG_AFTER), in.get(ARG_SORT), in.get(ARG_DIRECTION), List.of(),
-            SortKey.STANDARD);
+            in.get(ARG_AFTER), in.get(ARG_SORT), in.get(ARG_DIRECTION), List.of());
         return Payloads.of(scope,
             verbs.query(caller.subject(), scope, selector, spec));
     }

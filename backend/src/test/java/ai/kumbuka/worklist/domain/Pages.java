@@ -48,7 +48,7 @@ public final class Pages {
                     + "forever");
             }
             PageRequest request = new QuerySpec(null, QuerySpec.MAX_PAGE_SIZE, after,
-                sort.wireName(), null, List.of(), SortKey.ALL).pageFor(scope, view);
+                sort.wireName(), null, List.of()).pageFor(scope, view);
             Page page = query.apply(scope, request);
             objects.addAll(page.objects());
             after = page.next();
