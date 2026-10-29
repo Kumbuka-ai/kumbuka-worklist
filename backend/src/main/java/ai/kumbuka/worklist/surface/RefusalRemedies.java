@@ -13,10 +13,10 @@ import io.quarkus.qute.i18n.MessageBundle;
 /**
  * The remedy of every refusal and protocol error: the act the caller performs next, phrased positively (DEC-0043 R21, linted by {@code PositivePhrasingLintTest}). Method names mirror {@link RefusalMessages}; the wire message is the message followed by the remedy.
  *
- * <p>The texts live in {@code src/main/resources/messages/remedies.properties}; {@code @Message}
+ * <p>The texts live in {@code src/main/resources/messages/remedy.properties}; {@code @Message}
  * carries no value, so the build fails when the file lacks a text.
  */
-@MessageBundle(value = "remedies")
+@MessageBundle(value = "remedy")
 public interface RefusalRemedies {
 
     @Message
@@ -174,13 +174,4 @@ public interface RefusalRemedies {
 
     @Message
     String iterationProducedMissing();
-
-    @Message
-    String protocolEnvelope();
-
-    @Message
-    String protocolMethod();
-
-    @Message
-    String protocolTool();
 }

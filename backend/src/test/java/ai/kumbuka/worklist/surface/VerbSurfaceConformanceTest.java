@@ -302,7 +302,7 @@ class VerbSurfaceConformanceTest {
 
     private static String argumentText(String key) {
         java.nio.file.Path direct = java.nio.file.Paths.get("src", "main", "resources",
-            "messages", "arguments.properties");
+            "messages", "argument.properties");
         java.nio.file.Path file = java.nio.file.Files.exists(direct) ? direct
             : java.nio.file.Paths.get("backend").resolve(direct);
         java.util.Properties texts = new java.util.Properties();

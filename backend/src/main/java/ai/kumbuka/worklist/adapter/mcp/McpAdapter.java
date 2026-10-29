@@ -26,7 +26,7 @@ import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
-import ai.kumbuka.worklist.surface.RefusalCatalogue;
+import ai.kumbuka.worklist.surface.ProtocolMessages;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
@@ -34,6 +34,7 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.arc.properties.IfBuildProperty;
+import io.quarkus.qute.i18n.MessageBundles;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -153,7 +154,7 @@ public class McpAdapter {
     @POST
     public Response rpc(@Nullable Map<String, Object> request) {
         if (request == null || !JSONRPC.equals(request.get(KEY_JSONRPC))) {
-            return error(null, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolEnvelope"),
+            return error(null, INVALID_PARAMS, protocol().envelopeRequired(),
                 null);
         }
 
@@ -173,7 +174,7 @@ public class McpAdapter {
             case "tools/call" -> call(id, arguments(request, "params"));
             // The method that arrived is the caller's and never comes back
             // (DEC-0043 R19); the answer names the methods this server speaks.
-            default -> error(id, METHOD_NOT_FOUND, RefusalCatalogue.protocolText("protocolMethod"),
+            default -> error(id, METHOD_NOT_FOUND, protocol().methodUnknown(),
                 null);
         };
     }
@@ -198,7 +199,7 @@ public class McpAdapter {
         if (verb.isEmpty()) {
             // The tool name that arrived is the caller's and never comes back
             // (DEC-0043 R19); the answer names the tools this server declares.
-            return error(id, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolTool"),
+            return error(id, INVALID_PARAMS, protocol().toolUnknown(),
                 new RpcErrorDataPayload(McpTools.names()));
         }
         return result(id, call(verb.get(), present(arguments(params, "arguments"))));
@@ -610,6 +611,11 @@ public class McpAdapter {
 
     private static Response result(Object id, Object payload) {
         return Response.ok(new RpcResultPayload(JSONRPC, id, payload)).build();
+    }
+
+    /** The texts of the protocol's own errors. */
+    private static ProtocolMessages protocol() {
+        return MessageBundles.get(ProtocolMessages.class);
     }
 
     /** @param id the request's id; absent where the request carried none to answer under */

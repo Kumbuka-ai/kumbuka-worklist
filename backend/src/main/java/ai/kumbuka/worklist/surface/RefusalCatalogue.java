@@ -27,9 +27,9 @@ import java.util.stream.Collectors;
  *
  * <p><strong>Binding by name.</strong> The message of a code is the method of
  * {@link RefusalMessages} named after the code in lower camel case, its remedy
- * the method of the same name in {@link RefusalRemedies}. Methods whose name
- * starts with {@link #PROTOCOL} word the errors of the protocol and belong to
- * no code. {@link #requireDeclared} holds the two sets against each other in
+ * the method of the same name in {@link RefusalRemedies}. The errors of the
+ * protocol belong to no code and are {@link ProtocolMessages}'.
+ * {@link #requireDeclared} holds the two sets against each other in
  * both directions, and the service does not start while they differ.
  *
  * <p><strong>Placeholders by type.</strong> A bundle method's parameters take
@@ -43,9 +43,6 @@ import java.util.stream.Collectors;
  * (DEC-0042).
  */
 public final class RefusalCatalogue {
-
-    /** The prefix of the bundle methods that word the protocol's own errors. */
-    public static final String PROTOCOL = "protocol";
 
     private RefusalCatalogue() {
     }
@@ -74,12 +71,6 @@ public final class RefusalCatalogue {
     public static Optional<Bound> boundOf(RefusalCode code) {
         return code == RefusalCode.PAGE_SIZE_REJECTED
             ? Optional.of(SurfaceDeclaration.PAGE_SIZE_MAX) : Optional.empty();
-    }
-
-    /** A protocol error, message and remedy joined. */
-    public static String protocolText(String name) {
-        return render(RefusalMessages.class, name, Context.NONE) + " "
-            + render(RefusalRemedies.class, name, Context.NONE);
     }
 
     /** The bundle method name of a code: {@code NOT_FOUND} is {@code notFound}. */
@@ -112,7 +103,6 @@ public final class RefusalCatalogue {
     private static List<String> faults(Class<?> bundle, Set<String> declared) {
         Set<String> worded = Arrays.stream(bundle.getMethods())
             .map(Method::getName)
-            .filter(name -> !name.startsWith(PROTOCOL))
             .collect(Collectors.toCollection(LinkedHashSet::new));
         List<String> faults = new ArrayList<>();
         declared.stream().filter(code -> !worded.contains(code))

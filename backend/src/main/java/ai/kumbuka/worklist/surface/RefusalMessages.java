@@ -11,12 +11,12 @@ import io.quarkus.qute.i18n.Message;
 import io.quarkus.qute.i18n.MessageBundle;
 
 /**
- * The message of every refusal and of every error of the protocol this service words itself: what was found. A message may state a finding in the negative (DEC-0043 R21); it never repeats the caller's input or the tenant's vocabulary (R18). One method per {@link RefusalCode}, named after it in lower camel case, plus the protocol's own errors under the prefix {@code protocol}.
+ * The message of every refusal: what was found. A message may state a finding in the negative (DEC-0043 R21); it never repeats the caller's input or the tenant's vocabulary (R18). One method per {@link RefusalCode}, named after it in lower camel case. The errors of the protocol are {@link ProtocolMessages}.
  *
- * <p>The texts live in {@code src/main/resources/messages/refusals.properties}; {@code @Message}
+ * <p>The texts live in {@code src/main/resources/messages/refusal.properties}; {@code @Message}
  * carries no value, so the build fails when the file lacks a text.
  */
-@MessageBundle(value = "refusals")
+@MessageBundle(value = "refusal")
 public interface RefusalMessages {
 
     @Message
@@ -174,13 +174,4 @@ public interface RefusalMessages {
 
     @Message
     String iterationProducedMissing();
-
-    @Message
-    String protocolEnvelope();
-
-    @Message
-    String protocolMethod();
-
-    @Message
-    String protocolTool();
 }

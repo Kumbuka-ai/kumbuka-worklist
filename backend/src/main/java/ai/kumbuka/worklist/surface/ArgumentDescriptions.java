@@ -13,10 +13,10 @@ import io.quarkus.qute.i18n.MessageBundle;
 /**
  * The description of every declared argument. An optional argument names its default and says that null equals leaving it out (DEC-0043 R17). Phrased positively (R21).
  *
- * <p>The texts live in {@code src/main/resources/messages/arguments.properties}; {@code @Message}
+ * <p>The texts live in {@code src/main/resources/messages/argument.properties}; {@code @Message}
  * carries no value, so the build fails when the file lacks a text.
  */
-@MessageBundle(value = "arguments")
+@MessageBundle(value = "argument")
 public interface ArgumentDescriptions {
 
     @Message

@@ -77,8 +77,8 @@ public final class DeclarationDocument {
     private static final String REFUSALS = "refusals";
 
     /** The bundle files the reasons are worded by: a name of a file, not of a member. */
-    private static final String MESSAGE_BUNDLE = "refusals";
-    private static final String REMEDY_BUNDLE = "remedies";
+    private static final String MESSAGE_BUNDLE = "refusal";
+    private static final String REMEDY_BUNDLE = "remedy";
 
     private DeclarationDocument() {
     }
