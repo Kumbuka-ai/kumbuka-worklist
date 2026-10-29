@@ -15,6 +15,7 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestIdentityAssociation;
 import io.restassured.http.ContentType;
+import io.restassured.path.json.JsonPath;
 import io.restassured.response.ValidatableResponse;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
@@ -80,6 +81,35 @@ class McpProjectionIT {
                 + "and the verbs this scheme does not carry are absent from it")
             .containsExactlyInAnyOrderElementsOf(
                 VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED));
+    }
+
+    /**
+     * The tool list offers the values the assistant surface takes, which are
+     * fewer than the declaration names: the sorts every transport offers, not
+     * the {@code rank} the REST surface adds, and no closed set on the view,
+     * whose unknown value the service refuses in its own check order. Written
+     * by hand, so that a value the declaration gains cannot reach the tool
+     * list unnoticed.
+     */
+    @Test
+    void the_tool_list_closes_the_sort_to_the_standard_values_and_leaves_the_view_open() {
+        JsonPath list = rpc("tools/list", Map.of()).extract().jsonPath();
+        String query = "result.tools.find { it.name == 'query' }.inputSchema.properties.";
+
+        assertThat(list.getList(query + "sort.enum", String.class))
+            .as("the assistant surface sorts by id and created_at; rank is the REST surface's")
+            .containsExactly("id", "created_at");
+        assertThat(list.getList(query + "direction.enum", String.class))
+            .containsExactly("asc", "desc");
+        assertThat(list.getString(query + "selector.type"))
+            .as("the path reaches the view argument, so its open set below is read, not missed")
+            .isEqualTo("string");
+        for (String tool : list.getList("result.tools.name", String.class)) {
+            assertThat(list.<Object>get("result.tools.find { it.name == '" + tool
+                    + "' }.inputSchema.properties.selector.enum"))
+                .as("%s leaves the view open in its schema", tool)
+                .isNull();
+        }
     }
 
     @Test
