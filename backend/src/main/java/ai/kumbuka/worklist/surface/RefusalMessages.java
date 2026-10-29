@@ -174,4 +174,7 @@ public interface RefusalMessages {
 
     @Message
     String iterationProducedMissing();
+
+    @Message
+    String idempotencyKeyReused();
 }

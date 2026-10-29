@@ -122,6 +122,9 @@ public class McpAdapter {
     /** The claim family's shared duration argument. */
     private static final String ARG_DURATION = "duration_seconds";
 
+    /** The idempotency key of a create (C10.4). */
+    private static final String ARG_KEY = "idempotency_key";
+
     /** The receipt {@code release} presents. */
     private static final String ARG_RECEIPT = "receipt";
 
@@ -310,7 +313,7 @@ public class McpAdapter {
     private Object create(Map<String, Object> in) {
         String scope = required(in, ARG_SCOPE);
         return dressed(scope, verbs.create(caller.subject(), scope,
-            required(in, ARG_SELECTOR), fields(in).orElse(null)));
+            required(in, ARG_SELECTOR), fields(in).orElse(null), text(in, ARG_KEY).orElse(null)));
     }
 
     private Object read(Map<String, Object> in) {
@@ -540,6 +543,21 @@ public class McpAdapter {
         if (scope instanceof String named && !named.isBlank()) {
             verbs.requireVisible(caller.subject(), named);
         }
+    }
+
+    /**
+     * An optional text argument; absent where the call left it out. A value of
+     * another JSON type is a form fault, decided before the scope (C1.3).
+     */
+    private static Optional<String> text(Map<String, Object> in, String name) {
+        Object value = in.get(name);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (!(value instanceof CharSequence text)) {
+            throw SurfaceException.invalid(name);
+        }
+        return Optional.of(text.toString());
     }
 
     private static Optional<String> optional(Map<String, Object> in, String name) {

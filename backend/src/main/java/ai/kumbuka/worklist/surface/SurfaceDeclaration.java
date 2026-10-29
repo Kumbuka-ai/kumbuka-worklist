@@ -50,6 +50,9 @@ public final class SurfaceDeclaration {
     /** The member and argument an object's address travels under. */
     private static final String ADDRESS_MEMBER = "address";
 
+    /** The argument a token travels in, and the member at the top of an answer that carries it (C6.1). */
+    private static final String TOKEN_MEMBER = "conflict_token";
+
     private SurfaceDeclaration() {
     }
 
@@ -147,10 +150,13 @@ public final class SurfaceDeclaration {
      * where it applies.
      */
     public enum Answer {
-        /** One object: {@code address} and {@code fields}. */
-        OBJECT(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT)),
+        /**
+         * One object: {@code address}, {@code fields}, and {@code conflict_token}
+         * where the object carries one (C6.1).
+         */
+        OBJECT(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT, "[" + TOKEN_MEMBER + "]")),
         /** One object at 201, with {@code Location}. */
-        OBJECT_CREATED(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT)),
+        OBJECT_CREATED(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT, "[" + TOKEN_MEMBER + "]")),
         /** A page of objects and {@code next_cursor} while more follow. */
         OBJECT_LISTING(List.of("objects", "[next_cursor]"));
 
@@ -230,7 +236,7 @@ public final class SurfaceDeclaration {
     private static final Argument MEMBERSHIP =
         required(ADDRESS_MEMBER, ArgumentType.STRING, ArgumentDescriptions::addressMembership);
     private static final Argument TOKEN =
-        required("conflict_token", ArgumentType.STRING, ArgumentDescriptions::conflictToken);
+        required(TOKEN_MEMBER, ArgumentType.STRING, ArgumentDescriptions::conflictToken);
     private static final Argument FIELDS =
         required(Field.FIELDS_ARGUMENT, ArgumentType.OBJECT, d -> d.fields(TITLE_MAX));
     /** A lease of no length is refused, so the least duration is one second. */
@@ -241,6 +247,10 @@ public final class SurfaceDeclaration {
         required("to_item", ArgumentType.STRING, ArgumentDescriptions::toItem);
     private static final Argument TYPE =
         required("type", ArgumentType.STRING, ArgumentDescriptions::type);
+    /** The key of a create (C10.4); a header on REST, an argument on MCP. */
+    private static final Argument IDEMPOTENCY_KEY =
+        optional("idempotency_key", ArgumentType.STRING, null,
+            ArgumentDescriptions::idempotencyKey);
 
     /**
      * The view argument, with the views the verb acts on as its fixed values.
@@ -298,9 +308,9 @@ public final class SurfaceDeclaration {
     private static final List<Verb> VERBS = List.of(
         verb("create", ToolDescriptions::create, EffectClass.CREATE, Answer.OBJECT_CREATED,
             reasons(WRITE, FIELD_WRITE, codes(RefusalCode.SETTING_ABSENT,
-                RefusalCode.CARDINALITY_EXCEEDED)),
+                RefusalCode.CARDINALITY_EXCEEDED, RefusalCode.IDEMPOTENCY_KEY_REUSED)),
             SCOPE, selector(ArgumentDescriptions::selectorCreate, Selector.ITEM, Selector.ITERATION,
-                Selector.MILESTONE), FIELDS),
+                Selector.MILESTONE), FIELDS, IDEMPOTENCY_KEY),
         verb("read", ToolDescriptions::read, EffectClass.ITEM_READ, Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.ITERATION_ABSENT)),
             ADDRESS),
@@ -351,7 +361,7 @@ public final class SurfaceDeclaration {
                 RefusalCode.VERB_UNCARRIED, RefusalCode.ITERATION_ABSENT,
                 RefusalCode.SETTING_ABSENT)),
             SCOPE, selector(ArgumentDescriptions::selectorIteration, Selector.ITERATION),
-            required("conflict_token", ArgumentType.STRING,
+            required(TOKEN_MEMBER, ArgumentType.STRING,
                 ArgumentDescriptions::conflictTokenSetting)),
         verb("plan", ToolDescriptions::plan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT_CREATED,
             reasons(WRITE, TOKENED, codes(RefusalCode.MEMBERSHIP_PRESENT,

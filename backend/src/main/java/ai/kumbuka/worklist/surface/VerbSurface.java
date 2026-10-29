@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.surface;
 import ai.kumbuka.worklist.domain.AddressRegistry;
 import ai.kumbuka.worklist.domain.ClaimService;
 import ai.kumbuka.worklist.domain.Field;
+import ai.kumbuka.worklist.domain.IdempotencyService;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
@@ -128,6 +129,7 @@ public class VerbSurface {
     @Inject WorkstreamService workstreams;
     @Inject MembershipService memberships;
     @Inject ClaimService claims;
+    @Inject IdempotencyService idempotency;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
 
@@ -155,16 +157,35 @@ public class VerbSurface {
      * The item allocator asks anyway; the two axes allocate from their own marks
      * and would not.
      *
-     * @param body          the body the transport carried; absent where it carried
-     *                      none, which this surface refuses where the verb needs one
+     * <p>Under an idempotency key (C10.4) a repeat with the same view and the
+     * same fields answers the object the first call made, read as it stands
+     * now, and creates nothing; the key's other repeats are refused in
+     * {@link IdempotencyService}. The fields are compared as the domain reads
+     * them, with {@code null} absent at every depth (C7.4), so that a repeat
+     * that spells an absent field as {@code null} is the same call.
+     *
+     * @param body           the body the transport carried; absent where it carried
+     *                       none, which this surface refuses where the verb needs one
+     * @param idempotencyKey the key the transport carried; absent where it carried
+     *                       none, and then every call creates
      */
     @Transactional
     public Result create(String subject, String rawScope, String rawView,
-                         VerbInput.@Nullable Fields body) {
+                         VerbInput.@Nullable Fields body, @Nullable String idempotencyKey) {
+        Optional<String> key = idempotencyKey(idempotencyKey);
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
-        refuseWriteOnDeclaredView(in.view(), "create");
+        refuseWriteOnDeclaredView(in.view(), CREATE);
         addresses.requireView(in.scopeId(), in.view());
         Map<String, Object> fields = required(body, FIELDS).values();
+        String digest = CanonicalJson.version(Map.of(SELECTOR, in.view(), FIELDS, fields));
+
+        Optional<UUID> first = key.flatMap(given ->
+            idempotency.firstAnswer(in.scopeId(), given, CREATE, digest));
+        if (first.isPresent()) {
+            LOG.debugf("create repeated under its key, answered by %s in scope %s",
+                in.view(), in.scopeId());
+            return at(in.view(), produced(in, first.get()));
+        }
 
         Map<String, Object> created = switch (in.view()) {
             case Selector.ITEM -> items.create(in.scopeId(), fields);
@@ -172,10 +193,45 @@ public class VerbSurface {
             case Selector.MILESTONE -> milestones.create(in.scopeId(), fields);
             default -> throw unreachableView(in.view());
         };
+        key.ifPresent(given -> idempotency.remember(in.scopeId(), given,
+            new IdempotencyService.Spent(CREATE, digest, in.view(), identityOf(created))));
 
         Result result = at(in.view(), created);
         LOG.infof("create %s in scope %s", result.address().id(), in.scopeId());
         return result;
+    }
+
+    /** The identity of what a create produced, read off its projection. */
+    private static UUID identityOf(Map<String, Object> created) {
+        if (!(created.get(Field.ID.canonicalName()) instanceof UUID id)) {
+            throw new IllegalStateException(
+                "the answer of a create carries no identity, so its key has nothing to name");
+        }
+        return id;
+    }
+
+    /** What a create produced, as it stands now: the answer to its repeat. */
+    private Map<String, Object> produced(Entry in, UUID id) {
+        return switch (in.view()) {
+            case Selector.ITEM -> items.read(in.scopeId(), id);
+            case Selector.ITERATION -> iterations.read(in.scopeId(), id);
+            case Selector.MILESTONE -> milestones.read(in.scopeId(), id);
+            default -> throw unreachableView(in.view());
+        };
+    }
+
+    /**
+     * The idempotency key, checked for form before any scope is resolved
+     * (C1.3): text of 1 to {@value #KEY_LENGTH_MAX} characters.
+     */
+    private static Optional<String> idempotencyKey(@Nullable String raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        if (raw.isBlank() || raw.length() > KEY_LENGTH_MAX) {
+            throw SurfaceException.invalid(IDEMPOTENCY_KEY);
+        }
+        return Optional.of(raw);
     }
 
     // ======================================================================
@@ -933,6 +989,12 @@ public class VerbSurface {
     private static final String TYPE = "type";
     private static final String DURATION = "duration_seconds";
     private static final String CLOSE = "close";
+    private static final String CREATE = "create";
+    private static final String SELECTOR = "selector";
+    private static final String IDEMPOTENCY_KEY = "idempotency_key";
+
+    /** The longest idempotency key taken, in characters. */
+    private static final int KEY_LENGTH_MAX = 255;
 
     /**
      * The switch arm that cannot be reached.

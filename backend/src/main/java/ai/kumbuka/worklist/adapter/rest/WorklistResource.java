@@ -103,6 +103,13 @@ public class WorklistResource {
      */
     static final String SURFACE = "Kumbuka-Surface";
 
+    /**
+     * The header the idempotency key of a create travels in on this surface
+     * (C10.4); the MCP surface carries it as the argument {@code
+     * idempotency_key}.
+     */
+    static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+
     /** The one value {@link #SURFACE} takes: the assistant surface. */
     static final String ASSISTANT = "assistant";
 
@@ -131,6 +138,7 @@ public class WorklistResource {
     public Response collectionPost(@PathParam("scope") String scope,
                                    @PathParam("selector") String segment,
                                    @HeaderParam("If-Match") @Nullable String ifMatch,
+                                   @HeaderParam(IDEMPOTENCY_KEY) @Nullable String key,
                                    @Nullable String body) {
         var split = CustomMethod.split(segment, CustomMethod.Depth.COLLECTION);
         if (split.isEmpty()) {
@@ -138,7 +146,8 @@ public class WorklistResource {
             // writing verb whose set semantics is declared as exactly one.
             calling(CREATE);
             return created(scope, verbs.create(caller.subject(), scope, segment,
-                ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null)));
+                ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null),
+                key));
         }
 
         CustomMethod.Split at = split.get();

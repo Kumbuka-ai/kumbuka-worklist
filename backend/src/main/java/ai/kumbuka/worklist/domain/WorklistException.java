@@ -332,6 +332,14 @@ public class WorklistException extends RuntimeException {
         SETTING_PRESENT,
 
         /**
+         * The idempotency key was spent in this scope within the last 24
+         * hours, and its first result cannot be answered again: it was spent
+         * on another call or other arguments, or the object it produced no
+         * longer stands (C10.4). Nothing is carried out.
+         */
+        IDEMPOTENCY_KEY_REUSED,
+
+        /**
          * A cardinality limit the scope set for itself would be exceeded.
          *
          * <p>The refusal carries the limit, so that a caller can tell a

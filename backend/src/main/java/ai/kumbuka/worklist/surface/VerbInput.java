@@ -9,8 +9,10 @@ package ai.kumbuka.worklist.surface;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -46,10 +48,13 @@ public final class VerbInput {
     /**
      * The canonical field map of a write, exactly as the caller wrote it.
      *
-     * <p>Carried through untouched but for one reading: a field written as
-     * JSON {@code null} is a field not sent (C7.4, DEC-0043 R17), so it is
-     * left out here, once, for both adapters. An update then leaves it as it
-     * is, and a create gives it the value a create without it gives. The one
+     * <p>Carried through untouched but for one reading: a member written as
+     * JSON {@code null} is a member not sent (C7.4, DEC-0043 R17), at every
+     * depth -- a field, a key of {@code attributes}, a member of an entry of
+     * {@code references} -- so it is left out here, once, for both adapters.
+     * An update then leaves the field as it is, and a create gives it the
+     * value a create without it gives. An element of a list is a value, not a
+     * member, and stays as it came. The one
      * thing the surface adds is the conflict token, and it adds it because the
      * token arrives in the transport ({@code If-Match}) while the domain reads
      * it as a field — see {@link #withToken}.
@@ -57,15 +62,31 @@ public final class VerbInput {
     public record Fields(Map<String, Object> values) {
 
         public Fields {
+            values = values == null ? Map.of() : present(values);
+        }
+
+        /** A map with the members whose value is {@code null} left out, at every depth. */
+        private static Map<String, Object> present(Map<?, ?> given) {
             Map<String, Object> present = new LinkedHashMap<>();
-            if (values != null) {
-                values.forEach((name, value) -> {
-                    if (value != null) {
-                        present.put(name, value);
-                    }
-                });
+            given.forEach((name, value) -> {
+                if (value != null) {
+                    present.put(String.valueOf(name), presentIn(value));
+                }
+            });
+            return Collections.unmodifiableMap(present);
+        }
+
+        /** A value with the null members of every map it holds left out. */
+        private static Object presentIn(Object value) {
+            if (value instanceof Map<?, ?> map) {
+                return present(map);
             }
-            values = Collections.unmodifiableMap(present);
+            if (value instanceof List<?> list) {
+                List<Object> elements = new ArrayList<>(list.size());
+                list.forEach(element -> elements.add(element == null ? null : presentIn(element)));
+                return Collections.unmodifiableList(elements);
+            }
+            return value;
         }
 
         /**
