@@ -76,6 +76,9 @@ public final class DeclarationDocument {
     private static final String ARGUMENTS = "arguments";
     private static final String REFUSALS = "refusals";
 
+    /** The member a reason's remedy travels under. */
+    private static final String REMEDY = "remedy";
+
     /** The bundle files the reasons are worded by: a name of a file, not of a member. */
     private static final String MESSAGE_BUNDLE = "refusal";
     private static final String REMEDY_BUNDLE = "remedy";
@@ -229,7 +232,7 @@ public final class DeclarationDocument {
         reason.put(REASON, code.name());
         reason.put("message_pattern", template);
         reason.put("messages", List.of(message));
-        reason.put("remedy", remedies.getProperty(key));
+        reason.put(REMEDY, remedies.getProperty(key));
         return reason;
     }
 

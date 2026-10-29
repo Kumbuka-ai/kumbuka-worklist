@@ -207,10 +207,10 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 default -> Optional.empty();
             };
         }
-    }
 
-    /** A surface refusal as the REST surface answers it, through the one mapping above. */
-    private static Response refusal(SurfaceException refused) {
-        return new RefusalMapper().toResponse(refused);
+        /** A surface refusal as the REST surface answers it, through the one mapping above. */
+        private static Response refusal(SurfaceException refused) {
+            return new RefusalMapper().toResponse(refused);
+        }
     }
 }
