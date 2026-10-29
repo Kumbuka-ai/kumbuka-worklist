@@ -71,10 +71,30 @@ public class DeclarationShapeTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void a_declaration_of_the_contract_shape_conforms() {
         assertThat(violations(conforming()))
             .as("a declaration written to C5.3 and C5.4 must pass the schema, or the schema "
                 + "says something the contract does not")
+            .isEmpty();
+
+        Map<String, Object> bounded = conforming();
+        Map<String, Object> pageSize = argument(bounded);
+        pageSize.put("name", "page_size");
+        pageSize.put("type", "integer");
+        pageSize.put("required", false);
+        pageSize.put("default", 50);
+        pageSize.put("minimum", 1);
+        pageSize.put("maximum", 200);
+        Map<String, Object> tags = new LinkedHashMap<>();
+        tags.put("name", "tags");
+        tags.put("type", "array");
+        tags.put("required", false);
+        tags.put("placement", "TOP");
+        tags.put("min_items", 1);
+        ((List<Object>) call(bounded).get("arguments")).add(tags);
+        assertThat(violations(bounded))
+            .as("bounds in the declaration's spelling are members of an argument (C5.4)")
             .isEmpty();
     }
 
@@ -138,6 +158,21 @@ public class DeclarationShapeTest {
             .as("RED STATE, observed: a reason in the earlier form, code and status")
             .contains("$.reasons[0]: missing 'reason'",
                 "$.reasons[0]: 'status' is not a member of this level");
+
+        Map<String, Object> schemaSpelling = conforming();
+        argument(schemaSpelling).put("minItems", 1);
+        assertThat(violations(schemaSpelling))
+            .as("RED STATE, observed: a bound in the spelling of JSON Schema, which the tool "
+                + "schema keeps and the declaration does not (C5.4)")
+            .containsExactly("$.calls[0].arguments[0]: 'minItems' is not a member of this "
+                + "level");
+
+        Map<String, Object> textBound = conforming();
+        argument(textBound).put("maximum", "200");
+        assertThat(violations(textBound))
+            .as("RED STATE, observed: a bound written as text")
+            .containsExactly("$.calls[0].arguments[0].maximum: string where the schema says "
+                + "integer");
 
         Map<String, Object> describedValue = conforming();
         argument(describedValue).put("values", List.of(Map.of("value", "id")));

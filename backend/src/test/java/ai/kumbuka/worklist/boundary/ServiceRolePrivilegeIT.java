@@ -123,6 +123,9 @@ class ServiceRolePrivilegeIT {
         "workstream",
         // The lease, and what the scope decides.
         "claim", "scope_setting", "view_preference",
+        // The ledger of spent idempotency keys (C10.4), from V25: the same
+        // SELECT/INSERT/UPDATE, and no DELETE -- an expired key is written over.
+        "idempotency_key",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);

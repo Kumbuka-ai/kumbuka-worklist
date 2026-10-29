@@ -42,6 +42,16 @@ public final class VerbName {
         return name;
     }
 
+    /**
+     * The name the assistant surface calls this verb by: the scheme and an
+     * underscore before the verb (C4.2). The REST surface calls it by
+     * {@link #name()}; which of the two a caller hears is the surface it came
+     * through (C6.2).
+     */
+    public String toolName() {
+        return DeclarationDocument.SCHEME + "_" + name;
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof VerbName that && name.equals(that.name);

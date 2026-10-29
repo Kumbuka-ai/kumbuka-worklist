@@ -107,11 +107,12 @@ public class MembershipService extends PlanningService {
     /**
      * Put an item into an iteration, at the end of its sequence.
      *
-     * <p>The preconditions are the concept's and both refusals NAME the value
-     * they found: an item enters an iteration only when it is
-     * <strong>actionable</strong> and carries a milestone that is
-     * <strong>on the product path</strong>. An item off the path is not
-     * plannable and an item without a milestone is not worked out.
+     * <p>The preconditions are the concept's: an item enters an iteration
+     * only when it is <strong>actionable</strong> and carries a milestone
+     * that is <strong>on the product path</strong>. An item off the path is not
+     * plannable and an item without a milestone is not worked out. Every
+     * such refusal is {@code ITEM_UNPLANNABLE} with {@code address} as its
+     * only offender; it does not name the value it found.
      *
      * <p>The cardinality of the iteration is checked before the write: the
      * hard limit refuses, the advisory threshold warns in the answer and
@@ -149,7 +150,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.infof("item planned into iteration %d in scope %s", iteration.number, scopeId);
+        LOG.debugf("item planned into iteration %d in scope %s", iteration.number, scopeId);
 
         return project(iteration, membership, warnings(warningAt(afterwards,
             setting.warnMembershipsPerIteration, Notice.MEMBERSHIPS_AT_THRESHOLD)));
@@ -188,7 +189,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.infof("item unplanned from iteration %d in scope %s", iteration.number, scopeId);
+        LOG.debugf("item unplanned from iteration %d in scope %s", iteration.number, scopeId);
         return project(iteration, membership, List.of());
     }
 
@@ -244,7 +245,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.infof("membership status moved in iteration %d, scope %s", iteration.number,
+        LOG.debugf("membership status moved in iteration %d, scope %s", iteration.number,
             scopeId);
         return project(iteration, membership, List.of());
     }
@@ -257,11 +258,11 @@ public class MembershipService extends PlanningService {
      * An item enters an iteration only when it is actionable and carries a
      * milestone on the product path.
      *
-     * <p>Three distinct causes and one reason code, with the offender naming
-     * which. They read the same from outside and the remedy for each is
-     * different: an item that is not actionable needs its status moved, an
-     * item without a milestone needs the axis assigned, and one off the path
-     * needs a decision that it belongs on it.
+     * <p>Three distinct causes and one reason code, and the offender is
+     * {@code address} for all three, so they read the same from outside. The
+     * remedy for each is different: an item that is not actionable needs its
+     * status moved, an item without a milestone needs the axis assigned, and
+     * one off the path needs a decision that it belongs on it.
      *
      * <p>The milestone is assigned through {@code item.update} against
      * {@link Field#MILESTONE_ID}, and the item verb runs the existence check

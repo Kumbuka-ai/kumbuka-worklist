@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.surface;
 import ai.kumbuka.worklist.domain.AddressRegistry;
 import ai.kumbuka.worklist.domain.ClaimService;
 import ai.kumbuka.worklist.domain.Field;
+import ai.kumbuka.worklist.domain.IdempotencyService;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
@@ -128,6 +129,7 @@ public class VerbSurface {
     @Inject WorkstreamService workstreams;
     @Inject MembershipService memberships;
     @Inject ClaimService claims;
+    @Inject IdempotencyService idempotency;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
 
@@ -155,16 +157,35 @@ public class VerbSurface {
      * The item allocator asks anyway; the two axes allocate from their own marks
      * and would not.
      *
-     * @param body          the body the transport carried; absent where it carried
-     *                      none, which this surface refuses where the verb needs one
+     * <p>Under an idempotency key (C10.4) a repeat with the same view and the
+     * same fields answers the object the first call made, read as it stands
+     * now, and creates nothing; the key's other repeats are refused in
+     * {@link IdempotencyService}. The fields are compared as the domain reads
+     * them, with {@code null} absent at every depth (C7.4), so that a repeat
+     * that spells an absent field as {@code null} is the same call.
+     *
+     * @param body           the body the transport carried; absent where it carried
+     *                       none, which this surface refuses where the verb needs one
+     * @param idempotencyKey the key the transport carried; absent where it carried
+     *                       none, and then every call creates
      */
     @Transactional
     public Result create(String subject, String rawScope, String rawView,
-                         VerbInput.@Nullable Fields body) {
+                         VerbInput.@Nullable Fields body, @Nullable String idempotencyKey) {
+        Optional<String> key = idempotencyKey(idempotencyKey);
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
-        refuseWriteOnDeclaredView(in.view(), "create");
+        refuseWriteOnDeclaredView(in.view(), CREATE);
         addresses.requireView(in.scopeId(), in.view());
         Map<String, Object> fields = required(body, FIELDS).values();
+        String digest = CanonicalJson.version(Map.of(SELECTOR, in.view(), FIELDS, fields));
+
+        Optional<Long> first = key.flatMap(given ->
+            idempotency.firstAnswer(in.scopeId(), given, CREATE, digest));
+        if (first.isPresent()) {
+            LOG.debugf("create repeated under its key, answered by %s in scope %s",
+                in.view(), in.scopeId());
+            return at(in.view(), produced(in, first.get()));
+        }
 
         Map<String, Object> created = switch (in.view()) {
             case Selector.ITEM -> items.create(in.scopeId(), fields);
@@ -172,10 +193,50 @@ public class VerbSurface {
             case Selector.MILESTONE -> milestones.create(in.scopeId(), fields);
             default -> throw unreachableView(in.view());
         };
+        key.ifPresent(given -> idempotency.remember(in.scopeId(), given,
+            new IdempotencyService.Spent(CREATE, digest, in.view(), numberOf(created))));
 
         Result result = at(in.view(), created);
         LOG.infof("create %s in scope %s", result.address().id(), in.scopeId());
         return result;
+    }
+
+    /** The number of what a create produced, read off its projection: its address in the view. */
+    private static long numberOf(Map<String, Object> created) {
+        if (!(created.get(Field.NUMBER.canonicalName()) instanceof Number number)) {
+            throw new IllegalStateException(
+                "the answer of a create carries no number, so its key has nothing to name");
+        }
+        return number.longValue();
+    }
+
+    /**
+     * What a create produced, as it stands now: the answer to its repeat. The
+     * ledger has found it standing under the key's lock, so it resolves.
+     */
+    private Map<String, Object> produced(Entry in, long number) {
+        return switch (in.view()) {
+            case Selector.ITEM -> items.read(in.scopeId(), addresses.itemAt(in.scopeId(), number));
+            case Selector.ITERATION ->
+                iterations.read(in.scopeId(), addresses.iterationAt(in.scopeId(), number));
+            case Selector.MILESTONE ->
+                milestones.read(in.scopeId(), addresses.milestoneAt(in.scopeId(), number));
+            default -> throw unreachableView(in.view());
+        };
+    }
+
+    /**
+     * The idempotency key, checked for form before any scope is resolved
+     * (C1.3): text of 1 to {@value #KEY_LENGTH_MAX} characters.
+     */
+    private static Optional<String> idempotencyKey(@Nullable String raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        if (raw.isBlank() || raw.length() > KEY_LENGTH_MAX) {
+            throw SurfaceException.invalid(IDEMPOTENCY_KEY);
+        }
+        return Optional.of(raw);
     }
 
     // ======================================================================
@@ -428,7 +489,7 @@ public class VerbSurface {
 
         Map<String, Object> setting = iterations.advance(in.scopeId(),
             requireToken(conflictToken));
-        LOG.infof("advance in scope %s", in.scopeId());
+        LOG.infof("advance %s in scope %s", in.view(), in.scopeId());
 
         // The answer is the SETTINGS row, because that is what the verb wrote:
         // it moved a pointer. Dressing it as the promoted iteration would be
@@ -594,11 +655,12 @@ public class VerbSurface {
 
         Duration lease = requireLease(body);
         Map<String, Object> answered = claims.claimNext(in.scopeId(), subject, lease);
-        LOG.infof("claim_next in scope %s", in.scopeId());
         // The answer's address is the item that was drawn; read from the
         // projection rather than remembered from the call, exactly as
         // {@link #create} does.
-        return at(Selector.ITEM, answered);
+        Result drawn = at(Selector.ITEM, answered);
+        LOG.infof("claim_next %s in scope %s", drawn.address().id(), in.scopeId());
+        return drawn;
     }
 
     // ======================================================================
@@ -709,10 +771,9 @@ public class VerbSurface {
      * the order is the ratified one and a per-scope declaration is the direction
      * of travel.
      *
-     * @param at the id part where the call carried one, so that a caller who got
-     *           the address wrong is told about the address first
-     * @param at            the id segment of the address; absent where the address
-     *                      names a collection
+     * @param at the id segment of the address, absent where the address names a
+     *           collection; checked first, so that a caller who got the address
+     *           wrong is told about the address first
      */
     @Transactional
     public void uncarried(String subject, String rawScope, String rawView, @Nullable String at,
@@ -932,6 +993,12 @@ public class VerbSurface {
     private static final String TYPE = "type";
     private static final String DURATION = "duration_seconds";
     private static final String CLOSE = "close";
+    private static final String CREATE = "create";
+    private static final String SELECTOR = "selector";
+    private static final String IDEMPOTENCY_KEY = "idempotency_key";
+
+    /** The longest idempotency key taken, in characters. */
+    private static final int KEY_LENGTH_MAX = 255;
 
     /**
      * The switch arm that cannot be reached.

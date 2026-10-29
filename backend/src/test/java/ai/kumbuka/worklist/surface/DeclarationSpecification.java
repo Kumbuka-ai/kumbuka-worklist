@@ -35,9 +35,16 @@ public final class DeclarationSpecification {
      *
      * @param defaultValue the fallback in its own JSON type, as the parsed
      *                     answer holds it; null where the argument declares none
+     * @param minimum      the least number the argument takes; null where unbounded
+     * @param maximum      the greatest number the argument takes; null where unbounded
      */
     public record Arg(String name, String type, boolean required, Object defaultValue,
-                      List<String> values) {
+                      List<String> values, Integer minimum, Integer maximum) {
+
+        Arg(String name, String type, boolean required, Object defaultValue,
+            List<String> values) {
+            this(name, type, required, defaultValue, values, null, null);
+        }
 
         static Arg req(String name, String type) {
             return new Arg(name, type, true, null, List.of());
@@ -49,6 +56,11 @@ public final class DeclarationSpecification {
 
         static Arg view(String... views) {
             return new Arg("selector", "string", true, null, List.of(views));
+        }
+
+        /** The same argument, bounded (C5.4); null for a side that is open. */
+        Arg bounded(Integer least, Integer greatest) {
+            return new Arg(name, type, required, defaultValue, values, least, greatest);
         }
     }
 
@@ -80,8 +92,8 @@ public final class DeclarationSpecification {
 
     /** The members each answer shape carries at its top level. */
     public static final Map<String, List<String>> ANSWER_MEMBERS = Map.of(
-        "OBJECT", List.of("address", "fields"),
-        "OBJECT_CREATED", List.of("address", "fields"),
+        "OBJECT", List.of("address", "fields", "[conflict_token]"),
+        "OBJECT_CREATED", List.of("address", "fields", "[conflict_token]"),
         "OBJECT_LISTING", List.of("objects", "[next_cursor]"));
 
     /** The effect classes the worklist verbs take, in the order the declaration lists them. */
@@ -95,7 +107,8 @@ public final class DeclarationSpecification {
     private static final Arg ADDRESS = Arg.req("address", "string");
     private static final Arg TOKEN = Arg.req("conflict_token", "string");
     private static final Arg FIELDS = Arg.req("fields", "object");
-    private static final Arg DURATION = Arg.req("duration_seconds", "integer");
+    /** A lease of no length is refused: one second at least, no ceiling. */
+    private static final Arg DURATION = Arg.req("duration_seconds", "integer").bounded(1, null);
     private static final Arg TO_ITEM = Arg.req("to_item", "string");
     private static final Arg TYPE = Arg.req("type", "string");
 
@@ -115,11 +128,12 @@ public final class DeclarationSpecification {
 
     public static final List<Verb> VERBS = List.of(
         new Verb("worklist_create", "CREATE", "OBJECT_CREATED",
-            List.of(SCOPE, Arg.view("item", "iteration", "milestone"), FIELDS),
+            List.of(SCOPE, Arg.view("item", "iteration", "milestone"), FIELDS,
+                Arg.opt("idempotency_key", "string", null)),
             reasons(WRITE, List.of("SELECTOR_DECLARED_NOT_WRITTEN", "FIELD_RETRACTED",
                 "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
                 "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "SETTING_ABSENT",
-                "CARDINALITY_EXCEEDED"))),
+                "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED"))),
         new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS),
             reasons(List.of("SELECTOR_UNDECLARED", "ITERATION_ABSENT"))),
         new Verb("worklist_update", "FIELD_WRITE", "OBJECT",
@@ -130,7 +144,8 @@ public final class DeclarationSpecification {
         new Verb("worklist_query", "COLLECTION_READ", "OBJECT_LISTING",
             List.of(SCOPE, Arg.view("item", "iteration", "milestone", "workstream"),
                 Arg.opt("filter", "object", null),
-                Arg.opt("page_size", "integer", 50), Arg.opt("after", "string", null),
+                Arg.opt("page_size", "integer", 50).bounded(1, 200),
+                Arg.opt("after", "string", null),
                 new Arg("sort", "string", false, "id", List.of("id", "created_at", "rank")),
                 new Arg("direction", "string", false, "asc", List.of("asc", "desc"))),
             reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "PREDICATE_UNKNOWN",

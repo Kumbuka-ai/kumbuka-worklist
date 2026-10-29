@@ -49,7 +49,7 @@ class PositivePhrasingLintTest {
 
     /** The bundles whose texts instruct. */
     private static final List<String> INSTRUCTING = List.of(
-        "remedies", "tools", "arguments", "values");
+        "remedy", "tool", "argument", "value", "protocol");
 
     /** The words of DEC-0043 R21, whole and in any case; "n't" ends a word. */
     private static final Pattern FORBIDDEN = Pattern.compile(

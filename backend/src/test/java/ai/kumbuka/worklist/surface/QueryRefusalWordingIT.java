@@ -123,7 +123,7 @@ class QueryRefusalWordingIT {
             check(soft, "REST " + c.label(), rest(c.scope(), c.view(), c.params(), null), c);
         }
         check(soft, "REST surface header", rest(SCOPE, Selector.ITEM, Map.of(), MARKER),
-            new Case("header", "ARGUMENT_INVALID", SCOPE, Selector.ITEM, Map.of(), MARKER));
+            new Case("header", "HEADER_INVALID", SCOPE, Selector.ITEM, Map.of(), MARKER));
         check(soft, "REST repeated filter", rest(SCOPE, Selector.ITEM,
                 Map.of("filter.status", List.of(MARKER, MARKER + "2")), null),
             new Case("repeated", "ARGUMENT_INVALID", SCOPE, Selector.ITEM, Map.of(), MARKER));

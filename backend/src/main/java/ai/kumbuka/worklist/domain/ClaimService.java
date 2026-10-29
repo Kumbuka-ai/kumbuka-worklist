@@ -134,7 +134,7 @@ public class ClaimService {
 
         Claim claim = award(held, item, subject, now, lease);
 
-        LOG.infof("claim taken on item %s in scope %s until %s",
+        LOG.debugf("claim taken on item %s in scope %s until %s",
             itemId, scopeId, claim.expiresAt);
         return project(item, claim, subject);
     }
@@ -188,7 +188,7 @@ public class ClaimService {
         claim.expiresAt = claim.grantedAt.plusNanos(1_000);
         claims.flushAndRefresh(claim);
 
-        LOG.infof("claim released on item %s in scope %s", itemId, scopeId);
+        LOG.debugf("claim released on item %s in scope %s", itemId, scopeId);
         return project(item, claim, subject);
     }
 
@@ -240,7 +240,7 @@ public class ClaimService {
 
         Claim claim = award(held, item, subject, now, lease);
 
-        LOG.infof("claim drawn and taken on item %s in scope %s until %s",
+        LOG.debugf("claim drawn and taken on item %s in scope %s until %s",
             item.id, scopeId, claim.expiresAt);
         return project(item, claim, subject);
     }

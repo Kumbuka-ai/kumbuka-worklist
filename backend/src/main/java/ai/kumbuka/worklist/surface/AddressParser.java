@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.domain.Selector;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -91,6 +92,14 @@ public final class AddressParser {
     private static final Pattern SCOPE = Pattern.compile("[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?");
 
     /**
+     * The names of the REST surface's two literal paths, {@code /api/declaration}
+     * and {@code /api/whoami}, which are never the name of a scope (C3.2): a
+     * scope so named would answer under a path the surface keeps for itself.
+     * Refused by the grammar, so that MCP and REST refuse them alike.
+     */
+    public static final Set<String> RESERVED_SCOPES = Set.of("declaration", "whoami");
+
+    /**
      * A number in an address: at least one, no leading zeroes.
      *
      * <p>Leading zeroes are form rather than taste: {@code 07} and {@code 7}
@@ -156,7 +165,7 @@ public final class AddressParser {
      */
     public static String scope(String raw) {
         String candidate = requirePresent(raw);
-        if (!SCOPE.matcher(candidate).matches()) {
+        if (!SCOPE.matcher(candidate).matches() || RESERVED_SCOPES.contains(candidate)) {
             throw malformed();
         }
         return candidate;

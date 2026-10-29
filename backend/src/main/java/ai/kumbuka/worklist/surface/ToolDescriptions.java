@@ -13,10 +13,10 @@ import io.quarkus.qute.i18n.MessageBundle;
 /**
  * The description of every tool, one per declared verb (DEC-0043 R3): what the call does, the states it moves between, who calls it and what usually follows. Phrased positively (R21).
  *
- * <p>The texts live in {@code src/main/resources/messages/tools.properties}; {@code @Message}
+ * <p>The texts live in {@code src/main/resources/messages/tool.properties}; {@code @Message}
  * carries no value, so the build fails when the file lacks a text.
  */
-@MessageBundle(value = "tools")
+@MessageBundle(value = "tool")
 public interface ToolDescriptions {
 
     @Message

@@ -138,7 +138,7 @@ public class MilestoneService extends PlanningService {
 
         planning.insert(milestone);
         planning.flushAndRefresh(milestone);
-        LOG.infof("milestone %d created in scope %s", milestone.number, scopeId);
+        LOG.debugf("milestone %d created in scope %s", milestone.number, scopeId);
         return project(milestone, List.of());
     }
 
@@ -175,7 +175,7 @@ public class MilestoneService extends PlanningService {
         refuseGoalOnAMarker(milestone);
 
         planning.flushAndRefresh(milestone);
-        LOG.infof("milestone %d updated in scope %s", milestone.number, scopeId);
+        LOG.debugf("milestone %d updated in scope %s", milestone.number, scopeId);
         return project(milestone, List.of());
     }
 
@@ -196,7 +196,7 @@ public class MilestoneService extends PlanningService {
         Map<String, Object> answer = update(scopeId, milestoneId, Map.of(
             Field.STATUS.canonicalName(), Milestone.CLOSED,
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
-        LOG.infof("milestone closed in scope %s", scopeId);
+        LOG.debugf("milestone closed in scope %s", scopeId);
         return answer;
     }
 
@@ -304,7 +304,7 @@ public class MilestoneService extends PlanningService {
                 current.status = Milestone.PLANNED;
                 current.stamp(clock.instant());
                 planning.flush();
-                LOG.infof("milestone %d demoted in scope %s", current.number,
+                LOG.debugf("milestone %d demoted in scope %s", current.number,
                     milestone.scopeId);
             }
         }

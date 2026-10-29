@@ -236,7 +236,11 @@ class VerbSurfaceConformanceTest {
 
     @Test
     void the_mcp_exposition_declares_exactly_the_carried_verbs() {
-        Set<String> carried = VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED);
+        // A tool is named worklist_<verb> (C4.2), written here and not read
+        // from the service.
+        Set<String> carried = VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED)
+            .stream().map(verb -> "worklist_" + verb)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Set<String> declared = tools().stream()
             .map(ToolPayload::name)
@@ -267,17 +271,25 @@ class VerbSurfaceConformanceTest {
      * view. RED STATE, observed 2026-10-12 on {@code e86e373}: it named item,
      * iteration and milestone, and a caller reading the tool would not know the
      * workstream view can be listed at all.
+     *
+     * <p>The views are listed here, not read from {@code Selector.VIEWS}: the
+     * expectation must not follow the code it checks. It is held against both,
+     * so a view taken out of the service turns this red as surely as a view the
+     * text leaves out.
      */
     @Test
     void the_query_selector_names_every_view_the_service_lists() {
+        List<String> views = List.of("item", "iteration", "milestone", "workstream");
+        assertThat(ai.kumbuka.worklist.domain.Selector.VIEWS)
+            .as("RED STATE, observed: the service lists exactly these views")
+            .containsExactlyElementsOf(views);
         ToolPayload query = tools().stream()
-            .filter(tool -> tool.name().equals("query"))
+            .filter(tool -> tool.name().equals("worklist_query"))
             .findFirst().orElseThrow();
         String selector = query.inputSchema().properties().get("selector").description();
         assertThat(selector).as("query's selector is described by its own text")
             .isEqualTo("selectorQuery");
-        assertThat(argumentText("selectorQuery"))
-            .contains(ai.kumbuka.worklist.domain.Selector.VIEWS);
+        assertThat(argumentText("selectorQuery")).contains(views);
     }
 
     /**
@@ -298,7 +310,7 @@ class VerbSurfaceConformanceTest {
 
     private static String argumentText(String key) {
         java.nio.file.Path direct = java.nio.file.Paths.get("src", "main", "resources",
-            "messages", "arguments.properties");
+            "messages", "argument.properties");
         java.nio.file.Path file = java.nio.file.Files.exists(direct) ? direct
             : java.nio.file.Paths.get("backend").resolve(direct);
         java.util.Properties texts = new java.util.Properties();

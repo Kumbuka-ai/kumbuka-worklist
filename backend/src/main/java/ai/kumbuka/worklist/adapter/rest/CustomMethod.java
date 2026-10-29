@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.adapter.rest;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -132,7 +133,24 @@ public enum CustomMethod {
         /** A complete address. */
         ITEM,
         /** A truncated address, which only a declared set semantics admits. */
-        COLLECTION
+        COLLECTION,
+        /**
+         * A membership: an iteration's address with the item's number after
+         * it. No custom method acts here; the plain verbs take it by method.
+         */
+        MEMBERSHIP
+    }
+
+    /**
+     * The verbs a route takes by its HTTP method rather than by colon
+     * notation, at one depth. A colon verb is a POST at its depth.
+     */
+    public static List<String> byMethod(Depth depth) {
+        return switch (depth) {
+            case COLLECTION -> List.of("create", "query");
+            case ITEM -> List.of("read", "update");
+            case MEMBERSHIP -> List.of("read", "update", "plan", "unplan");
+        };
     }
 
     /**
@@ -174,6 +192,27 @@ public enum CustomMethod {
 
     public Kind kind() {
         return kind;
+    }
+
+    /**
+     * The verbs carried at one depth, by their REST names: the ones its routes
+     * take by method, then the carried custom methods. What {@code data.accepts}
+     * of a {@code VERB_NOT_CARRIED} lists for an address of that depth (C3.3).
+     */
+    public static List<String> accepts(Depth depth) {
+        List<String> accepts = new ArrayList<>(byMethod(depth));
+        at(depth).stream().filter(m -> m.kind == Kind.CARRIED)
+            .forEach(m -> accepts.add(m.verb));
+        return List.copyOf(accepts);
+    }
+
+    /** The HTTP methods the routes of one depth take, as {@code Allow} names them. */
+    public static String allow(Depth depth) {
+        return switch (depth) {
+            case COLLECTION -> "GET, POST";
+            case ITEM -> "GET, PATCH, POST";
+            case MEMBERSHIP -> "DELETE, GET, PATCH, POST";
+        };
     }
 
     /** The verbs of one depth, for the conformance probe and for routing. */

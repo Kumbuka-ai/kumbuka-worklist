@@ -89,7 +89,7 @@ public class SelectorRegistry {
         }
 
         selectors.open(scopeId, token);
-        LOG.infof("view %s open in scope %s", token, scopeId);
+        LOG.debugf("view %s open in scope %s", token, scopeId);
     }
 
     /** The views open in a scope, by token. */
@@ -121,10 +121,10 @@ public class SelectorRegistry {
      * because the contended case here is two agents working the same scope,
      * which is normal rather than exceptional.
      *
-     * <p>A number allocated by a transaction that then rolls back is BURNT:
-     * the mark rolls back with it, so it is handed out again. That is the one
-     * place this differs from a sequence, and it is the safe direction —
-     * a number is reused only when nothing ever saw it.
+     * <p>A number allocated by a transaction that then rolls back is NOT
+     * burnt: the mark rolls back with it, so it is handed out again. That is
+     * the one place this differs from a sequence, and it is the safe direction
+     * — a number is reused only when nothing ever saw it.
      *
      * <p><strong>Each view reads its own counter.</strong> The address form
      * carries the view, so {@code .../item/1}, {@code .../iteration/1} and

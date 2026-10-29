@@ -139,6 +139,8 @@ WORKLIST_DB_PASSWORD        its password
 WORKLIST_MIGRATOR_USERNAME  the migrating role
 WORKLIST_MIGRATOR_PASSWORD  its password
 WORKLIST_OIDC_ISSUER        the tenant realm's issuer URL
+WORKLIST_OIDC_AUDIENCE      the platform's audience  (default kumbuka-worklist);
+                            set and empty, the service refuses to start
 WORKLIST_TENANT_ID          the tenancy axis for this deployment — MANDATORY,
                             no default, the service refuses to start without it
 ```
@@ -152,6 +154,11 @@ with a message naming the variable — an empty one is refused explicitly becaus
 `docker compose config` substitutes the empty string for a variable that is not
 set, and an expression default does not apply to it.
 
+**`WORKLIST_OIDC_AUDIENCE` set and empty is refused too.** Its default applies
+only where the variable is absent; the empty string `docker compose` hands
+over for a variable the shell lacks resolves to an empty audience, and an
+empty audience validates none, so the start-up check refuses it.
+
 **The service role's password must be rotated.** `V2__service_role.sql`
 creates the role with a placeholder so that a cold start against an empty
 database needs no manual step. Any deployment reachable from outside a
@@ -160,6 +167,14 @@ from its own secret store.
 
 **The migrating role must exist and must not be a superuser.** It needs
 `CREATEROLE` and `CREATE` on the database, and nothing more.
+
+### Logging
+
+One line per completed write at INFO, naming the verb and the address; every
+refusal at DEBUG, by its code; ERROR only for an unexpected failure, with the
+reference the caller is given. No line carries what a caller sent. Every line
+carries the call's request id, taken from `Kumbuka-Request-Id` where it is a
+UUID, minted otherwise, and returned in the same header.
 
 ### Build and test
 

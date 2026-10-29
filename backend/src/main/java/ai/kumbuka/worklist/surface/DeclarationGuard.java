@@ -37,8 +37,8 @@ import java.util.Map;
  * check refusing.
  *
  * <p>That every served verb has a route and every route a declared verb is a
- * statement about the REST adapter and is checked there, by
- * {@code adapter.rest.RouteDeclarationGuard}.
+ * statement about the REST adapter and is checked by the route test of that
+ * adapter, {@code RestRouteFormTest}.
  */
 @ApplicationScoped
 public class DeclarationGuard {

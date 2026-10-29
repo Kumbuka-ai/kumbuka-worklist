@@ -11,12 +11,12 @@ import io.quarkus.qute.i18n.Message;
 import io.quarkus.qute.i18n.MessageBundle;
 
 /**
- * The remedy of every refusal and protocol error: the act the caller performs next, phrased positively (DEC-0043 R21, linted by {@code PositivePhrasingLintTest}). Method names mirror {@link RefusalMessages}; the wire message is the message followed by the remedy.
+ * The remedy of every refusal: the act the caller performs next, phrased positively (DEC-0043 R21, linted by {@code PositivePhrasingLintTest}). Method names mirror {@link RefusalMessages}; the wire message is the message followed by the remedy. The errors of the protocol are worded whole in {@link ProtocolMessages}.
  *
- * <p>The texts live in {@code src/main/resources/messages/remedies.properties}; {@code @Message}
+ * <p>The texts live in {@code src/main/resources/messages/remedy.properties}; {@code @Message}
  * carries no value, so the build fails when the file lacks a text.
  */
-@MessageBundle(value = "remedies")
+@MessageBundle(value = "remedy")
 public interface RefusalRemedies {
 
     @Message
@@ -24,6 +24,12 @@ public interface RefusalRemedies {
 
     @Message
     String addressMalformed();
+
+    @Message
+    String verbNotCarried();
+
+    @Message
+    String headerInvalid();
 
     @Message
     String verbUncarried(VerbName attempted);
@@ -170,8 +176,5 @@ public interface RefusalRemedies {
     String iterationProducedMissing();
 
     @Message
-    String protocolEnvelope();
-
-    @Message
-    String protocolMethod();
+    String idempotencyKeyReused();
 }

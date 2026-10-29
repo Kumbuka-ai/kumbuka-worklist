@@ -290,8 +290,8 @@ class KeysetPagingIT {
 
     private static QuerySpec spec(Map<String, Object> filter, SortKey sort,
                                   SortKey.Direction direction, String after) {
-        return new QuerySpec(filter, 2, after, sort.wireName(), direction.wireName(), List.of(),
-            SortKey.ALL);
+        return new QuerySpec(filter, 2, after, sort.wireName(), direction.wireName(),
+            List.of());
     }
 
     private static List<Long> numbers(Page page) {

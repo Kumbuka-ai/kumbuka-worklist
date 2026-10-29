@@ -213,7 +213,7 @@ class MarkerProbeIT {
                     "rank", MARKER))));
 
         // The arguments of the transitions and the graph verbs.
-        absent(soft, "update with a marked token", mcpRaw("update",
+        staleAbsent(soft, "update with a marked token", mcpRaw("update",
             Map.of("address", item, "conflict_token", MARKER, "fields", Map.of("title", "y"))));
         absent(soft, "withdraw into a marked status", mcpRaw("withdraw",
             Map.of("address", item, "conflict_token", tokenOf(item), "status", MARKER)));
@@ -264,7 +264,7 @@ class MarkerProbeIT {
         absent(soft, "a receipt", post(itemPath + "/1:release", Map.of("receipt", MARKER)));
         absent(soft, "an edge", post(itemPath + "/1:relate", Map.of("to_item", MARKER,
             "type", MARKER)));
-        absent(soft, "a stale token", given().contentType(ContentType.JSON)
+        staleAbsent(soft, "a stale token", given().contentType(ContentType.JSON)
             .header("If-Match", "\"" + MARKER + "\"").body(Map.of("title", "y"))
             .when().patch(itemPath + "/1").then().extract().asString());
         absent(soft, "a query parameter name", given().queryParam(MARKER, MARKER)
@@ -324,6 +324,44 @@ class MarkerProbeIT {
             .doesNotContainIgnoringCase(TENANT);
         soft.assertThat(answer).as("%s: the marked identity is absent from the answer", what)
             .doesNotContainIgnoringCase(MARKER_UUID);
+    }
+
+    /**
+     * A stale token's refusal carries the object as it stands under
+     * {@code data.fields} (DEC-0041, C8.7): what a read of it answers, which
+     * is outside R18 like any read. The tenant's vocabulary may stand there
+     * and nowhere else; the caller's marker and the marked identity stand
+     * nowhere, that object included.
+     */
+    private static void staleAbsent(SoftAssertions soft, String what, String answer) {
+        soft.assertThat(answer).as("%s: the caller's marker is absent from the answer", what)
+            .doesNotContainIgnoringCase(MARKER);
+        soft.assertThat(answer).as("%s: the marked identity is absent from the answer", what)
+            .doesNotContainIgnoringCase(MARKER_UUID);
+        Map<String, Object> envelope = refusalOf(answer);
+        soft.assertThat(envelope).as("%s: refused", what).containsKey("reason");
+        soft.assertThat(withoutTheObject(envelope).toString())
+            .as("%s: the tenant's vocabulary is absent outside the object", what)
+            .doesNotContainIgnoringCase(TENANT);
+    }
+
+    /** The refusal envelope of an answer, over either transport. */
+    private static Map<String, Object> refusalOf(String answer) {
+        io.restassured.path.json.JsonPath json = new io.restassured.path.json.JsonPath(answer);
+        Map<String, Object> structured = json.getMap("result.structuredContent");
+        return structured != null ? structured : json.getMap("$");
+    }
+
+    /** The envelope with the object's fields taken out of {@code data}, and the text around it. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> withoutTheObject(Map<String, Object> envelope) {
+        Map<String, Object> rest = new LinkedHashMap<>(envelope);
+        if (rest.get("data") instanceof Map<?, ?> data) {
+            Map<String, Object> members = new LinkedHashMap<>((Map<String, Object>) data);
+            members.remove("fields");
+            rest.put("data", members);
+        }
+        return rest;
     }
 
     private static Map<String, Object> with(Map<String, Object> base, String name, Object value) {

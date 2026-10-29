@@ -46,36 +46,45 @@ class IdentityConfigurationGuardTest {
     private static final Path SHIPPED = Path.of("src/main/resources/application.properties");
     private static final String AUDIENCE = "https://platform.kumbuka.ai/mcp";
 
+    /*
+     * The keys and the expected claim are written out here rather than taken
+     * from the guard: a test that read them from the class it checks would
+     * follow that class into any change and never see the shipped file drift.
+     */
+    private static final String PRINCIPAL_CLAIM_KEY = "quarkus.oidc.token.principal-claim";
+    private static final String SUBJECT = "sub";
+    private static final String AUDIENCE_KEY = "quarkus.oidc.token.audience";
+
     @Test
     void the_shipped_configuration_pins_the_principal_and_names_an_audience()
             throws IOException {
         String shipped = Files.readString(SHIPPED);
 
         assertThat(shipped)
-            .as("the acting identity is derived from the token's stable subject: Quarkus "
-                + "falls through upn -> preferred_username -> sub for a service application "
-                + "unless it is pinned")
-            .contains(IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY + "="
-                + IdentityConfigurationGuard.EXPECTED_PRINCIPAL_CLAIM);
+            .as("RED STATE, observed: the acting identity is derived from the token's "
+                + "stable subject: Quarkus falls through upn -> preferred_username -> sub "
+                + "for a service application unless it is pinned; a guard and a file moved "
+                + "together to another claim turn this red")
+            .contains(PRINCIPAL_CLAIM_KEY + "=" + SUBJECT);
         assertThat(shipped)
             .as("and the platform's one audience (ADR-0034) is configured, with the "
                 + "environment variable a deployment overrides it with")
-            .contains(IdentityConfigurationGuard.AUDIENCE_KEY + "=${WORKLIST_OIDC_AUDIENCE:");
+            .contains(AUDIENCE_KEY + "=${WORKLIST_OIDC_AUDIENCE:");
     }
 
     @Test
     void the_refusal_stands_in_a_log_line_of_its_own() {
         List<LogRecord> lines = LogLines.of(IdentityConfigurationGuard.class, () ->
             IdentityConfigurationGuard.verify(configOf(
-                IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY,
-                IdentityConfigurationGuard.EXPECTED_PRINCIPAL_CLAIM)));
+                PRINCIPAL_CLAIM_KEY,
+                SUBJECT)));
 
         assertThat(lines)
             .as("one WARN line says why the start was refused, and names what to set")
             .singleElement()
             .satisfies(line -> {
                 assertThat(line.getLevel().intValue()).isEqualTo(Level.WARNING.intValue());
-                assertThat(LogLines.text(line)).contains(IdentityConfigurationGuard.AUDIENCE_KEY)
+                assertThat(LogLines.text(line)).contains(AUDIENCE_KEY)
                     .contains("WORKLIST_OIDC_AUDIENCE");
                 assertThat(line.getThrown()).as("the line carries no exception").isNull();
             });
@@ -84,45 +93,77 @@ class IdentityConfigurationGuardTest {
     @Test
     void a_principal_resolved_from_anything_but_the_subject_refuses_the_start() {
         assertThatThrownBy(() -> IdentityConfigurationGuard.verify(configOf(
-                IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY, "preferred_username",
-                IdentityConfigurationGuard.AUDIENCE_KEY, AUDIENCE)))
+                PRINCIPAL_CLAIM_KEY, "preferred_username",
+                AUDIENCE_KEY, AUDIENCE)))
             .as("RED STATE, observed: a principal resolved from a claim other than the "
                 + "subject refuses the start, and says why")
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining(IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY)
+            .hasMessageContaining(PRINCIPAL_CLAIM_KEY)
             .hasMessageContaining("refused its own claim");
     }
 
     @Test
     void an_absent_principal_claim_refuses_the_start_too() {
         assertThatThrownBy(() -> IdentityConfigurationGuard.verify(configOf(
-                IdentityConfigurationGuard.AUDIENCE_KEY, AUDIENCE)))
+                AUDIENCE_KEY, AUDIENCE)))
             .as("RED STATE, observed: unset is exactly the state in which Quarkus falls "
                 + "through to preferred_username")
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining(IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY);
+            .hasMessageContaining(PRINCIPAL_CLAIM_KEY);
     }
 
     @Test
     void an_unset_audience_refuses_the_start_because_unset_means_unchecked() {
         assertThatThrownBy(() -> IdentityConfigurationGuard.verify(configOf(
-                IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY, "sub")))
+                PRINCIPAL_CLAIM_KEY, SUBJECT)))
             .as("RED STATE, observed: an unset audience means no audience is validated")
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining(IdentityConfigurationGuard.AUDIENCE_KEY);
+            .hasMessageContaining(AUDIENCE_KEY);
         assertThatThrownBy(() -> IdentityConfigurationGuard.verify(configOf(
-                IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY, "sub",
-                IdentityConfigurationGuard.AUDIENCE_KEY, " ")))
+                PRINCIPAL_CLAIM_KEY, SUBJECT,
+                AUDIENCE_KEY, " ")))
             .as("RED STATE, observed: a blank audience is no audience")
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining(IdentityConfigurationGuard.AUDIENCE_KEY);
+            .hasMessageContaining(AUDIENCE_KEY);
+    }
+
+    /**
+     * F-0358: the shipped audience is the expression
+     * {@code ${WORKLIST_OIDC_AUDIENCE:kumbuka-worklist}}, and {@code docker
+     * compose} hands a variable the file names and the shell lacks to the
+     * container as set and empty. The expression is read from the shipped file
+     * and resolved as the service resolves it, with the variable set to the
+     * empty string.
+     */
+    @Test
+    void the_shipped_audience_with_its_variable_set_and_empty_refuses_the_start()
+            throws IOException {
+        String expression = shippedValue(AUDIENCE_KEY);
+        assertThat(expression).as("the shipped audience is an expression over the variable")
+            .startsWith("${WORKLIST_OIDC_AUDIENCE");
+
+        assertThatThrownBy(() -> IdentityConfigurationGuard.verify(resolving(
+                Map.of(PRINCIPAL_CLAIM_KEY, SUBJECT,
+                    AUDIENCE_KEY, expression),
+                Map.of("WORKLIST_OIDC_AUDIENCE", ""))))
+            .as("RED STATE, observed: the variable set and empty, as docker compose hands "
+                + "over one the shell lacks, refuses the start")
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining(AUDIENCE_KEY);
+
+        assertThatCode(() -> IdentityConfigurationGuard.verify(resolving(
+                Map.of(PRINCIPAL_CLAIM_KEY, SUBJECT,
+                    AUDIENCE_KEY, expression),
+                Map.of("WORKLIST_OIDC_AUDIENCE", AUDIENCE))))
+            .as("the control: the same expression with the variable set to an audience starts")
+            .doesNotThrowAnyException();
     }
 
     @Test
     void a_pinned_principal_with_an_audience_starts() {
         assertThatCode(() -> IdentityConfigurationGuard.verify(configOf(
-                IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY, "sub",
-                IdentityConfigurationGuard.AUDIENCE_KEY, AUDIENCE)))
+                PRINCIPAL_CLAIM_KEY, SUBJECT,
+                AUDIENCE_KEY, AUDIENCE)))
             .as("the other half: without it every refusal above would hold just as well "
                 + "against a guard that refuses everything")
             .doesNotThrowAnyException();
@@ -135,6 +176,27 @@ class IdentityConfigurationGuardTest {
             .as("a disabled tenant validates no token, so there is no principal to pin; the "
                 + "default is true, so silence never disarms the guard")
             .doesNotThrowAnyException();
+    }
+
+    /**
+     * A configuration that expands expressions as the service's does: the
+     * file's values, and the environment as a source of higher ordinal.
+     */
+    private static Config resolving(Map<String, String> file, Map<String, String> environment) {
+        return new SmallRyeConfigBuilder()
+            .addDefaultInterceptors()
+            .withSources(new PropertiesConfigSource(file, "the shipped file", 250),
+                new PropertiesConfigSource(environment, "the environment", 300))
+            .build();
+    }
+
+    /** The value the shipped file gives a key, unexpanded. */
+    private static String shippedValue(String key) throws IOException {
+        java.util.Properties shipped = new java.util.Properties();
+        try (java.io.Reader in = Files.newBufferedReader(SHIPPED)) {
+            shipped.load(in);
+        }
+        return shipped.getProperty(key);
     }
 
     private static Config configOf(String... namesAndValues) {

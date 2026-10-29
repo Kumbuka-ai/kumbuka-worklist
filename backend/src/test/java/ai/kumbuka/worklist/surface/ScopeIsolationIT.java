@@ -134,11 +134,13 @@ class ScopeIsolationIT {
             .body(RefusalSpecification.REASON,
                 is(RefusalSpecification.SCOPE_KIND_UNSUPPORTED));
 
-        assertThat(body(item))
+        assertThat(attempted(item)).isEqualTo("read");
+        assertThat(attempted(collection)).isEqualTo("query");
+        assertThat(beyondTheCall(item))
             .as("the two address forms reach the surface through different resource "
                 + "methods, and the whole point of resolving the scope in one place is "
                 + "that a caller cannot tell which one they used from the answer")
-            .isEqualTo(body(collection));
+            .isEqualTo(beyondTheCall(collection));
     }
 
     /**
@@ -205,12 +207,14 @@ class ScopeIsolationIT {
             .statusCode(409)
             .body(RefusalSpecification.REASON, is(RefusalSpecification.SCOPE_LOCKED));
 
-        assertThat(body(item))
+        assertThat(attempted(item)).isEqualTo("update");
+        assertThat(attempted(collection)).isEqualTo("create");
+        assertThat(beyondTheCall(item))
             .as("the lock is a property of the scope, so both forms say the same "
                 + "sentence — and the item form says it BEFORE resolving the item, "
                 + "which is why the address names an id that does not exist and the "
                 + "answer is still about the lock")
-            .isEqualTo(body(collection));
+            .isEqualTo(beyondTheCall(collection));
     }
 
     @Test
@@ -270,7 +274,9 @@ class ScopeIsolationIT {
             .statusCode(403)
             .body(RefusalSpecification.REASON, is(RefusalSpecification.SCOPE_READ_ONLY));
 
-        assertThat(body(item)).isEqualTo(body(collection));
+        assertThat(attempted(item)).isEqualTo("update");
+        assertThat(attempted(collection)).isEqualTo("create");
+        assertThat(beyondTheCall(item)).isEqualTo(beyondTheCall(collection));
     }
 
     @Test
@@ -314,8 +320,30 @@ class ScopeIsolationIT {
             .body(RefusalSpecification.REASON, is("INVALID_VALUE"));
     }
 
-    /** The response body, as the bytes a caller receives. */
-    private static String body(ValidatableResponse response) {
-        return response.extract().asString();
+    /** The call a refusal names, which differs between the two forms by design (C6.2). */
+    private static String attempted(ValidatableResponse response) {
+        return response.extract().jsonPath().getString("data.attempted");
+    }
+
+    /**
+     * The refusal with the call it names taken out: what is left is what the
+     * scope stage says, and that is the same on both forms. Each form names its
+     * own verb under {@code data.attempted} (C6.2), which tells the caller
+     * nothing it did not send.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> beyondTheCall(ValidatableResponse response) {
+        Map<String, Object> envelope = new java.util.LinkedHashMap<>(
+            response.extract().jsonPath().getMap("$"));
+        if (envelope.get("data") instanceof Map<?, ?> data) {
+            Map<String, Object> rest = new java.util.LinkedHashMap<>((Map<String, Object>) data);
+            rest.remove("attempted");
+            if (rest.isEmpty()) {
+                envelope.remove("data");
+            } else {
+                envelope.put("data", rest);
+            }
+        }
+        return envelope;
     }
 }

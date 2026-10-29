@@ -15,7 +15,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -32,9 +31,9 @@ import java.util.UUID;
  * does, rather than an {@code instanceof} that falls through to "no filter" and
  * answers the whole set (REQ-0156).
  *
- * <p>What differs between the transports is said by the adapter, not guessed
- * here: {@code offered} names the sorts its surface offers, the standard pair
- * on the assistant surface and every declared field on REST.
+ * <p>Nothing differs between the transports: both offer every sort a view
+ * declares, because the tool schema is a projection of the declaration and
+ * declares no narrower set (C4.7).
  *
  * <h2>What a refusal says</h2>
  *
@@ -53,7 +52,7 @@ import java.util.UUID;
  * is — the ratified check order, which a refusal raised in an adapter would
  * break. {@code pageFor} then reads every argument, checks the filter names and
  * value forms against {@link QueryFilter} for that view, the page size, the
- * sort against the view and the offered set, and decodes the cursor against
+ * sort against the view, and decodes the cursor against
  * all of them; the values the scope must have declared are resolved by the
  * view's service.
  *
@@ -62,11 +61,9 @@ import java.util.UUID;
  *                beside the filter instead of in it does not answer the whole
  *                set, and a {@code limit} or {@code cursor} of the earlier
  *                contract is not silently dropped
- * @param offered the sorts the calling surface offers
  */
 public record QuerySpec(@Nullable Object filter, @Nullable Object pageSize, @Nullable Object after,
-                        @Nullable Object sort, @Nullable Object direction, List<String> untaken,
-                        Set<SortKey> offered) {
+                        @Nullable Object sort, @Nullable Object direction, List<String> untaken) {
 
     /** The page size when a caller does not name one. */
     public static final int DEFAULT_PAGE_SIZE = 50;
@@ -78,6 +75,9 @@ public record QuerySpec(@Nullable Object filter, @Nullable Object pageSize, @Nul
      * sprint-169 defect looks like one layer out.
      */
     public static final int MAX_PAGE_SIZE = 200;
+
+    /** The smallest page: a page of none answers nothing and moves no cursor. */
+    public static final int MIN_PAGE_SIZE = 1;
 
     /** The argument names a query takes besides its address and filter. */
     public static final String PAGE_SIZE_ARGUMENT = "page_size";
@@ -91,23 +91,22 @@ public record QuerySpec(@Nullable Object filter, @Nullable Object pageSize, @Nul
 
     public QuerySpec {
         untaken = untaken == null ? List.of() : List.copyOf(untaken);
-        offered = Set.copyOf(offered);
     }
 
     /** A first page with a filter, as an in-process caller writes one. */
     public QuerySpec(Map<String, Object> filter, int pageSize) {
-        this(filter, pageSize, null, null, null, List.of(), SortKey.ALL);
+        this(filter, pageSize, null, null, null, List.of());
     }
 
     /** The first page in the default sort: no filter, the default page size. */
     public static QuerySpec all() {
-        return new QuerySpec(null, null, null, null, null, List.of(), SortKey.ALL);
+        return new QuerySpec(null, null, null, null, null, List.of());
     }
 
     /**
      * The query read and checked against one view of one scope: no untaken
      * argument, every filter name declared, every value in its form, the page
-     * size in range, the sort declared and offered, the cursor one this query
+     * size in range, the sort declared, the cursor one this query
      * handed out.
      *
      * @throws WorklistException {@code ARGUMENT_UNKNOWN}, {@code PREDICATE_UNKNOWN},
@@ -120,7 +119,7 @@ public record QuerySpec(@Nullable Object filter, @Nullable Object pageSize, @Nul
         refuseUntaken(untaken);
         Map<QueryFilter, Object> filters = QueryFilter.parse(view, filterOf(filter));
         int size = pageSizeOf(pageSize);
-        SortKey key = sortOf(view, sort, offered);
+        SortKey key = sortOf(view, sort);
         SortKey.Direction way = directionOf(direction);
         return new PageRequest(scopeId, view, filters, size, key, way,
             cursorOf(after)
@@ -184,19 +183,18 @@ public record QuerySpec(@Nullable Object filter, @Nullable Object pageSize, @Nul
             return DEFAULT_PAGE_SIZE;
         }
         return wholeNumber(raw)
-            .filter(number -> number >= 1 && number <= MAX_PAGE_SIZE)
+            .filter(number -> number >= MIN_PAGE_SIZE && number <= MAX_PAGE_SIZE)
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.PAGE_SIZE_REJECTED,
                 List.of(PAGE_SIZE_ARGUMENT)))
             .intValue();
     }
 
-    private static SortKey sortOf(String view, @Nullable Object raw, Set<SortKey> offered) {
+    private static SortKey sortOf(String view, @Nullable Object raw) {
         if (raw == null) {
             return DEFAULT_SORT;
         }
         return (raw instanceof String text ? SortKey.named(text) : Optional.<SortKey>empty())
-            .filter(offered::contains)
             .filter(key -> key.declaredOn(view))
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.SORT_UNDECLARED,

@@ -1,5 +1,5 @@
 {
-  "$comment": "The shape of a service declaration, rules C5.3, C5.4 and C5.5 of the platform service contract (platform-specs code-conventions/service-contract.md, commit 88c6554, round 4 part 1). Held in the test tree so the expectation does not come from the declaration it checks; read by DeclarationShapeTest. 'description' per argument and 'value_descriptions' are admitted beyond the members C5.4 enumerates: C5.4 asks each fixed value with its description, and the bundles of C12.2 publish the argument texts through the declaration. The members of a reason follow the reference kumbuka-dispatch (open point 10 of the contract, decided by measurement); the members of a call's answer are not enumerated by the contract and are left open.",
+  "$comment": "The shape of a service declaration, rules C5.3, C5.4 and C5.5 of the platform service contract (platform-specs code-conventions/service-contract.md, commit 966c9b8, round 4 part 2). Bounds per C5.4 in this file's spelling: 'minimum' and 'maximum' for a number, 'min_items' for an array. Held in the test tree so the expectation does not come from the declaration it checks; read by DeclarationShapeTest. 'description' per argument and 'value_descriptions' are admitted beyond the members C5.4 enumerates: C5.4 asks each fixed value with its description, and the bundles of C12.2 publish the argument texts through the declaration. The members of a reason follow the reference kumbuka-dispatch (open point 10 of the contract, decided by measurement); the members of a call's answer are not enumerated by the contract and are left open.",
   "type": "object",
   "required": ["version", "shape_version", "service", "scheme", "address_form", "effect_classes", "calls", "reasons"],
   "additionalProperties": false,
@@ -42,6 +42,9 @@
                 "placement": {"type": "string", "enum": ["TOP", "FIELDS"]},
                 "default": {"$comment": "in its own JSON type: checked against 'type' by DeclarationShapeTest"},
                 "values": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                "minimum": {"type": "integer"},
+                "maximum": {"type": "integer"},
+                "min_items": {"type": "integer"},
                 "item_pattern": {"type": "string"},
                 "description": {"type": "string"},
                 "value_descriptions": {

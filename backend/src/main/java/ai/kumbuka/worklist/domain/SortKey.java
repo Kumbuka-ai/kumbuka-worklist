@@ -8,9 +8,7 @@
 package ai.kumbuka.worklist.domain;
 
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * The fields a {@code query} sorts by.
@@ -21,10 +19,10 @@ import java.util.Set;
  * number alone; every other key is the named field with the number after it.
  * Never the platform's identity: it orders nothing a caller can see.
  *
- * <p>Two sets are offered. {@link #STANDARD} is what every transport sorts by
- * and what the assistant surface offers at all. The full set adds the fields a
- * view declares beyond it — today {@link #RANK}, on the two planning axes
- * whose objects carry one — and is offered on the REST surface.
+ * <p>{@link #ID} and {@link #CREATED_AT} are declared on every view. A view
+ * declares further fields beyond them -- today {@link #RANK}, on the two
+ * planning axes whose objects carry one. Every transport offers every sort a
+ * view declares (C4.7).
  */
 public enum SortKey {
 
@@ -40,12 +38,6 @@ public enum SortKey {
      * pages of this sort meets the order as it stands when each page is read.
      */
     RANK("rank");
-
-    /** The sorts every transport offers. */
-    public static final Set<SortKey> STANDARD = Set.copyOf(EnumSet.of(ID, CREATED_AT));
-
-    /** Every sort, for the transport that offers declared fields too. */
-    public static final Set<SortKey> ALL = Set.copyOf(EnumSet.allOf(SortKey.class));
 
     private final String wireName;
 

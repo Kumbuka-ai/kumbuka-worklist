@@ -36,7 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code code-conventions/service-construction.md}, texts addressed to a
  * caller, rules 1 and 3).
  *
- * <p>Four checks. Every {@code @MessageBundle} interface carries
+ * <p>Five checks. Every bundle is one kind of text of C12.2, under the
+ * interface and file name the contract gives it. Every {@code @MessageBundle} interface carries
  * {@code @Message} without a value on each method, so the words are in the
  * properties file and the build fails when one is missing. Every bundle has
  * exactly one properties file under {@code src/main/resources/messages/}, whose
@@ -121,6 +122,63 @@ class MessageBundleTest {
             texts.stringPropertyNames().forEach(key -> assertThat(texts.getProperty(key))
                 .as("%s.%s carries a text", name, key).isNotBlank());
         }
+    }
+
+    /**
+     * One bundle per kind of text, under the interface and file names of C12.2,
+     * the same in every service: what a refusal, a remedy or a tool says is
+     * found by the same name wherever it is looked for. A service declares only
+     * the kinds it uses; this one answers no {@code next} and has no
+     * {@code NextStepTexts}, and the day it does, the name is this table's.
+     */
+    static final java.util.Map<String, String> KINDS = java.util.Map.of(
+        "RefusalMessages", "refusal", "RefusalRemedies", "remedy",
+        "ToolDescriptions", "tool", "NextStepTexts", "next",
+        "ArgumentDescriptions", "argument", "ValueDescriptions", "value",
+        "Notices", "notice", "ProtocolMessages", "protocol", "StoredTexts", "stored");
+
+    @Test
+    void every_bundle_is_a_kind_of_text_under_its_contract_name() {
+        java.util.Map<String, String> declared = new java.util.TreeMap<>();
+        for (Class<?> bundle : bundles()) {
+            declared.put(bundle.getSimpleName(),
+                bundle.getAnnotation(MessageBundle.class).value());
+        }
+        assertThat(kindOffences(declared))
+            .as("a bundle is one kind of text of C12.2, under the interface name and the "
+                + "singular file name the contract gives it")
+            .isEmpty();
+        assertThat(declared).as("the protocol's errors are a kind of their own")
+            .containsEntry("ProtocolMessages", "protocol");
+    }
+
+    /** The red state, observed on every build: the plural file names this service had. */
+    @Test
+    void the_check_reports_a_plural_file_and_a_kind_the_contract_lacks() {
+        java.util.Map<String, String> planted = new java.util.TreeMap<>();
+        planted.put("RefusalMessages", "refusals");
+        planted.put("Texts", "texts");
+        planted.put("ToolDescriptions", "tool");
+        assertThat(kindOffences(planted))
+            .as("RED STATE, observed: the plural file this service named its refusals by, and "
+                + "a bundle that is no kind C12.2 names, are each reported")
+            .containsExactly(
+                "RefusalMessages names its file 'refusals', where C12.2 names 'refusal'",
+                "Texts is no kind of text C12.2 names");
+    }
+
+    static List<String> kindOffences(java.util.Map<String, String> declared) {
+        List<String> offences = new ArrayList<>();
+        declared.forEach((bundle, file) -> {
+            String kind = KINDS.get(bundle);
+            if (kind == null) {
+                offences.add(bundle + " is no kind of text C12.2 names");
+            } else if (!kind.equals(file)) {
+                offences.add(bundle + " names its file '" + file + "', where C12.2 names '"
+                    + kind + "'");
+            }
+        });
+        return offences;
     }
 
     @Test

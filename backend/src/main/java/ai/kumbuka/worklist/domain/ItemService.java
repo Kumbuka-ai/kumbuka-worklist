@@ -281,7 +281,7 @@ public class ItemService {
             items.flush();
         }
 
-        LOG.infof("item created as %s-%d in scope %s", Selector.ITEM, number, scopeId);
+        LOG.debugf("item created as %s-%d in scope %s", Selector.ITEM, number, scopeId);
         return project(item);
     }
 
@@ -371,7 +371,7 @@ public class ItemService {
         }
 
         items.flushAndRefresh(item);
-        LOG.infof("item updated in scope %s", scopeId);
+        LOG.debugf("item updated in scope %s", scopeId);
         return project(item);
     }
 
@@ -410,7 +410,7 @@ public class ItemService {
         Map<String, Object> answer = update(scopeId, itemId, Map.of(
             Field.STATUS.canonicalName(), status.name,
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
-        LOG.infof("item withdrawn in scope %s", scopeId);
+        LOG.debugf("item withdrawn in scope %s", scopeId);
         return answer;
     }
 
@@ -469,7 +469,7 @@ public class ItemService {
         if (changed) {
             item.stamp(clock.instant());
             items.flushAndRefresh(item);
-            LOG.infof("relation asserted from %s to %s in scope %s", itemId, target.id, scopeId);
+            LOG.debugf("relation asserted from %s to %s in scope %s", itemId, target.id, scopeId);
         }
         return project(item);
     }
@@ -505,7 +505,7 @@ public class ItemService {
         edge.status = ItemRelation.WITHDRAWN;
         item.stamp(clock.instant());
         items.flushAndRefresh(item);
-        LOG.infof("relation withdrawn from %s to %s in scope %s", itemId, target.id, scopeId);
+        LOG.debugf("relation withdrawn from %s to %s in scope %s", itemId, target.id, scopeId);
         return project(item);
     }
 
@@ -745,7 +745,10 @@ public class ItemService {
 
     /**
      * The milestone assignment: resolved against the milestone's NUMBER in
-     * the same scope, and null clears it.
+     * the same scope, and an empty string clears it. A null would clear it as
+     * well, but no caller reaches this method with one: a member of
+     * {@code fields} sent as null is absent (C7.4), so the milestone stays as
+     * it is.
      *
      * <p>The value travels as the number the scope allocated, never as a
      * title and never as a uuid — the read answer names the number, and the

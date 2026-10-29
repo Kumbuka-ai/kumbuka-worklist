@@ -103,6 +103,16 @@ class SurfaceDeclarationGuardTest {
     }
 
     @Test
+    void an_argument_declared_twice_refuses_the_start() {
+        assertThatThrownBy(() -> SurfaceDeclaration.requireDistinctArguments("worklist_something",
+            List.of("address", "conflict_token", "address")))
+            .as("RED STATE, observed: a call declaring one argument twice refuses the start, "
+                + "and names the argument")
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("'address' twice");
+    }
+
+    @Test
     void the_real_verbs_pass_with_texts_and_are_refused_with_one_text_missing() {
         assertThatCode(() -> SurfaceDeclaration.requireServable(
                 bundle(ToolDescriptions.class, null), bundle(ArgumentDescriptions.class, null)))
@@ -150,6 +160,20 @@ class SurfaceDeclarationGuardTest {
                 + "though the verbs declare it once")
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("'" + calls(document).get(0).get("call") + "'");
+
+        Map<String, Object> twiceArgued = withCalls(document, calls -> {
+            Map<String, Object> call = new LinkedHashMap<>(calls.get(0));
+            List<Object> arguments = new ArrayList<>((List<?>) call.get("arguments"));
+            arguments.add(arguments.get(0));
+            call.put("arguments", arguments);
+            calls.set(0, call);
+        });
+        assertThatThrownBy(() -> DeclarationDocument.requireServable(twiceArgued))
+            .as("RED STATE, observed: an argument a call carries twice is refused by the call "
+                + "and the argument; read into a map by name, the two were one and passed")
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining(String.valueOf(calls(document).get(0).get("call")))
+            .hasMessageContaining("twice");
 
         Map<String, Object> uncatalogued = new LinkedHashMap<>(document);
         uncatalogued.put("reasons", List.of());

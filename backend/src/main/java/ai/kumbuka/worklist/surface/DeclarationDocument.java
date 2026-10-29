@@ -76,9 +76,12 @@ public final class DeclarationDocument {
     private static final String ARGUMENTS = "arguments";
     private static final String REFUSALS = "refusals";
 
+    /** The member a reason's remedy travels under. */
+    private static final String REMEDY = "remedy";
+
     /** The bundle files the reasons are worded by: a name of a file, not of a member. */
-    private static final String MESSAGE_BUNDLE = "refusals";
-    private static final String REMEDY_BUNDLE = "remedies";
+    private static final String MESSAGE_BUNDLE = "refusal";
+    private static final String REMEDY_BUNDLE = "remedy";
 
     private DeclarationDocument() {
     }
@@ -127,8 +130,8 @@ public final class DeclarationDocument {
      * document is built from; this checks what the build made of them, so a
      * call the projection drops a text from, doubles or misnames is refused
      * here although its verb is sound. The conditions are the same: every call
-     * once, each with a description within the budget, each argument with a
-     * description, and every refusal a call names among the document's own
+     * once, each with a description within the budget, each argument once and
+     * with a description, and every refusal a call names among the document's own
      * reasons. A member that is absent or not of its kind is refused as well,
      * since a caller would meet it the same way.
      */
@@ -145,8 +148,14 @@ public final class DeclarationDocument {
             String description = text(declared.get(DESCRIPTION));
             SurfaceDeclaration.requireDescribed(call, description);
             SurfaceDeclaration.requireWithinBudget(call, String.valueOf(description));
+            // Read as a list before it is keyed by name: a map keeps one of two
+            // arguments under one name and would pass the document that carries both.
+            List<Map<?, ?>> listed = members(declared.get(ARGUMENTS), call + "'s arguments");
+            SurfaceDeclaration.requireDistinctArguments(call, listed.stream()
+                .map(argument -> name(argument.get("name"), call + "'s argument"))
+                .toList());
             Map<String, @Nullable String> arguments = new LinkedHashMap<>();
-            for (Map<?, ?> argument : members(declared.get(ARGUMENTS), call + "'s arguments")) {
+            for (Map<?, ?> argument : listed) {
                 arguments.put(name(argument.get("name"), call + "'s argument"),
                     text(argument.get(DESCRIPTION)));
             }
@@ -223,7 +232,7 @@ public final class DeclarationDocument {
         reason.put(REASON, code.name());
         reason.put("message_pattern", template);
         reason.put("messages", List.of(message));
-        reason.put("remedy", remedies.getProperty(key));
+        reason.put(REMEDY, remedies.getProperty(key));
         return reason;
     }
 
@@ -262,6 +271,13 @@ public final class DeclarationDocument {
             declared.put("default", typed(argument.type(), fallback));
         }
         declared.put(DESCRIPTION, argument.description().apply(arguments));
+        // In this file's spelling (C5.4); the tool schema keeps JSON Schema's.
+        if (argument.minimum() != null) {
+            declared.put("minimum", argument.minimum());
+        }
+        if (argument.maximum() != null) {
+            declared.put("maximum", argument.maximum());
+        }
         if (!argument.values().isEmpty()) {
             declared.put("values", argument.values().stream()
                 .map(SurfaceDeclaration.Value::name).toList());

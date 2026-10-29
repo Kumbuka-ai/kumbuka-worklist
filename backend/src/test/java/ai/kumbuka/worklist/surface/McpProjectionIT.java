@@ -80,25 +80,28 @@ class McpProjectionIT {
             .as("MCP omits and never adds: the tool list is the carried verb set exactly, "
                 + "and the verbs this scheme does not carry are absent from it")
             .containsExactlyInAnyOrderElementsOf(
-                VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED));
+                VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED).stream()
+                    .map(verb -> "worklist_" + verb).toList());
     }
 
     /**
-     * The tool list offers the values the assistant surface takes, which are
-     * fewer than the declaration names: the sorts every transport offers, not
-     * the {@code rank} the REST surface adds, and no closed set on the view,
-     * whose unknown value the service refuses in its own check order. Written
-     * by hand, so that a value the declaration gains cannot reach the tool
-     * list unnoticed.
+     * The tool list projects the declaration (C4.7): a closed set carries every
+     * value the declaration names, the {@code rank} of the two planning axes
+     * among the sorts, and the view stays open, whose unknown value the service
+     * refuses in its own check order. A bound travels as JSON Schema spells it
+     * (C5.4). Written by hand, so that a value the declaration gains or loses
+     * cannot reach the tool list unnoticed.
      */
     @Test
-    void the_tool_list_closes_the_sort_to_the_standard_values_and_leaves_the_view_open() {
+    void the_tool_list_closes_the_sort_with_every_declared_value_and_leaves_the_view_open() {
         JsonPath list = rpc("tools/list", Map.of()).extract().jsonPath();
-        String query = "result.tools.find { it.name == 'query' }.inputSchema.properties.";
+        String query = "result.tools.find { it.name == 'worklist_query' }.inputSchema.properties.";
 
         assertThat(list.getList(query + "sort.enum", String.class))
-            .as("the assistant surface sorts by id and created_at; rank is the REST surface's")
-            .containsExactly("id", "created_at");
+            .as("the assistant surface sorts by every declared sort, rank included")
+            .containsExactly("id", "created_at", "rank");
+        assertThat(list.getInt(query + "page_size.minimum")).isEqualTo(1);
+        assertThat(list.getInt(query + "page_size.maximum")).isEqualTo(200);
         assertThat(list.getList(query + "direction.enum", String.class))
             .containsExactly("asc", "desc");
         assertThat(list.getString(query + "selector.type"))
@@ -268,11 +271,17 @@ class McpProjectionIT {
     // now has no verb to point at; it will come back when the surface has a
     // planned-but-not-yet-built verb again, and stays absent until then.
 
+    /**
+     * A tool this server does not have is a fault of the protocol, -32602, and
+     * the answer names the tools it has (C4.3).
+     */
     @Test
     void a_tool_this_server_does_not_have_is_a_malformed_call_and_says_so() {
-        call("frobnicate", Map.of("address", SurfaceFixture.address(Selector.ITEM, 1)))
-            .body("result.isError", is(true))
-            .body("result.structuredContent.reason", is("ARGUMENT_INVALID"));
+        rpc("tools/call", Map.of("name", "frobnicate",
+                "arguments", Map.of("address", SurfaceFixture.address(Selector.ITEM, 1))))
+            .body("error.code", is(-32602))
+            .body("error.data.accepts", org.hamcrest.Matchers.hasItem("worklist_read"))
+            .body("$", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasKey("result")));
     }
 
     /**

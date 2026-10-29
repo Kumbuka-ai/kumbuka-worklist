@@ -33,6 +33,16 @@ public enum RefusalCode {
 
     /** The address violates the grammar. Decidable without a scope: 400. */
     ADDRESS_MALFORMED(400),
+    /**
+     * A method the route does not take: the framework's own 405, answered in
+     * the envelope with {@code Allow} (C3.3, C8.3).
+     */
+    VERB_NOT_CARRIED(405),
+    /**
+     * {@code Kumbuka-Surface} with another value than {@code assistant}, or
+     * sent twice: decided before anything else, with no data (C14.5).
+     */
+    HEADER_INVALID(400),
     /** The worklist scheme carries the verb elsewhere, or the address names a view the verb skips. */
     VERB_UNCARRIED(422),
     /** A verb of the scheme this service has yet to build: the fault is ours, 501. */
@@ -101,6 +111,7 @@ public enum RefusalCode {
     ITEM_UNPLANNABLE(409),
     SETTING_ABSENT(409),
     SETTING_PRESENT(409),
+    IDEMPOTENCY_KEY_REUSED(409),
     CARDINALITY_EXCEEDED(409),
     CLAIM_HELD(409),
     CLAIM_ABSENT(409),
@@ -163,6 +174,7 @@ public enum RefusalCode {
             case ITEM_UNPLANNABLE -> ITEM_UNPLANNABLE;
             case SETTING_ABSENT -> SETTING_ABSENT;
             case SETTING_PRESENT -> SETTING_PRESENT;
+            case IDEMPOTENCY_KEY_REUSED -> IDEMPOTENCY_KEY_REUSED;
             case CARDINALITY_EXCEEDED -> CARDINALITY_EXCEEDED;
             case CLAIM_HELD -> CLAIM_HELD;
             case CLAIM_ABSENT -> CLAIM_ABSENT;

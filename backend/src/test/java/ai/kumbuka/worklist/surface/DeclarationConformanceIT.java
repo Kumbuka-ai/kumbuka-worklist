@@ -134,6 +134,14 @@ class DeclarationConformanceIT {
         soft.assertAll();
     }
 
+    /** The bounds an argument is held to, by the member of C5.4 each travels under. */
+    private static Map<String, Integer> bounds(DeclarationSpecification.Arg want) {
+        Map<String, Integer> bounds = new java.util.LinkedHashMap<>();
+        bounds.put("minimum", want.minimum());
+        bounds.put("maximum", want.maximum());
+        return bounds;
+    }
+
     @SuppressWarnings("unchecked")
     private static void argument(SoftAssertions soft, String id, Map<String, Object> arg,
                                  DeclarationSpecification.Arg want) {
@@ -149,6 +157,15 @@ class DeclarationConformanceIT {
         } else {
             soft.assertThat(arg.get("default")).as("%s default, in its own type", where)
                 .isEqualTo(want.defaultValue());
+        }
+        for (Map.Entry<String, Integer> bound : bounds(want).entrySet()) {
+            if (bound.getValue() == null) {
+                soft.assertThat(arg).as("%s declares no %s", where, bound.getKey())
+                    .doesNotContainKey(bound.getKey());
+            } else {
+                soft.assertThat(arg.get(bound.getKey())).as("%s %s", where, bound.getKey())
+                    .isEqualTo(bound.getValue());
+            }
         }
         if (want.values().isEmpty()) {
             soft.assertThat(arg).as("%s has no fixed values", where)

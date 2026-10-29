@@ -259,15 +259,17 @@ class RefusalEnvelopeIT {
     }
 
     /**
-     * A refusal with nothing to name carries no {@code data} at all.
+     * A refusal with nothing to name beyond the call carries {@code attempted}
+     * and nothing else under {@code data}.
      *
-     * <p>"Where a refusal has any" is the node's wording, so an empty
-     * {@code data} would be a member present with nothing in it — which the
-     * not-found assertions above would then have to tolerate, and could no
-     * longer measure.
+     * <p>Every refusal that falls once the route stands names the call
+     * (C8.7); "where a refusal has any" is the node's wording for the rest, so
+     * an empty member beside it would be a member present with nothing in it
+     * -- which the not-found assertions above would then have to tolerate,
+     * and could no longer measure.
      */
     @Test
-    void a_refusal_with_nothing_to_name_carries_no_data() {
+    void a_refusal_with_nothing_to_name_carries_the_call_alone() {
         SurfaceFixture.asMember(identity);
 
         Map<String, Object> envelope = given()
@@ -276,8 +278,9 @@ class RefusalEnvelopeIT {
             .body(RefusalSpecification.REASON, is("VERB_UNCARRIED"))
             .extract().body().jsonPath().getMap("$");
 
-        assertThat(envelope)
-            .containsOnlyKeys(RefusalSpecification.REASON, RefusalSpecification.MESSAGE);
+        assertThat(envelope).containsOnlyKeys(RefusalSpecification.REASON,
+            RefusalSpecification.MESSAGE, "data");
+        assertThat(envelope.get("data")).isEqualTo(Map.of("attempted", "send"));
     }
 
     /** The response body, as the bytes a caller receives. */

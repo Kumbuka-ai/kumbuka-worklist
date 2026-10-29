@@ -26,6 +26,8 @@ import java.util.Map;
  * @param additionalProperties absent on a schema of no object
  * @param values absent where the value is not of a closed set
  * @param oneOf absent where the value is not of a closed set
+ * @param minimum absent where the value is no bounded number
+ * @param maximum absent where the value is no bounded number
  */
 public record SchemaPayload(
     @JsonProperty("type") String type,
@@ -34,12 +36,15 @@ public record SchemaPayload(
     @JsonProperty("required") @Nullable List<String> required,
     @JsonProperty("additionalProperties") @Nullable Boolean additionalProperties,
     @JsonProperty("enum") @Nullable List<String> values,
-    @JsonProperty("oneOf") @Nullable List<SchemaValuePayload> oneOf) {
+    @JsonProperty("oneOf") @Nullable List<SchemaValuePayload> oneOf,
+    @JsonProperty("minimum") @Nullable Integer minimum,
+    @JsonProperty("maximum") @Nullable Integer maximum) {
 
     /** An object closed at its level. */
     public static SchemaPayload object(Map<String, SchemaPayload> properties,
                                        List<String> required) {
-        return new SchemaPayload("object", null, properties, required, false, null, null);
+        return new SchemaPayload("object", null, properties, required, false, null, null, null,
+            null);
     }
 
     /**
@@ -47,12 +52,15 @@ public record SchemaPayload(
      *
      * @param values the closed set; empty where the value is of none, and then
      *               neither {@code enum} nor {@code oneOf} is written
+     * @param minimum the least number, absent where there is none
+     * @param maximum the greatest number, absent where there is none
      */
     public static SchemaPayload property(String type, String description,
-                                         List<SchemaValuePayload> values) {
+                                         List<SchemaValuePayload> values,
+                                         @Nullable Integer minimum, @Nullable Integer maximum) {
         return values.isEmpty()
-            ? new SchemaPayload(type, description, null, null, null, null, null)
+            ? new SchemaPayload(type, description, null, null, null, null, null, minimum, maximum)
             : new SchemaPayload(type, description, null, null, null,
-                values.stream().map(SchemaValuePayload::value).toList(), values);
+                values.stream().map(SchemaValuePayload::value).toList(), values, minimum, maximum);
     }
 }

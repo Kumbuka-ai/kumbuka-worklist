@@ -8,9 +8,16 @@
 package ai.kumbuka.worklist.adapter.payload;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.jspecify.annotations.Nullable;
 
-/** A JSON-RPC error: its code and its message. */
+/**
+ * A JSON-RPC error: its code, its message, and the detail of an unknown tool.
+ *
+ * @param data the declared tool names, for an unknown tool (C4.3); absent for
+ *             every other protocol error
+ */
 public record RpcErrorBodyPayload(
     @JsonProperty("code") int code,
-    @JsonProperty("message") String message) {
+    @JsonProperty("message") String message,
+    @JsonProperty("data") @Nullable RpcErrorDataPayload data) {
 }

@@ -217,7 +217,7 @@ public class VocabularyRegistry {
         definition.sortable = sortable;
         vocabulary.insert(definition);
 
-        LOG.infof("attribute %s declared in scope %s", key, scopeId);
+        LOG.infof("attribute %s declared in scope %s", definition.pk, scopeId);
         return definition;
     }
 
@@ -262,7 +262,7 @@ public class VocabularyRegistry {
         if (!DeclaredValue.WITHDRAWN.equals(definition.status)) {
             definition.status = DeclaredValue.WITHDRAWN;
             vocabulary.flush();
-            LOG.infof("attribute %s withdrawn in scope %s", key, scopeId);
+            LOG.infof("attribute %s withdrawn in scope %s", definition.pk, scopeId);
         }
         return definition;
     }
@@ -294,7 +294,7 @@ public class VocabularyRegistry {
         vocabulary.insert(option);
 
         LOG.infof("option %s declared under attribute %s in scope %s",
-            option.pk, key, scopeId);
+            option.pk, definition.pk, scopeId);
         return option;
     }
 

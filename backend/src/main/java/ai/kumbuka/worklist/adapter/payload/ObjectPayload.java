@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.adapter.payload;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 
@@ -19,8 +20,17 @@ import java.util.Map;
  * canonical field catalogue was built to remove, reintroduced one layer out.
  * It is the one map an answer carries (C7.1); a key whose value is absent is
  * left out of it on the wire like any other member.
+ *
+ * <p>The conflict token stands beside the field map (C6.1) and, until the
+ * breaking step, inside it as well: a caller that reads it from {@code fields}
+ * today keeps reading it there. Both are the same value, read off the one
+ * projection ({@code VerbSurface.Result#conflictToken}).
+ *
+ * @param conflictToken the object's token; absent for an answer about no
+ *                      single object that carries one, and then left out
  */
 public record ObjectPayload(
     @JsonProperty("address") String address,
-    @JsonProperty("fields") Map<String, Object> fields) {
+    @JsonProperty("fields") Map<String, Object> fields,
+    @JsonProperty("conflict_token") @Nullable String conflictToken) {
 }
