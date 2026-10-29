@@ -89,6 +89,23 @@
       ],
       "firstName": "Tenant",
       "lastName": "Probe"
+    },
+    {
+      "username": "probe-roleless",
+      "email": "probe-roleless@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "probe-password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [],
+      "firstName": "Roleless",
+      "lastName": "Probe"
     }
   ]
 }

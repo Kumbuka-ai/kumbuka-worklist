@@ -1,0 +1,96 @@
+{
+  "$comment": "The shape of a service declaration, rules C5.3, C5.4 and C5.5 of the platform service contract (platform-specs code-conventions/service-contract.md, commit 88c6554, round 4 part 1). Held in the test tree so the expectation does not come from the declaration it checks; read by DeclarationShapeTest. 'description' per argument and 'value_descriptions' are admitted beyond the members C5.4 enumerates: C5.4 asks each fixed value with its description, and the bundles of C12.2 publish the argument texts through the declaration. The members of a reason follow the reference kumbuka-dispatch (open point 10 of the contract, decided by measurement); the members of a call's answer are not enumerated by the contract and are left open.",
+  "type": "object",
+  "required": ["version", "shape_version", "service", "scheme", "address_form", "effect_classes", "calls", "reasons"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shape_version": {"type": "string", "const": "3"},
+    "service": {"type": "string", "pattern": "^[a-z]+$"},
+    "scheme": {"type": "string", "pattern": "^[a-z]+$"},
+    "address_form": {"type": "string"},
+    "technical_address_form": {"type": "string"},
+    "effect_classes": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[A-Z]+(_[A-Z]+)*$"}},
+    "calls": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["identity", "call", "rest_name", "effect_class", "description", "arguments", "answer", "refusals"],
+        "additionalProperties": false,
+        "properties": {
+          "identity": {"type": "string", "pattern": "^[a-z]+_[a-z]+(_[a-z]+)*$"},
+          "call": {"type": "string", "pattern": "^[a-z]+_[a-z]+(_[a-z]+)*$"},
+          "rest_name": {"type": "string", "pattern": "^[a-z]+(_[a-z]+)*$"},
+          "effect_class": {"type": "string", "pattern": "^[A-Z]+(_[A-Z]+)*$"},
+          "description": {"type": "string"},
+          "transition": {"type": "boolean"},
+          "next_step": {"type": "string"},
+          "role": {"type": "string", "enum": ["commissioner", "holder", "candidate", "bystander"]},
+          "at_scope_depth": {"type": "string", "pattern": "^[A-Z]+(_[A-Z]+)*$"},
+          "technical_address": {"type": "boolean", "const": true},
+          "arguments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "type", "required", "placement"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string", "pattern": "^[a-z]+(_[a-z]+)*$"},
+                "type": {"type": "string", "enum": ["string", "integer", "boolean", "array", "object"]},
+                "required": {"type": "boolean"},
+                "placement": {"type": "string", "enum": ["TOP", "FIELDS"]},
+                "default": {"$comment": "in its own JSON type: checked against 'type' by DeclarationShapeTest"},
+                "values": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                "item_pattern": {"type": "string"},
+                "description": {"type": "string"},
+                "value_descriptions": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["value", "description"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "value": {"type": "string"},
+                      "description": {"type": "string"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "answer": {"type": "object"},
+          "refusals": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z]+(_[A-Z]+)*$"}}
+        }
+      }
+    },
+    "reasons": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["reason", "message_pattern", "messages", "remedy"],
+        "additionalProperties": false,
+        "properties": {
+          "reason": {"type": "string", "pattern": "^[A-Z]+(_[A-Z]+)*$"},
+          "message_pattern": {"type": "string"},
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["key", "template"],
+              "additionalProperties": false,
+              "properties": {
+                "key": {"type": "string"},
+                "template": {"type": "string"}
+              }
+            }
+          },
+          "remedy": {"type": "string"}
+        }
+      }
+    }
+  }
+}

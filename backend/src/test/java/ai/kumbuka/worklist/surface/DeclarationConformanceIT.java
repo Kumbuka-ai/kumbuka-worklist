@@ -39,21 +39,24 @@ import static org.assertj.core.api.Assertions.assertThat;
  * transcription in the test tree that imports nothing from the production
  * packages.
  *
- * <p>Compared per verb: the identity, the effect class in the router's names,
- * the shape of the answer, every argument (name, type, requiredness, default,
- * value set) and the set of reasons a refusal may name. Beside it: every text
- * is present, every optional argument names its default and what null does
- * (DEC-0043 R17), every reason of a verb is in the catalogue with its status,
- * message and remedy, and the version is a hash over the content -- recomputed
- * here with a canonical writer of this probe's own -- and travels as the
- * entity tag.
+ * <p>Compared on the top level: the shape version, the service, the scheme,
+ * the address form and the effect classes. Per call: the identity and call
+ * name, the REST name, the effect class in the router's names, the shape of
+ * the answer with its members, every argument (name, type, requiredness,
+ * placement, default in its own type, fixed values with a description each)
+ * and the set of reasons a refusal may name. Beside it: every text is present,
+ * every optional argument names its default and what null does (DEC-0043
+ * R17), every reason of a call is in the catalogue with its message templates
+ * and remedy, and the version is {@code sha256:} and the hash over everything
+ * else -- recomputed here with a canonical writer of this probe's own -- and
+ * travels as the entity tag.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
 @CounterProbe
 class DeclarationConformanceIT {
 
-    private static final Pattern HEX64 = Pattern.compile("[0-9a-f]{64}");
+    private static final Pattern VERSION = Pattern.compile("sha256:[0-9a-f]{64}");
 
     @Inject TestIdentityAssociation identity;
 
@@ -64,118 +67,161 @@ class DeclarationConformanceIT {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void the_declaration_carries_every_verb_as_the_transcription_holds_it() {
+    void the_top_level_names_the_shape_the_service_and_its_address_form() {
         Map<String, Object> document = declaration().jsonPath().getMap("$");
-        List<Map<String, Object>> verbs = (List<Map<String, Object>>) document.get("verbs");
+        SoftAssertions soft = new SoftAssertions();
+        soft.assertThat(document.get("shape_version")).isEqualTo(
+            DeclarationSpecification.SHAPE_VERSION);
+        soft.assertThat(document.get("service")).isEqualTo(DeclarationSpecification.SCHEME);
+        soft.assertThat(document.get("scheme")).isEqualTo(DeclarationSpecification.SCHEME);
+        soft.assertThat(document.get("address_form"))
+            .isEqualTo(DeclarationSpecification.ADDRESS_FORM);
+        soft.assertThat(document).as("worklist has no technical address")
+            .doesNotContainKey("technical_address_form");
+        soft.assertThat(document.get("effect_classes"))
+            .isEqualTo(DeclarationSpecification.DECLARED_EFFECT_CLASSES);
+        soft.assertThat(DeclarationSpecification.EFFECT_CLASSES)
+            .as("every declared effect class is one the router knows")
+            .containsAll(DeclarationSpecification.DECLARED_EFFECT_CLASSES);
+        soft.assertAll();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void the_declaration_carries_every_call_as_the_transcription_holds_it() {
+        Map<String, Object> document = declaration().jsonPath().getMap("$");
+        List<Map<String, Object>> calls = (List<Map<String, Object>>) document.get("calls");
         SoftAssertions soft = new SoftAssertions();
 
-        soft.assertThat(document.get("scheme")).isEqualTo(DeclarationSpecification.SCHEME);
-        soft.assertThat(verbs.stream().map(v -> v.get("identity")).toList())
-            .as("the verbs, by their stable identity worklist_<verb>, in order")
+        soft.assertThat(calls.stream().map(v -> v.get("identity")).toList())
+            .as("the calls, by their stable identity worklist_<verb>, in order")
             .containsExactlyElementsOf(DeclarationSpecification.VERBS.stream()
                 .map(DeclarationSpecification.Verb::identity).toList());
 
         Map<String, DeclarationSpecification.Verb> expected =
             DeclarationSpecification.byIdentity();
-        for (Map<String, Object> verb : verbs) {
-            String id = String.valueOf(verb.get("identity"));
+        for (Map<String, Object> call : calls) {
+            String id = String.valueOf(call.get("identity"));
             DeclarationSpecification.Verb spec = expected.get(id);
             if (spec == null) {
                 continue;
             }
-            soft.assertThat(verb.get("effect_class")).as("%s effect class", id)
+            soft.assertThat(call.get("call")).as("%s call name", id).isEqualTo(id);
+            soft.assertThat(call.get("rest_name")).as("%s REST name", id)
+                .isEqualTo(spec.restName());
+            soft.assertThat(call.get("effect_class")).as("%s effect class", id)
                 .isEqualTo(spec.effectClass());
-            soft.assertThat(DeclarationSpecification.EFFECT_CLASSES)
-                .as("%s: the effect class is one the router knows", id)
-                .contains(String.valueOf(verb.get("effect_class")));
-            soft.assertThat(verb.get("answer")).as("%s answer", id)
-                .isEqualTo(spec.answer());
-            soft.assertThat(String.valueOf(verb.get("description")))
+            soft.assertThat(call.get("answer")).as("%s answer", id)
+                .isEqualTo(Map.of("shape", spec.answer(),
+                    "members", DeclarationSpecification.ANSWER_MEMBERS.get(spec.answer())));
+            soft.assertThat(String.valueOf(call.get("description")))
                 .as("%s carries its description", id).isNotBlank();
-            soft.assertThat(new LinkedHashSet<>((List<String>) verb.get("reasons")))
-                .as("%s reasons", id)
+            soft.assertThat(new LinkedHashSet<>((List<String>) call.get("refusals")))
+                .as("%s refusals", id)
                 .isEqualTo(new LinkedHashSet<>(spec.reasons()));
+            soft.assertThat(call).as("%s carries no member of a later step", id)
+                .doesNotContainKeys("transition", "next_step", "verb", "reasons");
 
-            List<Map<String, Object>> args = (List<Map<String, Object>>) verb.get("arguments");
+            List<Map<String, Object>> args = (List<Map<String, Object>>) call.get("arguments");
             soft.assertThat(args.stream().map(a -> a.get("name")).toList())
                 .as("%s argument names, in order", id)
                 .containsExactlyElementsOf(spec.args().stream()
                     .map(DeclarationSpecification.Arg::name).toList());
             for (int i = 0; i < Math.min(args.size(), spec.args().size()); i++) {
-                Map<String, Object> arg = args.get(i);
-                DeclarationSpecification.Arg want = spec.args().get(i);
-                String where = id + "." + want.name();
-                soft.assertThat(arg.get("type")).as("%s type", where).isEqualTo(want.type());
-                soft.assertThat(arg.get("required")).as("%s required", where)
-                    .isEqualTo(want.required());
-                soft.assertThat(arg.get("default")).as("%s default", where)
-                    .isEqualTo(want.defaultValue());
-                List<Map<String, Object>> values = (List<Map<String, Object>>) arg.get("values");
-                soft.assertThat(values.stream().map(v -> v.get("value")).toList())
-                    .as("%s value set", where).containsExactlyElementsOf(want.values());
-                values.forEach(v -> soft.assertThat(String.valueOf(v.get("description")))
-                    .as("%s value %s is described", where, v.get("value")).isNotBlank());
-                String description = String.valueOf(arg.get("description"));
-                soft.assertThat(description).as("%s is described", where).isNotBlank();
-                if (!want.required()) {
-                    soft.assertThat(description).as("%s names its default", where)
-                        .contains("Default");
-                    soft.assertThat(description).as("%s says what null does", where)
-                        .contains("null");
-                }
+                argument(soft, id, args.get(i), spec.args().get(i));
             }
         }
         soft.assertAll();
     }
 
-    @Test
     @SuppressWarnings("unchecked")
-    void every_reason_a_verb_names_is_in_the_catalogue_with_its_texts() {
-        Map<String, Object> document = declaration().jsonPath().getMap("$");
-        Map<String, Map<String, Object>> catalogue = new LinkedHashMap<>();
-        ((List<Map<String, Object>>) document.get("reasons"))
-            .forEach(r -> catalogue.put(String.valueOf(r.get("code")), r));
-        SoftAssertions soft = new SoftAssertions();
-        Set<String> named = new LinkedHashSet<>();
-        DeclarationSpecification.VERBS.forEach(v -> named.addAll(v.reasons()));
-        soft.assertThat(catalogue.keySet()).as("the catalogue holds every reason a verb names")
-            .containsAll(named);
-        catalogue.forEach((code, reason) -> {
-            soft.assertThat(reason.get("status")).as("%s status", code).isInstanceOf(Integer.class);
-            soft.assertThat(String.valueOf(reason.get("message"))).as("%s message", code)
-                .isNotBlank().isNotEqualTo("null");
-            soft.assertThat(String.valueOf(reason.get("remedy"))).as("%s remedy", code)
-                .isNotBlank().isNotEqualTo("null");
-        });
-        soft.assertThat(catalogue.get("NOT_FOUND"))
-            .as("the not-found class answers 404, as on every hop")
-            .containsEntry("status", 404);
-        soft.assertAll();
+    private static void argument(SoftAssertions soft, String id, Map<String, Object> arg,
+                                 DeclarationSpecification.Arg want) {
+        String where = id + "." + want.name();
+        soft.assertThat(arg.get("type")).as("%s type", where).isEqualTo(want.type());
+        soft.assertThat(arg.get("required")).as("%s required", where)
+            .isEqualTo(want.required());
+        soft.assertThat(arg.get("placement")).as("%s placement", where)
+            .isEqualTo(DeclarationSpecification.PLACEMENT);
+        if (want.defaultValue() == null) {
+            soft.assertThat(arg).as("%s declares no default", where)
+                .doesNotContainKey("default");
+        } else {
+            soft.assertThat(arg.get("default")).as("%s default, in its own type", where)
+                .isEqualTo(want.defaultValue());
+        }
+        if (want.values().isEmpty()) {
+            soft.assertThat(arg).as("%s has no fixed values", where)
+                .doesNotContainKeys("values", "value_descriptions");
+        } else {
+            soft.assertThat((List<String>) arg.get("values")).as("%s values", where)
+                .containsExactlyElementsOf(want.values());
+            List<Map<String, Object>> described =
+                (List<Map<String, Object>>) arg.get("value_descriptions");
+            soft.assertThat(described.stream().map(v -> v.get("value")).toList())
+                .as("%s every value is described, in order", where)
+                .containsExactlyElementsOf(want.values());
+            described.forEach(v -> soft.assertThat(String.valueOf(v.get("description")))
+                .as("%s value %s is described", where, v.get("value")).isNotBlank());
+        }
+        String description = String.valueOf(arg.get("description"));
+        soft.assertThat(description).as("%s is described", where).isNotBlank();
+        if (!want.required()) {
+            soft.assertThat(description).as("%s names its default", where)
+                .contains("Default");
+            soft.assertThat(description).as("%s says what null does", where)
+                .contains("null");
+        }
     }
 
     @Test
     @SuppressWarnings("unchecked")
+    void every_reason_a_call_names_is_in_the_catalogue_with_its_texts() {
+        Map<String, Object> document = declaration().jsonPath().getMap("$");
+        Map<String, Map<String, Object>> catalogue = new LinkedHashMap<>();
+        ((List<Map<String, Object>>) document.get("reasons"))
+            .forEach(r -> catalogue.put(String.valueOf(r.get("reason")), r));
+        SoftAssertions soft = new SoftAssertions();
+        Set<String> named = new LinkedHashSet<>();
+        DeclarationSpecification.VERBS.forEach(v -> named.addAll(v.reasons()));
+        soft.assertThat(catalogue.keySet()).as("the catalogue holds every reason a call names")
+            .containsAll(named);
+        catalogue.forEach((code, reason) -> {
+            String pattern = String.valueOf(reason.get("message_pattern"));
+            soft.assertThat(pattern).as("%s message pattern", code)
+                .isNotBlank().isNotEqualTo("null");
+            List<Map<String, Object>> messages = (List<Map<String, Object>>) reason.get("messages");
+            soft.assertThat(messages).as("%s messages", code).isNotEmpty();
+            soft.assertThat(messages.get(0).get("template"))
+                .as("%s: the pattern is the first message's template", code).isEqualTo(pattern);
+            messages.forEach(m -> soft.assertThat(String.valueOf(m.get("key")))
+                .as("%s message key", code).isNotBlank().isNotEqualTo("null"));
+            soft.assertThat(String.valueOf(reason.get("remedy"))).as("%s remedy", code)
+                .isNotBlank().isNotEqualTo("null");
+        });
+        soft.assertAll();
+    }
+
+    @Test
     void the_version_is_a_hash_over_the_content_and_travels_as_the_entity_tag() throws Exception {
         ExtractableResponse<Response> first = declaration();
         ExtractableResponse<Response> second = declaration();
         Map<String, Object> document = first.jsonPath().getMap("$");
         String version = String.valueOf(document.get("version"));
 
-        assertThat(version).as("a SHA-256 in lower-case hex").matches(HEX64);
+        assertThat(version).as("sha256: and a SHA-256 in lower-case hex").matches(VERSION);
         assertThat(second.jsonPath().getString("version"))
             .as("the same declaration answers the same version").isEqualTo(version);
         assertThat(first.header("ETag")).as("and the version is the entity tag")
             .contains(version);
 
         Map<String, Object> content = new LinkedHashMap<>(document);
-        content.remove("scheme");
         content.remove("version");
-        String recomputed = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-            .digest(canonical(content).getBytes(StandardCharsets.UTF_8)));
+        String recomputed = "sha256:" + HexFormat.of().formatHex(MessageDigest
+            .getInstance("SHA-256").digest(canonical(content).getBytes(StandardCharsets.UTF_8)));
         assertThat(version)
-            .as("the version is the hash of the verbs and the reasons written canonically, so "
-                + "any change to either changes it")
+            .as("the version is the hash of everything but itself, the shape version and the "
+                + "scheme included, written canonically, so any change to any of it changes it")
             .isEqualTo(recomputed);
     }
 

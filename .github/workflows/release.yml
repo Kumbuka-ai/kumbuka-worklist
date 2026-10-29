@@ -175,12 +175,20 @@ jobs:
       # lifecycle, so compiling, test compilation and the Quarkus build are
       # skipped explicitly: the jars are packaged from the classes the suite
       # above compiled and tested.
+      #
+      # THE DECLARATION BESIDE THEM. `-Pdeclaration` attaches
+      # target/declaration.json as ai.kumbuka:kumbuka-worklist:<version>:json:declaration.
+      # The suite above wrote that file from the body GET /api/declaration
+      # served and held it byte for byte against that body
+      # (DeclarationFileIT), so a router can build against the declaration of
+      # the version it pins without starting it. The profile fails the
+      # package when the file is missing: no release without its declaration.
       - name: Deploy to GitHub Packages (from the tested build)
         working-directory: backend
         env:
           GITHUB_ACTOR_FOR_MAVEN: ${{ github.actor }}
           GITHUB_TOKEN_FOR_MAVEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn -B -ntp -Dmaven.main.skip=true -Dmaven.test.skip=true -Dquarkus.build.skip=true deploy
+        run: mvn -B -ntp -Pdeclaration -Dmaven.main.skip=true -Dmaven.test.skip=true -Dquarkus.build.skip=true deploy
 
 
   # -------------------------------------------------------------------------
@@ -219,6 +227,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${TAG#v}"
           OWNER="${{ steps.meta.outputs.owner }}"
           gh release create "$TAG" \
             --title "$TAG" \
@@ -229,6 +238,15 @@ jobs:
           \`\`\`
           ghcr.io/$OWNER/kumbuka-worklist:$TAG
           \`\`\`
+
+          ## Library and declaration in GitHub Packages
+
+          \`\`\`
+          ai.kumbuka:kumbuka-worklist:$VERSION
+          ai.kumbuka:kumbuka-worklist:$VERSION:json:declaration
+          \`\`\`
+
+          The declaration is byte for byte what \`GET /api/declaration\` serves for this version.
 
           Configuration is environment variables with a \`WORKLIST_\` prefix; see the README for the full set. The service role's password must be rotated away from the migration's placeholder before the service is reachable from outside a development machine.
           "

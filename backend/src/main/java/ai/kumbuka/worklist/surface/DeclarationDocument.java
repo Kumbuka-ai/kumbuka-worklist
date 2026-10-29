@@ -8,75 +8,185 @@
 package ai.kumbuka.worklist.surface;
 
 import io.quarkus.qute.i18n.MessageBundles;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
-import java.util.HexFormat;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.TreeMap;
 
 /**
- * The declaration as the REST surface offers it (ADR-0039): one document, read
- * from {@link SurfaceDeclaration} and worded by the message bundles, with a
- * version that is a hash over its own content.
+ * The declaration as the REST surface offers it (ADR-0039), in shape 3 of the
+ * service contract (C5.3 to C5.5): one document, read from
+ * {@link SurfaceDeclaration} and worded by the message bundles, with a version
+ * that is a hash over its own content.
  *
  * <p>Nothing here is a second copy of the declaration. Every member is read
  * from the declaration or the catalogue at the moment the document is built,
  * so a verb, an argument or a text changed there changes the document and its
  * version with it.
+ *
+ * <p>No member is written without a value. An argument with no fallback
+ * declares no {@code default}, a set of values stands only where there is
+ * one, and nothing travels as {@code null}: the document is written by the
+ * same mapper as every other answer, which leaves such a member out (C7.2),
+ * and a member that was there for the version and gone on the wire would make
+ * the version the hash of something nobody was served.
  */
 public final class DeclarationDocument {
 
     /** The member the version travels under. */
     public static final String VERSION = "version";
 
+    /**
+     * The revision of the declaration's own shape (C5.5).
+     *
+     * <p>Not the service version. A consumer that takes this declaration needs
+     * to know when the SHAPE changed -- a member added, a member's meaning
+     * changed -- and the service's version moves for reasons that have nothing
+     * to do with it.
+     */
+    public static final String SHAPE_VERSION = "3";
+
+    /** The scheme this service declares the verbs of, and the service's own name. */
+    public static final String SCHEME = "worklist";
+
+    /** The form of an address of this scheme. The service has no technical address. */
+    public static final String ADDRESS_FORM = "worklist://<scope>/<selector>/<number>";
+
     /** The member every text of the declaration travels under. */
     private static final String DESCRIPTION = "description";
 
-    /** The scheme this service declares the verbs of. */
-    public static final String SCHEME = "worklist";
+    /** The member the calls travel under, and within a call its name. */
+    private static final String CALLS = "calls";
+    private static final String CALL = "call";
+
+    /** The member the catalogue of reasons travels under, and within one its code. */
+    private static final String REASONS = "reasons";
+    private static final String REASON = "reason";
+
+    /** The members within a call its arguments and the reasons it may refuse with travel under. */
+    private static final String ARGUMENTS = "arguments";
+    private static final String REFUSALS = "refusals";
+
+    /** The bundle files the reasons are worded by: a name of a file, not of a member. */
+    private static final String MESSAGE_BUNDLE = "refusals";
+    private static final String REMEDY_BUNDLE = "remedies";
 
     private DeclarationDocument() {
     }
 
-    /** The document, its version included. */
+    /** The document, its version first. */
     public static Map<String, Object> document() {
         Map<String, Object> content = content(
             MessageBundles.get(ToolDescriptions.class),
             MessageBundles.get(ArgumentDescriptions.class),
             MessageBundles.get(ValueDescriptions.class));
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("scheme", SCHEME);
-        document.put(VERSION, versionOf(content));
+        document.put(VERSION, CanonicalJson.version(content));
         document.putAll(content);
-        return document;
+        return Collections.unmodifiableMap(document);
     }
 
     /**
-     * The content the version is taken over: the verbs and the catalogue of
-     * reasons, worded by the bundles given.
+     * The content the version is taken over: everything but the version
+     * itself, the shape version and the scheme included, worded by the bundles
+     * given.
      */
     static Map<String, Object> content(ToolDescriptions tools, ArgumentDescriptions arguments,
                                        ValueDescriptions values) {
         Map<String, Object> content = new LinkedHashMap<>();
-        content.put("verbs", SurfaceDeclaration.verbs().stream()
-            .map(verb -> verb(verb, tools, arguments, values))
+        content.put("shape_version", SHAPE_VERSION);
+        content.put("service", SCHEME);
+        content.put("scheme", SCHEME);
+        content.put("address_form", ADDRESS_FORM);
+        content.put("effect_classes", Arrays.stream(SurfaceDeclaration.EffectClass.values())
+            .map(Enum::name).toList());
+        content.put(CALLS, SurfaceDeclaration.verbs().stream()
+            .map(verb -> call(verb, tools, arguments, values))
             .toList());
-        Properties messages = patterns("refusals");
-        Properties remedies = patterns("remedies");
-        content.put("reasons", Arrays.stream(RefusalCode.values())
+        Properties messages = patterns(MESSAGE_BUNDLE);
+        Properties remedies = patterns(REMEDY_BUNDLE);
+        content.put(REASONS, Arrays.stream(RefusalCode.values())
             .map(code -> reason(code, messages, remedies))
             .toList());
         return content;
+    }
+
+    /**
+     * Refuses a document that cannot be served, read as it is served (C5.6).
+     *
+     * <p>{@link SurfaceDeclaration#requireServable} checks the verbs the
+     * document is built from; this checks what the build made of them, so a
+     * call the projection drops a text from, doubles or misnames is refused
+     * here although its verb is sound. The conditions are the same: every call
+     * once, each with a description within the budget, each argument with a
+     * description, and every refusal a call names among the document's own
+     * reasons. A member that is absent or not of its kind is refused as well,
+     * since a caller would meet it the same way.
+     */
+    public static void requireServable(Map<String, ?> document) {
+        List<Map<?, ?>> calls = members(document.get(CALLS), CALLS);
+        List<String> catalogue = members(document.get(REASONS), REASONS).stream()
+            .map(reason -> name(reason.get(REASON), "a reason"))
+            .toList();
+        SurfaceDeclaration.requireDistinctNames(calls.stream()
+            .map(call -> name(call.get(CALL), "a call"))
+            .toList());
+        for (Map<?, ?> declared : calls) {
+            String call = name(declared.get(CALL), "a call");
+            String description = text(declared.get(DESCRIPTION));
+            SurfaceDeclaration.requireDescribed(call, description);
+            SurfaceDeclaration.requireWithinBudget(call, String.valueOf(description));
+            Map<String, @Nullable String> arguments = new LinkedHashMap<>();
+            for (Map<?, ?> argument : members(declared.get(ARGUMENTS), call + "'s arguments")) {
+                arguments.put(name(argument.get("name"), call + "'s argument"),
+                    text(argument.get(DESCRIPTION)));
+            }
+            SurfaceDeclaration.requireDescribedArguments(call, arguments);
+            SurfaceDeclaration.requireCatalogued(call,
+                members(declared.get(REFUSALS), call + "'s refusals", String.class), catalogue);
+        }
+    }
+
+    /** The objects of a list member, refused if it is no list of objects. */
+    @SuppressWarnings("unchecked")
+    private static List<Map<?, ?>> members(@Nullable Object member, String what) {
+        return (List<Map<?, ?>>) (List<?>) members(member, what, Map.class);
+    }
+
+    /** The entries of a list member, refused if it is no list of {@code type}. */
+    private static <T> List<T> members(@Nullable Object member, String what, Class<T> type) {
+        if (!(member instanceof List<?> list) || !list.stream().allMatch(type::isInstance)) {
+            throw new IllegalStateException(
+                "the declaration carries " + what + " as no list of " + type.getSimpleName()
+                    + ". A caller reads the document as it is served, and this one it cannot "
+                    + "read.");
+        }
+        return list.stream().map(type::cast).toList();
+    }
+
+    /** A name member, refused if it is no text. */
+    private static String name(@Nullable Object member, String what) {
+        String name = text(member);
+        if (name == null || name.isBlank()) {
+            throw new IllegalStateException(
+                "the declaration carries " + what + " without a name. A call or a reason is "
+                    + "addressed by its name, and one without is addressed by nothing.");
+        }
+        return name;
+    }
+
+    /** A text member as its text, or {@code null} where it is none. */
+    private static @Nullable String text(@Nullable Object member) {
+        return member instanceof String text ? text : null;
     }
 
     /**
@@ -98,129 +208,82 @@ public final class DeclarationDocument {
         return patterns;
     }
 
+    /**
+     * One reason in the reference's form: the code, its message as a pattern
+     * and as the one keyed template the bundle holds for it, and its remedy.
+     */
     private static Map<String, Object> reason(RefusalCode code, Properties messages,
                                               Properties remedies) {
-        String name = RefusalCatalogue.methodName(code);
+        String key = RefusalCatalogue.methodName(code);
+        String template = messages.getProperty(key);
+        Map<String, Object> message = new LinkedHashMap<>();
+        message.put("key", key);
+        message.put("template", template);
         Map<String, Object> reason = new LinkedHashMap<>();
-        reason.put("code", code.name());
-        reason.put("status", code.status());
-        reason.put("message", messages.getProperty(name));
-        reason.put("remedy", remedies.getProperty(name));
+        reason.put(REASON, code.name());
+        reason.put("message_pattern", template);
+        reason.put("messages", List.of(message));
+        reason.put("remedy", remedies.getProperty(key));
         return reason;
     }
 
-    private static Map<String, Object> verb(SurfaceDeclaration.Verb verb, ToolDescriptions tools,
+    private static Map<String, Object> call(SurfaceDeclaration.Verb verb, ToolDescriptions tools,
                                             ArgumentDescriptions arguments,
                                             ValueDescriptions values) {
-        Map<String, Object> declared = new LinkedHashMap<>();
-        declared.put("identity", SCHEME + "_" + verb.name().name());
-        declared.put("verb", verb.name().name());
-        declared.put("effect_class", verb.effectClass().name());
-        declared.put(DESCRIPTION, verb.description().apply(tools));
-        declared.put("arguments", verb.arguments().stream()
+        Map<String, Object> call = new LinkedHashMap<>();
+        call.put("identity", SurfaceDeclaration.call(verb));
+        call.put(CALL, SurfaceDeclaration.call(verb));
+        call.put("rest_name", verb.name().name());
+        call.put("effect_class", verb.effectClass().name());
+        call.put(DESCRIPTION, verb.description().apply(tools));
+        call.put(ARGUMENTS, verb.arguments().stream()
             .map(argument -> argument(argument, arguments, values))
             .toList());
-        declared.put("answer", verb.answer().name());
-        declared.put("reasons", verb.reasons().stream().map(RefusalCode::name).toList());
-        return declared;
+        Map<String, Object> answer = new LinkedHashMap<>();
+        answer.put("shape", verb.answer().name());
+        answer.put("members", verb.answer().members());
+        call.put("answer", answer);
+        call.put(REFUSALS, verb.reasons().stream().map(RefusalCode::name).toList());
+        return call;
     }
 
     private static Map<String, Object> argument(SurfaceDeclaration.Argument argument,
                                                 ArgumentDescriptions arguments,
                                                 ValueDescriptions values) {
-        Map<String, Object> arg = new LinkedHashMap<>();
-        arg.put("name", argument.name().name());
-        arg.put("type", argument.type().json());
-        arg.put("required", argument.required());
-        arg.put("default", argument.defaultValue());
-        arg.put("values", argument.values().stream()
-            .map(value -> Map.<String, Object>of("value", value.name(),
-                DESCRIPTION, value.description().apply(values)))
-            .toList());
-        arg.put(DESCRIPTION, argument.description().apply(arguments));
-        return arg;
-    }
-
-    /**
-     * The version: the SHA-256 of the content written canonically -- object
-     * members sorted by name, no whitespace -- as lower-case hex.
-     */
-    static String versionOf(Map<String, Object> content) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                .digest(canonical(content).getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException absent) {
-            throw new IllegalStateException("SHA-256 is part of every JVM", absent);
+        Map<String, Object> declared = new LinkedHashMap<>();
+        declared.put("name", argument.name().name());
+        declared.put("type", argument.type().json());
+        declared.put("required", argument.required());
+        declared.put("placement", argument.placement().name());
+        String fallback = argument.defaultValue();
+        if (fallback != null) {
+            // In its own JSON type (C5.4); an argument whose absence means
+            // "unset" declares none.
+            declared.put("default", typed(argument.type(), fallback));
         }
-    }
-
-    /** JSON with object members sorted by name and no insignificant whitespace. */
-    static String canonical(Object value) {
-        StringBuilder out = new StringBuilder();
-        write(out, value);
-        return out.toString();
-    }
-
-    private static void write(StringBuilder out, Object value) {
-        if (value == null) {
-            out.append("null");
-        } else if (value instanceof Map<?, ?> map) {
-            writeObject(out, map);
-        } else if (value instanceof List<?> list) {
-            writeArray(out, list);
-        } else if (value instanceof Number || value instanceof Boolean) {
-            out.append(value);
-        } else {
-            string(out, value.toString());
+        declared.put(DESCRIPTION, argument.description().apply(arguments));
+        if (!argument.values().isEmpty()) {
+            declared.put("values", argument.values().stream()
+                .map(SurfaceDeclaration.Value::name).toList());
+            declared.put("value_descriptions", argument.values().stream()
+                .map(value -> {
+                    Map<String, Object> described = new LinkedHashMap<>();
+                    described.put("value", value.name());
+                    described.put(DESCRIPTION, value.description().apply(values));
+                    return described;
+                })
+                .toList());
         }
+        return declared;
     }
 
-    @SuppressWarnings("unchecked")
-    private static void writeObject(StringBuilder out, Map<?, ?> map) {
-        out.append('{');
-        boolean first = true;
-        for (Map.Entry<String, Object> e : new TreeMap<>((Map<String, Object>) map).entrySet()) {
-            if (!first) {
-                out.append(',');
-            }
-            first = false;
-            string(out, e.getKey());
-            out.append(':');
-            write(out, e.getValue());
-        }
-        out.append('}');
-    }
-
-    private static void writeArray(StringBuilder out, List<?> list) {
-        out.append('[');
-        for (int i = 0; i < list.size(); i++) {
-            if (i > 0) {
-                out.append(',');
-            }
-            write(out, list.get(i));
-        }
-        out.append(']');
-    }
-
-    private static void string(StringBuilder out, String text) {
-        out.append('"');
-        for (char c : text.toCharArray()) {
-            switch (c) {
-                case '"' -> out.append("\\\"");
-                case '\\' -> out.append("\\\\");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        out.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        out.append(c);
-                    }
-                }
-            }
-        }
-        out.append('"');
+    /** A fallback as a value of the argument's own type: a number or text. */
+    private static Object typed(SurfaceDeclaration.ArgumentType type, String fallback) {
+        return switch (type) {
+            case INTEGER -> Long.parseLong(fallback);
+            case STRING -> fallback;
+            case OBJECT -> throw new IllegalStateException(
+                "an object argument declares no fallback: " + fallback);
+        };
     }
 }

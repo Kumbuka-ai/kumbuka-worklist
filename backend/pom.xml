@@ -76,6 +76,10 @@
         <errorprone.version>2.50.0</errorprone.version>
         <nullaway.version>0.14.2</nullaway.version>
         <jspecify.version>1.0.0</jspecify.version>
+
+        <!-- Attaches the declaration of the build to the release deploy. -->
+        <build-helper-plugin.version>3.6.2</build-helper-plugin.version>
+        <enforcer-plugin.version>3.6.3</enforcer-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -343,6 +347,8 @@
                 <configuration>
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                        <!-- Where DeclarationFileIT writes the declaration this build serves. -->
+                        <kumbuka.worklist.declaration>${project.build.directory}/declaration.json</kumbuka.worklist.declaration>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -443,4 +449,86 @@
             <url>https://maven.pkg.github.com/Kumbuka-ai/kumbuka-worklist</url>
         </snapshotRepository>
     </distributionManagement>
+
+    <profiles>
+        <!--
+            The declaration of the released version, beside its jar.
+
+            A router builds its surface for this scheme from what GET
+            /api/declaration answers, and should be able to build against the
+            version it pins without starting that version. So the release
+            deploys that answer as a second file under the same coordinate:
+            ai.kumbuka:kumbuka-worklist:<version>:json:declaration, i.e.
+            kumbuka-worklist-<version>-declaration.json in GitHub Packages, the
+            repository the jar already goes to. No channel of its own.
+
+            The file is not generated beside the service: the declaration's
+            texts come from the message bundles, which exist only in a running
+            application. DeclarationFileIT therefore writes target/declaration.json
+            from the body the built service serves, during `mvn verify`, and
+            holds it byte for byte against that body.
+
+            Switched on by the release workflow's deploy only, by name: an
+            install from a fresh clone, which runs no integration test and so
+            has no file, must not fail on it, and the release must fail when
+            the file is missing rather than publish without it.
+        -->
+        <profile>
+            <id>declaration</id>
+            <build>
+                <plugins>
+                    <!-- No file, no release: attach-artifact alone does not look. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>${enforcer-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>declaration-present</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireFilesSize>
+                                            <files>
+                                                <file>${project.build.directory}/declaration.json</file>
+                                            </files>
+                                            <minsize>1</minsize>
+                                            <maxsize>10485760</maxsize>
+                                            <message>target/declaration.json is missing or empty. It is written by DeclarationFileIT during `mvn verify`; deploy with -Pdeclaration only after the suite ran in the same workspace.</message>
+                                        </requireFilesSize>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>${build-helper-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-declaration</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>attach-artifact</goal>
+                                </goals>
+                                <configuration>
+                                    <artifacts>
+                                        <artifact>
+                                            <file>${project.build.directory}/declaration.json</file>
+                                            <type>json</type>
+                                            <classifier>declaration</classifier>
+                                        </artifact>
+                                    </artifacts>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
