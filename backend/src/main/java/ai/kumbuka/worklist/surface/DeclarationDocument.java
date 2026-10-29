@@ -76,6 +76,10 @@ public final class DeclarationDocument {
     private static final String ARGUMENTS = "arguments";
     private static final String REFUSALS = "refusals";
 
+    /** The bundle files the reasons are worded by: a name of a file, not of a member. */
+    private static final String MESSAGE_BUNDLE = "refusals";
+    private static final String REMEDY_BUNDLE = "remedies";
+
     private DeclarationDocument() {
     }
 
@@ -108,8 +112,8 @@ public final class DeclarationDocument {
         content.put(CALLS, SurfaceDeclaration.verbs().stream()
             .map(verb -> call(verb, tools, arguments, values))
             .toList());
-        Properties messages = patterns("refusals");
-        Properties remedies = patterns("remedies");
+        Properties messages = patterns(MESSAGE_BUNDLE);
+        Properties remedies = patterns(REMEDY_BUNDLE);
         content.put(REASONS, Arrays.stream(RefusalCode.values())
             .map(code -> reason(code, messages, remedies))
             .toList());
