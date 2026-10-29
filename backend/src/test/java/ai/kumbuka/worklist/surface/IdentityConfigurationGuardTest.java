@@ -118,6 +118,38 @@ class IdentityConfigurationGuardTest {
             .hasMessageContaining(IdentityConfigurationGuard.AUDIENCE_KEY);
     }
 
+    /**
+     * F-0358: the shipped audience is the expression
+     * {@code ${WORKLIST_OIDC_AUDIENCE:kumbuka-worklist}}, and {@code docker
+     * compose} hands a variable the file names and the shell lacks to the
+     * container as set and empty. The expression is read from the shipped file
+     * and resolved as the service resolves it, with the variable set to the
+     * empty string.
+     */
+    @Test
+    void the_shipped_audience_with_its_variable_set_and_empty_refuses_the_start()
+            throws IOException {
+        String expression = shippedValue(IdentityConfigurationGuard.AUDIENCE_KEY);
+        assertThat(expression).as("the shipped audience is an expression over the variable")
+            .startsWith("${WORKLIST_OIDC_AUDIENCE");
+
+        assertThatThrownBy(() -> IdentityConfigurationGuard.verify(resolving(
+                Map.of(IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY, "sub",
+                    IdentityConfigurationGuard.AUDIENCE_KEY, expression),
+                Map.of("WORKLIST_OIDC_AUDIENCE", ""))))
+            .as("RED STATE, observed: the variable set and empty, as docker compose hands "
+                + "over one the shell lacks, refuses the start")
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining(IdentityConfigurationGuard.AUDIENCE_KEY);
+
+        assertThatCode(() -> IdentityConfigurationGuard.verify(resolving(
+                Map.of(IdentityConfigurationGuard.PRINCIPAL_CLAIM_KEY, "sub",
+                    IdentityConfigurationGuard.AUDIENCE_KEY, expression),
+                Map.of("WORKLIST_OIDC_AUDIENCE", AUDIENCE))))
+            .as("the control: the same expression with the variable set to an audience starts")
+            .doesNotThrowAnyException();
+    }
+
     @Test
     void a_pinned_principal_with_an_audience_starts() {
         assertThatCode(() -> IdentityConfigurationGuard.verify(configOf(
@@ -135,6 +167,27 @@ class IdentityConfigurationGuardTest {
             .as("a disabled tenant validates no token, so there is no principal to pin; the "
                 + "default is true, so silence never disarms the guard")
             .doesNotThrowAnyException();
+    }
+
+    /**
+     * A configuration that expands expressions as the service's does: the
+     * file's values, and the environment as a source of higher ordinal.
+     */
+    private static Config resolving(Map<String, String> file, Map<String, String> environment) {
+        return new SmallRyeConfigBuilder()
+            .addDefaultInterceptors()
+            .withSources(new PropertiesConfigSource(file, "the shipped file", 250),
+                new PropertiesConfigSource(environment, "the environment", 300))
+            .build();
+    }
+
+    /** The value the shipped file gives a key, unexpanded. */
+    private static String shippedValue(String key) throws IOException {
+        java.util.Properties shipped = new java.util.Properties();
+        try (java.io.Reader in = Files.newBufferedReader(SHIPPED)) {
+            shipped.load(in);
+        }
+        return shipped.getProperty(key);
     }
 
     private static Config configOf(String... namesAndValues) {

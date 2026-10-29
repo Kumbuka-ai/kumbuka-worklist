@@ -745,7 +745,10 @@ public class ItemService {
 
     /**
      * The milestone assignment: resolved against the milestone's NUMBER in
-     * the same scope, and null clears it.
+     * the same scope, and an empty string clears it. A null would clear it as
+     * well, but no caller reaches this method with one: a member of
+     * {@code fields} sent as null is absent (C7.4), so the milestone stays as
+     * it is.
      *
      * <p>The value travels as the number the scope allocated, never as a
      * title and never as a uuid — the read answer names the number, and the
