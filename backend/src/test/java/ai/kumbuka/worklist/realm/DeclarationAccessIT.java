@@ -38,10 +38,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * carries the texts of the message bundles, which only the running service
  * renders.
  *
- * <p>RED STATE, observed 2026-10-29 against the tree before this change: the
- * declaration of the earlier shape broke the schema at the top level, with
- * {@code verbs} for {@code calls}, a bare hexadecimal version and no
- * {@code shape_version}, and 43 arguments carried {@code "default": null}.
+ * <p>RED STATE, observed 2026-10-29 with the declaration document and
+ * resource of the earlier shape put back: the served declaration broke the
+ * schema with {@code verbs} for {@code calls}, a version as bare hex, no
+ * {@code shape_version}, {@code service}, {@code address_form} or
+ * {@code effect_classes}, reasons carrying {@code code}, {@code status} and
+ * {@code message}, and 43 arguments declaring {@code "default": null}.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
