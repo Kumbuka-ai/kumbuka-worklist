@@ -55,11 +55,22 @@ import static io.restassured.RestAssured.given;
  * <p>The last half reads the declaration: every optional argument names its
  * default and says that {@code null} does the same as leaving it out.
  *
+ * <p>One level further down the same holds again: a member sent as
+ * {@code null} inside a map {@code fields} holds is the member left out.
+ *
  * <p>RED STATE, observed 2026-10-28 against the service before the fields map
  * dropped a {@code null}: {@code {"description":null}} in {@code fields} ended
  * every create and update with {@code UNEXPECTED_FAILURE} -- {@code isError}
  * over MCP, 500 over REST -- because the map was copied with
  * {@code Map.copyOf}, which refuses a null value.
+ *
+ * <p>RED STATE of the nested case, observed 2026-10-29: with the fields map
+ * dropping {@code null} at the top only, as at {@code 0fb4862}, and
+ * {@code ItemFields.attributes} planted to read a {@code null} as the empty
+ * text, {@link #a_null_inside_a_map_of_fields_is_the_member_left_out_on_both_surfaces}
+ * turned red in all four answers, create and update over MCP and REST.
+ * Measured beside it: at {@code 0fb4862} itself the nested case is green, the
+ * attributes dropping a null key and an absent label reading as none.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -228,6 +239,60 @@ class NullIsAbsentIT {
         soft.assertAll();
     }
 
+    /**
+     * C7.4 at the next depth: a member sent as {@code null} inside a map that
+     * {@code fields} holds is that member left out -- a key of {@code
+     * attributes}, the label of an entry of {@code references} -- on create
+     * and on update, over both surfaces.
+     */
+    @Test
+    void a_null_inside_a_map_of_fields_is_the_member_left_out_on_both_surfaces() {
+        Map<String, Object> nulled = args("title", "nested", "status", "open",
+            "attributes", args("note", "kept", "size", null),
+            "references", List.of(args("target", "https://example.org/n", "label", null)));
+        Map<String, Object> plain = args("title", "nested", "status", "open",
+            "attributes", args("note", "kept"),
+            "references", List.of(args("target", "https://example.org/n")));
+        SoftAssertions soft = new SoftAssertions();
+
+        JsonPath createdNull = mcpCreate(nulled);
+        soft.assertThat(createdNull.getBoolean("result.isError"))
+            .as("create over MCP with nested nulls is made: %s", createdNull.prettify())
+            .isFalse();
+        soft.assertThat(ownless(createdNull.getMap("result.structuredContent.fields")))
+            .as("create over MCP with nested nulls answers as the create without them")
+            .isEqualTo(ownless(mcpCreate(plain).getMap("result.structuredContent.fields")));
+        Response restNull = restCreate(nulled);
+        soft.assertThat(restNull.statusCode())
+            .as("create over REST with nested nulls is made: %s", restNull.asString())
+            .isEqualTo(201);
+        soft.assertThat(ownless(restNull.jsonPath().getMap("fields")))
+            .as("create over REST with nested nulls answers as the create without them")
+            .isEqualTo(ownless(restCreate(plain).jsonPath().getMap("fields")));
+
+        Map<String, Object> written = args("title", "nested update", "status", "open",
+            "attributes", args("note", "before", "size", "large"));
+        Map<String, Object> changeNull = args("attributes", args("note", "after", "size", null));
+        Map<String, Object> changePlain = args("attributes", args("note", "after"));
+        JsonPath updatedNull = mcpUpdate(mcpCreate(written), changeNull);
+        soft.assertThat(updatedNull.getBoolean("result.isError"))
+            .as("update over MCP with a nested null is made: %s", updatedNull.prettify())
+            .isFalse();
+        soft.assertThat(ownless(updatedNull.getMap("result.structuredContent.fields")))
+            .as("update over MCP with a nested null answers as the update without it")
+            .isEqualTo(ownless(mcpUpdate(mcpCreate(written), changePlain)
+                .getMap("result.structuredContent.fields")));
+        Response restUpdatedNull = restUpdate(restCreate(written), changeNull);
+        soft.assertThat(restUpdatedNull.statusCode())
+            .as("update over REST with a nested null is made: %s", restUpdatedNull.asString())
+            .isEqualTo(200);
+        soft.assertThat(ownless(restUpdatedNull.jsonPath().getMap("fields")))
+            .as("update over REST with a nested null answers as the update without it")
+            .isEqualTo(ownless(restUpdate(restCreate(written), changePlain).jsonPath()
+                .getMap("fields")));
+        soft.assertAll();
+    }
+
     /** @param fields absent where the call was refused, which leaves nothing to compare */
     private static Map<String, Object> ownless(@Nullable Map<String, Object> fields) {
         Map<String, Object> shared = fields == null ? new LinkedHashMap<>()
@@ -387,6 +452,8 @@ class NullIsAbsentIT {
         vocabulary.declareStatus(SCOPE_ID, "open", 1, true, false, false, false);
         vocabulary.declareStatus(SCOPE_ID, "done", 2, false, false, true, true);
         vocabulary.declareRelationType(SCOPE_ID, "blocks", true, 1);
+        vocabulary.declareAttribute(SCOPE_ID, "note", "Note", "text", 1, false);
+        vocabulary.declareAttribute(SCOPE_ID, "size", "Size", "text", 2, false);
         workstreams.requireDefault(SCOPE_ID);
         for (int i = 0; i < 2; i++) {
             items.create(SCOPE_ID, Map.of("title", "null probe " + i, "status", "open"));

@@ -62,8 +62,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * where the object is gone ({@code IdempotencyService.firstAnswer} answering
  * empty in place of the refusal):
  * {@link #a_repeat_after_the_object_is_gone_is_refused_and_creates_nothing}
- * turned red, the repeat answering 201 with a new address; with the refusal
- * back it is green.
+ * turned red, the repeat over MCP answering as a success, with no
+ * {@code isError}, where it is refused; with the refusal back it is green.
+ * With the fields map dropping {@code null} at the top only, as at
+ * {@code 0fb4862}, {@link #a_repeat_that_spells_an_absent_field_as_null_is_the_same_call}
+ * turned red: the repeat was refused as {@code IDEMPOTENCY_KEY_REUSED}, its
+ * digest reading the null label as another value.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
