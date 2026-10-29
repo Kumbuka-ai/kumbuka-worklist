@@ -46,9 +46,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the object (C14.5). The MCP adapter does not read the header at all.
  *
  * <p>RED STATE, observed 2026-10-29 with {@code SurfaceHeaderFilter} taken out
- * of the chain for the run ({@code @Provider} removed): a create with the
- * header sent twice came through and wrote an item, and {@link
- * #an_unknown_value_is_header_invalid_and_writes_nothing} and {@link
+ * of the chain for the run ({@code @Provider} removed): a create with {@code
+ * Kumbuka-Surface: mcp}, and one with the header sent twice, came through and
+ * wrote an item (201), and a colon verb not carried answered {@code
+ * WRITE_ON_TRUNCATED_ADDRESS} 405 where the header is decided first: {@link
+ * #an_unknown_value_is_header_invalid_and_writes_nothing}, {@link
+ * #the_header_twice_is_header_invalid_and_writes_nothing} and {@link
  * #the_header_is_decided_before_anything_else} turned red.
  */
 @QuarkusTest
@@ -115,7 +118,10 @@ class SurfaceHeaderIT {
             headerInvalid(refused, "'" + value + "'");
             assertThat(newest()).as("'%s' wrote nothing", value).isEqualTo(before);
         }
+    }
 
+    @Test
+    void the_header_twice_is_header_invalid_and_writes_nothing() {
         String before = newest();
         Response twice = given().header(HEADER, ASSISTANT, ASSISTANT)
             .contentType(ContentType.JSON).body(fields("refused for twice"))
