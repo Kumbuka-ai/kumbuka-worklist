@@ -47,6 +47,9 @@ public final class SurfaceDeclaration {
      */
     public static final int DESCRIPTION_BUDGET = 500;
 
+    /** The member and argument an object's address travels under. */
+    private static final String ADDRESS_MEMBER = "address";
+
     private SurfaceDeclaration() {
     }
 
@@ -142,9 +145,9 @@ public final class SurfaceDeclaration {
      */
     public enum Answer {
         /** One object: {@code address} and {@code fields}. */
-        OBJECT(List.of("address", "fields")),
+        OBJECT(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT)),
         /** One object at 201, with {@code Location}. */
-        OBJECT_CREATED(List.of("address", "fields")),
+        OBJECT_CREATED(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT)),
         /** A page of objects and {@code next_cursor} while more follow. */
         OBJECT_LISTING(List.of("objects", "[next_cursor]"));
 
@@ -211,9 +214,9 @@ public final class SurfaceDeclaration {
     private static final Argument SCOPE =
         required("scope", ArgumentType.STRING, ArgumentDescriptions::scope);
     private static final Argument ADDRESS =
-        required("address", ArgumentType.STRING, ArgumentDescriptions::address);
+        required(ADDRESS_MEMBER, ArgumentType.STRING, ArgumentDescriptions::address);
     private static final Argument MEMBERSHIP =
-        required("address", ArgumentType.STRING, ArgumentDescriptions::addressMembership);
+        required(ADDRESS_MEMBER, ArgumentType.STRING, ArgumentDescriptions::addressMembership);
     private static final Argument TOKEN =
         required("conflict_token", ArgumentType.STRING, ArgumentDescriptions::conflictToken);
     private static final Argument FIELDS =
