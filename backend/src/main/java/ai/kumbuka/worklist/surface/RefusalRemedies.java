@@ -26,6 +26,12 @@ public interface RefusalRemedies {
     String addressMalformed();
 
     @Message
+    String verbNotCarried();
+
+    @Message
+    String headerInvalid();
+
+    @Message
     String verbUncarried(VerbName attempted);
 
     @Message
@@ -174,4 +180,7 @@ public interface RefusalRemedies {
 
     @Message
     String protocolMethod();
+
+    @Message
+    String protocolTool();
 }

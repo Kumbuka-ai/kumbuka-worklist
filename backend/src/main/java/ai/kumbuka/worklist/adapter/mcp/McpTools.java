@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.adapter.payload.SchemaPayload;
 import ai.kumbuka.worklist.adapter.payload.SchemaValuePayload;
 import ai.kumbuka.worklist.adapter.payload.ToolPayload;
 import ai.kumbuka.worklist.surface.ArgumentDescriptions;
+import ai.kumbuka.worklist.surface.DeclarationDocument;
 import ai.kumbuka.worklist.surface.SurfaceDeclaration;
 import ai.kumbuka.worklist.surface.ToolDescriptions;
 import ai.kumbuka.worklist.surface.ValueDescriptions;
@@ -32,11 +33,19 @@ import java.util.Optional;
  * hold for the verb, each argument and each value. Nothing here says anything
  * of its own, so the tool list and the declaration cannot drift apart (ADR-0039).
  *
+ * <p><strong>A tool is named {@code worklist_<verb>}</strong>, the identity the
+ * declaration publishes for the call (C4.2, DEC-0043 R1). The bare verb a tool
+ * was named by before is still taken on {@code tools/call} and never listed;
+ * it goes in the breaking step of the service, with the other old forms.
+ *
  * <p><strong>MCP omits and never adds.</strong> The verbs of the scheme this
  * service refuses by name are absent from {@code tools/list} and still answered
  * by name when called, with the same typed refusal the REST surface gives.
  */
 public final class McpTools {
+
+    /** What a tool name carries before its verb: the scheme and an underscore. */
+    private static final String PREFIX = DeclarationDocument.SCHEME + "_";
 
     private McpTools() {
     }
@@ -53,19 +62,30 @@ public final class McpTools {
                                              ArgumentDescriptions arguments,
                                              ValueDescriptions values) {
         return SurfaceDeclaration.verbs().stream()
-            .map(verb -> new ToolPayload(verb.name().name(), verb.description().apply(tools),
+            .map(verb -> new ToolPayload(SurfaceDeclaration.call(verb),
+                verb.description().apply(tools),
                 schema(verb, arguments, values)))
             .toList();
     }
 
     /** The names of the tools this server declares, in the order of tools/list. */
     public static List<String> names() {
-        return SurfaceDeclaration.verbs().stream().map(v -> v.name().name()).toList();
+        return SurfaceDeclaration.verbs().stream().map(SurfaceDeclaration::call).toList();
     }
 
-    /** The argument names one tool declares; absent for a name that is no declared tool. */
-    public static Optional<List<String>> argumentsOf(String tool) {
-        return SurfaceDeclaration.verb(tool)
+    /**
+     * The verb a tool name calls: the name without the service prefix, or the
+     * bare verb a tool was named by before; absent for a name that calls no
+     * verb, carried or refused by name.
+     */
+    public static Optional<String> verbOf(String tool) {
+        String verb = tool.startsWith(PREFIX) ? tool.substring(PREFIX.length()) : tool;
+        return SurfaceDeclaration.isNamed(verb) ? Optional.of(verb) : Optional.empty();
+    }
+
+    /** The argument names one verb declares; absent for a verb that is not carried. */
+    public static Optional<List<String>> argumentsOf(String verb) {
+        return SurfaceDeclaration.verb(verb)
             .map(SurfaceDeclaration.Verb::argumentNames);
     }
 

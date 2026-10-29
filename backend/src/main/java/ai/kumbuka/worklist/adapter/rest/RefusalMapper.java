@@ -12,13 +12,17 @@ import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import org.jboss.logging.Logger;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -139,15 +143,18 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
     }
 
     /**
-     * Every failure nobody anticipated, in the same envelope (DEC-0043 R13).
+     * Every failure nobody anticipated, in the same envelope (DEC-0043 R13),
+     * and the framework's own 404 and 405 (C8.3).
      *
      * <p>Registered for {@link Exception} and therefore chosen only where no
      * more specific mapper applies: the two typed refusals above keep theirs.
-     * The framework's own answers -- a 405 for a method the route does not
-     * take, a 415 for a body of the wrong type, a 401 with its challenge --
-     * travel as {@link WebApplicationException} and are handed back as they
-     * came, because they are the protocol's form and replacing them would
-     * make the surface non-conformant.
+     * The framework's answers travel as {@link WebApplicationException}. A
+     * route that does not exist is {@code NOT_FOUND}, byte for byte the one of
+     * an absent object (C8.4); a method the route does not take is {@code
+     * VERB_NOT_CARRIED} with {@code Allow} and the verbs carried at the
+     * address (C3.3). Every other status of the framework -- a 415 for a body
+     * of the wrong type, the security layer's 401 with its challenge -- is
+     * handed back as it came: the authentication exception of DEC-0042.
      *
      * <p>The exception's own message never reaches the caller: whatever threw
      * it wrote it, and it can carry a value the call sent. The log line and
@@ -157,10 +164,17 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
     @Provider
     public static class Unexpected implements ExceptionMapper<Exception> {
 
+        @Context UriInfo uri;
+
         @Override
         public Response toResponse(Exception e) {
             if (e instanceof WebApplicationException framework) {
-                return framework.getResponse();
+                Response given = framework.getResponse();
+                return switch (given.getStatus()) {
+                    case 404 -> refusal(new SurfaceException(RefusalCode.NOT_FOUND));
+                    case 405 -> methodNotCarried(given, depthOf(uri.getPath()));
+                    default -> given;
+                };
             }
             String reference = UUID.randomUUID().toString();
             LOG.errorf("unexpected failure %s: %s", reference, e.getClass().getName());
@@ -169,5 +183,39 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 .entity(RefusalPayload.unexpected(reference))
                 .build();
         }
+
+        /**
+         * The framework's 405 in the envelope: the verbs carried at the
+         * address where it is one, and the route's methods in {@code Allow}.
+         * The framework's own {@code Allow} is taken where it sends one.
+         */
+        private static Response methodNotCarried(Response given,
+                                                 Optional<CustomMethod.Depth> depth) {
+            String allow = given.getHeaderString(HttpHeaders.ALLOW);
+            if (allow == null) {
+                allow = depth.map(CustomMethod::allow).orElse(null);
+            }
+            return refusal(new SurfaceException(RefusalCode.VERB_NOT_CARRIED, allow, List.of(),
+                depth.map(CustomMethod::accepts).orElse(List.of()), null));
+        }
+
+        /** The depth of a REST path: a collection, an object, a membership, or none. */
+        private static Optional<CustomMethod.Depth> depthOf(String path) {
+            String[] segments = (path.startsWith("/") ? path.substring(1) : path).split("/", -1);
+            if (segments.length < 3 || !"api".equals(segments[0])) {
+                return Optional.empty();
+            }
+            return switch (segments.length) {
+                case 3 -> Optional.of(CustomMethod.Depth.COLLECTION);
+                case 4 -> Optional.of(CustomMethod.Depth.ITEM);
+                case 5 -> Optional.of(CustomMethod.Depth.MEMBERSHIP);
+                default -> Optional.empty();
+            };
+        }
+    }
+
+    /** A surface refusal as the REST surface answers it, through the one mapping above. */
+    private static Response refusal(SurfaceException refused) {
+        return new RefusalMapper().toResponse(refused);
     }
 }

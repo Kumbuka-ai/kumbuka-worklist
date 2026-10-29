@@ -124,8 +124,8 @@ class NullIsAbsentIT {
 
         SoftAssertions soft = new SoftAssertions();
         List<String> tools = toolsList().getList("result.tools.name", String.class);
-        soft.assertThat(calls.keySet()).as("every declared tool is probed")
-            .containsExactlyInAnyOrderElementsOf(tools);
+        soft.assertThat(calls.keySet().stream().map(verb -> "worklist_" + verb).toList())
+            .as("every declared tool is probed").containsExactlyInAnyOrderElementsOf(tools);
 
         calls.forEach((tool, call) -> {
             for (String argument : call.keySet()) {
@@ -133,8 +133,8 @@ class NullIsAbsentIT {
                 asNull.put(argument, null);
                 Map<String, Object> leftOut = new HashMap<>(call);
                 leftOut.remove(argument);
-                Object nullAnswer = structured(tool, asNull);
-                Object absentAnswer = structured(tool, leftOut);
+                Object nullAnswer = structured("worklist_" + tool, asNull);
+                Object absentAnswer = structured("worklist_" + tool, leftOut);
                 soft.assertThat(nullAnswer)
                     .as("%s with %s as null answers as %s left out", tool, argument, argument)
                     .isEqualTo(absentAnswer);

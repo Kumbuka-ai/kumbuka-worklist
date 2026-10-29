@@ -14,6 +14,7 @@ import ai.kumbuka.worklist.adapter.payload.ObjectPayload;
 import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.adapter.payload.RpcErrorBodyPayload;
+import ai.kumbuka.worklist.adapter.payload.RpcErrorDataPayload;
 import ai.kumbuka.worklist.adapter.payload.RpcErrorPayload;
 import ai.kumbuka.worklist.adapter.payload.RpcResultPayload;
 import ai.kumbuka.worklist.adapter.payload.ServerInfoPayload;
@@ -33,6 +34,7 @@ import ai.kumbuka.worklist.surface.VerbSurface;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.arc.properties.IfBuildProperty;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -41,6 +43,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
@@ -77,7 +80,20 @@ import java.util.UUID;
  * unbuilt says so. The difference matters: unknown tool says the caller mistyped,
  * a category error says the act does not exist in this scheme, and neither of
  * those is "not yet".
+ *
+ * <h2>The protocol</h2>
+ *
+ * JSON-RPC 2.0 at {@code POST /mcp}, protocol {@code 2025-06-18}, the methods
+ * {@code initialize}, {@code ping}, {@code tools/list} and {@code tools/call}
+ * (C4.1). A tool is named {@code worklist_<verb>}; the bare verb is still taken
+ * on {@code tools/call} until the breaking step (C4.2). A tool name that calls
+ * no verb is a fault of the protocol, -32602 with the declared tool names under
+ * {@code error.data.accepts}; an unknown method is -32601 (C4.3).
+ *
+ * <p>Present only where the build says so: {@code kumbuka.local-mcp.enabled},
+ * on unless set to {@code false} (C4.6).
  */
+@IfBuildProperty(name = "kumbuka.local-mcp.enabled", stringValue = "true", enableIfMissing = true)
 @Path("/mcp")
 @Authenticated
 @TenantBound
@@ -130,10 +146,16 @@ public class McpAdapter {
     @Inject CallerActor caller;
     @Inject ObjectMapper json;
 
+    /** The service's version, from the build: the POM's version, never a literal (C4.5). */
+    @Inject
+    @ConfigProperty(name = "quarkus.application.version")
+    String version;
+
     @POST
     public Response rpc(@Nullable Map<String, Object> request) {
         if (request == null || !JSONRPC.equals(request.get(KEY_JSONRPC))) {
-            return error(null, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolEnvelope"));
+            return error(null, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolEnvelope"),
+                null);
         }
 
         Object id = request.get(KEY_ID);
@@ -147,22 +169,40 @@ public class McpAdapter {
 
         return switch (method) {
             case "initialize" -> result(id, initialize());
+            case "ping" -> result(id, new EmptyPayload());
             case "tools/list" -> result(id, new ToolListPayload(McpTools.declared()));
-            case "tools/call" -> result(id, call(arguments(request, "params")));
+            case "tools/call" -> call(id, arguments(request, "params"));
             // The method that arrived is the caller's and never comes back
             // (DEC-0043 R19); the answer names the methods this server speaks.
-            default -> error(id, METHOD_NOT_FOUND, RefusalCatalogue.protocolText("protocolMethod"));
+            default -> error(id, METHOD_NOT_FOUND, RefusalCatalogue.protocolText("protocolMethod"),
+                null);
         };
     }
 
     // ======================================================================
-    // The three methods
+    // The four methods
     // ======================================================================
 
-    private static InitializePayload initialize() {
+    private InitializePayload initialize() {
         return new InitializePayload(PROTOCOL_VERSION,
             new CapabilitiesPayload(new EmptyPayload()),
-            new ServerInfoPayload("kumbuka-worklist", "0.4.2"));
+            new ServerInfoPayload("kumbuka-worklist", version));
+    }
+
+    /**
+     * One tool call. A name that calls no verb is a fault of the protocol and
+     * answers as one (C4.3); every other outcome is the call's, made and
+     * answered, refused or not.
+     */
+    private Response call(Object id, Map<String, Object> params) {
+        Optional<String> verb = string(params, KEY_NAME).flatMap(McpTools::verbOf);
+        if (verb.isEmpty()) {
+            // The tool name that arrived is the caller's and never comes back
+            // (DEC-0043 R19); the answer names the tools this server declares.
+            return error(id, INVALID_PARAMS, RefusalCatalogue.protocolText("protocolTool"),
+                new RpcErrorDataPayload(McpTools.names()));
+        }
+        return result(id, call(verb.get(), present(arguments(params, "arguments"))));
     }
 
     /**
@@ -173,12 +213,9 @@ public class McpAdapter {
      * it is worth keeping: a JSON-RPC error says the call could not be made, and
      * every refusal in this service is a call that was made and answered.
      */
-    private ToolResultPayload call(Map<String, Object> params) {
-        String tool = string(params, KEY_NAME).orElse("");
-        Map<String, Object> arguments = present(arguments(params, "arguments"));
-
+    private ToolResultPayload call(String verb, Map<String, Object> arguments) {
         try {
-            return content(invoke(tool, arguments), false);
+            return content(invoke(verb, arguments), false);
         } catch (SurfaceException e) {
             return content(RefusalPayload.of(e), true);
         } catch (WorklistException e) {
@@ -218,23 +255,22 @@ public class McpAdapter {
      * Refuses a name the tool does not declare, at the top level of its
      * arguments (DEC-0043 R4). The answer names the arguments the tool
      * declares and never the name that arrived (R19); nothing is accepted and
-     * discarded.
+     * discarded. A form fault, decided before any scope is resolved (C1.3).
      */
-    private void requireDeclared(List<String> declared, Map<String, Object> in) {
-        if (declared.containsAll(in.keySet())) {
-            return;
+    private static void requireDeclared(List<String> declared, Map<String, Object> in) {
+        if (!declared.containsAll(in.keySet())) {
+            throw SurfaceException.unknown(declared);
         }
-        visibleFirst(in, null);
-        throw SurfaceException.unknown(declared);
     }
 
     // ======================================================================
     // The verbs
     // ======================================================================
 
-    private Object invoke(String tool, Map<String, Object> in) {
-        McpTools.argumentsOf(tool).ifPresent(declared -> requireDeclared(declared, in));
-        return switch (tool) {
+    /** @param verb a verb this service carries or refuses by name ({@link McpTools#verbOf}) */
+    private Object invoke(String verb, Map<String, Object> in) {
+        McpTools.argumentsOf(verb).ifPresent(declared -> requireDeclared(declared, in));
+        return switch (verb) {
             case "create" -> create(in);
             case "read" -> read(in);
             case "update" -> update(in);
@@ -256,11 +292,10 @@ public class McpAdapter {
 
             // Not in tools/list, and still answered by name.
             case "send", "append", "digest", "abandon", "block", "resume", "consume" ->
-                refused(in, tool, false);
+                refused(in, verb, false);
 
-            // The tool name that arrived is the caller's and never comes back
-            // (DEC-0043 R19); the answer names the tools this server declares.
-            default -> throw SurfaceException.invalid(KEY_NAME, McpTools.names());
+            default -> throw new IllegalStateException(
+                "a verb McpTools names has no arm here");
         };
     }
 
@@ -457,7 +492,7 @@ public class McpAdapter {
             return Optional.empty();
         }
         if (!(raw instanceof Map)) {
-            visibleFirst(in, ARG_FIELDS);
+            // A form fault: decided before the scope (C1.3).
             throw SurfaceException.invalid(ARG_FIELDS);
         }
         return Optional.of(new VerbInput.Fields((Map<String, Object>) raw));
@@ -469,22 +504,23 @@ public class McpAdapter {
 
     private String required(Map<String, Object> in, String name) {
         String value = optional(in, name).orElse(null);
-        if (value == null || value.isBlank()) {
-            visibleFirst(in, name);
-        }
         if (value == null) {
+            visibleFirst(in, name);
             throw SurfaceException.missing(name);
         }
         if (value.isBlank()) {
+            // A form fault: decided before the scope (C1.3).
             throw SurfaceException.invalid(name);
         }
         return value;
     }
 
     /**
-     * Resolves the scope the call names, before an argument of the call is
-     * refused: a stranger is answered NOT_FOUND whatever else is wrong with
-     * the call (DEC-0042). Where the call names no scope -- the refused
+     * Resolves the scope the call names, before a missing argument of the
+     * call is refused: a stranger is answered NOT_FOUND for a call that left
+     * an argument out, as the verb surface answers it where the REST body
+     * leaves one out. A fault of form is decided before the scope (C1.3) and
+     * does not come here. Where the call names no scope -- the missing
      * argument is the address or the scope itself -- there is nothing to
      * resolve and the argument's own refusal stands.
      */
@@ -528,7 +564,7 @@ public class McpAdapter {
                 // fall through to the refusal below
             }
         }
-        visibleFirst(in, ARG_DURATION);
+        // A form fault: decided before the scope (C1.3).
         throw SurfaceException.invalid(ARG_DURATION);
     }
 
@@ -579,8 +615,9 @@ public class McpAdapter {
     }
 
     /** @param id the request's id; absent where the request carried none to answer under */
-    private static Response error(@Nullable Object id, int code, String message) {
-        return Response.ok(new RpcErrorPayload(JSONRPC, id, new RpcErrorBodyPayload(code, message)))
-            .build();
+    private static Response error(@Nullable Object id, int code, String message,
+                                  @Nullable RpcErrorDataPayload data) {
+        return Response.ok(new RpcErrorPayload(JSONRPC, id,
+            new RpcErrorBodyPayload(code, message, data))).build();
     }
 }

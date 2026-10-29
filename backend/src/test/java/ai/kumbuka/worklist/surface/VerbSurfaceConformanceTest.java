@@ -236,7 +236,11 @@ class VerbSurfaceConformanceTest {
 
     @Test
     void the_mcp_exposition_declares_exactly_the_carried_verbs() {
-        Set<String> carried = VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED);
+        // A tool is named worklist_<verb> (C4.2), written here and not read
+        // from the service.
+        Set<String> carried = VerbSurfaceSpecification.verbsOf(VerbSurfaceSpecification.CARRIED)
+            .stream().map(verb -> "worklist_" + verb)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Set<String> declared = tools().stream()
             .map(ToolPayload::name)
@@ -271,7 +275,7 @@ class VerbSurfaceConformanceTest {
     @Test
     void the_query_selector_names_every_view_the_service_lists() {
         ToolPayload query = tools().stream()
-            .filter(tool -> tool.name().equals("query"))
+            .filter(tool -> tool.name().equals("worklist_query"))
             .findFirst().orElseThrow();
         String selector = query.inputSchema().properties().get("selector").description();
         assertThat(selector).as("query's selector is described by its own text")

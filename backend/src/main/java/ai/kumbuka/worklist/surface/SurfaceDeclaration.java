@@ -575,6 +575,11 @@ public final class SurfaceDeclaration {
         return VERBS.stream().filter(v -> v.name().name().equals(name)).findFirst();
     }
 
+    /** Whether a verb of this spelling is carried or refused by name. */
+    public static boolean isNamed(String verb) {
+        return VERB_NAMES.containsKey(verb);
+    }
+
     /** The names of the carried verbs, as placeholders. */
     public static List<VerbName> carried() {
         return VERBS.stream().map(Verb::name).toList();

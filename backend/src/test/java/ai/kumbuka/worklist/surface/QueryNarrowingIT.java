@@ -495,6 +495,10 @@ class QueryNarrowingIT {
      * else is wrong with the call (DEC-0042) — a 422 here would confirm that
      * the scope exists.
      *
+     * <p>An argument the call does not declare is a fault of form, which says
+     * nothing about any scope, and is decided before the scope (C1.3): the
+     * stranger is answered {@code ARGUMENT_UNKNOWN}, as the member is.
+     *
      * <p>RED STATE, observed 2026-10-12 with the paging read moved in front of
      * the scope resolution in {@code VerbSurface.query}: the stranger was
      * answered {@code PREDICATE_UNKNOWN} with 422 on REST and on the service
@@ -504,9 +508,10 @@ class QueryNarrowingIT {
     @EnumSource(Transport.class)
     void an_undeclared_filter_on_an_invisible_scope_is_not_found(Transport via) {
         SurfaceFixture.asStranger(identity);
+        assertRefused(via.call(Selector.ITEM, Map.of(), Map.of("limit", 1)),
+            "ARGUMENT_UNKNOWN", null, "limit, a fault of form, before the scope");
         Map<String, Answer> calls = new LinkedHashMap<>();
         calls.put("filter.foo", via.call(Selector.ITEM, Map.of("foo", "1"), Map.of()));
-        calls.put("limit", via.call(Selector.ITEM, Map.of(), Map.of("limit", 1)));
         calls.forEach((what, answer) -> {
             assertThat(answer.status()).as("%s: refused, not answered", what).isNotEqualTo(200);
             if (answer.status() != Answer.MCP_REFUSAL) {
@@ -698,14 +703,17 @@ class QueryNarrowingIT {
         assertThat(viaRest).isEqualTo(Transport.MCP.body(Selector.MILESTONE, paging));
     }
 
-    /** The header takes one value; any other is refused and the read not made. */
+    /**
+     * The header takes one value; any other is refused as {@code
+     * HEADER_INVALID} (C14.5) and the read not made.
+     */
     @Test
     void the_surface_header_takes_only_the_assistant() {
         var response = given().header(SURFACE, "console")
             .when().get("/api/" + SCOPE + "/" + Selector.MILESTONE)
             .then().extract();
         assertThat(response.statusCode()).isEqualTo(400);
-        assertThat(response.jsonPath().getString("reason")).isEqualTo("ARGUMENT_INVALID");
+        assertThat(response.jsonPath().getString("reason")).isEqualTo("HEADER_INVALID");
         assertThat(response.jsonPath().getMap("$"))
             .as("the header is not an argument of the call, so there is no offender to name")
             .doesNotContainKey("data");
@@ -1024,7 +1032,7 @@ class QueryNarrowingIT {
             return given()
                 .contentType(ContentType.JSON)
                 .body(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call",
-                    "params", Map.of("name", "query", "arguments", arguments)))
+                    "params", Map.of("name", "worklist_query", "arguments", arguments)))
                 .when().post("/mcp")
                 .then().statusCode(200)
                 .extract().jsonPath();

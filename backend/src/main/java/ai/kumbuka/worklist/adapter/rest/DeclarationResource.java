@@ -34,9 +34,10 @@ import java.util.Map;
  * comparing them.
  *
  * <p>The path follows {@code /api/whoami}: a literal segment under
- * {@code /api}, which JAX-RS matches before the {@code /api/{scope}} template,
- * so no scope address is shadowed -- a scope named {@code declaration} is still
- * addressed at {@code /api/declaration/<view>}. Authenticated like every other
+ * {@code /api}, which JAX-RS matches before the {@code /api/{scope}} template.
+ * The name is reserved and is never the name of a scope (C3.2): a path below
+ * it is refused before any route is looked up ({@link ReservedScopeFilter}).
+ * Authenticated like every other
  * route of this service; nothing in it is a tenant's.
  */
 @Path("/api/declaration")
