@@ -89,7 +89,7 @@ public class SelectorRegistry {
         }
 
         selectors.open(scopeId, token);
-        LOG.infof("view %s open in scope %s", token, scopeId);
+        LOG.debugf("view %s open in scope %s", token, scopeId);
     }
 
     /** The views open in a scope, by token. */

@@ -143,7 +143,7 @@ public class IterationService extends PlanningService {
 
         planning.insert(iteration);
         planning.flushAndRefresh(iteration);
-        LOG.infof("iteration %d created in scope %s", iteration.number, scopeId);
+        LOG.debugf("iteration %d created in scope %s", iteration.number, scopeId);
 
         return project(iteration, warnings(warningAt(openAfterwards,
             setting.warnPlannedIterations, Notice.PLANNED_ITERATIONS_AT_THRESHOLD)));
@@ -176,7 +176,7 @@ public class IterationService extends PlanningService {
         }
 
         planning.flushAndRefresh(iteration);
-        LOG.infof("iteration %d updated in scope %s", iteration.number, scopeId);
+        LOG.debugf("iteration %d updated in scope %s", iteration.number, scopeId);
         return project(iteration, List.of());
     }
 
@@ -222,7 +222,7 @@ public class IterationService extends PlanningService {
     @Transactional
     public Map<String, Object> close(UUID scopeId, UUID iterationId,
             @Nullable String produced, String conflictToken) {
-        String producedNamed = requireNamed(produced);
+        requireNamed(produced);
 
         Iteration iteration = requireLocked(scopeId, iterationId);
         refuseClosed(iteration);
@@ -244,8 +244,7 @@ public class IterationService extends PlanningService {
         }
 
         planning.flushAndRefresh(iteration);
-        LOG.infof("iteration %d closed in scope %s (produced: %s)",
-            iteration.number, scopeId, producedNamed);
+        LOG.debugf("iteration %d closed in scope %s", iteration.number, scopeId);
         return project(iteration, List.of());
     }
 
@@ -295,7 +294,7 @@ public class IterationService extends PlanningService {
         setting.currentIterationNumber = next.number;
         setting.stamp(clock.instant());
         planning.flushAndRefresh(setting);
-        LOG.infof("iteration %d promoted to current in scope %s", next.number, scopeId);
+        LOG.debugf("iteration %d promoted to current in scope %s", next.number, scopeId);
         return ScopeSettingService.project(setting, next.id, List.of());
     }
 

@@ -28,6 +28,7 @@ import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.ProtocolMessages;
 import ai.kumbuka.worklist.surface.SurfaceException;
+import ai.kumbuka.worklist.surface.UnexpectedFailures;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
 import ai.kumbuka.worklist.tenancy.TenantBound;
@@ -51,7 +52,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * The MCP exposition of the verb surface: a projection that omits and adds
@@ -217,18 +217,19 @@ public class McpAdapter {
         try {
             return content(invoke(verb, arguments), false);
         } catch (SurfaceException e) {
+            LOG.debugf("surface refusal: %s", e.reason().name());
             return content(RefusalPayload.of(e), true);
         } catch (WorklistException e) {
             // The same envelope the REST path answers with, built by the same
             // method — which is what makes "one envelope, whichever hop" a
             // property of the construction and not a claim about it.
+            LOG.debugf("domain refusal: %s", e.reason().name());
             return content(RefusalPayload.of(e), true);
         } catch (RuntimeException e) {
             // DEC-0043 R13: a defect answers as one, with a reference the log
             // line shares, and nothing the exception said.
-            String reference = UUID.randomUUID().toString();
-            LOG.errorf("unexpected failure %s: %s", reference, e.getClass().getName());
-            return content(RefusalPayload.unexpected(reference), true);
+            return content(RefusalPayload.unexpected(UnexpectedFailures.reference(verb, e)),
+                true);
         }
     }
 

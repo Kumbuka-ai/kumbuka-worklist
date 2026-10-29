@@ -149,7 +149,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.infof("item planned into iteration %d in scope %s", iteration.number, scopeId);
+        LOG.debugf("item planned into iteration %d in scope %s", iteration.number, scopeId);
 
         return project(iteration, membership, warnings(warningAt(afterwards,
             setting.warnMembershipsPerIteration, Notice.MEMBERSHIPS_AT_THRESHOLD)));
@@ -188,7 +188,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.infof("item unplanned from iteration %d in scope %s", iteration.number, scopeId);
+        LOG.debugf("item unplanned from iteration %d in scope %s", iteration.number, scopeId);
         return project(iteration, membership, List.of());
     }
 
@@ -244,7 +244,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.infof("membership status moved in iteration %d, scope %s", iteration.number,
+        LOG.debugf("membership status moved in iteration %d, scope %s", iteration.number,
             scopeId);
         return project(iteration, membership, List.of());
     }

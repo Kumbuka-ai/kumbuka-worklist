@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
+import ai.kumbuka.worklist.surface.UnexpectedFailures;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -23,7 +24,6 @@ import org.jboss.logging.Logger;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Turns the two families of typed refusal into HTTP, and keeps them apart.
@@ -72,7 +72,9 @@ import java.util.UUID;
 public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
     /**
-     * The one place every refusal that reaches a caller passes through.
+     * The one place every refusal that reaches a REST caller passes through; the
+     * MCP adapter logs the refusals it answers in the same words at the same
+     * level, and a defect is logged by {@link UnexpectedFailures} on both.
      *
      * <p>Logging here rather than at the throw sites is not tidiness: every site
      * is a chance to do it differently, and the one that gets forgotten is the
@@ -124,15 +126,10 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
         public Response toResponse(WorklistException e) {
             int status = RefusalCode.of(e.reason()).status();
 
-            // A 5xx is ours, not the caller's, and no retry of theirs fixes it.
-            // That is the one refusal class this surface raises to ERROR:
-            // everything else is a caller being told no, which is the surface
-            // working.
-            if (status >= 500) {
-                LOG.errorf("domain refusal answered %d: %s", status, e.reason().name());
-            } else {
-                LOG.debugf("domain refusal: %s -> %d", e.reason().name(), status);
-            }
+            // Every refusal at DEBUG, by its code (C13.3), a 5xx among them:
+            // the anomaly behind SESSION_NOT_BOUND is logged at WARN where it
+            // is found, and ERROR belongs to the unexpected failure alone.
+            LOG.debugf("domain refusal: %s -> %d", e.reason().name(), status);
 
             return Response.status(status)
                 .type(MediaType.APPLICATION_JSON)
@@ -176,11 +173,9 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                     default -> given;
                 };
             }
-            String reference = UUID.randomUUID().toString();
-            LOG.errorf("unexpected failure %s: %s", reference, e.getClass().getName());
             return Response.status(RefusalCode.UNEXPECTED_FAILURE.status())
                 .type(MediaType.APPLICATION_JSON)
-                .entity(RefusalPayload.unexpected(reference))
+                .entity(RefusalPayload.unexpected(UnexpectedFailures.reference(null, e)))
                 .build();
         }
 

@@ -428,7 +428,7 @@ public class VerbSurface {
 
         Map<String, Object> setting = iterations.advance(in.scopeId(),
             requireToken(conflictToken));
-        LOG.infof("advance in scope %s", in.scopeId());
+        LOG.infof("advance %s in scope %s", in.view(), in.scopeId());
 
         // The answer is the SETTINGS row, because that is what the verb wrote:
         // it moved a pointer. Dressing it as the promoted iteration would be
@@ -594,11 +594,12 @@ public class VerbSurface {
 
         Duration lease = requireLease(body);
         Map<String, Object> answered = claims.claimNext(in.scopeId(), subject, lease);
-        LOG.infof("claim_next in scope %s", in.scopeId());
         // The answer's address is the item that was drawn; read from the
         // projection rather than remembered from the call, exactly as
         // {@link #create} does.
-        return at(Selector.ITEM, answered);
+        Result drawn = at(Selector.ITEM, answered);
+        LOG.infof("claim_next %s in scope %s", drawn.address().id(), in.scopeId());
+        return drawn;
     }
 
     // ======================================================================

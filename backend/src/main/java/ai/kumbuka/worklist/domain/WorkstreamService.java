@@ -133,7 +133,7 @@ public class WorkstreamService {
         // number_space row is planted by bootstrap or by the first
         // `selectors.open(scope, MILESTONE)` call.
 
-        LOG.infof("default workstream created lazily in scope %s (number %d)",
+        LOG.debugf("default workstream created lazily in scope %s (number %d)",
             scopeId, number);
         return defaultRow;
     }
@@ -181,8 +181,7 @@ public class WorkstreamService {
         // V12 (2026-09-09): no per-workstream milestone counter is opened;
         // the counter is scope-wide (see class comment above).
 
-        LOG.infof("workstream %s (number %d) declared in scope %s",
-            token, number, scopeId);
+        LOG.infof("workstream %d declared in scope %s", number, scopeId);
         return workstream;
     }
 
@@ -202,7 +201,8 @@ public class WorkstreamService {
         workstream.description = cleaned;
         workstream.stamp(clock.instant());
         workstreams.flush();
-        LOG.infof("workstream %s description updated in scope %s", workstream.token, scopeId);
+        LOG.infof("workstream %d description updated in scope %s", workstream.number,
+            scopeId);
         return workstream;
     }
 
@@ -237,11 +237,10 @@ public class WorkstreamService {
                 WorklistException.Reason.WORKSTREAM_HAS_REFERENCES,
                 List.of(TOKEN));
         }
-        String oldToken = workstream.token;
         workstream.token = newToken;
         workstream.stamp(clock.instant());
         workstreams.flush();
-        LOG.infof("workstream renamed %s -> %s in scope %s", oldToken, newToken, scopeId);
+        LOG.infof("workstream %d renamed in scope %s", workstream.number, scopeId);
         return workstream;
     }
 
@@ -260,7 +259,7 @@ public class WorkstreamService {
         workstream.status = Workstream.WITHDRAWN;
         workstream.stamp(clock.instant());
         workstreams.flush();
-        LOG.infof("workstream %s withdrawn in scope %s", workstream.token, scopeId);
+        LOG.infof("workstream %d withdrawn in scope %s", workstream.number, scopeId);
         return workstream;
     }
 
