@@ -616,14 +616,16 @@ class QueryNarrowingIT {
      * Rank is a declared value of the sort, so the assistant surface takes it
      * as REST does (C4.7).
      *
-     * <p>RED STATE, observed 2026-10-29 with the MCP adapter offering the
-     * standard pair again: the MCP case was refused SORT_UNDECLARED.
+     * <p>RED STATE, observed 2026-10-29 with the MCP adapter refusing rank
+     * again: the MCP case answered no object. Before the count below, the
+     * refusal passed, since an empty list is sorted.
      */
     @ParameterizedTest
     @EnumSource(Transport.class)
     void every_transport_sorts_the_axes_by_rank_then_number(Transport via) {
         List<Map<String, Object>> fields = via.call(Selector.ITERATION, Map.of(),
             Map.of("sort", "rank")).fields();
+        assertThat(fields).as("both iterations answer the sort").hasSizeGreaterThanOrEqualTo(2);
         assertThat(fields).extracting(f -> ((Number) f.get("rank")).intValue())
             .as("the open iteration was ranked 1, the closed one 2")
             .isSorted();
@@ -672,10 +674,9 @@ class QueryNarrowingIT {
      * The read is then made on the assistant surface, which offers every sort
      * the view declares, as REST does (C4.7).
      *
-     * <p>RED STATE, observed 2026-10-29 with the standard pair offered under
-     * the header again in {@code WorklistResource.collectionGet}:
-     * {@code sort=rank} on the milestone view was refused SORT_UNDECLARED with
-     * the header.
+     * <p>RED STATE, observed 2026-10-29 with {@code sort=rank} refused under
+     * the header again in {@code WorklistResource.collectionGet}: the call
+     * with the header answered no 200.
      */
     @Test
     void the_assistant_header_offers_every_declared_sort() {
