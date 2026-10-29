@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.domain.WorklistException;
+import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.RefusalCatalogue;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceDeclaration;
@@ -58,6 +59,9 @@ public record RefusalPayload(
 
     private static final Logger LOG = Logger.getLogger(RefusalPayload.class);
 
+    /** The service a stale token's object is held by, as its addresses spell it. */
+    private static final String SERVICE = AddressParser.SCHEME;
+
     /**
      * A domain refusal, in the envelope.
      *
@@ -76,6 +80,27 @@ public record RefusalPayload(
         return new RefusalPayload(code.name(), message(code, null),
             dataOf(code, attempted, e.offenders(), e.accepts(),
                 e.currentToken().orElse(null)));
+    }
+
+    /**
+     * A stale conflict token, with the object as it stands now (DEC-0041,
+     * C8.7): its address, its fields and its token, and the service that holds
+     * it, so that a caller can redo its change on what is there without a read
+     * of its own. The adapter reads the object after the refused write has
+     * rolled back; where that read cannot be made, {@link #of(WorklistException,
+     * String)} answers with the token alone.
+     *
+     * @param attempted the call as the caller's surface names it (C6.2)
+     * @param current   the object at the address the call named, read now
+     */
+    public static RefusalPayload stale(WorklistException e, @Nullable String attempted,
+                                       ObjectPayload current) {
+        RefusalCode code = RefusalCode.of(e.reason());
+        String held = current.conflictToken();
+        String token = held != null ? held : e.currentToken().orElse(null);
+        return new RefusalPayload(code.name(), message(code, null),
+            new RefusalDataPayload(attempted, current.address(), current.fields(),
+                present(declared(code, e.offenders())), null, token, SERVICE, null));
     }
 
     /**
@@ -105,7 +130,7 @@ public record RefusalPayload(
     public static RefusalPayload unexpected(String reference, @Nullable String attempted) {
         RefusalCode code = RefusalCode.UNEXPECTED_FAILURE;
         return new RefusalPayload(code.name(), message(code, null),
-            new RefusalDataPayload(attempted, null, null, null, reference));
+            new RefusalDataPayload(attempted, null, null, null, null, null, null, reference));
     }
 
     /** @param attempted the verb the text names; absent where it names none */
@@ -129,9 +154,9 @@ public record RefusalPayload(
                                                        List<String> offenders,
                                                        List<String> accepts,
                                                        @Nullable String conflictToken) {
-        RefusalDataPayload data = new RefusalDataPayload(attempted,
+        RefusalDataPayload data = new RefusalDataPayload(attempted, null, null,
             present(declared(code, offenders)), present(declared(code, accepts)),
-            conflictToken, null);
+            conflictToken, null, null);
         return data.isEmpty() ? null : data;
     }
 

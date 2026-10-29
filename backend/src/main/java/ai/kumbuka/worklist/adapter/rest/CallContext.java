@@ -23,12 +23,27 @@ import java.util.Optional;
  * became a call -- a header refused before the route, a path under a reserved
  * name, a colon that names no verb -- leaves it empty, and its refusal carries
  * no {@code attempted}.
+ *
+ * <p>Where the call names an object, the address it names is recorded too, so
+ * that a stale token can be answered with the object as it stands (DEC-0041).
  */
 @RequestScoped
 public class CallContext {
 
+    /**
+     * The object a call names, as the path carried it.
+     *
+     * @param member the membership's item segment; absent where the address
+     *               names an object rather than a membership
+     */
+    record Target(String scope, String view, String id, @Nullable String member) {
+    }
+
     /** The call, in the names of the caller's surface; absent until the route named a verb. */
     private @Nullable String attempted;
+
+    /** The object the call names; absent for a call at a collection. */
+    private @Nullable Target target;
 
     /**
      * Records the verb the route named.
@@ -39,6 +54,16 @@ public class CallContext {
     void call(String verb, boolean assistant) {
         VerbName name = VerbName.declared(verb);
         this.attempted = assistant ? name.toolName() : name.name();
+    }
+
+    /** Records the object the call names. */
+    void at(Target named) {
+        this.target = named;
+    }
+
+    /** The object the call names; empty for a call at a collection, or none at all. */
+    Optional<Target> target() {
+        return Optional.ofNullable(target);
     }
 
     /** The call as the caller's surface names it; empty where the request became none. */

@@ -7,11 +7,14 @@
  */
 package ai.kumbuka.worklist.adapter.rest;
 
+import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
+import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.UnexpectedFailures;
+import ai.kumbuka.worklist.surface.VerbSurface;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Context;
@@ -137,6 +140,8 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
     public static class Domain implements ExceptionMapper<WorklistException> {
 
         @Inject CallContext context;
+        @Inject VerbSurface verbs;
+        @Inject CallerActor caller;
 
         @Override
         public Response toResponse(WorklistException e) {
@@ -149,8 +154,33 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
             return Response.status(status)
                 .type(MediaType.APPLICATION_JSON)
-                .entity(RefusalPayload.of(e, context.attempted().orElse(null)))
+                .entity(payload(e, context.attempted().orElse(null)))
                 .build();
+        }
+
+        /**
+         * The envelope of a domain refusal. A stale token carries the object
+         * as it stands (DEC-0041), read again at the address the path named,
+         * now that the refused write has rolled back; a call at a collection
+         * -- the settings token of {@code advance} -- or an object the read
+         * cannot reach is answered with the token alone.
+         */
+        private RefusalPayload payload(WorklistException e, @Nullable String attempted) {
+            Optional<CallContext.Target> named = context.target();
+            if (e.reason() != WorklistException.Reason.CONFLICT || named.isEmpty()) {
+                return RefusalPayload.of(e, attempted);
+            }
+            CallContext.Target at = named.get();
+            String member = at.member();
+            try {
+                VerbSurface.Result now = member == null
+                    ? verbs.read(caller.subject(), at.scope(), at.view(), at.id())
+                    : verbs.readMembership(caller.subject(), at.scope(), at.view(), at.id(),
+                        member);
+                return RefusalPayload.stale(e, attempted, Payloads.of(at.scope(), now));
+            } catch (WorklistException | SurfaceException unreadable) {
+                return RefusalPayload.of(e, attempted);
+            }
         }
 
     }

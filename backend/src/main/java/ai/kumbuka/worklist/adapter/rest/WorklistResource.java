@@ -263,6 +263,7 @@ public class WorklistResource {
                            @HeaderParam("If-Match") @Nullable String ifMatch,
                            @Nullable String body) {
         calling(UPDATE);
+        context.at(new CallContext.Target(scope, selector, id, null));
         return ok(scope, verbs.update(caller.subject(), scope, selector, id,
             unquote(ifMatch).orElse(null), ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null)));
     }
@@ -293,6 +294,7 @@ public class WorklistResource {
                 CustomMethod.allow(CustomMethod.Depth.ITEM)));
 
         calling(at.known().verb());
+        context.at(new CallContext.Target(scope, selector, at.address(), null));
         return dispatch(at, scope, selector, unquote(ifMatch).orElse(null), body);
     }
 
@@ -366,6 +368,7 @@ public class WorklistResource {
                          @PathParam("member") String member,
                          @HeaderParam("If-Match") @Nullable String ifMatch) {
         calling("plan");
+        context.at(new CallContext.Target(scope, selector, id, member));
         return created(scope, verbs.plan(caller.subject(), scope, selector, id, member,
             unquote(ifMatch).orElse(null)));
     }
@@ -387,6 +390,7 @@ public class WorklistResource {
                            @PathParam("member") String member,
                            @HeaderParam("If-Match") @Nullable String ifMatch) {
         calling("unplan");
+        context.at(new CallContext.Target(scope, selector, id, member));
         return ok(scope, verbs.unplan(caller.subject(), scope, selector, id, member,
             unquote(ifMatch).orElse(null)));
     }
@@ -400,6 +404,7 @@ public class WorklistResource {
                                      @HeaderParam("If-Match") @Nullable String ifMatch,
                                      @Nullable String body) {
         calling(UPDATE);
+        context.at(new CallContext.Target(scope, selector, id, member));
         return ok(scope, verbs.updateMembership(caller.subject(), scope, selector, id, member,
             unquote(ifMatch).orElse(null), ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null)));
     }

@@ -234,12 +234,32 @@ public class McpAdapter {
             // method — which is what makes "one envelope, whichever hop" a
             // property of the construction and not a claim about it.
             LOG.debugf("domain refusal: %s", e.reason().name());
-            return content(RefusalPayload.of(e, attempted), true);
+            return content(domainRefusal(e, attempted, arguments), true);
         } catch (RuntimeException e) {
             // DEC-0043 R13: a defect answers as one, with a reference the log
             // line shares, and nothing the exception said.
             return content(RefusalPayload.unexpected(UnexpectedFailures.reference(verb, e),
                 attempted), true);
+        }
+    }
+
+    /**
+     * A domain refusal in the envelope. A stale token carries the object as it
+     * stands (DEC-0041), read again at the address the call named, now that
+     * the refused write has rolled back. A call that names no address -- the
+     * settings token of {@code advance} -- or an object the read cannot reach
+     * is answered with the token alone.
+     */
+    private RefusalPayload domainRefusal(WorklistException e, String attempted,
+                                         Map<String, Object> in) {
+        if (e.reason() != WorklistException.Reason.CONFLICT
+                || !(in.get(ARG_ADDRESS) instanceof String address)) {
+            return RefusalPayload.of(e, attempted);
+        }
+        try {
+            return RefusalPayload.stale(e, attempted, read(Map.of(ARG_ADDRESS, address)));
+        } catch (WorklistException | SurfaceException unreadable) {
+            return RefusalPayload.of(e, attempted);
         }
     }
 
@@ -316,7 +336,7 @@ public class McpAdapter {
             required(in, ARG_SELECTOR), fields(in).orElse(null), text(in, ARG_KEY).orElse(null)));
     }
 
-    private Object read(Map<String, Object> in) {
+    private ObjectPayload read(Map<String, Object> in) {
         Address at = address(in);
         String member = at.member();
         return dressed(at.scope(), member != null
