@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.surface;
 
 import io.quarkus.qute.i18n.MessageBundles;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +64,14 @@ public final class DeclarationDocument {
     /** The member every text of the declaration travels under. */
     private static final String DESCRIPTION = "description";
 
+    /** The member the calls travel under, and within a call its name. */
+    private static final String CALLS = "calls";
+    private static final String CALL = "call";
+
+    /** The member the catalogue of reasons travels under, and within one its code. */
+    private static final String REASONS = "reasons";
+    private static final String REASON = "reason";
+
     private DeclarationDocument() {
     }
 
@@ -92,15 +101,84 @@ public final class DeclarationDocument {
         content.put("address_form", ADDRESS_FORM);
         content.put("effect_classes", Arrays.stream(SurfaceDeclaration.EffectClass.values())
             .map(Enum::name).toList());
-        content.put("calls", SurfaceDeclaration.verbs().stream()
+        content.put(CALLS, SurfaceDeclaration.verbs().stream()
             .map(verb -> call(verb, tools, arguments, values))
             .toList());
         Properties messages = patterns("refusals");
         Properties remedies = patterns("remedies");
-        content.put("reasons", Arrays.stream(RefusalCode.values())
+        content.put(REASONS, Arrays.stream(RefusalCode.values())
             .map(code -> reason(code, messages, remedies))
             .toList());
         return content;
+    }
+
+    /**
+     * Refuses a document that cannot be served, read as it is served (C5.6).
+     *
+     * <p>{@link SurfaceDeclaration#requireServable} checks the verbs the
+     * document is built from; this checks what the build made of them, so a
+     * call the projection drops a text from, doubles or misnames is refused
+     * here although its verb is sound. The conditions are the same: every call
+     * once, each with a description within the budget, each argument with a
+     * description, and every refusal a call names among the document's own
+     * reasons. A member that is absent or not of its kind is refused as well,
+     * since a caller would meet it the same way.
+     */
+    public static void requireServable(Map<String, ?> document) {
+        List<Map<?, ?>> calls = members(document.get(CALLS), CALLS);
+        List<String> catalogue = members(document.get(REASONS), REASONS).stream()
+            .map(reason -> name(reason.get(REASON), "a reason"))
+            .toList();
+        SurfaceDeclaration.requireDistinctNames(calls.stream()
+            .map(call -> name(call.get(CALL), "a call"))
+            .toList());
+        for (Map<?, ?> declared : calls) {
+            String call = name(declared.get(CALL), "a call");
+            String description = text(declared.get(DESCRIPTION));
+            SurfaceDeclaration.requireDescribed(call, description);
+            SurfaceDeclaration.requireWithinBudget(call, String.valueOf(description));
+            Map<String, @Nullable String> arguments = new LinkedHashMap<>();
+            for (Map<?, ?> argument : members(declared.get("arguments"), call + "'s arguments")) {
+                arguments.put(name(argument.get("name"), call + "'s argument"),
+                    text(argument.get(DESCRIPTION)));
+            }
+            SurfaceDeclaration.requireDescribedArguments(call, arguments);
+            SurfaceDeclaration.requireCatalogued(call,
+                members(declared.get("refusals"), call + "'s refusals", String.class), catalogue);
+        }
+    }
+
+    /** The objects of a list member, refused if it is no list of objects. */
+    @SuppressWarnings("unchecked")
+    private static List<Map<?, ?>> members(@Nullable Object member, String what) {
+        return (List<Map<?, ?>>) (List<?>) members(member, what, Map.class);
+    }
+
+    /** The entries of a list member, refused if it is no list of {@code type}. */
+    private static <T> List<T> members(@Nullable Object member, String what, Class<T> type) {
+        if (!(member instanceof List<?> list) || !list.stream().allMatch(type::isInstance)) {
+            throw new IllegalStateException(
+                "the declaration carries " + what + " as no list of " + type.getSimpleName()
+                    + ". A caller reads the document as it is served, and this one it cannot "
+                    + "read.");
+        }
+        return list.stream().map(type::cast).toList();
+    }
+
+    /** A name member, refused if it is no text. */
+    private static String name(@Nullable Object member, String what) {
+        String name = text(member);
+        if (name == null || name.isBlank()) {
+            throw new IllegalStateException(
+                "the declaration carries " + what + " without a name. A call or a reason is "
+                    + "addressed by its name, and one without is addressed by nothing.");
+        }
+        return name;
+    }
+
+    /** A text member as its text, or {@code null} where it is none. */
+    private static @Nullable String text(@Nullable Object member) {
+        return member instanceof String text ? text : null;
     }
 
     /**
@@ -134,7 +212,7 @@ public final class DeclarationDocument {
         message.put("key", key);
         message.put("template", template);
         Map<String, Object> reason = new LinkedHashMap<>();
-        reason.put("reason", code.name());
+        reason.put(REASON, code.name());
         reason.put("message_pattern", template);
         reason.put("messages", List.of(message));
         reason.put("remedy", remedies.getProperty(key));
@@ -146,7 +224,7 @@ public final class DeclarationDocument {
                                             ValueDescriptions values) {
         Map<String, Object> call = new LinkedHashMap<>();
         call.put("identity", SurfaceDeclaration.call(verb));
-        call.put("call", SurfaceDeclaration.call(verb));
+        call.put(CALL, SurfaceDeclaration.call(verb));
         call.put("rest_name", verb.name().name());
         call.put("effect_class", verb.effectClass().name());
         call.put(DESCRIPTION, verb.description().apply(tools));

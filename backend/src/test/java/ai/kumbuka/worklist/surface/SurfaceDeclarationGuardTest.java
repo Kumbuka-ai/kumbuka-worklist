@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.surface;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +27,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * this runs without the service. {@code requireServable} itself is run over the
  * real verbs with bundles that answer one text for every method: once with a
  * text, which passes, and once with a blank one for a single method, which is
- * refused under the call that method describes. That the served texts pass is
- * observed wherever the service boots, since the guard runs on every start.
+ * refused under the call that method describes. The document the guard builds
+ * is checked the same way: the real one passes, and one whose projection lost a
+ * text or doubled a call -- which the verbs cannot show -- is refused under that
+ * call. That the served texts pass is observed wherever the service boots, since
+ * the guard runs on every start.
  */
 class SurfaceDeclarationGuardTest {
 
@@ -119,6 +123,63 @@ class SurfaceDeclarationGuardTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("worklist_release")
             .hasMessageContaining("'receipt'");
+    }
+
+    @Test
+    void the_document_is_checked_as_served_and_refused_where_its_projection_is_broken() {
+        Map<String, Object> document = document();
+        assertThatCode(() -> DeclarationDocument.requireServable(document))
+            .as("the document built from the real verbs is servable")
+            .doesNotThrowAnyException();
+
+        Map<String, Object> blank = withCalls(document, calls -> {
+            Map<String, Object> call = new LinkedHashMap<>(calls.get(2));
+            call.put("description", "");
+            calls.set(2, call);
+        });
+        assertThatThrownBy(() -> DeclarationDocument.requireServable(blank))
+            .as("RED STATE, observed: a call the document carries with an empty description is "
+                + "refused by its call name, though its verb is described")
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining(String.valueOf(calls(document).get(2).get("call")))
+            .hasMessageContaining("without a description");
+
+        Map<String, Object> doubled = withCalls(document, calls -> calls.add(calls.get(0)));
+        assertThatThrownBy(() -> DeclarationDocument.requireServable(doubled))
+            .as("RED STATE, observed: a call the document carries twice is refused by its name, "
+                + "though the verbs declare it once")
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("'" + calls(document).get(0).get("call") + "'");
+
+        Map<String, Object> uncatalogued = new LinkedHashMap<>(document);
+        uncatalogued.put("reasons", List.of());
+        assertThatThrownBy(() -> DeclarationDocument.requireServable(uncatalogued))
+            .as("RED STATE, observed: a refusal a call names that the document's reasons lack "
+                + "is refused")
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("does not declare");
+    }
+
+    /** The document as the service builds it, worded by bundles that answer a text. */
+    private static Map<String, Object> document() {
+        return DeclarationDocument.content(bundle(ToolDescriptions.class, null),
+            bundle(ArgumentDescriptions.class, null), bundle(ValueDescriptions.class, null));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> calls(Map<String, Object> document) {
+        return (List<Map<String, Object>>) document.get("calls");
+    }
+
+    /** A copy of the document whose list of calls is changed as given. */
+    private static Map<String, Object> withCalls(Map<String, Object> document,
+                                                 java.util.function.Consumer<
+                                                     List<Map<String, Object>>> change) {
+        List<Map<String, Object>> calls = new ArrayList<>(calls(document));
+        change.accept(calls);
+        Map<String, Object> copy = new LinkedHashMap<>(document);
+        copy.put("calls", calls);
+        return copy;
     }
 
     /** A bundle that answers a text for every method, and a blank one for the method named. */
