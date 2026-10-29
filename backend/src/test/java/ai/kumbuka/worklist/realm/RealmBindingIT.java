@@ -96,7 +96,7 @@ class RealmBindingIT {
      * The issuer URL of a realm, as reported by the running container. It is
      * read at runtime because the container's port is only known once it is up.
      */
-    private static String issuer(String key) {
+    static String issuer(String key) {
         return ConfigProvider.getConfig().getValue(key, String.class);
     }
 
@@ -107,7 +107,7 @@ class RealmBindingIT {
      * authorization-code flow would add a browser to a test about issuers and
      * change nothing about the token that comes out of it.
      */
-    private static String tokenFrom(String issuer, String username) {
+    static String tokenFrom(String issuer, String username) {
         return given()
             .contentType(ContentType.URLENC)
             .formParam("grant_type", "password")

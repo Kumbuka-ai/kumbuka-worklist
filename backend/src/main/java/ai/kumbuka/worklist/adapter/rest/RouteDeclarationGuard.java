@@ -29,11 +29,16 @@ import java.util.TreeSet;
  * The two are held against each other at start-up and the refusal names the
  * verbs that differ. The MCP surface needs no such check: its tool list is
  * generated from the declaration.
+ *
+ * <p>The checks of the declaration itself -- distinct names, a description
+ * per call and argument, the budget -- are {@code surface.DeclarationGuard}'s.
+ * This one stays in the adapter because it is about the adapter's routes,
+ * until a route test of the REST surface takes it over.
  */
 @ApplicationScoped
-public class DeclarationGuard {
+public class RouteDeclarationGuard {
 
-    private static final Logger LOG = Logger.getLogger(DeclarationGuard.class);
+    private static final Logger LOG = Logger.getLogger(RouteDeclarationGuard.class);
 
     /** The verbs this surface routes by HTTP method rather than by colon notation. */
     static final List<String> ROUTED_BY_METHOD = List.of(
@@ -42,7 +47,7 @@ public class DeclarationGuard {
     void onStart(@Observes StartupEvent event) {
         requireDeclared(served(), SurfaceDeclaration.verbs().stream()
             .map(v -> v.name().name()).toList());
-        LOG.infof("declaration served: %d verbs", SurfaceDeclaration.verbs().size());
+        LOG.infof("routes match the declaration: %d verbs", SurfaceDeclaration.verbs().size());
     }
 
     /** The verbs the REST surface carries. */

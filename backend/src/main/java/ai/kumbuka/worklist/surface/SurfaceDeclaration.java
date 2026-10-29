@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.surface;
 import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
+import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.SortKey;
 import org.jspecify.annotations.Nullable;
 
@@ -39,6 +40,13 @@ import java.util.function.Function;
  */
 public final class SurfaceDeclaration {
 
+    /**
+     * The most characters a verb's description may carry (C5.6). A description
+     * over it fails the start of the service, and with it every test that boots
+     * the service: the build.
+     */
+    public static final int DESCRIPTION_BUDGET = 500;
+
     private SurfaceDeclaration() {
     }
 
@@ -64,8 +72,31 @@ public final class SurfaceDeclaration {
         }
     }
 
-    /** One value of a fixed set an argument takes, with the text that describes it. */
-    public record Value(String name, Function<ValueDescriptions, String> description) {
+    /**
+     * One value of a fixed set an argument takes, with the text that describes it.
+     *
+     * @param inToolSchema whether the tool list of the assistant surface closes
+     *                     the argument with this value too. The declaration
+     *                     carries every value the service takes; the tool list
+     *                     offers what the assistant surface takes, which is
+     *                     fewer: a sort the REST surface alone offers
+     *                     ({@link SortKey#STANDARD}), and the views, which the
+     *                     tool list leaves open so that an unknown view is
+     *                     refused by the service in its check order and not by
+     *                     the schema.
+     */
+    public record Value(String name, Function<ValueDescriptions, String> description,
+                        boolean inToolSchema) {
+    }
+
+    /**
+     * Where an argument travels in a call: at the top level of its arguments,
+     * or as a member of {@code fields} (C5.4). Every argument of this service
+     * stands at the top level; {@code fields} is declared as one object
+     * argument and its members are named in its description.
+     */
+    public enum Placement {
+        TOP
     }
 
     /**
@@ -80,6 +111,11 @@ public final class SurfaceDeclaration {
     public record Argument(ArgumentName name, ArgumentType type, boolean required,
                            @Nullable String defaultValue, List<Value> values,
                            Function<ArgumentDescriptions, String> description) {
+
+        /** Where the argument travels; the top level for every argument here. */
+        public Placement placement() {
+            return Placement.TOP;
+        }
     }
 
     /**
@@ -98,14 +134,30 @@ public final class SurfaceDeclaration {
         COLLECTION_COMPOUND
     }
 
-    /** The shape of a verb's answer, named as the router names it. */
+    /**
+     * The shape of a verb's answer, named as the router names it, with the
+     * members the answer carries at its top level as the records of
+     * {@code adapter.payload} write them; a member in brackets is there only
+     * where it applies.
+     */
     public enum Answer {
         /** One object: {@code address} and {@code fields}. */
-        OBJECT,
+        OBJECT(List.of("address", "fields")),
         /** One object at 201, with {@code Location}. */
-        OBJECT_CREATED,
+        OBJECT_CREATED(List.of("address", "fields")),
         /** A page of objects and {@code next_cursor} while more follow. */
-        OBJECT_LISTING
+        OBJECT_LISTING(List.of("objects", "[next_cursor]"));
+
+        private final List<String> members;
+
+        Answer(List<String> members) {
+            this.members = members;
+        }
+
+        /** The members of the answer at its top level. */
+        public List<String> members() {
+            return members;
+        }
     }
 
     /**
@@ -173,8 +225,26 @@ public final class SurfaceDeclaration {
     private static final Argument TYPE =
         required("type", ArgumentType.STRING, ArgumentDescriptions::type);
 
-    private static Argument selector(Function<ArgumentDescriptions, String> description) {
-        return required("selector", ArgumentType.STRING, description);
+    /**
+     * The view argument, with the views the verb acts on as its fixed values.
+     * The four are the service's constants ({@link Selector#VIEWS}), not a
+     * scope's vocabulary, so the declaration can name them.
+     */
+    private static Argument selector(Function<ArgumentDescriptions, String> description,
+                                     String... views) {
+        return new Argument(name("selector"), ArgumentType.STRING, true, null,
+            java.util.Arrays.stream(views).map(SurfaceDeclaration::view).toList(), description);
+    }
+
+    private static Value view(String view) {
+        Function<ValueDescriptions, String> description = switch (view) {
+            case Selector.ITEM -> ValueDescriptions::viewItem;
+            case Selector.ITERATION -> ValueDescriptions::viewIteration;
+            case Selector.MILESTONE -> ValueDescriptions::viewMilestone;
+            case Selector.WORKSTREAM -> ValueDescriptions::viewWorkstream;
+            default -> throw new IllegalArgumentException("not one of the four views: " + view);
+        };
+        return new Value(view, description, false);
     }
 
     // ======================================================================
@@ -211,7 +281,8 @@ public final class SurfaceDeclaration {
         verb("create", ToolDescriptions::create, EffectClass.CREATE, Answer.OBJECT_CREATED,
             reasons(WRITE, FIELD_WRITE, codes(RefusalCode.SETTING_ABSENT,
                 RefusalCode.CARDINALITY_EXCEEDED)),
-            SCOPE, selector(ArgumentDescriptions::selectorCreate), FIELDS),
+            SCOPE, selector(ArgumentDescriptions::selectorCreate, Selector.ITEM, Selector.ITERATION,
+                Selector.MILESTONE), FIELDS),
         verb("read", ToolDescriptions::read, EffectClass.ITEM_READ, Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.ITERATION_ABSENT)),
             ADDRESS),
@@ -223,7 +294,8 @@ public final class SurfaceDeclaration {
                 RefusalCode.PREDICATE_UNKNOWN, RefusalCode.VALUE_UNDECLARED,
                 RefusalCode.PAGE_SIZE_REJECTED, RefusalCode.CURSOR_MALFORMED,
                 RefusalCode.CURSOR_FOREIGN, RefusalCode.SORT_UNDECLARED)),
-            SCOPE, selector(ArgumentDescriptions::selectorQuery),
+            SCOPE, selector(ArgumentDescriptions::selectorQuery, Selector.ITEM, Selector.ITERATION,
+                Selector.MILESTONE, Selector.WORKSTREAM),
             optional(QueryFilter.FILTER_ARGUMENT, ArgumentType.OBJECT, null,
                 ArgumentDescriptions::filter),
             optional(QuerySpec.PAGE_SIZE_ARGUMENT, ArgumentType.INTEGER,
@@ -233,14 +305,17 @@ public final class SurfaceDeclaration {
                 ArgumentDescriptions::after),
             new Argument(name(QuerySpec.SORT_ARGUMENT), ArgumentType.STRING, false,
                 QuerySpec.DEFAULT_SORT.wireName(),
-                List.of(new Value(SortKey.ID.wireName(), ValueDescriptions::sortId),
-                    new Value(SortKey.CREATED_AT.wireName(), ValueDescriptions::sortCreatedAt)),
+                List.of(new Value(SortKey.ID.wireName(), ValueDescriptions::sortId, true),
+                    new Value(SortKey.CREATED_AT.wireName(), ValueDescriptions::sortCreatedAt,
+                        true),
+                    new Value(SortKey.RANK.wireName(), ValueDescriptions::sortRank, false)),
                 ArgumentDescriptions::sort),
             new Argument(name(QuerySpec.DIRECTION_ARGUMENT), ArgumentType.STRING, false,
                 QuerySpec.DEFAULT_DIRECTION.wireName(),
-                List.of(new Value(SortKey.Direction.ASC.wireName(), ValueDescriptions::directionAsc),
+                List.of(new Value(SortKey.Direction.ASC.wireName(), ValueDescriptions::directionAsc,
+                        true),
                     new Value(SortKey.Direction.DESC.wireName(),
-                        ValueDescriptions::directionDesc)),
+                        ValueDescriptions::directionDesc, true)),
                 ArgumentDescriptions::direction)),
         verb("accept", ToolDescriptions::accept, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
@@ -260,7 +335,7 @@ public final class SurfaceDeclaration {
             reasons(WRITE, codes(RefusalCode.CONFLICT_TOKEN_MISSING, RefusalCode.CONFLICT,
                 RefusalCode.VERB_UNCARRIED, RefusalCode.ITERATION_ABSENT,
                 RefusalCode.SETTING_ABSENT)),
-            SCOPE, selector(ArgumentDescriptions::selectorIteration),
+            SCOPE, selector(ArgumentDescriptions::selectorIteration, Selector.ITERATION),
             required("conflict_token", ArgumentType.STRING,
                 ArgumentDescriptions::conflictTokenSetting)),
         verb("plan", ToolDescriptions::plan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT_CREATED,
@@ -284,7 +359,7 @@ public final class SurfaceDeclaration {
             Answer.OBJECT,
             reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.DRAW_EMPTY,
                 RefusalCode.CLAIM_HELD)),
-            SCOPE, selector(ArgumentDescriptions::selectorItem), DURATION),
+            SCOPE, selector(ArgumentDescriptions::selectorItem, Selector.ITEM), DURATION),
         verb("relate", ToolDescriptions::relate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
                 RefusalCode.VALUE_UNDECLARED)),
@@ -297,7 +372,7 @@ public final class SurfaceDeclaration {
             Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.SELECTOR_WITHDRAWN,
                 RefusalCode.VERB_UNCARRIED)),
-            SCOPE, selector(ArgumentDescriptions::selectorItem)));
+            SCOPE, selector(ArgumentDescriptions::selectorItem, Selector.ITEM)));
 
     /**
      * The verbs of the worklist scheme this service refuses by name rather
@@ -358,6 +433,129 @@ public final class SurfaceDeclaration {
         Map<String, ArgumentPath> paths = new LinkedHashMap<>();
         spelled.forEach(p -> paths.put(p, ArgumentPath.of(p)));
         return Map.copyOf(paths);
+    }
+
+    // ======================================================================
+    // Refusing a declaration that cannot be served
+    // ======================================================================
+
+    /**
+     * Refuses a declaration that cannot be served, at start-up.
+     *
+     * <p>Each check is a way the surface would be broken in production without
+     * anybody noticing until a caller hit it: a duplicate call name makes the
+     * tool list ambiguous; a verb with no description is one an assistant with
+     * no skill cannot use; a description over {@link #DESCRIPTION_BUDGET} is cut
+     * by a caller that does not read it whole; and an argument with no
+     * description leaves {@code ARGUMENT_MISSING} with nothing to say the value
+     * is; and a refusal a call names that the catalogue lacks is one the
+     * declaration promises and cannot word. That every code of the catalogue
+     * can be worded is {@link RefusalCatalogueGuard}'s.
+     *
+     * <p>Takes the bundles, because the texts live there and not here: the
+     * guard at start-up hands in the bundles the service serves.
+     */
+    public static void requireServable(ToolDescriptions tools, ArgumentDescriptions arguments) {
+        requireDistinctNames(VERBS.stream().map(SurfaceDeclaration::call).toList());
+        for (Verb verb : VERBS) {
+            String call = call(verb);
+            String description = verb.description().apply(tools);
+            requireDescribed(call, description);
+            requireWithinBudget(call, description);
+            requireDescribedArguments(call, verb.arguments().stream()
+                .collect(java.util.stream.Collectors.toMap(a -> a.name().name(),
+                    a -> a.description().apply(arguments), (a, b) -> a, LinkedHashMap::new)));
+            requireCatalogued(call, verb.reasons().stream().map(RefusalCode::name).toList(),
+                java.util.Arrays.stream(RefusalCode.values()).map(RefusalCode::name).toList());
+        }
+    }
+
+    /**
+     * Refuses a call that names a refusal the catalogue does not declare.
+     *
+     * <p>Takes the names, for the reason {@link #requireDistinctNames} does:
+     * a code of this service is a constant of the catalogue's own enum, so the
+     * real declaration cannot be made to name one outside it at runtime.
+     */
+    public static void requireCatalogued(String call, List<String> refusals,
+                                         List<String> catalogue) {
+        List<String> undeclared = refusals.stream().filter(r -> !catalogue.contains(r)).toList();
+        if (!undeclared.isEmpty()) {
+            throw new IllegalStateException(
+                call + " names " + undeclared + " among its refusals, which the catalogue "
+                    + "does not declare. A caller reads the reasons of the declaration to "
+                    + "know what a refusal means; one it cannot find there means nothing.");
+        }
+    }
+
+    /** The name a verb is called under on every surface: {@code worklist_<verb>}. */
+    public static String call(Verb verb) {
+        return DeclarationDocument.SCHEME + "_" + verb.name().name();
+    }
+
+    /**
+     * Refuses two calls declared under one name.
+     *
+     * <p>Takes the names rather than the declaration: the real declaration is a
+     * constant that cannot be made to carry a duplicate at runtime, so a check
+     * that only ever saw it could never be observed refusing.
+     */
+    public static void requireDistinctNames(List<String> calls) {
+        Set<String> seen = new LinkedHashSet<>();
+        for (String call : calls) {
+            if (!seen.add(call)) {
+                throw new IllegalStateException(
+                    "two calls are declared as '" + call + "'. A tool list is flat, so a "
+                        + "duplicate name is a call one of whose declarations no caller can "
+                        + "reach.");
+            }
+        }
+    }
+
+    /** Refuses a call declared without a description; takes the text, as above. */
+    public static void requireDescribed(String call, @Nullable String description) {
+        if (description == null || description.isBlank()) {
+            throw new IllegalStateException(
+                call + " is declared without a description. The description is the only "
+                    + "thing a caller with no skill has to go on.");
+        }
+    }
+
+    /** Refuses a description over {@link #DESCRIPTION_BUDGET} characters; takes the text. */
+    public static void requireWithinBudget(String call, String description) {
+        if (description.length() > DESCRIPTION_BUDGET) {
+            throw new IllegalStateException(
+                call + "'s description has " + description.length() + " characters, over the "
+                    + "budget of " + DESCRIPTION_BUDGET + ". What explains one argument stands "
+                    + "at that argument.");
+        }
+    }
+
+    /**
+     * Refuses a call whose arguments cannot be explained to a caller: one with
+     * no arguments, whose input schema would be an empty closed object, and one
+     * with an argument without a description, which is the {@code what} of the
+     * {@code ARGUMENT_MISSING} refusal.
+     *
+     * @param arguments the call's arguments by name, each with its description
+     */
+    public static void requireDescribedArguments(String call,
+                                                 Map<String, @Nullable String> arguments) {
+        if (arguments.isEmpty()) {
+            throw new IllegalStateException(
+                call + " is declared with no arguments. Its input schema would be an empty "
+                    + "closed object, and the check that names an undeclared argument would "
+                    + "have no declaration to name instead.");
+        }
+        arguments.forEach((argument, description) -> {
+            if (description == null || description.isBlank()) {
+                throw new IllegalStateException(
+                    call + " declares '" + argument + "' without a description. The "
+                        + "description is what an ARGUMENT_MISSING refusal says the value IS, "
+                        + "and without it the refusal stops where the caller needed it to "
+                        + "start.");
+            }
+        });
     }
 
     // ======================================================================

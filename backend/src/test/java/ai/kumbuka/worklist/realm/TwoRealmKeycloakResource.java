@@ -53,6 +53,9 @@ public class TwoRealmKeycloakResource implements QuarkusTestResourceLifecycleMan
     public static final String CLIENT_ID = "kumbuka-worklist";
     public static final String CLIENT_SECRET = "test-only-not-a-secret";
     public static final String TENANT_USER = "probe-member";
+
+    /** A user of the tenant realm that holds no realm role at all. */
+    public static final String ROLELESS_USER = "probe-roleless";
     public static final String OPERATOR_USER = "probe-operator";
     public static final String USER_PASSWORD = "probe-password";
 

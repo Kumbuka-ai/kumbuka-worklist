@@ -86,6 +86,7 @@ public final class McpTools {
             properties.put(argument.name().name(), SchemaPayload.property(
                 argument.type().json(), argument.description().apply(arguments),
                 argument.values().stream()
+                    .filter(SurfaceDeclaration.Value::inToolSchema)
                     .map(v -> new SchemaValuePayload(v.name(), v.description().apply(values)))
                     .toList()));
             if (argument.required()) {

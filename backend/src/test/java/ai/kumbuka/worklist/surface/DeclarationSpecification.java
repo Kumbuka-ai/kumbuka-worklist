@@ -30,28 +30,68 @@ public final class DeclarationSpecification {
     private DeclarationSpecification() {
     }
 
-    /** One argument as a caller sends it. */
-    public record Arg(String name, String type, boolean required, String defaultValue,
+    /**
+     * One argument as a caller sends it.
+     *
+     * @param defaultValue the fallback in its own JSON type, as the parsed
+     *                     answer holds it; null where the argument declares none
+     */
+    public record Arg(String name, String type, boolean required, Object defaultValue,
                       List<String> values) {
 
         static Arg req(String name, String type) {
             return new Arg(name, type, true, null, List.of());
         }
 
-        static Arg opt(String name, String type, String defaultValue) {
+        static Arg opt(String name, String type, Object defaultValue) {
             return new Arg(name, type, false, defaultValue, List.of());
+        }
+
+        static Arg view(String... views) {
+            return new Arg("selector", "string", true, null, List.of(views));
         }
     }
 
-    /** One verb as the declaration carries it. */
+    /**
+     * One verb as the declaration carries it.
+     *
+     * @param answer the shape of its answer; the members of each shape are
+     *               {@link #ANSWER_MEMBERS}
+     */
     public record Verb(String identity, String effectClass, String answer, List<Arg> args,
                        List<String> reasons) {
+
+        /** The name the verb is called under on REST: the identity without the scheme. */
+        public String restName() {
+            return identity.substring(SCHEME.length() + 1);
+        }
     }
 
     public static final String SCHEME = "worklist";
 
+    /** The shape of the declaration, the same for every service (C5.5). */
+    public static final String SHAPE_VERSION = "3";
+
+    /** The form of a worklist address; the service has no technical one. */
+    public static final String ADDRESS_FORM = "worklist://<scope>/<selector>/<number>";
+
+    /** Where every argument of this service travels: the top level. */
+    public static final String PLACEMENT = "TOP";
+
+    /** The members each answer shape carries at its top level. */
+    public static final Map<String, List<String>> ANSWER_MEMBERS = Map.of(
+        "OBJECT", List.of("address", "fields"),
+        "OBJECT_CREATED", List.of("address", "fields"),
+        "OBJECT_LISTING", List.of("objects", "[next_cursor]"));
+
+    /** The effect classes the worklist verbs take, in the order the declaration lists them. */
+    public static final List<String> DECLARED_EFFECT_CLASSES = List.of(
+        "ITEM_READ", "COLLECTION_READ", "CREATE", "FIELD_WRITE", "GRAPH_ADD_OR_REMOVE",
+        "ITEM_TRANSITION", "COLLECTION_COMPOUND");
+
     private static final Arg SCOPE = Arg.req("scope", "string");
-    private static final Arg SELECTOR = Arg.req("selector", "string");
+    private static final Arg ITEM_VIEW = Arg.view("item");
+    private static final Arg ITERATION_VIEW = Arg.view("iteration");
     private static final Arg ADDRESS = Arg.req("address", "string");
     private static final Arg TOKEN = Arg.req("conflict_token", "string");
     private static final Arg FIELDS = Arg.req("fields", "object");
@@ -75,7 +115,7 @@ public final class DeclarationSpecification {
 
     public static final List<Verb> VERBS = List.of(
         new Verb("worklist_create", "CREATE", "OBJECT_CREATED",
-            List.of(SCOPE, SELECTOR, FIELDS),
+            List.of(SCOPE, Arg.view("item", "iteration", "milestone"), FIELDS),
             reasons(WRITE, List.of("SELECTOR_DECLARED_NOT_WRITTEN", "FIELD_RETRACTED",
                 "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
                 "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "SETTING_ABSENT",
@@ -88,9 +128,10 @@ public final class DeclarationSpecification {
                 "FIELD_RETRACTED", "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
                 "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "ITERATION_CLOSED"))),
         new Verb("worklist_query", "COLLECTION_READ", "OBJECT_LISTING",
-            List.of(SCOPE, SELECTOR, Arg.opt("filter", "object", null),
-                Arg.opt("page_size", "integer", "50"), Arg.opt("after", "string", null),
-                new Arg("sort", "string", false, "id", List.of("id", "created_at")),
+            List.of(SCOPE, Arg.view("item", "iteration", "milestone", "workstream"),
+                Arg.opt("filter", "object", null),
+                Arg.opt("page_size", "integer", 50), Arg.opt("after", "string", null),
+                new Arg("sort", "string", false, "id", List.of("id", "created_at", "rank")),
                 new Arg("direction", "string", false, "asc", List.of("asc", "desc"))),
             reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "PREDICATE_UNKNOWN",
                 "VALUE_UNDECLARED", "PAGE_SIZE_REJECTED", "CURSOR_MALFORMED", "CURSOR_FOREIGN",
@@ -106,7 +147,7 @@ public final class DeclarationSpecification {
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "ITERATION_CLOSED",
                 "ITERATION_INCOMPLETE", "ITERATION_PRODUCED_MISSING"))),
         new Verb("worklist_advance", "COLLECTION_COMPOUND", "OBJECT",
-            List.of(SCOPE, SELECTOR, TOKEN),
+            List.of(SCOPE, ITERATION_VIEW, TOKEN),
             reasons(WRITE, List.of("CONFLICT_TOKEN_MISSING", "CONFLICT", "VERB_UNCARRIED",
                 "ITERATION_ABSENT", "SETTING_ABSENT"))),
         new Verb("worklist_plan", "GRAPH_ADD_OR_REMOVE", "OBJECT_CREATED",
@@ -123,7 +164,7 @@ public final class DeclarationSpecification {
             reasons(WRITE, List.of("VERB_UNCARRIED", "ADDRESS_READ_ONLY", "CLAIM_ABSENT",
                 "CLAIM_RECEIPT_UNKNOWN"))),
         new Verb("worklist_claim_next", "COLLECTION_COMPOUND", "OBJECT",
-            List.of(SCOPE, SELECTOR, DURATION),
+            List.of(SCOPE, ITEM_VIEW, DURATION),
             reasons(WRITE, List.of("VERB_UNCARRIED", "DRAW_EMPTY", "CLAIM_HELD"))),
         new Verb("worklist_relate", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
@@ -134,7 +175,7 @@ public final class DeclarationSpecification {
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
                 "VALUE_UNDECLARED"))),
         new Verb("worklist_validate", "COLLECTION_COMPOUND", "OBJECT",
-            List.of(SCOPE, SELECTOR),
+            List.of(SCOPE, ITEM_VIEW),
             reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "VERB_UNCARRIED"))));
 
     @SafeVarargs

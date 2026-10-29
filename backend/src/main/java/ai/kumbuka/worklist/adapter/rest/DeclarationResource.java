@@ -8,11 +8,7 @@
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.surface.DeclarationDocument;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.security.Authenticated;
-import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -25,12 +21,14 @@ import java.util.Map;
 /**
  * The service's declaration, offered on its REST surface (ADR-0039).
  *
- * <p>{@code GET /api/declaration} answers, per verb, the identity
- * {@code worklist_<verb>}, the effect class in the router's own names, the
- * arguments with their names, types, requiredness, defaults and value sets,
- * the shape of the answer, the reason codes a refusal of the verb may name,
- * and the texts the verb addresses to a caller; beside them the catalogue of
- * every reason with its status, message and remedy. The document carries a
+ * <p>{@code GET /api/declaration} answers the declaration in shape 3 of the
+ * service contract (C5.3, C5.4): per call the identity and call name
+ * {@code worklist_<verb>}, the REST name, the effect class in the router's own
+ * names, the arguments with their names, types, requiredness, placement,
+ * defaults and fixed values, the shape of the answer with its members, the
+ * reason codes a refusal of the call may name, and the texts the call
+ * addresses to a caller; beside them the catalogue of every reason with its
+ * message templates and remedy. The document carries a
  * version, a hash over its own content, and the same value travels as the
  * entity tag, so that a reader can tell two declarations apart without
  * comparing them.
@@ -46,32 +44,16 @@ import java.util.Map;
 @Produces(MediaType.APPLICATION_JSON)
 public class DeclarationResource {
 
-    @Inject ObjectMapper json;
-
+    /**
+     * The document as every answer is written. It carries no member without a
+     * value, so the mapper, which leaves such a member out (C7.2), writes the
+     * content the version is the hash of.
+     */
     @GET
     public Response declaration() {
         Map<String, Object> document = DeclarationDocument.document();
-        return Response.ok(written(document))
+        return Response.ok(document)
             .tag(new EntityTag(String.valueOf(document.get(DeclarationDocument.VERSION))))
             .build();
-    }
-
-    /**
-     * The document with every member written, one without a value as
-     * {@code null}: the form its version is taken over. Every other answer
-     * leaves such a member out (C7.2); written that way here, the document
-     * would no longer be the content its version is the hash of. The
-     * declaration keeps its form until its own reshaping decides it.
-     */
-    private String written(Map<String, Object> document) {
-        try {
-            return json.copy()
-                .setDefaultPropertyInclusion(JsonInclude.Value.construct(
-                    JsonInclude.Include.ALWAYS, JsonInclude.Include.ALWAYS))
-                .writeValueAsString(document);
-        } catch (JsonProcessingException unwritable) {
-            throw new IllegalStateException("the declaration could not be written as JSON",
-                unwritable);
-        }
     }
 }

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The start-up check of ADR-0039, held in every build: each verb the REST
  * surface serves is declared, and each declared verb is served.
  */
-class DeclarationGuardTest {
+class RouteDeclarationGuardTest {
 
     private static List<String> declared() {
         return SurfaceDeclaration.verbs().stream().map(v -> v.name().name()).toList();
@@ -27,8 +27,8 @@ class DeclarationGuardTest {
 
     @Test
     void every_served_verb_is_declared_and_every_declared_verb_served() {
-        assertThatCode(() -> DeclarationGuard.requireDeclared(DeclarationGuard.served(),
-            declared())).doesNotThrowAnyException();
+        assertThatCode(() -> RouteDeclarationGuard.requireDeclared(
+            RouteDeclarationGuard.served(), declared())).doesNotThrowAnyException();
     }
 
     @Test
@@ -36,8 +36,8 @@ class DeclarationGuardTest {
         List<String> withoutClaim = declared().stream()
             .filter(verb -> !verb.equals("claim"))
             .toList();
-        assertThatThrownBy(() -> DeclarationGuard.requireDeclared(DeclarationGuard.served(),
-                withoutClaim))
+        assertThatThrownBy(() -> RouteDeclarationGuard.requireDeclared(
+                RouteDeclarationGuard.served(), withoutClaim))
             .as("RED STATE, observed: a served verb with its declaration removed must stop "
                 + "the service from starting, and the refusal names the verb")
             .isInstanceOf(IllegalStateException.class)

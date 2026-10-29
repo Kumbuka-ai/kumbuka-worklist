@@ -11,13 +11,25 @@ import io.quarkus.qute.i18n.Message;
 import io.quarkus.qute.i18n.MessageBundle;
 
 /**
- * The description of every value of a fixed set an argument takes, such as the values of sort and direction. Phrased positively (R21).
+ * The description of every value of a fixed set an argument takes, such as the views and the values of sort and direction. Phrased positively (R21).
  *
  * <p>The texts live in {@code src/main/resources/messages/values.properties}; {@code @Message}
  * carries no value, so the build fails when the file lacks a text.
  */
 @MessageBundle(value = "values")
 public interface ValueDescriptions {
+
+    @Message
+    String viewItem();
+
+    @Message
+    String viewIteration();
+
+    @Message
+    String viewMilestone();
+
+    @Message
+    String viewWorkstream();
 
     @Message
     String sortId();
