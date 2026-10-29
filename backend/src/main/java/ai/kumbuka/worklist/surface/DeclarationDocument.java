@@ -72,6 +72,10 @@ public final class DeclarationDocument {
     private static final String REASONS = "reasons";
     private static final String REASON = "reason";
 
+    /** The members within a call its arguments and the reasons it may refuse with travel under. */
+    private static final String ARGUMENTS = "arguments";
+    private static final String REFUSALS = "refusals";
+
     private DeclarationDocument() {
     }
 
@@ -138,13 +142,13 @@ public final class DeclarationDocument {
             SurfaceDeclaration.requireDescribed(call, description);
             SurfaceDeclaration.requireWithinBudget(call, String.valueOf(description));
             Map<String, @Nullable String> arguments = new LinkedHashMap<>();
-            for (Map<?, ?> argument : members(declared.get("arguments"), call + "'s arguments")) {
+            for (Map<?, ?> argument : members(declared.get(ARGUMENTS), call + "'s arguments")) {
                 arguments.put(name(argument.get("name"), call + "'s argument"),
                     text(argument.get(DESCRIPTION)));
             }
             SurfaceDeclaration.requireDescribedArguments(call, arguments);
             SurfaceDeclaration.requireCatalogued(call,
-                members(declared.get("refusals"), call + "'s refusals", String.class), catalogue);
+                members(declared.get(REFUSALS), call + "'s refusals", String.class), catalogue);
         }
     }
 
@@ -228,14 +232,14 @@ public final class DeclarationDocument {
         call.put("rest_name", verb.name().name());
         call.put("effect_class", verb.effectClass().name());
         call.put(DESCRIPTION, verb.description().apply(tools));
-        call.put("arguments", verb.arguments().stream()
+        call.put(ARGUMENTS, verb.arguments().stream()
             .map(argument -> argument(argument, arguments, values))
             .toList());
         Map<String, Object> answer = new LinkedHashMap<>();
         answer.put("shape", verb.answer().name());
         answer.put("members", verb.answer().members());
         call.put("answer", answer);
-        call.put("refusals", verb.reasons().stream().map(RefusalCode::name).toList());
+        call.put(REFUSALS, verb.reasons().stream().map(RefusalCode::name).toList());
         return call;
     }
 
