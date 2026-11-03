@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * created again is back; a renamed column keeps what it had. Both halves read text, the Java sources and the
  * migrations, and neither needs a database.
  */
+// This class runs locally without Docker.
 class ClockUsageTest {
 
     /** The one class that may build the system clock: the CDI producer. */
