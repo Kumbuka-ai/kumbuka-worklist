@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>Runs as a plain unit test: it reads paths and needs no database.
  */
+// Runs locally without Docker: it reads the source tree and starts no container.
 class PackageStructureTest {
 
     /**
