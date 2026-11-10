@@ -66,7 +66,6 @@ CREATE TABLE worklist.item_tag (
 CREATE INDEX idx_item_tag_tag ON worklist.item_tag (tag_id);
 
 ALTER TABLE worklist.item_tag ENABLE ROW LEVEL SECURITY;
-ALTER TABLE worklist.item_tag FORCE  ROW LEVEL SECURITY;
 
 CREATE POLICY item_tag_tenant_isolation ON worklist.item_tag
     USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
