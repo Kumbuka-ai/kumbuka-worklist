@@ -19,6 +19,7 @@ import ai.kumbuka.worklist.domain.Page;
 import ai.kumbuka.worklist.domain.PageRequest;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
+import ai.kumbuka.worklist.domain.TagService;
 import ai.kumbuka.worklist.domain.WorkstreamService;
 import ai.kumbuka.worklist.platform.ScopeDirectory;
 import ai.kumbuka.worklist.platform.ScopeDirectory.Access;
@@ -129,6 +130,7 @@ public class VerbSurface {
     @Inject WorkstreamService workstreams;
     @Inject MembershipService memberships;
     @Inject ClaimService claims;
+    @Inject TagService tags;
     @Inject IdempotencyService idempotency;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
@@ -727,6 +729,68 @@ public class VerbSurface {
     }
 
     // ======================================================================
+    // The tags
+    // ======================================================================
+
+    /**
+     * Attach one tag of the scope's vocabulary to an item.
+     *
+     * <p>A write, so the scope is resolved for writing and a subject without
+     * the write right meets {@code SCOPE_READ_ONLY}. No conflict token: the
+     * assignment is a relation, and the item's token and timestamp stay as
+     * they are. Only an item carries tags; an iteration, a milestone or a
+     * workstream address is refused as {@code TAG_ITEM_ONLY} before anything
+     * is looked up.
+     *
+     * @param rawTag the token the transport carried; absent where it carried
+     *               none, which this surface refuses as ARGUMENT_MISSING
+     */
+    @Transactional
+    public Result tagAttach(String subject, String rawScope, String rawView, String rawId,
+                            @Nullable String rawTag) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireItem(rawView, rawId);
+        UUID id = resolve(in, target);
+
+        Result result = at(target, tags.tagAttach(in.scopeId(), id, requireText(TAG, rawTag),
+            subject));
+        LOG.infof("tag_attach on %s in scope %s", target.id(), in.scopeId());
+        return result;
+    }
+
+    /**
+     * Detach one tag from an item; a withdrawn tag detaches like any other.
+     *
+     * @param rawTag the token the transport carried; absent where it carried
+     *               none, which this surface refuses as ARGUMENT_MISSING
+     */
+    @Transactional
+    public Result tagDetach(String subject, String rawScope, String rawView, String rawId,
+                            @Nullable String rawTag) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireItem(rawView, rawId);
+        UUID id = resolve(in, target);
+
+        Result result = at(target, tags.tagDetach(in.scopeId(), id, requireText(TAG, rawTag)));
+        LOG.infof("tag_detach on %s in scope %s", target.id(), in.scopeId());
+        return result;
+    }
+
+    /**
+     * The address of a tag verb, which only an item answers to. The other
+     * three views are refused with the sentence that says so, rather than as
+     * a verb this address skips: the verb is carried, and the object is one
+     * that carries no tags.
+     */
+    private static AddressParser.Target requireItem(String rawView, String rawId) {
+        AddressParser.Target target = AddressParser.target(rawView, rawId);
+        if (!Selector.ITEM.equals(target.view())) {
+            throw new SurfaceException(RefusalCode.TAG_ITEM_ONLY);
+        }
+        return target;
+    }
+
+    // ======================================================================
     // The validation check
     // ======================================================================
 
@@ -991,6 +1055,7 @@ public class VerbSurface {
     private static final String RECEIPT = "receipt";
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
+    private static final String TAG = "tag";
     private static final String DURATION = "duration_seconds";
     private static final String CLOSE = "close";
     private static final String CREATE = "create";

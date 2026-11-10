@@ -63,6 +63,8 @@ public class ItemRepository {
     public static final String BY_STATUS = "status_pk";
     public static final String BY_MILESTONE = "milestone_number";
     public static final String BY_WORKSTREAM = "workstream_number";
+    /** The items carrying one tag, by the platform's identity of the tag. */
+    public static final String BY_TAG = "tag_id";
 
     @Inject EntityManager em;
     @Inject Clock clock;
@@ -106,9 +108,11 @@ public class ItemRepository {
      *
      * <p><strong>Enumerated columns only</strong>, each an equality on a key the
      * domain resolved from the caller's name, number or token:
-     * {@link #BY_STATUS}, {@link #BY_MILESTONE}, {@link #BY_WORKSTREAM}. A key
-     * not among them is a defect of the caller above and fails loudly rather
-     * than being dropped, because a dropped filter answers the whole set.
+     * {@link #BY_STATUS}, {@link #BY_MILESTONE}, {@link #BY_WORKSTREAM}, and
+     * {@link #BY_TAG}, which asks whether an assignment of that tag stands for
+     * the item. A key not among them is a defect of the caller above and fails
+     * loudly rather than being dropped, because a dropped filter answers the
+     * whole set. The filters combine by AND.
      *
      * <p>The continuation, the order and the bound are {@link KeysetClause}'s:
      * the page starts strictly after the position the cursor carries, whether
@@ -124,16 +128,18 @@ public class ItemRepository {
 
         for (java.util.Map.Entry<String, Object> entry : filter.entrySet()) {
             String param = "f_" + params.size();
-            String column = switch (entry.getKey()) {
-                case BY_STATUS -> "i.statusPk";
-                case BY_MILESTONE -> "i.milestoneNumber";
-                case BY_WORKSTREAM -> "i.workstreamNumber";
+            String predicate = switch (entry.getKey()) {
+                case BY_STATUS -> "i.statusPk = :" + param;
+                case BY_MILESTONE -> "i.milestoneNumber = :" + param;
+                case BY_WORKSTREAM -> "i.workstreamNumber = :" + param;
+                case BY_TAG -> "i.number IN (SELECT t.itemNumber FROM ItemTag t "
+                    + "WHERE t.scopeId = i.scopeId AND t.tagId = :" + param + ")";
                 default -> throw new IllegalArgumentException(
                     "the filter key '" + entry.getKey() + "' is not one this query "
                         + "narrows on — the domain must refuse it above rather than "
                         + "sending it here");
             };
-            jpql.append(" AND ").append(column).append(" = :").append(param);
+            jpql.append(" AND ").append(predicate);
             params.put(param, entry.getValue());
         }
         KeysetClause.continueAndOrder(jpql, params, "i", request);

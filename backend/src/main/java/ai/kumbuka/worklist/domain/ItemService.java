@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.domain;
 import ai.kumbuka.worklist.repository.ItemRepository;
 import ai.kumbuka.worklist.repository.PlanningRepository;
 import ai.kumbuka.worklist.repository.ScopeAccessRepository;
+import ai.kumbuka.worklist.repository.TagRepository;
 import ai.kumbuka.worklist.repository.WorkstreamRepository;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -123,6 +124,7 @@ public class ItemService {
     @Inject WorkstreamService workstreams;
     @Inject WorkstreamRepository workstreamRepository;
     @Inject ScopeAccessRepository scopeAccess;
+    @Inject TagRepository tags;
 
 
     // ------------------------------------------------------------------
@@ -162,6 +164,22 @@ public class ItemService {
             filter.put(ItemRepository.BY_WORKSTREAM,
                 workstreamByToken(scopeId, (String) token,
                     QueryFilter.ITEM_WORKSTREAM.offenderName()).number));
+
+        Optional<Object> tagToken = request.value(QueryFilter.ITEM_TAG);
+        if (tagToken.isPresent()) {
+            // A token the vocabulary lacks is an empty page and not a refusal:
+            // the vocabulary is the platform's, and a tag that names no item
+            // here is an ordinary answer. Withdrawn tags still filter, since
+            // the items carrying them keep carrying them.
+            Optional<TagRepository.TagRow> tag =
+                tags.inVocabulary(scopeId, (String) tagToken.get());
+            if (tag.isEmpty()) {
+                return Page.of(request, List.<Item>of(),
+                    item -> PageCursor.Position.of(request.sort(), item.number, item.createdAt, 0),
+                    this::project);
+            }
+            filter.put(ItemRepository.BY_TAG, tag.get().tagId());
+        }
 
         return Page.of(request, items.page(scopeId, filter, request),
             item -> PageCursor.Position.of(request.sort(), item.number, item.createdAt, 0),
@@ -1362,6 +1380,7 @@ public class ItemService {
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
+        fields.put(Field.TAGS.canonicalName(), tagsOf(item));
         fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneNumber);
         fields.put(Field.WORKSTREAM_ID.canonicalName(),
             workstreamTokenOf(item.scopeId, item.workstreamNumber).orElse(null));
@@ -1496,6 +1515,19 @@ public class ItemService {
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);
+    }
+
+    /**
+     * The tokens of the tags the item carries, ascending, withdrawn ones
+     * included.
+     *
+     * <p>The assignments are this schema's and the tokens the platform's, so
+     * the view is read only where the item carries a tag at all: an item
+     * without one answers its empty list from this schema alone.
+     */
+    private List<String> tagsOf(Item item) {
+        List<UUID> attached = tags.attachedTo(item.scopeId, item.number);
+        return attached.isEmpty() ? List.of() : List.copyOf(tags.tokensOf(attached));
     }
 
     /** The display name of a declared relation type, if it has one. */

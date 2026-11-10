@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.boundary;
 
 import ai.kumbuka.worklist.platform.PlatformFixture;
@@ -55,10 +62,13 @@ class ServiceRoleConformanceIT {
 
     /**
      * Everything the role may hold OUTSIDE its own schema, named object by
-     * object. One entry today: the published read contract.
+     * object. Two entries today: the published read contract of the scopes,
+     * and the one of the tag vocabulary (sprint/210). The table behind the
+     * second, {@code platform.tag}, is not among them.
      */
     private static final Set<String> PERMITTED_FOREIGN_OBJECTS = Set.of(
-        SubstrateDatabaseResource.PLATFORM_SCHEMA + "." + SubstrateDatabaseResource.DIRECTORY_VIEW);
+        SubstrateDatabaseResource.PLATFORM_SCHEMA + "." + SubstrateDatabaseResource.DIRECTORY_VIEW,
+        SubstrateDatabaseResource.PLATFORM_SCHEMA + "." + SubstrateDatabaseResource.TAG_VIEW);
 
     @BeforeAll
     static void grantDirectoryAccess() {
@@ -118,6 +128,15 @@ class ServiceRoleConformanceIT {
             .as("the role must actually hold SELECT on the read contract — a permitted "
                 + "entry that is not held would make the check pass by absence")
             .containsExactly("SELECT");
+        assertThat(grantsOn(SubstrateDatabaseResource.PLATFORM_SCHEMA,
+                SubstrateDatabaseResource.TAG_VIEW))
+            .as("and on the tag vocabulary's view, the one way the service reads tags")
+            .containsExactly("SELECT");
+        assertThat(grantsOn(SubstrateDatabaseResource.PLATFORM_SCHEMA,
+                SubstrateDatabaseResource.TAG_TABLE))
+            .as("and nothing on the table behind it: the vocabulary is read through the view "
+                + "alone")
+            .isEmpty();
     }
 
     /**

@@ -111,6 +111,7 @@ public final class DeclarationSpecification {
     private static final Arg DURATION = Arg.req("duration_seconds", "integer").bounded(1, null);
     private static final Arg TO_ITEM = Arg.req("to_item", "string");
     private static final Arg TYPE = Arg.req("type", "string");
+    private static final Arg TAG = Arg.req("tag", "string");
 
     /** Every refusal a call can meet before its own work begins. */
     private static final List<String> COMMON = List.of(
@@ -191,7 +192,13 @@ public final class DeclarationSpecification {
                 "VALUE_UNDECLARED"))),
         new Verb("worklist_validate", "COLLECTION_COMPOUND", "OBJECT",
             List.of(SCOPE, ITEM_VIEW),
-            reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "VERB_UNCARRIED"))));
+            reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "VERB_UNCARRIED"))),
+        // The tags (sprint/210): a write on an addressed object that presents
+        // no conflict token, classed as claim and release are.
+        new Verb("worklist_tag_attach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
+            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED", "TAG_WITHDRAWN"))),
+        new Verb("worklist_tag_detach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
+            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED"))));
 
     @SafeVarargs
     private static List<String> reasons(List<String>... groups) {

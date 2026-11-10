@@ -84,4 +84,7 @@ public interface ArgumentDescriptions {
 
     @Message
     String idempotencyKey();
+
+    @Message
+    String tag();
 }

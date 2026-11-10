@@ -68,9 +68,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VerbVocabularyGuardTest {
 
     /**
-     * The platform verb set, transcribed from section 2 of the catalogue.
+     * The platform verb set, transcribed from section 2 of the catalogue, and
+     * the two tag verbs sprint/210 adds to it for worklist, dispatch and
+     * memory alike.
      *
-     * <p>Twenty-four, grouped as the catalogue groups them. Its purpose here
+     * <p>Twenty-six, grouped as the catalogue groups them. Its purpose here
      * is narrow and it is not the main assertion: it catches a name that was
      * added to {@link #CARRIED_BY_THIS_SCHEME} without being a platform verb
      * at all. Without it, a fantasy name added in both places at once would
@@ -90,7 +92,9 @@ class VerbVocabularyGuardTest {
         // Planning
         "plan", "unplan", "advance",
         // Scheme-specific and platform
-        "digest", "scopes", "validate");
+        "digest", "scopes", "validate",
+        // Tags (sprint/210): a scope's vocabulary, attached to an object
+        "tag_attach", "tag_detach");
 
     /**
      * The verbs each service of this scheme carries TODAY, and therefore
@@ -150,7 +154,12 @@ class VerbVocabularyGuardTest {
         // No `query`: one row per scope is not something a scope-addressed
         // call enumerates.
         ScopeSettingService.class,
-        Set.of("create", "read", "update"));
+        Set.of("create", "read", "update"),
+
+        // The tags of an item: the assignment has its own table, and the
+        // vocabulary is the platform's, read through its view.
+        TagService.class,
+        Set.of("tag_attach", "tag_detach"));
 
     /**
      * The public methods of the verb surface that are not verbs.
@@ -178,7 +187,7 @@ class VerbVocabularyGuardTest {
     @Test
     void every_verb_this_scheme_claims_to_carry_is_a_platform_verb() {
         assertThat(PLATFORM_VOCABULARY)
-            .as("a verb this scheme carries is one of the platform's twenty-four. A name "
+            .as("a verb this scheme carries is one of the platform's twenty-six. A name "
                 + "that is not in that set is a service-private verb wearing the "
                 + "vocabulary's clothes, and adding it here as well as to the class "
                 + "would make this whole guard a list compared with itself")
@@ -364,17 +373,19 @@ class VerbVocabularyGuardTest {
      *
      * <p>Twenty-four is the number after the two reductions the catalogue
      * records: the draw-candidate read folded into {@code query}, and the two
-     * failure verbs folded into {@code abandon}. A transcription that had
-     * quietly picked up a twenty-fifth would be a transcription of something
-     * else.
+     * failure verbs folded into {@code abandon}. Sprint/210 adds the two tag
+     * verbs, which three services carry with one semantics, so twenty-six. A
+     * transcription that had quietly picked up a twenty-seventh would be a
+     * transcription of something else.
      */
     @Test
-    void the_transcribed_vocabulary_is_the_twenty_four_the_catalogue_settled_on() {
+    void the_transcribed_vocabulary_is_the_twenty_six_the_catalogue_settled_on() {
         assertThat(PLATFORM_VOCABULARY)
-            .as("the catalogue settles on twenty-four verbs after two reductions. A "
-                + "different count here means this transcription is of a different "
-                + "revision than the one that was ratified")
-            .hasSize(24);
+            .as("the catalogue settles on twenty-four verbs after two reductions, and "
+                + "sprint/210 adds tag_attach and tag_detach. A different count here means "
+                + "this transcription is of a different revision than the one that was "
+                + "ratified")
+            .hasSize(26);
     }
 
     /**

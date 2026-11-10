@@ -64,7 +64,7 @@ class ItemFieldsTest {
             .contains("title", "description", "status", "milestone", "attributes",
                 "references", "relations")
             .doesNotContain("id", "number", "selector", "created_at",
-                "conflict_token");
+                "conflict_token", "tags");
     }
 
     /**

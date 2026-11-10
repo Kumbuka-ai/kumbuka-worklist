@@ -177,4 +177,10 @@ public interface RefusalMessages {
 
     @Message
     String idempotencyKeyReused();
+
+    @Message
+    String tagWithdrawn();
+
+    @Message
+    String tagItemOnly();
 }
