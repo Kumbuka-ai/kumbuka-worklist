@@ -66,10 +66,7 @@ CREATE TABLE worklist.item_tag (
 CREATE INDEX idx_item_tag_tag ON worklist.item_tag (tag_id);
 
 ALTER TABLE worklist.item_tag ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY item_tag_tenant_isolation ON worklist.item_tag
-    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
-    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+ALTER TABLE worklist.item_tag FORCE  ROW LEVEL SECURITY;
 
 -- The three privileges every table of this schema carries, and DELETE for
 -- the verb that removes an assignment (see above). No TRUNCATE, no TRIGGER,
