@@ -419,6 +419,10 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
                 FROM platform.tag t
                 JOIN platform.scope_access sa ON sa.scope_id = t.scope_id
             """);
+        // The platform reaches its own schema: the key from platform.tag onto
+        // the scope is checked under the table's owner when a scope row is
+        // removed, and that check reads platform.tag.
+        s.execute("GRANT USAGE ON SCHEMA " + PLATFORM_SCHEMA + " TO " + PLATFORM_ROLE);
         s.execute("ALTER TABLE platform.tag      OWNER TO " + PLATFORM_ROLE);
         s.execute("ALTER VIEW  platform.tag_access OWNER TO " + PLATFORM_ROLE);
     }

@@ -55,6 +55,7 @@ class TaggingIT {
     @Inject TestIdentityAssociation identity;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
+    @Inject ai.kumbuka.worklist.domain.ScopeSettingService settings;
 
     @BeforeAll
     static void stage() {
@@ -74,6 +75,10 @@ class TaggingIT {
         if (vocabulary.statusByName(SCOPE_ID, OPEN).isEmpty()) {
             vocabulary.declareStatus(SCOPE_ID, OPEN, 1, true, false, false, false);
             vocabulary.declareStatus(SCOPE_ID, DONE, 2, false, false, true, true);
+            // A milestone is created against the scope's cardinality settings.
+            settings.create(SCOPE_ID, Map.of(
+                "max_planned_iterations", 100, "warn_planned_iterations", 100,
+                "max_memberships_per_iteration", 100, "warn_memberships_per_iteration", 100));
         }
     }
 
