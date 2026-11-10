@@ -181,9 +181,10 @@ class ItemTagIsolationIT {
             throws SQLException {
         UUID item = createItem("planted across");
         long number = numberOf(item);
+        UUID anyTag = UUID.randomUUID();
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, TENANT);
-            assertThatThrownBy(() -> insertAssignment(c, FOREIGN_TENANT, number, UUID.randomUUID()))
+            assertThatThrownBy(() -> insertAssignment(c, FOREIGN_TENANT, number, anyTag))
                 .isInstanceOf(SQLException.class)
                 .hasMessageContaining("row-level security");
             c.rollback();

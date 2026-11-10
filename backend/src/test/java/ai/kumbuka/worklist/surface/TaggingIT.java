@@ -333,10 +333,9 @@ class TaggingIT {
     @Test
     void the_filter_tag_with_an_unknown_token_answers_an_empty_page() {
         createItem("there is something to list");
-        given().queryParam("filter.tag", "no-such-tag")
-            .when().get("/api/" + SCOPE + "/" + Selector.ITEM)
-            .then().statusCode(200)
-            .body("objects.size()", org.hamcrest.Matchers.is(0));
+        assertThat(query(Map.of("filter.tag", "no-such-tag")))
+            .as("a token the vocabulary lacks answers an empty page, not a refusal")
+            .isEmpty();
     }
 
     // =======================================================================
