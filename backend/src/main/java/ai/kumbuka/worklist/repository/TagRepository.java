@@ -136,7 +136,7 @@ public class TagRepository {
         public static final String WITHDRAWN = "withdrawn";
 
         /** Whether the tag takes no new assignment. */
-        public boolean withdrawn() {
+        public boolean isWithdrawn() {
             return WITHDRAWN.equals(status);
         }
     }

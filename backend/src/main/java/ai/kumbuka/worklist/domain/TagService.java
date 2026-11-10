@@ -86,7 +86,7 @@ public class TagService {
                                          String subject) {
         Item item = requireLocked(scopeId, itemId);
         TagRepository.TagRow tag = requireDeclared(scopeId, token);
-        if (tag.withdrawn()) {
+        if (tag.isWithdrawn()) {
             throw new WorklistException(WorklistException.Reason.TAG_WITHDRAWN,
                 List.of(TAG_ARGUMENT));
         }
