@@ -464,6 +464,15 @@ public class WorklistException extends RuntimeException {
          * but empty and whitespace-only are refused.
          */
         ITERATION_PRODUCED_MISSING,
+
+        // --- the tags --------------------------------------------------
+
+        /**
+         * The token names a tag of the scope's vocabulary that the platform
+         * has withdrawn: it takes no new assignment, and the items that
+         * carry it keep carrying it and can still have it detached.
+         */
+        TAG_WITHDRAWN,
     }
 
     private final transient Reason reason;

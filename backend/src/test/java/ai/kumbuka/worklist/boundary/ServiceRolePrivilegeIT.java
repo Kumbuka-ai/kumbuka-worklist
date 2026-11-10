@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.boundary;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -13,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,6 +71,18 @@ class ServiceRolePrivilegeIT {
 
     /** Exactly what a domain table of this schema grants the runtime role. */
     private static final Set<String> PERMITTED = Set.of("SELECT", "INSERT", "UPDATE");
+
+    /**
+     * The tables whose verbs genuinely delete, each with exactly what it
+     * grants instead of {@link #PERMITTED}.
+     *
+     * <p>One, from V26: {@code tag_detach} removes an assignment, which has no
+     * status to fall back to (V2: "the day a verb genuinely deletes is the day
+     * the grant is added with that verb"). Named table by table, so DELETE on
+     * any other table is still a defect.
+     */
+    private static final Map<String, Set<String>> PERMITTED_HERE = Map.of(
+        "item_tag", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"));
 
     /**
      * Everything {@code has_table_privilege} can be asked about a table.
@@ -126,6 +146,9 @@ class ServiceRolePrivilegeIT {
         // The ledger of spent idempotency keys (C10.4), from V25: the same
         // SELECT/INSERT/UPDATE, and no DELETE -- an expired key is written over.
         "idempotency_key",
+        // The tags an item carries, from V26: the one table with DELETE, for
+        // tag_detach (PERMITTED_HERE).
+        "item_tag",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);
@@ -400,15 +423,16 @@ class ServiceRolePrivilegeIT {
         List<String> defects = new ArrayList<>();
         for (String table : tables) {
             boolean history = HISTORY_TABLE.equals(table);
+            Set<String> permitted = PERMITTED_HERE.getOrDefault(table, PERMITTED);
             for (String privilege : ALL_TABLE_PRIVILEGES) {
                 boolean held = holds(c, table, privilege);
-                boolean expected = !history && PERMITTED.contains(privilege);
+                boolean expected = !history && permitted.contains(privilege);
                 if (held && !expected) {
                     defects.add(schema() + "." + table + ": holds " + privilege
                         + " and must not" + (history
                             ? " — the history table belongs to the migrator and the runtime "
                                 + "role holds nothing on it"
-                            : " — permitted here is exactly " + PERMITTED));
+                            : " — permitted here is exactly " + permitted));
                 } else if (!held && expected) {
                     defects.add(schema() + "." + table + ": lacks " + privilege
                         + " and must hold it — the service cannot run without it");

@@ -132,6 +132,9 @@ class NullIsAbsentIT {
         calls.put("unrelate", args("address", item, "conflict_token", "stale",
             "to_item", "worklist://" + SCOPE + "/item/2", "type", "blocks"));
         calls.put("validate", args("scope", SCOPE, "selector", Selector.ITEM));
+        // A token the scope does not declare: refused, so the store stays as it is.
+        calls.put("tag_attach", args("address", item, "tag", "no-such-tag"));
+        calls.put("tag_detach", args("address", item, "tag", "no-such-tag"));
 
         SoftAssertions soft = new SoftAssertions();
         List<String> tools = toolsList().getList("result.tools.name", String.class);
@@ -338,6 +341,8 @@ class NullIsAbsentIT {
         bodies.put(itemPath + "/1:unrelate", args("to_item", "worklist://" + SCOPE + "/item/2",
             "type", "blocks"));
         bodies.put(itemPath + ":claim_next", args("duration_seconds", 0));
+        bodies.put(itemPath + "/1:tag_attach", args("tag", "no-such-tag"));
+        bodies.put(itemPath + "/1:tag_detach", args("tag", "no-such-tag"));
         bodies.put("/api/" + SCOPE + "/iteration/1:close", args("produced", "a release"));
 
         SoftAssertions soft = new SoftAssertions();

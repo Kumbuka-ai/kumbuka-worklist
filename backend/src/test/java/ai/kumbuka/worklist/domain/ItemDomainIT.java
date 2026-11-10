@@ -1650,8 +1650,8 @@ class ItemDomainIT {
             .anySatisfy(item -> {
                 assertThat(item.get("id")).isEqualTo(id);
                 assertThat(item).containsKeys("title", "description", "status", "attributes",
-                    "references", "relations", "milestone", "conflict_token", "created_at",
-                    "changed_at");
+                    "references", "relations", "tags", "milestone", "conflict_token",
+                    "created_at", "changed_at");
             });
     }
 

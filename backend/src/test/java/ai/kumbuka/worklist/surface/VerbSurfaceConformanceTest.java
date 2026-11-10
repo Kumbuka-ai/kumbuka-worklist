@@ -70,8 +70,11 @@ class VerbSurfaceConformanceTest {
     /** Below this the probe is not walking the tree it thinks it is. */
     private static final int MINIMUM_ROUTES = 8;
 
-    /** The verb set is twenty-four, after the catalogue's two reductions. */
-    private static final int VOCABULARY_SIZE = 24;
+    /**
+     * The verb set is twenty-six: the catalogue's twenty-four, after its two
+     * reductions, and the two tag verbs of sprint/210.
+     */
+    private static final int VOCABULARY_SIZE = 26;
 
     // =======================================================================
     // Closure, on the bindings
@@ -200,7 +203,7 @@ class VerbSurfaceConformanceTest {
     // =======================================================================
 
     /**
-     * Every one of the twenty-four is accounted for, in exactly one class.
+     * Every one of the twenty-six is accounted for, in exactly one class.
      *
      * <p>This is what makes the file a decision record rather than a route list.
      * A verb nobody put in a class is a verb nobody decided about, and the
@@ -217,9 +220,9 @@ class VerbSurfaceConformanceTest {
             .toList();
 
         assertThat(named)
-            .as("the catalogue settles on twenty-four verbs after two reductions, and every "
-                + "one of them is either carried, refused by name, declared-but-unbuilt, or "
-                + "the platform's")
+            .as("the catalogue settles on twenty-four verbs after two reductions, sprint/210 "
+                + "adds the two tag verbs, and every one of the twenty-six is either carried, "
+                + "refused by name, declared-but-unbuilt, or the platform's")
             .hasSize(VOCABULARY_SIZE);
 
         for (String verb : named) {

@@ -132,6 +132,9 @@ class RawSqlArchitectureTest {
         "repository.ScopeAccessRepository", new NativeUse(5, "reads the platform's "
             + "subject-filtered scope directory, a view no entity of this service maps, and "
             + "binds and reads the session settings app.subject and app.tenant_id"),
+        "repository.TagRepository", new NativeUse(2, "reads the platform's subject-filtered "
+            + "tag vocabulary, platform.tag_access, a view no entity of this service maps: a "
+            + "token's tag in one scope, and the tokens of the tags an item carries"),
         "repository.SpentKeyRepository", new NativeUse(1, "takes the transaction-scoped "
             + "advisory lock of one idempotency key, pg_advisory_xact_lock: before a key's first "
             + "use there is no row to lock, and JPQL has no advisory lock"),

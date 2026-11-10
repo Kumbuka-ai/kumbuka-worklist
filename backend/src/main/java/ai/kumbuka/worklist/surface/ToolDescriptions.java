@@ -23,6 +23,12 @@ public interface ToolDescriptions {
     String create();
 
     @Message
+    String tagAttach();
+
+    @Message
+    String tagDetach();
+
+    @Message
     String read();
 
     @Message

@@ -95,6 +95,15 @@ public enum CustomMethod {
     RELATE("relate", Depth.ITEM, Kind.CARRIED),
     UNRELATE("unrelate", Depth.ITEM, Kind.CARRIED),
 
+    // ---- Carried, at item depth: the tags --------------------------------
+    //
+    // A write on the item that presents no conflict token, the same class as
+    // claim and release, so the same form: a custom method on the item URI.
+    // Only the item view answers to it; the other three refuse by name.
+
+    TAG_ATTACH("tag_attach", Depth.ITEM, Kind.CARRIED),
+    TAG_DETACH("tag_detach", Depth.ITEM, Kind.CARRIED),
+
     // ---- Carried, at collection depth -----------------------------------
     //
     // {@code validate} was declared at item depth in the previous revision of

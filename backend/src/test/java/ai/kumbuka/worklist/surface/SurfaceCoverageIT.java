@@ -266,6 +266,20 @@ class SurfaceCoverageIT {
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
+        // ---- tag_attach and tag_detach, at item depth -----------------------
+        //
+        // Reached, refused by the domain: the token is one the scope's
+        // vocabulary lacks. The semantics of the two sit in TaggingIT. Neither
+        // presents a token, and neither moves the item's.
+        call("POST", item(Selector.ITEM, itemNumber) + ":tag_attach", null,
+            Map.of("tag", "no-such-tag"))
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
+        call("POST", item(Selector.ITEM, itemNumber) + ":tag_detach", null,
+            Map.of("tag", "no-such-tag"))
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
+
         // ---- accept, which is carried and refuses -------------------------
         call("POST", item(Selector.ITEM, itemNumber) + ":accept", itemToken, null)
             .statusCode(501)

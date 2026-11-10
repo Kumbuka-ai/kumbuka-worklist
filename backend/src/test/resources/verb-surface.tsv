@@ -22,12 +22,14 @@
 #   depth     item | membership | collection | none
 #   repeat    the declared repetition behaviour
 #
-# THE TWENTY-FOUR VERBS ARE ALL HERE, in one of four classes. A verb missing
-# from this file is a verb nobody decided about, which is the state this file
-# exists to make impossible.
+# THE TWENTY-SIX VERBS ARE ALL HERE, in one of four classes: the catalogue's
+# twenty-four and the two tag verbs of sprint/210 (tag_attach, tag_detach),
+# which worklist, dispatch and memory carry alike. A verb missing from this
+# file is a verb nobody decided about, which is the state this file exists to
+# make impossible.
 #
 # ---------------------------------------------------------------------------
-# CARRIED -- the sixteen this scheme has and this service has built
+# CARRIED -- the eighteen this scheme has and this service has built
 # ---------------------------------------------------------------------------
 # Probed END TO END against a running service and a running database: each is
 # called and must be answered by the surface rather than by the framework's
@@ -56,6 +58,11 @@ carried	claim_next	POST	/api/{scope}/{selector}:claim_next	collection	exactly-on
 carried	relate	POST	/api/{scope}/{selector}/{id}:relate	item	conflict-token
 carried	unrelate	POST	/api/{scope}/{selector}/{id}:unrelate	item	conflict-token
 carried	validate	POST	/api/{scope}/{selector}:validate	collection	none
+# The tags (sprint/210). A write on the item that presents no conflict token,
+# as claim and release are; repeating either is a successful call that
+# writes nothing. Only the item view carries tags.
+carried	tag_attach	POST	/api/{scope}/{selector}/{id}:tag_attach	item	idempotent
+carried	tag_detach	POST	/api/{scope}/{selector}/{id}:tag_detach	item	idempotent
 
 # ---------------------------------------------------------------------------
 # UNCARRIED -- the seven the capability declaration does not give this scheme

@@ -122,7 +122,14 @@ public enum RefusalCode {
     WORKSTREAM_DEFAULT_LOCKED(409),
     WORKSTREAM_MILESTONE_MISMATCH(409),
     ITEM_WORKSTREAM_MISSING(422),
-    ITERATION_PRODUCED_MISSING(422);
+    ITERATION_PRODUCED_MISSING(422),
+
+    // --- the tags ---------------------------------------------------------------
+
+    /** A tag the platform withdrew: it takes no new assignment. */
+    TAG_WITHDRAWN(409),
+    /** A tag verb addressed at an iteration, a milestone or a workstream: only items carry tags. */
+    TAG_ITEM_ONLY(422);
 
     private final int status;
 
@@ -186,6 +193,7 @@ public enum RefusalCode {
             case WORKSTREAM_MILESTONE_MISMATCH -> WORKSTREAM_MILESTONE_MISMATCH;
             case ITEM_WORKSTREAM_MISSING -> ITEM_WORKSTREAM_MISSING;
             case ITERATION_PRODUCED_MISSING -> ITERATION_PRODUCED_MISSING;
+            case TAG_WITHDRAWN -> TAG_WITHDRAWN;
         };
     }
 }

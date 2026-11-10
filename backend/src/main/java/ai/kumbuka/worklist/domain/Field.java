@@ -223,6 +223,19 @@ public enum Field {
      */
     RELATIONS("relations", Set.of(ITEM), Set.of(ITEM)),
 
+    /**
+     * The tags an item carries, as the tokens of its scope's vocabulary in
+     * ascending order, withdrawn tags included; an empty list where it
+     * carries none.
+     *
+     * <p>Read-only through {@code update}: a tag is a relation and not a field
+     * of the item, attached by {@code tag_attach} and removed by
+     * {@code tag_detach}, neither of which moves the item's timestamp or its
+     * conflict token. A read answer sent back with its tags unchanged is
+     * accepted, as every read-only field is.
+     */
+    TAGS("tags", Set.of(ITEM), Set.of()),
+
     // --- the goal axis ----------------------------------------------------
 
     /**

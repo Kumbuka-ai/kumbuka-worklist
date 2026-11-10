@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.boundary;
 
 import ai.kumbuka.worklist.tenancy.Db;
@@ -29,7 +36,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       target's, so the two rows share a scope.</li>
  *   <li>Every other key targets exactly {@code (tenant_id, pk)}.</li>
  *   <li>A uuid column exists only as {@code id} of the four primary tables
- *       and as {@code tenant_id} and {@code scope_id}.</li>
+ *       and as {@code tenant_id} and {@code scope_id} -- and as the identities
+ *       of the platform's objects named in {@link #PLATFORM_IDENTITIES}, which
+ *       live in another schema, carry no key across the boundary, and are the
+ *       platform's identity in the way {@code scope_id} is.</li>
  * </ol>
  *
  * <p>The expectations — which tables are primary, which uuid columns are
@@ -42,6 +52,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ForeignKeyShapeGuardIT {
 
     private static final Set<String> PRIMARY = Set.of("item", "iteration", "milestone", "workstream");
+
+    /**
+     * A platform object's identity held by a row of this schema, as
+     * {@code table.column}: the tag of {@code platform.tag}, by which V26
+     * records an assignment (sprint/210). Named column by column, so a uuid
+     * reference between two rows of this schema is still a defect.
+     */
+    private static final Set<String> PLATFORM_IDENTITIES = Set.of("item_tag.tag_id");
 
     /** Every key, as: table, constraint, its columns, target table, target columns. */
     private static final String KEYS = """
@@ -152,7 +170,8 @@ class ForeignKeyShapeGuardIT {
                 String table = rs.getString(1);
                 String column = rs.getString(2);
                 boolean admitted = "tenant_id".equals(column) || "scope_id".equals(column)
-                    || ("id".equals(column) && PRIMARY.contains(table));
+                    || ("id".equals(column) && PRIMARY.contains(table))
+                    || PLATFORM_IDENTITIES.contains(table + "." + column);
                 if (!admitted) {
                     offenders.add(table + "." + column);
                 }

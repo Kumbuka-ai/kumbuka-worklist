@@ -329,6 +329,11 @@ public class WorklistResource {
             case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
                 edge(arguments(body, TO_ITEM, TYPE)).orElse(null)));
 
+            case TAG_ATTACH -> ok(scope, verbs.tagAttach(subject, scope, selector, id,
+                arguments(body, TAG).text(TAG).orElse(null)));
+            case TAG_DETACH -> ok(scope, verbs.tagDetach(subject, scope, selector, id,
+                arguments(body, TAG).text(TAG).orElse(null)));
+
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
 
@@ -497,6 +502,7 @@ public class WorklistResource {
     private static final String RECEIPT = "receipt";
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
+    private static final String TAG = "tag";
 
     /**
      * The arguments of a body under the names the verb declares, checked for

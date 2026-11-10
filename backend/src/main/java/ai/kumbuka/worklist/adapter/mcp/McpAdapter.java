@@ -132,6 +132,9 @@ public class McpAdapter {
     private static final String ARG_TO_ITEM = "to_item";
     private static final String ARG_TYPE = "type";
 
+    /** The token a tag verb attaches or detaches. */
+    private static final String ARG_TAG = "tag";
+
     /** The query's filter and paging, as arguments rather than address parts. */
     private static final String ARG_FILTER = QueryFilter.FILTER_ARGUMENT;
     private static final String ARG_PAGE_SIZE = QuerySpec.PAGE_SIZE_ARGUMENT;
@@ -321,6 +324,10 @@ public class McpAdapter {
             case "unrelate" -> unrelate(in);
             case "validate" -> validate(in);
 
+            // The tags, addressed at an item.
+            case "tag_attach" -> tagAttach(in);
+            case "tag_detach" -> tagDetach(in);
+
             // Not in tools/list, and still answered by name.
             case "send", "append", "digest", "abandon", "block", "resume", "consume" ->
                 refused(in, verb, false);
@@ -453,6 +460,18 @@ public class McpAdapter {
         String scope = required(in, ARG_SCOPE);
         return dressed(scope, verbs.validate(caller.subject(), scope,
             required(in, ARG_SELECTOR)));
+    }
+
+    private Object tagAttach(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.tagAttach(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TAG)));
+    }
+
+    private Object tagDetach(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.tagDetach(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TAG)));
     }
 
     /**

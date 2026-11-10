@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
@@ -111,6 +118,19 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
     public static final String PLATFORM_ROLE = "kumbuka";
     public static final String PLATFORM_SCHEMA = "platform";
     public static final String DIRECTORY_VIEW = "scope_access";
+
+    /**
+     * The tag vocabulary of the platform (sprint/210): the table, which this
+     * service holds nothing on, and the view it reads tags through.
+     *
+     * <p>Built here after the contract kumbuka-server publishes for it, so the
+     * suite runs before that release: {@code platform.tag} with its tokens per
+     * scope, and {@code platform.tag_access}, the tag joined to the scope
+     * directory, which publishes only the tags of scopes the bound subject may
+     * see.
+     */
+    public static final String TAG_TABLE = "tag";
+    public static final String TAG_VIEW = "tag_access";
 
     /**
      * The columns the view publishes, in the order V24 of the core declares
@@ -335,6 +355,8 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
         s.execute("ALTER TABLE public.user_account OWNER TO " + PLATFORM_ROLE);
         s.execute("ALTER VIEW  platform.scope_access OWNER TO " + PLATFORM_ROLE);
 
+        stageTagVocabulary(s);
+
         // The grants are NOT issued here, and the omission is deliberate. The
         // service role does not exist yet — the migration creates it during
         // boot, which is after this runs — and in a deployment the platform
@@ -352,6 +374,53 @@ public class SubstrateDatabaseResource implements QuarkusTestResourceLifecycleMa
             + "WHERE NOT EXISTS (SELECT 1 FROM public.user_account "
             + "WHERE subject = '" + PROBE_SUBJECT + "')");
         s.execute("RESET app.tenant_id");
+    }
+
+    /**
+     * The platform's tag vocabulary, in the shape of the contract kumbuka-server
+     * publishes for sprint/210.
+     *
+     * <p>{@code platform.tag}: one row per token and scope, {@code declared} or
+     * {@code withdrawn}, under the same forced tenant policy as the scope it
+     * belongs to. The scope reference points at {@code public.scope}, which is
+     * where this harness keeps what the core calls {@code platform.scope}.
+     *
+     * <p>{@code platform.tag_access}: the tag joined to {@code platform.scope_access}
+     * over {@code scope_id}, so it inherits that view's tenant and subject filter
+     * term for term and publishes only the tags of scopes the bound subject may
+     * see. Owned by the platform role, like the scope view, and the service role
+     * is granted SELECT on it and nothing on the table -- by
+     * {@link ai.kumbuka.worklist.platform.PlatformFixture}, once the role exists.
+     */
+    private void stageTagVocabulary(Statement s) throws SQLException {
+        s.execute("""
+            CREATE TABLE IF NOT EXISTS platform.tag (
+                id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id    uuid NOT NULL,
+                scope_id     uuid NOT NULL REFERENCES public.scope (id),
+                token        text NOT NULL CHECK (token ~ '^[a-z0-9][a-z0-9:-]{0,62}$'),
+                description  text,
+                status       text NOT NULL DEFAULT 'declared'
+                                 CHECK (status IN ('declared', 'withdrawn')),
+                created_by   text NOT NULL,
+                created_at   timestamptz NOT NULL DEFAULT now(),
+                withdrawn_at timestamptz,
+                UNIQUE (scope_id, token))
+            """);
+        s.execute("ALTER TABLE platform.tag ENABLE ROW LEVEL SECURITY");
+        s.execute("ALTER TABLE platform.tag FORCE  ROW LEVEL SECURITY");
+        s.execute("DROP POLICY IF EXISTS tag_tenant_isolation ON platform.tag");
+        s.execute("CREATE POLICY tag_tenant_isolation ON platform.tag"
+            + " USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)"
+            + " WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)");
+        s.execute("""
+            CREATE OR REPLACE VIEW platform.tag_access AS
+                SELECT t.id AS tag_id, t.scope_id, t.token, t.description, t.status
+                FROM platform.tag t
+                JOIN platform.scope_access sa ON sa.scope_id = t.scope_id
+            """);
+        s.execute("ALTER TABLE platform.tag      OWNER TO " + PLATFORM_ROLE);
+        s.execute("ALTER VIEW  platform.tag_access OWNER TO " + PLATFORM_ROLE);
     }
 
     /**

@@ -46,6 +46,12 @@ public enum QueryFilter {
     /** An item's workstream, by the token the scope declared it under. */
     ITEM_WORKSTREAM(Selector.ITEM, "workstream", Form.NAME),
 
+    /**
+     * The items carrying one tag, by its token in the scope's vocabulary.
+     * Exactly one token; a token the vocabulary lacks answers an empty page.
+     */
+    ITEM_TAG(Selector.ITEM, "tag", Form.TOKEN),
+
     /** Whether an iteration is closed. */
     ITERATION_CLOSED(Selector.ITERATION, "closed", Form.BOOLEAN),
 
@@ -155,6 +161,18 @@ public enum QueryFilter {
                     throw refused(filter);
                 }
                 return text;
+            }
+        };
+
+        /**
+         * A tag token: non-blank text. The platform's token grammar admits a
+         * uuid-shaped token, so the shape is no form fault here; a token
+         * nobody declared is answered by the query, with an empty page.
+         */
+        static final Form TOKEN = new Form() {
+            @Override
+            Object read(QueryFilter filter, Object raw) {
+                return text(filter, raw);
             }
         };
 

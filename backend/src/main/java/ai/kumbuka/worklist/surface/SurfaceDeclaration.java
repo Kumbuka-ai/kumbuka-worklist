@@ -247,6 +247,9 @@ public final class SurfaceDeclaration {
         required("to_item", ArgumentType.STRING, ArgumentDescriptions::toItem);
     private static final Argument TYPE =
         required("type", ArgumentType.STRING, ArgumentDescriptions::type);
+    /** A tag, by its token in the scope's vocabulary. */
+    private static final Argument TAG =
+        required("tag", ArgumentType.STRING, ArgumentDescriptions::tag);
     /** The key of a create (C10.4); a header on REST, an argument on MCP. */
     private static final Argument IDEMPOTENCY_KEY =
         optional("idempotency_key", ArgumentType.STRING, null,
@@ -397,7 +400,20 @@ public final class SurfaceDeclaration {
             Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.SELECTOR_WITHDRAWN,
                 RefusalCode.VERB_UNCARRIED)),
-            SCOPE, selector(ArgumentDescriptions::selectorItem, Selector.ITEM)));
+            SCOPE, selector(ArgumentDescriptions::selectorItem, Selector.ITEM)),
+        // The tags. A write on an addressed object that presents no conflict
+        // token, which this declaration classes as claim and release are
+        // classed; the assignment is a relation and moves neither the item's
+        // timestamp nor its token. The answer is the item, its tags included.
+        verb("tag_attach", ToolDescriptions::tagAttach, EffectClass.ITEM_TRANSITION,
+            Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.TAG_ITEM_ONLY, RefusalCode.VALUE_UNDECLARED,
+                RefusalCode.TAG_WITHDRAWN)),
+            ADDRESS, TAG),
+        verb("tag_detach", ToolDescriptions::tagDetach, EffectClass.ITEM_TRANSITION,
+            Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.TAG_ITEM_ONLY, RefusalCode.VALUE_UNDECLARED)),
+            ADDRESS, TAG));
 
     /**
      * The verbs of the worklist scheme this service refuses by name rather

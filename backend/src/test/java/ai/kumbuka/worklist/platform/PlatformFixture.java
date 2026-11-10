@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.platform;
 
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
@@ -9,7 +16,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * Issues the one grant the platform gives a consuming service, once the
+ * Issues the grants the platform gives a consuming service, once the
  * consuming role exists.
  *
  * <p>Not part of {@code SubstrateDatabaseResource}, because of ordering that
@@ -26,12 +33,19 @@ public final class PlatformFixture {
     private PlatformFixture() {
     }
 
-    /** {@code USAGE} on the schema and {@code SELECT} on the view. Nothing else. */
+    /**
+     * {@code USAGE} on the schema and {@code SELECT} on the two views: the
+     * scope directory and the tag vocabulary. Nothing else, and nothing on
+     * {@code platform.tag} itself.
+     */
     public static void grantDirectoryAccess() {
         run("GRANT USAGE ON SCHEMA " + SubstrateDatabaseResource.PLATFORM_SCHEMA
                 + " TO " + SubstrateDatabaseResource.SERVICE_ROLE,
             "GRANT SELECT ON " + SubstrateDatabaseResource.PLATFORM_SCHEMA + "."
                 + SubstrateDatabaseResource.DIRECTORY_VIEW
+                + " TO " + SubstrateDatabaseResource.SERVICE_ROLE,
+            "GRANT SELECT ON " + SubstrateDatabaseResource.PLATFORM_SCHEMA + "."
+                + SubstrateDatabaseResource.TAG_VIEW
                 + " TO " + SubstrateDatabaseResource.SERVICE_ROLE);
     }
 
