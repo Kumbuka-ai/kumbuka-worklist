@@ -165,21 +165,21 @@ class UnstampedWriteIT {
     @Test
     void an_item_written_through_its_verbs_passes_the_flush() {
         Map<String, Object> created = item("first");
-        passesTheFlush(created, Field.TITLE, fields -> items.update(scope, idOf(created), fields));
+        passesTheFlush(created, Field.TITLE, fields -> items.update(scope, idOf(created), fields).answer());
     }
 
     @Test
     void an_iteration_written_through_its_verbs_passes_the_flush() {
         Map<String, Object> created = iteration("first");
         passesTheFlush(created, Field.TITLE,
-            fields -> iterations.update(scope, idOf(created), fields));
+            fields -> iterations.update(scope, idOf(created), fields).answer());
     }
 
     @Test
     void a_milestone_written_through_its_verbs_passes_the_flush() {
         Map<String, Object> created = milestone("first");
         passesTheFlush(created, Field.TITLE,
-            fields -> milestones.update(scope, idOf(created), fields));
+            fields -> milestones.update(scope, idOf(created), fields).answer());
     }
 
     @Test
@@ -196,7 +196,7 @@ class UnstampedWriteIT {
         Map<String, Object> written = iterations.update(scope, iteration, Map.of(
             Field.TITLE.canonicalName(), "first, renamed",
             Field.ORDER.canonicalName(), reversed,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(iterations.read(scope, iteration))));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(iterations.read(scope, iteration)))).answer();
 
         assertThat(written)
             .as("the reorder reads and flushes inside the write, after the title was set, "
@@ -216,7 +216,7 @@ class UnstampedWriteIT {
         Map<String, Object> activated = milestones.update(scope, idOf(next), Map.of(
             Field.TITLE.canonicalName(), "next, renamed",
             Field.STATUS.canonicalName(), Milestone.ACTIVE,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(next)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(next))).answer();
 
         assertThat(activated)
             .as("the demotion flushes inside the write, after the title was set, and the "
@@ -319,7 +319,7 @@ class UnstampedWriteIT {
     private Map<String, Object> item(String title) {
         return items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), openStatus));
+            Field.STATUS.canonicalName(), openStatus)).answer();
     }
 
     /** An item pointed at a milestone, which is what makes it plannable. */
@@ -327,14 +327,14 @@ class UnstampedWriteIT {
         return items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), openStatus,
-            Field.MILESTONE_ID.canonicalName(), milestoneNumber));
+            Field.MILESTONE_ID.canonicalName(), milestoneNumber)).answer();
     }
 
     private Map<String, Object> iteration(String title) {
         return iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.MOTTO.canonicalName(), "a motto",
-            Field.DESCRIPTION.canonicalName(), "a description"));
+            Field.DESCRIPTION.canonicalName(), "a description")).answer();
     }
 
     private Map<String, Object> milestone(String title) {
@@ -342,7 +342,7 @@ class UnstampedWriteIT {
             Field.TITLE.canonicalName(), title,
             Field.KIND.canonicalName(), Milestone.GOAL,
             Field.VISION.canonicalName(), "a vision",
-            Field.MISSION.canonicalName(), "a mission"));
+            Field.MISSION.canonicalName(), "a mission")).answer();
     }
 
     /** The canonical address of an item, the wire form of an order entry. */

@@ -26,6 +26,7 @@ import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
+import ai.kumbuka.worklist.surface.PlatformLog;
 import ai.kumbuka.worklist.surface.ProtocolMessages;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.UnexpectedFailures;
@@ -46,7 +47,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -147,8 +147,6 @@ public class McpAdapter {
 
     private static final int INVALID_PARAMS = -32602;
 
-    private static final Logger LOG = Logger.getLogger(McpAdapter.class);
-
     @Inject VerbSurface verbs;
     @Inject CallerActor caller;
     @Inject ObjectMapper json;
@@ -226,23 +224,43 @@ public class McpAdapter {
      * declared one is what this surface names.
      */
     private ToolResultPayload call(String verb, Map<String, Object> arguments) {
-        String attempted = VerbName.declared(verb).toolName();
+        VerbName called = VerbSurface.declaredVerb(verb);
+        String attempted = called.toolName();
         try {
             return content(invoke(verb, arguments), false);
         } catch (SurfaceException e) {
-            LOG.debugf("surface refusal: %s", e.reason().name());
+            PlatformLog.assistantSurfaceRefused(PlatformLog.Reason.of(e.reason()));
             return content(RefusalPayload.of(e, attempted), true);
         } catch (WorklistException e) {
             // The same envelope the REST path answers with, built by the same
             // method — which is what makes "one envelope, whichever hop" a
             // property of the construction and not a claim about it.
-            LOG.debugf("domain refusal: %s", e.reason().name());
+            PlatformLog.Reason code = PlatformLog.Reason.of(e.reason());
+            PlatformLog.assistantDomainRefused(code);
+            warnOnTheDeployment(e.reason(), code);
             return content(domainRefusal(e, attempted, arguments), true);
         } catch (RuntimeException e) {
             // DEC-0043 R13: a defect answers as one, with a reference the log
             // line shares, and nothing the exception said.
-            return content(RefusalPayload.unexpected(UnexpectedFailures.reference(verb, e),
+            return content(RefusalPayload.unexpected(UnexpectedFailures.logged(called, e),
                 attempted), true);
+        }
+    }
+
+    /**
+     * The WARN line of a refusal that is a statement about the deployment
+     * rather than about the call (C13.3), in the words the REST surface writes
+     * it in: the directory that finds the anomaly logs nothing (DEC-0051, C4),
+     * so it is written where its refusal arrives, by the code alone.
+     */
+    private static void warnOnTheDeployment(WorklistException.Reason reason,
+                                            PlatformLog.Reason code) {
+        switch (reason) {
+            case SCOPE_UNRESOLVED -> PlatformLog.scopeUnresolved(code);
+            case SESSION_NOT_BOUND -> PlatformLog.sessionNotBound(code);
+            default -> {
+                // A refusal about the call: its DEBUG line is the whole of it.
+            }
         }
     }
 

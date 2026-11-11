@@ -12,7 +12,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 
 import java.util.List;
 import java.util.Optional;
@@ -60,8 +59,11 @@ import java.util.UUID;
 @TenantBound
 public class VocabularyRegistry {
 
-    /** An identity, a scope id, a key. Never a description, never an actor. */
-    private static final Logger LOG = Logger.getLogger(VocabularyRegistry.class);
+    /*
+     * Nothing here logs (DEC-0051, C4). The vocabulary is declared on no verb
+     * of the surface today, so no line is written for it until a surface that
+     * calls these methods writes one.
+     */
 
     @Inject VocabularyRepository vocabulary;
 
@@ -106,7 +108,6 @@ public class VocabularyRegistry {
         status.successful = successful;
         vocabulary.insert(status);
 
-        LOG.infof("status %s declared in scope %s", status.pk, scopeId);
         return status;
     }
 
@@ -171,7 +172,6 @@ public class VocabularyRegistry {
         if (!DeclaredValue.WITHDRAWN.equals(status.status)) {
             status.status = DeclaredValue.WITHDRAWN;
             vocabulary.flush();
-            LOG.infof("status %s withdrawn in scope %s", statusId, scopeId);
         }
         return status;
     }
@@ -217,7 +217,6 @@ public class VocabularyRegistry {
         definition.sortable = sortable;
         vocabulary.insert(definition);
 
-        LOG.infof("attribute %s declared in scope %s", definition.pk, scopeId);
         return definition;
     }
 
@@ -262,7 +261,6 @@ public class VocabularyRegistry {
         if (!DeclaredValue.WITHDRAWN.equals(definition.status)) {
             definition.status = DeclaredValue.WITHDRAWN;
             vocabulary.flush();
-            LOG.infof("attribute %s withdrawn in scope %s", definition.pk, scopeId);
         }
         return definition;
     }
@@ -293,8 +291,6 @@ public class VocabularyRegistry {
         option.rank = rank;
         vocabulary.insert(option);
 
-        LOG.infof("option %s declared under attribute %s in scope %s",
-            option.pk, definition.pk, scopeId);
         return option;
     }
 
@@ -361,7 +357,6 @@ public class VocabularyRegistry {
         type.rank = rank;
         vocabulary.insert(type);
 
-        LOG.infof("relation type %s declared in scope %s", type.pk, scopeId);
         return type;
     }
 
@@ -412,7 +407,6 @@ public class VocabularyRegistry {
         if (!DeclaredValue.WITHDRAWN.equals(type.status)) {
             type.status = DeclaredValue.WITHDRAWN;
             vocabulary.flush();
-            LOG.infof("relation type %s withdrawn in scope %s", typeId, scopeId);
         }
         return type;
     }

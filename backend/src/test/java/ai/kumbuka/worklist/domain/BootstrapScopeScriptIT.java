@@ -102,7 +102,7 @@ class BootstrapScopeScriptIT {
 
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the first item of a bootstrapped scope",
-            Field.STATUS.canonicalName(), "open"));
+            Field.STATUS.canonicalName(), "open")).answer();
         assertThat(item.get(Field.NUMBER.canonicalName()))
             .as("the service, under its own role, allocates from the item counter "
                 + "the script opened")

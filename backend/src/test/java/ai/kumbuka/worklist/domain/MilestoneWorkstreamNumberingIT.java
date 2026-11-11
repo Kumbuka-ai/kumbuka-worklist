@@ -82,11 +82,11 @@ class MilestoneWorkstreamNumberingIT {
         Long first = (Long) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "goal 1",
             Field.VISION.canonicalName(), "vision 1"))
-            .get(Field.NUMBER.canonicalName());
+            .answer().get(Field.NUMBER.canonicalName());
         Long second = (Long) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "goal 2",
             Field.VISION.canonicalName(), "vision 2"))
-            .get(Field.NUMBER.canonicalName());
+            .answer().get(Field.NUMBER.canonicalName());
 
         assertThat(first).isEqualTo(1L);
         assertThat(second)

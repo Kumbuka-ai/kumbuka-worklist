@@ -11,7 +11,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -54,8 +53,11 @@ import java.util.UUID;
 @TenantBound
 public class ScopeSettingService extends PlanningService {
 
-    /** A scope id and a transition. Never a limit's value, never an actor. */
-    private static final Logger LOG = Logger.getLogger(ScopeSettingService.class);
+    /*
+     * Nothing here logs (DEC-0051, C4). The opening and the settings are
+     * written by no verb of the surface today, so no line is written for them
+     * until a surface that calls them writes one.
+     */
 
     /**
      * The scope-opening act seeds the four views through this registry.
@@ -126,7 +128,6 @@ public class ScopeSettingService extends PlanningService {
             selectors.open(scopeId, view);
         }
 
-        LOG.infof("scope %s opened, and the four views seeded", scopeId);
         return projectOf(setting, List.of());
     }
 
@@ -148,14 +149,11 @@ public class ScopeSettingService extends PlanningService {
         refuseUnsettableChanges(Addressed.SETTING, current, given);
 
         if (!applyEffectiveChanges(setting, current, settableOnly(Addressed.SETTING, given))) {
-            LOG.debugf("update of the settings of scope %s changed nothing and wrote "
-                + "nothing", scopeId);
             return current;
         }
 
         setting.stamp(clock.instant());
         planning.flushAndRefresh(setting);
-        LOG.infof("settings of scope %s updated", scopeId);
         return projectOf(setting, List.of());
     }
 

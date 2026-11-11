@@ -13,7 +13,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
@@ -61,9 +60,10 @@ public class IterationService extends PlanningService {
     /** The argument a refusal about the addressed iteration names (DEC-0043 R18). */
     private static final String ADDRESS = "address";
 
-
-    /** An address, a scope id, a count, a transition. Never a motto, never an actor. */
-    private static final Logger LOG = Logger.getLogger(IterationService.class);
+    /*
+     * Nothing here logs (DEC-0051, C4). A write answers a Written, and the
+     * surface that called it writes the line exactly when it stored something.
+     */
 
     /**
      * The iteration selector's number_space row is what this allocator
@@ -123,7 +123,8 @@ public class IterationService extends PlanningService {
      * and admits. Both numbers are the scope's own.
      */
     @Transactional
-    public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
+    public Written<Map<String, Object>, Iteration> create(UUID scopeId,
+            Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITERATION, arguments);
         refuseUnsettableChanges(Addressed.ITERATION, Map.of(), given);
 
@@ -143,10 +144,9 @@ public class IterationService extends PlanningService {
 
         planning.insert(iteration);
         planning.flushAndRefresh(iteration);
-        LOG.debugf("iteration %d created in scope %s", iteration.number, scopeId);
 
-        return project(iteration, warnings(warningAt(openAfterwards,
-            setting.warnPlannedIterations, Notice.PLANNED_ITERATIONS_AT_THRESHOLD)));
+        return new Written<>(project(iteration, warnings(warningAt(openAfterwards,
+            setting.warnPlannedIterations, Notice.PLANNED_ITERATIONS_AT_THRESHOLD))), iteration);
     }
 
     /**
@@ -158,7 +158,7 @@ public class IterationService extends PlanningService {
      * moves no row, no timestamp and no token.
      */
     @Transactional
-    public Map<String, Object> update(UUID scopeId, UUID iterationId,
+    public Written<Map<String, Object>, Iteration> update(UUID scopeId, UUID iterationId,
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITERATION, arguments);
         Iteration iteration = requireLocked(scopeId, iterationId);
@@ -170,14 +170,11 @@ public class IterationService extends PlanningService {
 
         if (!applyEffectiveChanges(iteration, current,
                 settableOnly(Addressed.ITERATION, given))) {
-            LOG.debugf("update of an iteration in scope %s changed nothing and wrote "
-                + "nothing", scopeId);
-            return current;
+            return Written.unchanged(current);
         }
 
         planning.flushAndRefresh(iteration);
-        LOG.debugf("iteration %d updated in scope %s", iteration.number, scopeId);
-        return project(iteration, List.of());
+        return new Written<>(project(iteration, List.of()), iteration);
     }
 
     /**
@@ -199,7 +196,8 @@ public class IterationService extends PlanningService {
      * declared, and no declaration says which of its statuses means finished.
      */
     @Transactional
-    public Map<String, Object> close(UUID scopeId, UUID iterationId, String conflictToken) {
+    public Written<Map<String, Object>, Iteration> close(UUID scopeId, UUID iterationId,
+            String conflictToken) {
         // The single-argument close is the compatibility shim: it forwards
         // with a null produced-name so the enforcement path in the ratified
         // signature raises `ITERATION_PRODUCED_MISSING` uniformly. A caller
@@ -221,7 +219,7 @@ public class IterationService extends PlanningService {
      *                 {@code ITERATION_PRODUCED_MISSING}
      */
     @Transactional
-    public Map<String, Object> close(UUID scopeId, UUID iterationId,
+    public Written<Map<String, Object>, Iteration> close(UUID scopeId, UUID iterationId,
             @Nullable String produced, String conflictToken) {
         requireNamed(produced);
 
@@ -245,8 +243,7 @@ public class IterationService extends PlanningService {
         }
 
         planning.flushAndRefresh(iteration);
-        LOG.debugf("iteration %d closed in scope %s", iteration.number, scopeId);
-        return project(iteration, List.of());
+        return new Written<>(project(iteration, List.of()), iteration);
     }
 
     /**
@@ -279,9 +276,13 @@ public class IterationService extends PlanningService {
      * <p>The pointer lives on the scope's settings and the write presents
      * THEIR token, because that is the aggregate being written. An iteration
      * is not modified by being pointed at.
+     *
+     * <p>The entity the answer names as written is the iteration the pointer
+     * was moved to: the settings row has no address of its own, and the line
+     * the write leaves says which iteration is current now.
      */
     @Transactional
-    public Map<String, Object> advance(UUID scopeId, String conflictToken) {
+    public Written<Map<String, Object>, Iteration> advance(UUID scopeId, String conflictToken) {
         ScopeSetting setting = requireLockedSetting(scopeId);
         setting.requireCurrentToken(conflictToken);
 
@@ -295,8 +296,7 @@ public class IterationService extends PlanningService {
         setting.currentIterationNumber = next.number;
         setting.stamp(clock.instant());
         planning.flushAndRefresh(setting);
-        LOG.debugf("iteration %d promoted to current in scope %s", next.number, scopeId);
-        return ScopeSettingService.project(setting, next.id, List.of());
+        return new Written<>(ScopeSettingService.project(setting, next.id, List.of()), next);
     }
 
     // ------------------------------------------------------------------

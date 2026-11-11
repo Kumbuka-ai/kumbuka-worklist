@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.surface.VerbName;
+import ai.kumbuka.worklist.surface.VerbSurface;
 import jakarta.enterprise.context.RequestScoped;
 import org.jspecify.annotations.Nullable;
 
@@ -52,7 +53,7 @@ public class CallContext {
      *                  names are the tool names (C14.4)
      */
     void call(String verb, boolean assistant) {
-        VerbName name = VerbName.declared(verb);
+        VerbName name = VerbSurface.declaredVerb(verb);
         this.attempted = assistant ? name.toolName() : name.name();
     }
 

@@ -190,7 +190,7 @@ class PlanningRefusalIT {
             "max_planned_iterations", 1, "warn_planned_iterations", 1,
             "max_memberships_per_iteration", 1, "warn_memberships_per_iteration", 1));
         UUID foreign = (UUID) milestones.create(elsewhere,
-            Map.of("title", "another scope's goal")).get("id");
+            Map.of("title", "another scope's goal")).answer().get("id");
         assertThat(refusalFrom(() -> milestones.read(scope, foreign)).reason())
             .isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
     }
@@ -247,7 +247,7 @@ class PlanningRefusalIT {
         memberships.update(scope, iteration, standing, Map.of(
             "membership_status", IterationMembership.DROPPED,
             "conflict_token", token(iteration)));
-        assertThat(iterations.close(scope, iteration, "test outcome", token(iteration)).get("closed_at"))
+        assertThat(iterations.close(scope, iteration, "test outcome", token(iteration)).answer().get("closed_at"))
             .isNotNull();
     }
 
@@ -288,7 +288,7 @@ class PlanningRefusalIT {
 
         // The admitted neighbour: one exists, and it is promoted.
         UUID only = iteration("the only one");
-        assertThat(iterations.advance(scope, settingToken()).get("current_iteration"))
+        assertThat(iterations.advance(scope, settingToken()).answer().get("current_iteration"))
             .isEqualTo(only);
 
         assertThat(refusalFrom(() -> iterations.advance(scope, settingToken())).reason())
@@ -355,7 +355,7 @@ class PlanningRefusalIT {
      */
     @Test
     void a_read_only_field_may_be_echoed_and_not_changed() {
-        UUID milestone = (UUID) milestones.create(scope, Map.of("title", "a goal")).get("id");
+        UUID milestone = (UUID) milestones.create(scope, Map.of("title", "a goal")).answer().get("id");
         Map<String, Object> read = milestones.read(scope, milestone);
 
         WorklistException refusal = refusalFrom(() -> {
@@ -381,9 +381,9 @@ class PlanningRefusalIT {
     @Test
     void the_axis_answers_in_its_own_order_and_a_milestone_closes() {
         UUID second = (UUID) milestones.create(scope, Map.of(
-            "title", "later", "rank", 2, "mission", "what it contains")).get("id");
+            "title", "later", "rank", 2, "mission", "what it contains")).answer().get("id");
         UUID first = (UUID) milestones.create(scope, Map.of(
-            "title", "sooner", "rank", 1)).get("id");
+            "title", "sooner", "rank", 1)).answer().get("id");
         milestones.create(scope, Map.of(
             "title", "not assessed", "kind", Milestone.NOT_ASSESSED, "rank", 3));
 
@@ -391,7 +391,7 @@ class PlanningRefusalIT {
             .as("rank orders the axis, and never the number or the alphabet")
             .containsExactly(first, second, Pages.all(scope, Selector.MILESTONE, SortKey.RANK, milestones::query).get(2).get("id"));
 
-        Map<String, Object> closed = milestones.close(scope, first, milestoneToken(first));
+        Map<String, Object> closed = milestones.close(scope, first, milestoneToken(first)).answer();
         assertThat(closed.get("status")).isEqualTo(Milestone.CLOSED);
         assertThat(Pages.all(scope, Selector.MILESTONE, SortKey.RANK, milestones::query))
             .as("a closed milestone stays in the table, so every reference still resolves "
@@ -402,7 +402,7 @@ class PlanningRefusalIT {
     /** An unknown milestone status is refused against the platform's own three. */
     @Test
     void a_milestone_status_is_one_of_the_platforms_three() {
-        UUID milestone = (UUID) milestones.create(scope, Map.of("title", "a goal")).get("id");
+        UUID milestone = (UUID) milestones.create(scope, Map.of("title", "a goal")).answer().get("id");
 
         assertThat(refusalFrom(() -> milestones.update(scope, milestone, Map.of(
                 "status", "half done", "conflict_token", milestoneToken(milestone))))
@@ -446,7 +446,7 @@ class PlanningRefusalIT {
             .containsExactly("fields.title");
 
         Map<String, Object> moved = iterations.update(scope, iteration, Map.of(
-            "motto", "renamed", "rank", 7, "conflict_token", token(iteration)));
+            "motto", "renamed", "rank", 7, "conflict_token", token(iteration))).answer();
         assertThat(moved.get("motto")).isEqualTo("renamed");
         assertThat(moved.get("rank")).isEqualTo(7);
     }
@@ -459,7 +459,7 @@ class PlanningRefusalIT {
         return (UUID) iterations.create(scope, Map.of(
             "title", motto,
             "motto", motto,
-            "description", "what " + motto + " contains")).get("id");
+            "description", "what " + motto + " contains")).answer().get("id");
     }
 
     private String token(UUID iterationId) {
@@ -489,9 +489,9 @@ class PlanningRefusalIT {
         // address is allocated at creation now. Declaring is idempotent.
         selectors.open(scope, Selector.ITEM);
         UUID item = (UUID) items.create(scope, Map.of(
-            "title", title, "status", vocabulary.requireStatus(scope, openStatus).name)).get("id");
+            "title", title, "status", vocabulary.requireStatus(scope, openStatus).name)).answer().get("id");
         UUID milestone = (UUID) milestones.create(scope, Map.of(
-            "title", "a goal for " + title, "vision", "the north star")).get("id");
+            "title", "a goal for " + title, "vision", "the north star")).answer().get("id");
         return PlanningFixture.pointAtMilestone(item, milestone);
     }
 

@@ -226,7 +226,7 @@ class ItemTagIsolationIT {
     private UUID createItem(String title) {
         Map<String, Object> created = items.create(SCOPE_ID, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), OPEN));
+            Field.STATUS.canonicalName(), OPEN)).answer();
         return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
     }
 

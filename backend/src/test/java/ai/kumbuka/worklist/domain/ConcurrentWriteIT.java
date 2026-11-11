@@ -79,13 +79,13 @@ class ConcurrentWriteIT {
     void two_writers_with_one_token_on_an_item_exactly_one_writes() throws Exception {
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "contested",
-            Field.STATUS.canonicalName(), openStatus));
+            Field.STATUS.canonicalName(), openStatus)).answer();
         UUID id = idOf(created);
         String token = tokenOf(created);
 
         contest(title -> items.update(scope, id, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.CONFLICT_TOKEN.canonicalName(), token)));
+            Field.CONFLICT_TOKEN.canonicalName(), token)).answer());
 
         assertThat(items.read(scope, id).get(Field.TITLE.canonicalName()))
             .as("the first writer's change stands").isEqualTo("first");
@@ -96,13 +96,13 @@ class ConcurrentWriteIT {
         Map<String, Object> created = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "contested",
             Field.MOTTO.canonicalName(), "a motto",
-            Field.DESCRIPTION.canonicalName(), "a description"));
+            Field.DESCRIPTION.canonicalName(), "a description")).answer();
         UUID id = idOf(created);
         String token = tokenOf(created);
 
         contest(title -> iterations.update(scope, id, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.CONFLICT_TOKEN.canonicalName(), token)));
+            Field.CONFLICT_TOKEN.canonicalName(), token)).answer());
 
         assertThat(iterations.read(scope, id).get(Field.TITLE.canonicalName()))
             .as("the first writer's change stands").isEqualTo("first");

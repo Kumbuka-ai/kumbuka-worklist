@@ -10,7 +10,8 @@ package ai.kumbuka.worklist.surface;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import org.jboss.logging.Logger;
+
+import java.util.List;
 
 /**
  * Refuses to bring the service up on a refusal catalogue it cannot serve
@@ -30,8 +31,6 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class RefusalCatalogueGuard {
 
-    private static final Logger LOG = Logger.getLogger(RefusalCatalogueGuard.class);
-
     void onStart(@Observes StartupEvent event) {
         RefusalCatalogue.requireDeclared(RefusalCode.class);
         VerbName anyVerb = SurfaceDeclaration.carried().get(0);
@@ -39,6 +38,6 @@ public class RefusalCatalogueGuard {
             RefusalCatalogue.message(code,
                 new RefusalCatalogue.Context(anyVerb, RefusalCatalogue.boundOf(code).orElse(null)));
         }
-        LOG.infof("refusal catalogue served: %d codes", RefusalCode.values().length);
+        PlatformLog.refusalCatalogueServed(PlatformLog.Count.of(List.of(RefusalCode.values())));
     }
 }

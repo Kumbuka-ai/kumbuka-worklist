@@ -125,11 +125,11 @@ class ScopeOpeningProbeIT {
         // freshly opened scope.
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the first item",
-            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
-        Map<String, Object> iteration = iterations.create(scope, Map.of(
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
+        Map<String, Object>iteration = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the first iteration",
             Field.MOTTO.canonicalName(), "the first iteration",
-            Field.DESCRIPTION.canonicalName(), "what it holds"));
+            Field.DESCRIPTION.canonicalName(), "what it holds")).answer();
 
         assertThat(item.get(Field.NUMBER.canonicalName())).isNotNull();
         assertThat(iteration.get(Field.NUMBER.canonicalName())).isNotNull();
@@ -149,13 +149,13 @@ class ScopeOpeningProbeIT {
 
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item",
-            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
-        Map<String, Object> iteration = iterations.create(scope, Map.of(
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
+        Map<String, Object>iteration = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "a title",
             Field.MOTTO.canonicalName(), "a motto",
-            Field.DESCRIPTION.canonicalName(), "a description"));
+            Field.DESCRIPTION.canonicalName(), "a description")).answer();
         Map<String, Object> milestone = milestones.create(scope, Map.of(
-            Field.TITLE.canonicalName(), "a goal"));
+            Field.TITLE.canonicalName(), "a goal")).answer();
 
         // Three of the views, three counters. Each starts at 1, and the address
         // carries the view — so item/1, iteration/1 and milestone/1 are
@@ -177,11 +177,11 @@ class ScopeOpeningProbeIT {
         // A second item and a second iteration keep to their own counters.
         Map<String, Object> secondItem = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "a second item",
-            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
-        Map<String, Object> secondIteration = iterations.create(scope, Map.of(
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
+        Map<String, Object>secondIteration = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "second",
             Field.MOTTO.canonicalName(), "later",
-            Field.DESCRIPTION.canonicalName(), "held after"));
+            Field.DESCRIPTION.canonicalName(), "held after")).answer();
 
         assertThat(secondItem.get(Field.NUMBER.canonicalName())).isEqualTo(2L);
         assertThat(secondIteration.get(Field.NUMBER.canonicalName())).isEqualTo(2L);

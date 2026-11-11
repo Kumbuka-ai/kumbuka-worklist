@@ -12,7 +12,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -57,8 +56,10 @@ import java.util.UUID;
 @TenantBound
 public class MilestoneService extends PlanningService {
 
-    /** An address, a scope id, a count, a transition. Never a title, never an actor. */
-    private static final Logger LOG = Logger.getLogger(MilestoneService.class);
+    /*
+     * Nothing here logs (DEC-0051, C4). A write answers a Written, and the
+     * surface that called it writes the line exactly when it stored something.
+     */
 
     /**
      * The write-path caps on the three text fields, matching the check
@@ -121,7 +122,8 @@ public class MilestoneService extends PlanningService {
      * active and that act should be visible as one.
      */
     @Transactional
-    public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
+    public Written<Map<String, Object>, Milestone> create(UUID scopeId,
+            Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         refuseUnsettableChanges(Addressed.MILESTONE, Map.of(), given);
 
@@ -138,8 +140,7 @@ public class MilestoneService extends PlanningService {
 
         planning.insert(milestone);
         planning.flushAndRefresh(milestone);
-        LOG.debugf("milestone %d created in scope %s", milestone.number, scopeId);
-        return project(milestone, List.of());
+        return new Written<>(project(milestone, List.of()), milestone);
     }
 
     /**
@@ -157,7 +158,7 @@ public class MilestoneService extends PlanningService {
      * refuse the write that was expressing one intention.
      */
     @Transactional
-    public Map<String, Object> update(UUID scopeId, UUID milestoneId,
+    public Written<Map<String, Object>, Milestone> update(UUID scopeId, UUID milestoneId,
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         Milestone milestone = requireLocked(scopeId, milestoneId);
@@ -168,15 +169,12 @@ public class MilestoneService extends PlanningService {
 
         if (!applyEffectiveChanges(milestone, current,
                 settableOnly(Addressed.MILESTONE, given))) {
-            LOG.debugf("update of a milestone in scope %s changed nothing and wrote "
-                + "nothing", scopeId);
-            return current;
+            return Written.unchanged(current);
         }
         refuseGoalOnAMarker(milestone);
 
         planning.flushAndRefresh(milestone);
-        LOG.debugf("milestone %d updated in scope %s", milestone.number, scopeId);
-        return project(milestone, List.of());
+        return new Written<>(project(milestone, List.of()), milestone);
     }
 
     /**
@@ -192,12 +190,11 @@ public class MilestoneService extends PlanningService {
      * code. A second write path is a second place for those three to drift.
      */
     @Transactional
-    public Map<String, Object> close(UUID scopeId, UUID milestoneId, String conflictToken) {
-        Map<String, Object> answer = update(scopeId, milestoneId, Map.of(
+    public Written<Map<String, Object>, Milestone> close(UUID scopeId, UUID milestoneId,
+            String conflictToken) {
+        return update(scopeId, milestoneId, Map.of(
             Field.STATUS.canonicalName(), Milestone.CLOSED,
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
-        LOG.debugf("milestone closed in scope %s", scopeId);
-        return answer;
     }
 
     // ------------------------------------------------------------------
@@ -304,8 +301,6 @@ public class MilestoneService extends PlanningService {
                 current.status = Milestone.PLANNED;
                 current.stamp(clock.instant());
                 planning.flush();
-                LOG.debugf("milestone %d demoted in scope %s", current.number,
-                    milestone.scopeId);
             }
         }
         milestone.status = status;

@@ -13,13 +13,13 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -53,12 +53,13 @@ import java.util.UUID;
 @TenantBound
 public class TagService {
 
-    /**
-     * An address, a scope id, a transition. Never a token, never the subject:
-     * who attached a tag is stored with the assignment, and a log line naming
-     * it would be a second record of it.
+    /*
+     * Nothing here logs (DEC-0051, C4). A write answers a Written carrying the
+     * assignment it stored or removed, and the surface that called it writes
+     * the line: never the tag's token, never the subject -- who attached a tag
+     * is stored with the assignment, and a log line naming it would be a
+     * second record of it.
      */
-    private static final Logger LOG = Logger.getLogger(TagService.class);
 
     /** The argument a refusal about the tag names. */
     static final String TAG_ARGUMENT = "tag";
@@ -82,8 +83,8 @@ public class TagService {
      *         platform withdrew
      */
     @Transactional
-    public Map<String, Object> tagAttach(UUID scopeId, UUID itemId, String token,
-                                         String subject) {
+    public Written<Map<String, Object>, ItemTag> tagAttach(UUID scopeId, UUID itemId,
+                                                           String token, String subject) {
         Item item = requireLocked(scopeId, itemId);
         TagRepository.TagRow tag = requireDeclared(scopeId, token);
         if (tag.isWithdrawn()) {
@@ -91,20 +92,17 @@ public class TagService {
                 List.of(TAG_ARGUMENT));
         }
 
-        if (tags.find(scopeId, item.number, tag.tagId()).isEmpty()) {
-            ItemTag assignment = new ItemTag();
-            assignment.scopeId = scopeId;
-            assignment.itemNumber = item.number;
-            assignment.tagId = tag.tagId();
-            assignment.attachedBy = subject;
-            assignment.attachedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
-            tags.insert(assignment);
-            LOG.debugf("tag attached to item %d in scope %s", item.number, scopeId);
-        } else {
-            LOG.debugf("tag already on item %d in scope %s; nothing written", item.number,
-                scopeId);
+        if (tags.find(scopeId, item.number, tag.tagId()).isPresent()) {
+            return Written.unchanged(itemService.read(scopeId, itemId));
         }
-        return itemService.read(scopeId, itemId);
+        ItemTag assignment = new ItemTag();
+        assignment.scopeId = scopeId;
+        assignment.itemNumber = item.number;
+        assignment.tagId = tag.tagId();
+        assignment.attachedBy = subject;
+        assignment.attachedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        tags.insert(assignment);
+        return new Written<>(itemService.read(scopeId, itemId), assignment);
     }
 
     /**
@@ -115,18 +113,17 @@ public class TagService {
      *         token the scope does not declare
      */
     @Transactional
-    public Map<String, Object> tagDetach(UUID scopeId, UUID itemId, String token) {
+    public Written<Map<String, Object>, ItemTag> tagDetach(UUID scopeId, UUID itemId,
+                                                           String token) {
         Item item = requireLocked(scopeId, itemId);
         TagRepository.TagRow tag = requireDeclared(scopeId, token);
 
-        tags.find(scopeId, item.number, tag.tagId()).ifPresentOrElse(
-            assignment -> {
-                tags.remove(assignment);
-                LOG.debugf("tag detached from item %d in scope %s", item.number, scopeId);
-            },
-            () -> LOG.debugf("tag absent from item %d in scope %s; nothing written",
-                item.number, scopeId));
-        return itemService.read(scopeId, itemId);
+        Optional<ItemTag> carried = tags.find(scopeId, item.number, tag.tagId());
+        if (carried.isEmpty()) {
+            return Written.unchanged(itemService.read(scopeId, itemId));
+        }
+        tags.remove(carried.get());
+        return new Written<>(itemService.read(scopeId, itemId), carried.get());
     }
 
     /** The tag of a token in the scope's vocabulary, or the not-found refusal of a value. */

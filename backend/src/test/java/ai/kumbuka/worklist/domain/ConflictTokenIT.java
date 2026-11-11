@@ -140,15 +140,15 @@ class ConflictTokenIT {
         Map<String, Object> created = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "first",
             Field.MOTTO.canonicalName(), "a motto",
-            Field.DESCRIPTION.canonicalName(), "a description"));
+            Field.DESCRIPTION.canonicalName(), "a description")).answer();
         assertThat(tokenOf(created)).isEqualTo(token(T));
 
         Map<String, Object> once = iterations.update(scope, idOf(created), Map.of(
             Field.TITLE.canonicalName(), "second",
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created))).answer();
         Map<String, Object> same = iterations.update(scope, idOf(created), Map.of(
             Field.TITLE.canonicalName(), "second",
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(once)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(once))).answer();
 
         assertThat(tokenOf(once)).isEqualTo(token(T.plus(1, ChronoUnit.MICROS)));
         assertThat(tokenOf(same)).as("a no-op keeps it").isEqualTo(tokenOf(once));
@@ -161,18 +161,18 @@ class ConflictTokenIT {
             Field.TITLE.canonicalName(), "first",
             Field.KIND.canonicalName(), Milestone.GOAL,
             Field.VISION.canonicalName(), "a vision",
-            Field.MISSION.canonicalName(), "a mission"));
+            Field.MISSION.canonicalName(), "a mission")).answer();
         assertThat(tokenOf(created)).isEqualTo(token(T));
 
         Map<String, Object> once = milestones.update(scope, idOf(created), Map.of(
             Field.TITLE.canonicalName(), "second",
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created))).answer();
         Map<String, Object> twice = milestones.update(scope, idOf(created), Map.of(
             Field.TITLE.canonicalName(), "third",
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(once)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(once))).answer();
         Map<String, Object> same = milestones.update(scope, idOf(created), Map.of(
             Field.TITLE.canonicalName(), "third",
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(twice)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(twice))).answer();
 
         assertThat(tokenOf(once)).isEqualTo(token(T.plus(1, ChronoUnit.MICROS)));
         assertThat(tokenOf(twice)).isEqualTo(token(T.plus(2, ChronoUnit.MICROS)));
@@ -225,13 +225,13 @@ class ConflictTokenIT {
     private Map<String, Object> item(String title) {
         return items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), openStatus));
+            Field.STATUS.canonicalName(), openStatus)).answer();
     }
 
     private Map<String, Object> renameItem(Map<String, Object> item, String title) {
         return items.update(scope, idOf(item), Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(item)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(item))).answer();
     }
 
     /** What the row's {@code conflict_token} column holds, read under the runtime role. */

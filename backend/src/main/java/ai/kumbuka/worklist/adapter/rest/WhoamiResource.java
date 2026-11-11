@@ -8,11 +8,11 @@
 package ai.kumbuka.worklist.adapter.rest;
 
 import ai.kumbuka.worklist.adapter.payload.WhoamiPayload;
+import ai.kumbuka.worklist.surface.PlatformLog;
 import ai.kumbuka.worklist.tenancy.TenantContext;
 import io.quarkus.security.Authenticated;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
-import org.jboss.logging.Logger;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -37,6 +37,9 @@ import jakarta.ws.rs.core.MediaType;
 @Authenticated
 public class WhoamiResource {
 
+    @Inject SecurityIdentity identity;
+    @Inject TenantContext tenantContext;
+
     /**
      * The endpoint logs that it was reached and nothing about who reached it.
      * The subject is exactly the field the convention keeps out of this
@@ -44,15 +47,10 @@ public class WhoamiResource {
      * id, because a second aggregatable record of who did what would be the
      * circumvention of not collecting it.
      */
-    private static final Logger LOG = Logger.getLogger(WhoamiResource.class);
-
-    @Inject SecurityIdentity identity;
-    @Inject TenantContext tenantContext;
-
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public WhoamiPayload whoami() {
-        LOG.debug("whoami");
+        PlatformLog.whoamiReached();
         return new WhoamiPayload(identity.getPrincipal().getName(),
             tenantContext.current().toString());
     }

@@ -104,7 +104,7 @@ class NumberSpaceBackfillIT {
         Map<String, Object> answer = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "after backfill",
             Field.MOTTO.canonicalName(), "after backfill",
-            Field.DESCRIPTION.canonicalName(), "the one V15 opened the counter for"));
+            Field.DESCRIPTION.canonicalName(), "the one V15 opened the counter for")).answer();
         assertThat(answer.get(Field.NUMBER.canonicalName()))
             .as("after V15 populates the row, allocate hands out number 1 and the "
                 + "create goes through — Kriterium 4 green")
@@ -150,7 +150,7 @@ class NumberSpaceBackfillIT {
         // next milestone lands at 8 and no number is handed out a second time.
         Map<String, Object> next = milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the eighth",
-            Field.KIND.canonicalName(), Milestone.GOAL));
+            Field.KIND.canonicalName(), Milestone.GOAL)).answer();
         assertThat(next.get(Field.NUMBER.canonicalName()))
             .as("V15 lifts the mark to 7 and the next create is 8 — Kriterium 2 green")
             .isEqualTo(8L);

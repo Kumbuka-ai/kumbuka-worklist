@@ -112,7 +112,7 @@ class LifecycleChainIT {
             Field.KIND.canonicalName(), Milestone.GOAL,
             Field.VISION.canonicalName(), "the product is usable by a first customer",
             Field.MISSION.canonicalName(),
-                "close the last five things a beta reader trips over first"));
+                "close the last five things a beta reader trips over first")).answer();
         UUID milestoneId = (UUID) milestoneAnswer.get(Field.ID.canonicalName());
         Long milestoneNumber = (Long) milestoneAnswer.get(Field.NUMBER.canonicalName());
         assertThat(milestoneNumber).isGreaterThan(0L);
@@ -126,7 +126,7 @@ class LifecycleChainIT {
         String milestoneToken = tokenOf(milestones.read(scope, milestoneId));
         Map<String, Object> activated = milestones.update(scope, milestoneId, Map.of(
             Field.STATUS.canonicalName(), Milestone.ACTIVE,
-            Field.CONFLICT_TOKEN.canonicalName(), milestoneToken));
+            Field.CONFLICT_TOKEN.canonicalName(), milestoneToken)).answer();
         assertThat(activated.get(Field.STATUS.canonicalName())).isEqualTo(Milestone.ACTIVE);
 
         // 3. An iteration — with a title beside the motto and the description.
@@ -134,7 +134,7 @@ class LifecycleChainIT {
             Field.TITLE.canonicalName(), "week 34",
             Field.MOTTO.canonicalName(), "close the beta gate",
             Field.DESCRIPTION.canonicalName(),
-                "the five items behind the beta gate; unrelated work stays out"));
+                "the five items behind the beta gate; unrelated work stays out")).answer();
         UUID iterationId = (UUID) iterationAnswer.get(Field.ID.canonicalName());
         assertThat(iterationAnswer)
             .as("the iteration read carries the title alongside the motto")
@@ -148,13 +148,13 @@ class LifecycleChainIT {
         //    thing the SPRINT_180.5 fixture reached past the surface for.
         Map<String, Object> itemAnswer = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "close the last beta reader thread",
-            Field.STATUS.canonicalName(), actionable.name));
+            Field.STATUS.canonicalName(), actionable.name)).answer();
         UUID itemId = (UUID) itemAnswer.get(Field.ID.canonicalName());
         String itemToken = (String) itemAnswer.get(Field.CONFLICT_TOKEN.canonicalName());
 
         Map<String, Object> assigned = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), milestoneNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), itemToken));
+            Field.CONFLICT_TOKEN.canonicalName(), itemToken)).answer();
         assertThat(assigned.get(Field.MILESTONE_ID.canonicalName()))
             .as("item.update carries the milestone assignment through the verb "
                 + "surface — SPRINT_180.4 fixed the wire form to the number, so this "
@@ -163,14 +163,14 @@ class LifecycleChainIT {
 
         // 5. Plan the item into the iteration.
         Map<String, Object> planned = memberships.plan(scope, iterationId, itemId,
-            tokenOf(iterations.read(scope, iterationId)));
+            tokenOf(iterations.read(scope, iterationId))).answer();
         assertThat(planned.get(Field.MEMBERSHIP_STATUS.canonicalName()))
             .isEqualTo(IterationMembership.TODO);
 
         // 6. Advance the iteration to current.
         Map<String, Object> settingsBefore = settings.read(scope);
         String settingsToken = (String) settingsBefore.get(Field.CONFLICT_TOKEN.canonicalName());
-        Map<String, Object> advanced = iterations.advance(scope, settingsToken);
+        Map<String, Object> advanced = iterations.advance(scope, settingsToken).answer();
         assertThat(advanced.get(Field.CURRENT_ITERATION.canonicalName()))
             .as("advance points the settings at the iteration through the verb "
                 + "surface — no side channel, no manual pointer write")
@@ -180,21 +180,21 @@ class LifecycleChainIT {
         String liveToken = tokenOf(iterations.read(scope, iterationId));
         Map<String, Object> madeActive = memberships.update(scope, iterationId, itemId, Map.of(
             Field.MEMBERSHIP_STATUS.canonicalName(), IterationMembership.ACTIVE,
-            Field.CONFLICT_TOKEN.canonicalName(), liveToken));
+            Field.CONFLICT_TOKEN.canonicalName(), liveToken)).answer();
         assertThat(madeActive.get(Field.MEMBERSHIP_STATUS.canonicalName()))
             .isEqualTo(IterationMembership.ACTIVE);
 
         String activeToken = tokenOf(iterations.read(scope, iterationId));
         Map<String, Object> completed = memberships.update(scope, iterationId, itemId, Map.of(
             Field.MEMBERSHIP_STATUS.canonicalName(), IterationMembership.DONE,
-            Field.CONFLICT_TOKEN.canonicalName(), activeToken));
+            Field.CONFLICT_TOKEN.canonicalName(), activeToken)).answer();
         assertThat(completed.get(Field.MEMBERSHIP_STATUS.canonicalName()))
             .isEqualTo(IterationMembership.DONE);
 
         // 8. Close the iteration, naming what was produced.
         String beforeClose = tokenOf(iterations.read(scope, iterationId));
         Map<String, Object> closedIteration = iterations.close(scope, iterationId,
-            "the beta reader thread is closed", beforeClose);
+            "the beta reader thread is closed", beforeClose).answer();
         assertThat(closedIteration.get(Field.CLOSED_AT.canonicalName()))
             .as("iteration.close writes the timestamp when a produced-name is given")
             .isNotNull();
@@ -202,7 +202,7 @@ class LifecycleChainIT {
         // 9. Close the milestone.
         Map<String, Object> milestoneNow = milestones.read(scope, milestoneId);
         Map<String, Object> closedMilestone = milestones.close(scope, milestoneId,
-            (String) milestoneNow.get(Field.CONFLICT_TOKEN.canonicalName()));
+            (String) milestoneNow.get(Field.CONFLICT_TOKEN.canonicalName())).answer();
         assertThat(closedMilestone.get(Field.STATUS.canonicalName())).isEqualTo(Milestone.CLOSED);
 
         // 10. The closed iteration stays readable — a closed iteration is a

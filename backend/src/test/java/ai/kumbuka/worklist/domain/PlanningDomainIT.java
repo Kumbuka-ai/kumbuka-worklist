@@ -109,7 +109,7 @@ class PlanningDomainIT {
         UUID two = onPath(item("planned two"));
 
         String beforeAnyPlan = token(iteration);
-        Map<String, Object> planned = memberships.plan(scope, iteration, one, beforeAnyPlan);
+        Map<String, Object> planned = memberships.plan(scope, iteration, one, beforeAnyPlan).answer();
 
         assertThat(planned.get("conflict_token"))
             .as("the answer carries the ITERATION's token, because that is the aggregate "
@@ -165,7 +165,7 @@ class PlanningDomainIT {
         String settled = token(iteration);
         Map<String, Object> answer = memberships.update(scope, iteration, item, Map.of(
             "membership_status", "todo",
-            "conflict_token", settled));
+            "conflict_token", settled)).answer();
 
         assertThat(answer.get("membership_status")).isEqualTo("todo");
         assertThat(token(iteration))
@@ -282,14 +282,14 @@ class PlanningDomainIT {
         UUID third = onPath(item("beyond the limit"));
 
         Map<String, Object> quiet = memberships.plan(scope, iteration, first,
-            token(iteration));
+            token(iteration)).answer();
         assertThat(warningsOf(quiet))
             .as("below the threshold there is nothing to say, and a warning here would "
                 + "make every plan carry noise")
             .isEmpty();
 
         Map<String, Object> warned = memberships.plan(scope, iteration, second,
-            token(iteration));
+            token(iteration)).answer();
         assertThat(warningsOf(warned))
             .as("at the threshold the answer warns AND the write goes through: the "
                 + "warning exists so the limit is met deliberately rather than "
@@ -475,7 +475,7 @@ class PlanningDomainIT {
         // ONE token, for twelve rows.
         Map<String, Object> answer = iterations.update(scope, iteration, Map.of(
             "order", reversedAddresses,
-            "conflict_token", token(iteration)));
+            "conflict_token", token(iteration))).answer();
 
         assertThat(answer.get("order"))
             .as("the sequence is now the one that was given, and it took one token to "
@@ -579,10 +579,10 @@ class PlanningDomainIT {
         UUID first = iterationId(created("first", 1));
         UUID second = iterationId(created("second", 2));
 
-        Map<String, Object> afterFirst = iterations.advance(scope, settingToken());
+        Map<String, Object> afterFirst = iterations.advance(scope, settingToken()).answer();
         assertThat(afterFirst.get("current_iteration")).isEqualTo(first);
 
-        Map<String, Object> afterSecond = iterations.advance(scope, settingToken());
+        Map<String, Object> afterSecond = iterations.advance(scope, settingToken()).answer();
         assertThat(afterSecond.get("current_iteration"))
             .as("advancing again takes the next one in the axis's order, by rank")
             .isEqualTo(second);
@@ -607,8 +607,8 @@ class PlanningDomainIT {
      */
     @Test
     void activating_a_milestone_demotes_the_one_that_was_active() {
-        UUID first = (UUID) milestones.create(scope, Map.of("title", "first goal")).get("id");
-        UUID second = (UUID) milestones.create(scope, Map.of("title", "second goal")).get("id");
+        UUID first = (UUID) milestones.create(scope, Map.of("title", "first goal")).answer().get("id");
+        UUID second = (UUID) milestones.create(scope, Map.of("title", "second goal")).answer().get("id");
 
         milestones.update(scope, first, Map.of("status", Milestone.ACTIVE,
             "conflict_token", milestoneToken(first)));
@@ -723,7 +723,7 @@ class PlanningDomainIT {
             "title", motto,
             "motto", motto,
             "description", "what " + motto + " contains",
-            "rank", rank));
+            "rank", rank)).answer();
     }
 
     private static UUID iterationId(Map<String, Object> iteration) {
@@ -759,19 +759,19 @@ class PlanningDomainIT {
         selectors.open(scope, Selector.ITEM);
         String statusName = vocabulary.requireStatus(scope, statusId).name;
         return (UUID) items.create(scope, Map.of(
-            "title", title, "status", statusName)).get("id");
+            "title", title, "status", statusName)).answer().get("id");
     }
 
     /** A milestone of the given kind. Markers carry neither vision nor mission. */
     private UUID marker(String kind) {
         return (UUID) milestones.create(scope, Map.of(
-            "title", kind + " position", "kind", kind)).get("id");
+            "title", kind + " position", "kind", kind)).answer().get("id");
     }
 
     /** An item carrying a real goal, which is what makes it plannable. */
     private UUID onPath(UUID itemId) {
         return withMilestone(itemId, (UUID) milestones.create(scope, Map.of(
-            "title", "a goal", "vision", "the north star in a sentence")).get("id"));
+            "title", "a goal", "vision", "the north star in a sentence")).answer().get("id"));
     }
 
     /**

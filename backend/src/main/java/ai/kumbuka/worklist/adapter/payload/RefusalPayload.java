@@ -9,13 +9,14 @@ package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
+import ai.kumbuka.worklist.surface.PlatformLog;
 import ai.kumbuka.worklist.surface.RefusalCatalogue;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceDeclaration;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbName;
+import ai.kumbuka.worklist.surface.VerbSurface;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -56,8 +57,6 @@ public record RefusalPayload(
     @JsonProperty("reason") String reason,
     @JsonProperty("message") String message,
     @JsonProperty("data") @Nullable RefusalDataPayload data) {
-
-    private static final Logger LOG = Logger.getLogger(RefusalPayload.class);
 
     /** The service a stale token's object is held by, as its addresses spell it. */
     private static final String SERVICE = AddressParser.SCHEME;
@@ -111,7 +110,8 @@ public record RefusalPayload(
      */
     public static RefusalPayload of(SurfaceException e, @Nullable String attempted) {
         RefusalCode code = e.reason();
-        String message = message(code, e.attempted().map(VerbName::declared).orElse(null));
+        String message = message(code,
+            e.attempted().map(VerbSurface::declaredVerb).orElse(null));
         if (code == RefusalCode.NOT_FOUND) {
             return new RefusalPayload(code.name(), message, null);
         }
@@ -164,9 +164,13 @@ public record RefusalPayload(
         List<String> names = SurfaceDeclaration.declaredNames(spellings);
         if (names.size() != spellings.size()) {
             // A throw site named something the declaration lacks. The spelling
-            // stays out of the answer and out of this line (DEC-0051).
-            LOG.warnf("refusal %s named %d undeclared path(s); they were left out", code,
-                spellings.size() - names.size());
+            // stays out of the answer and out of this line (DEC-0051): the
+            // line counts the left-out paths, and says nothing of them.
+            List<String> undeclared = spellings.stream()
+                .filter(spelling -> SurfaceDeclaration.declaredNames(List.of(spelling)).isEmpty())
+                .toList();
+            PlatformLog.undeclaredPathsLeftOut(PlatformLog.Reason.of(code),
+                PlatformLog.Count.of(undeclared));
         }
         return names;
     }

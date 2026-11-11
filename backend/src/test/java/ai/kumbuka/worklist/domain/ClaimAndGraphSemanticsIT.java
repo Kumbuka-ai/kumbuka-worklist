@@ -91,7 +91,7 @@ class ClaimAndGraphSemanticsIT {
         UUID item = createItem("free item");
 
         Map<String, Object> drawn = claims.claimNext(scope, "drawer",
-            Duration.ofMinutes(30));
+            Duration.ofMinutes(30)).answer();
 
         assertThat(drawn.get(Field.ID.canonicalName())).isEqualTo(item);
         assertThat(drawn.get(ClaimService.F_RECEIPT))
@@ -110,13 +110,13 @@ class ClaimAndGraphSemanticsIT {
         vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
-        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token));
+        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token).answer());
 
         // Re-asserting an existing edge writes nothing and does not stamp
         // the aggregate again — the token stays the same across the second
         // call.
         String reasserted = tokenOfProjection(
-            items.relate(scope, from, addressOf(to), "carries", token));
+            items.relate(scope, from, addressOf(to), "carries", token).answer());
         assertThat(reasserted)
             .as("relate is idempotent under the triple: reasserting an existing edge "
                 + "writes nothing, so the item is not stamped and the token does not "
@@ -154,14 +154,14 @@ class ClaimAndGraphSemanticsIT {
         vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
-        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token));
+        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token).answer());
         token = tokenOfProjection(
-            items.unrelate(scope, from, addressOf(to), "carries", token));
+            items.unrelate(scope, from, addressOf(to), "carries", token).answer());
 
         // The row is now withdrawn. Re-asserting it moves the status back
         // and stamps the aggregate — the token rotates.
         String afterReassert = tokenOfProjection(
-            items.relate(scope, from, addressOf(to), "carries", token));
+            items.relate(scope, from, addressOf(to), "carries", token).answer());
         assertThat(afterReassert)
             .as("re-asserting a withdrawn edge is a write: the row moves from withdrawn "
                 + "to asserted, and the aggregate is stamped so the token rotates")
@@ -191,9 +191,9 @@ class ClaimAndGraphSemanticsIT {
         vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
-        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token));
+        token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token).answer());
         String withdrawnToken = tokenOfProjection(
-            items.unrelate(scope, from, addressOf(to), "carries", token));
+            items.unrelate(scope, from, addressOf(to), "carries", token).answer());
 
         WorklistException refusal = refusalFrom(() ->
             items.unrelate(scope, from, addressOf(to), "carries", withdrawnToken));
@@ -250,7 +250,7 @@ class ClaimAndGraphSemanticsIT {
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(),
-            vocabulary.requireStatus(scope, openStatus).name));
+            vocabulary.requireStatus(scope, openStatus).name)).answer();
         return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
     }
 

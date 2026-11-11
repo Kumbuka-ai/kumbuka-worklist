@@ -217,7 +217,7 @@ class TenantBindingEdgeCaseIT {
             // tenant-scoped like the vocabulary above it.
             selectors.open(scope, ai.kumbuka.worklist.domain.Selector.ITEM);
             var created = items.create(scope,
-                java.util.Map.of("title", "count-probe", "status", status));
+                java.util.Map.of("title", "count-probe", "status", status)).answer();
             assertThat(created.get("title")).isEqualTo("count-probe");
 
             assertThat(Pages.all(scope, Selector.ITEM, items::query))

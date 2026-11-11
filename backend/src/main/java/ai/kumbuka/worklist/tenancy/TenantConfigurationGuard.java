@@ -103,25 +103,38 @@ public class TenantConfigurationGuard {
      */
     public static UUID requireUsable(@Nullable String raw) {
         if (raw == null || raw.isBlank()) {
-            throw new TenantNotConfigured(
+            throw refused(TenancyLog.StartProblem.TENANT_EMPTY, new TenantNotConfigured(
                 "it carries no value at all. An EMPTY environment variable is not an "
                     + "unset one — SmallRye counts it as supplied, so the default in "
                     + "application.properties does not apply and what reaches the "
-                    + "service is a blank tenant.");
+                    + "service is a blank tenant."));
         }
         if (SENTINEL.equals(raw.trim())) {
-            throw new TenantNotConfigured(
+            throw refused(TenancyLog.StartProblem.TENANT_SENTINEL, new TenantNotConfigured(
                 "it is still the sentinel " + SENTINEL + ", which stands in for an "
                     + "environment variable nobody supplied. This service runs one "
                     + "tenant per deployment and will not guess which — every other "
-                    + "layer of the boundary would enforce the guess perfectly.");
+                    + "layer of the boundary would enforce the guess perfectly."));
         }
         try {
             return UUID.fromString(raw.trim());
         } catch (IllegalArgumentException notAUuid) {
-            throw new TenantNotConfigured(
-                "'" + raw + "' is not a uuid, and a tenant id is one.");
+            throw refused(TenancyLog.StartProblem.TENANT_NOT_A_UUID, new TenantNotConfigured(
+                "'" + raw + "' is not a uuid, and a tenant id is one."));
         }
+    }
+
+    /**
+     * The refusal, written on a line of its own before it is thrown (C13.3,
+     * WARN: the deployment's configuration). The log format prints no
+     * exception (C13.1), so a reason carried only by the exception would leave
+     * an operator with a start that failed and no word why. The line names the
+     * problem; the value that was wrong stays in the exception.
+     */
+    private static TenantNotConfigured refused(TenancyLog.StartProblem problem,
+                                               TenantNotConfigured refusal) {
+        TenancyLog.startRefused(problem);
+        return refusal;
     }
 
     /** The deployment's tenant was not configured usably. */

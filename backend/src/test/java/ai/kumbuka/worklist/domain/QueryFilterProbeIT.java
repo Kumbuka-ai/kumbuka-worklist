@@ -284,7 +284,7 @@ class QueryFilterProbeIT {
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(),
-            vocabulary.requireStatus(scope, statusId).name));
+            vocabulary.requireStatus(scope, statusId).name)).answer();
         return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
     }
 

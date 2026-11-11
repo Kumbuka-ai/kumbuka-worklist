@@ -16,7 +16,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
@@ -102,12 +101,11 @@ import java.util.UUID;
 @TenantBound
 public class ItemService {
 
-    /**
-     * An address, a scope id, a count, a transition. Never a title, never an
-     * actor — the operator boundary of this service is a missing GRANT, and a
-     * log line carrying content walks around it by a different road.
+    /*
+     * Nothing here logs (DEC-0051, C4). A write answers a Written, and the
+     * surface that called it writes the line, by the item's technical address
+     * and the scope id, exactly when the item was stored.
      */
-    private static final Logger LOG = Logger.getLogger(ItemService.class);
 
     /** The argument names of the verbs this service answers, as refusals name them. */
     private static final String WITHDRAW_STATUS = "status";
@@ -238,7 +236,7 @@ public class ItemService {
      * existed without an address would be an item no verb could address.
      */
     @Transactional
-    public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
+    public Written<Map<String, Object>, Item> create(UUID scopeId, Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
 
         List<String> notSettable = given.keySet().stream()
@@ -299,8 +297,7 @@ public class ItemService {
             items.flush();
         }
 
-        LOG.debugf("item created as %s-%d in scope %s", Selector.ITEM, number, scopeId);
-        return project(item);
+        return new Written<>(project(item), item);
     }
 
     /**
@@ -362,7 +359,8 @@ public class ItemService {
      * the answer a caller read already carries it.
      */
     @Transactional
-    public Map<String, Object> update(UUID scopeId, UUID itemId, Map<String, ?> arguments) {
+    public Written<Map<String, Object>, Item> update(UUID scopeId, UUID itemId,
+            Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
         Item item = requireLocked(scopeId, itemId);
 
@@ -383,14 +381,11 @@ public class ItemService {
             // The whole point. No statement is issued, so the modification
             // date and the token stay where they are, and the change trail
             // keeps meaning what it says.
-            LOG.debugf("update of an item in scope %s changed nothing and wrote nothing",
-                scopeId);
-            return current;
+            return Written.unchanged(current);
         }
 
         items.flushAndRefresh(item);
-        LOG.debugf("item updated in scope %s", scopeId);
-        return project(item);
+        return new Written<>(project(item), item);
     }
 
     /**
@@ -407,8 +402,8 @@ public class ItemService {
      * code — a second write path is a second place for those three to drift.
      */
     @Transactional
-    public Map<String, Object> withdraw(UUID scopeId, UUID itemId, String statusName,
-            String conflictToken) {
+    public Written<Map<String, Object>, Item> withdraw(UUID scopeId, UUID itemId,
+            String statusName, String conflictToken) {
         if (statusName == null || statusName.isBlank()) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
@@ -425,11 +420,9 @@ public class ItemService {
                 List.of(WITHDRAW_STATUS));
         }
 
-        Map<String, Object> answer = update(scopeId, itemId, Map.of(
+        return update(scopeId, itemId, Map.of(
             Field.STATUS.canonicalName(), status.name,
             Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
-        LOG.debugf("item withdrawn in scope %s", scopeId);
-        return answer;
     }
 
     /**
@@ -454,8 +447,8 @@ public class ItemService {
      * change lands on top of the state I read".
      */
     @Transactional
-    public Map<String, Object> relate(UUID scopeId, UUID itemId, String toItemAddress,
-            String relationTypeName, String conflictToken) {
+    public Written<Map<String, Object>, Item> relate(UUID scopeId, UUID itemId,
+            String toItemAddress, String relationTypeName, String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
@@ -484,12 +477,12 @@ public class ItemService {
             changed = false;
         }
 
-        if (changed) {
-            item.stamp(clock.instant());
-            items.flushAndRefresh(item);
-            LOG.debugf("relation asserted from %s to %s in scope %s", itemId, target.id, scopeId);
+        if (!changed) {
+            return Written.unchanged(project(item));
         }
-        return project(item);
+        item.stamp(clock.instant());
+        items.flushAndRefresh(item);
+        return new Written<>(project(item), item);
     }
 
     /**
@@ -506,8 +499,8 @@ public class ItemService {
      * which of the three parts they got wrong.
      */
     @Transactional
-    public Map<String, Object> unrelate(UUID scopeId, UUID itemId, String toItemAddress,
-            String relationTypeName, String conflictToken) {
+    public Written<Map<String, Object>, Item> unrelate(UUID scopeId, UUID itemId,
+            String toItemAddress, String relationTypeName, String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
 
@@ -523,8 +516,7 @@ public class ItemService {
         edge.status = ItemRelation.WITHDRAWN;
         item.stamp(clock.instant());
         items.flushAndRefresh(item);
-        LOG.debugf("relation withdrawn from %s to %s in scope %s", itemId, target.id, scopeId);
-        return project(item);
+        return new Written<>(project(item), item);
     }
 
     private Optional<ItemRelation> findEdge(Item from, Long toItemNumber, Long relationTypePk) {
@@ -587,7 +579,6 @@ public class ItemService {
         answer.put(Field.SCOPE.canonicalName(), slugOf(scopeId));
         answer.put("findings", findings);
         answer.put("consistent", findings.isEmpty());
-        LOG.debugf("validate reported %d finding(s) in scope %s", findings.size(), scopeId);
         return answer;
     }
 
