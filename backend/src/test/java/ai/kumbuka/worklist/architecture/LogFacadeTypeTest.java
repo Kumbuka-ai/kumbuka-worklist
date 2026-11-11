@@ -209,7 +209,11 @@ class LogFacadeTypeTest {
         }
     }
 
-    /** An allowed name with a factory from an optional uuid. */
+    /**
+     * An allowed name with a factory from an optional uuid: the offence this
+     * guard exists for, planted, so the optional parameter is the point.
+     */
+    @SuppressWarnings("java:S3553")
     static final class TenantId {
 
         private final UUID id;
