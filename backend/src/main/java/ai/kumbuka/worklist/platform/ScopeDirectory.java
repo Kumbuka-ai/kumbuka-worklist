@@ -13,7 +13,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,10 +50,12 @@ import java.util.UUID;
 @TenantBound
 public class ScopeDirectory {
 
-    /** Bound by the same convention as every logger here: no title, no body, no
-     *  metadata text, no token, and no actor. A slug is a scope name and an
-     *  address; the subject that asked for it is the audit log's business. */
-    private static final Logger LOG = Logger.getLogger(ScopeDirectory.class);
+    /*
+     * Nothing here logs (DEC-0051, C4). The two anomalies this class finds --
+     * a scope that does not resolve, a session that is not bound -- are
+     * written at WARN by the surface where their refusal arrives, by the
+     * reason code, and never with the slug, which is the caller's.
+     */
 
     /**
      * The one scope kind this service refuses outright.
@@ -106,8 +107,7 @@ public class ScopeDirectory {
         if (row.isEmpty()) {
             // Reached only with both settings bound, so this genuinely means
             // "no such scope for this subject" and not "nothing was bound".
-            // The slug is the caller's and stays out of the line (DEC-0051).
-            LOG.warnf("scope unresolved: %s", WorklistException.Reason.SCOPE_UNRESOLVED);
+            // The surface writes the WARN line where this refusal arrives.
             throw new WorklistException(WorklistException.Reason.SCOPE_UNRESOLVED);
         }
 
@@ -118,7 +118,6 @@ public class ScopeDirectory {
             refuseWriteWithoutTheRight(found);
         }
 
-        LOG.debugf("resolved scope %s", found.scopeId());
         return new ScopeAccess(
             found.scopeId(),
             found.tenantId(),
@@ -202,8 +201,6 @@ public class ScopeDirectory {
      */
     private void requireSessionBound() {
         if (scopes.boundTenant().isEmpty() || scopes.boundSubject().isEmpty()) {
-            LOG.warnf("directory call with unbound session: %s",
-                WorklistException.Reason.SESSION_NOT_BOUND);
             throw new WorklistException(WorklistException.Reason.SESSION_NOT_BOUND);
         }
     }

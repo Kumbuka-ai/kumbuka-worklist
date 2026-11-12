@@ -108,7 +108,7 @@ class ItemDomainIT {
         // Somebody else gets there first.
         Map<String, Object> moved = items.update(SCOPE, id, Map.of(
             "title", "moved on",
-            "conflict_token", staleToken));
+            "conflict_token", staleToken)).answer();
         String currentToken = (String) moved.get("conflict_token");
 
         assertThat(currentToken)
@@ -185,7 +185,7 @@ class ItemDomainIT {
             "status", statusNameOf(openStatus()),
             "description", "what it is and why",
             "attributes", Map.of(key, "a declared value"),
-            "references", List.of(Map.of("label", "the design", "target", "docs/thing.md"))));
+            "references", List.of(Map.of("label", "the design", "target", "docs/thing.md")))).answer();
         UUID id = (UUID) created.get("id");
 
         Map<String, Object> before = items.read(SCOPE, id);
@@ -195,7 +195,7 @@ class ItemDomainIT {
         String storedDateBefore = storedChangedAt(id);
 
         // The obvious caller move: read, change nothing, send it all back.
-        Map<String, Object> echoed = items.update(SCOPE, id, new HashMap<>(before));
+        Map<String, Object> echoed = items.update(SCOPE, id, new HashMap<>(before)).answer();
 
         assertThat(echoed.get("changed_at"))
             .as("the modification date must not move for a write that changed no value — "
@@ -237,7 +237,7 @@ class ItemDomainIT {
 
         Map<String, Object> changed = new HashMap<>(before);
         changed.put("title", "an actual change");
-        Map<String, Object> after = items.update(SCOPE, id, changed);
+        Map<String, Object> after = items.update(SCOPE, id, changed).answer();
 
         assertThat(after.get("conflict_token"))
             .as("a real change rotates the token. Without this half, 'nothing writes on a "
@@ -275,7 +275,7 @@ class ItemDomainIT {
         Map<String, Object> reordered = new HashMap<>(before);
         reordered.put("relations", List.of(
             relation(type, third), relation(type, second), relation(type, third)));
-        Map<String, Object> after = items.update(SCOPE, first, reordered);
+        Map<String, Object> after = items.update(SCOPE, first, reordered).answer();
 
         assertThat(after.get("conflict_token"))
             .as("the same set, in another order and with a repeat, is the same value")
@@ -381,7 +381,7 @@ class ItemDomainIT {
         Map<String, Object> roundTrip = new HashMap<>(before);
         roundTrip.put("description", "changed one thing");
 
-        Map<String, Object> after = items.update(SCOPE, id, roundTrip);
+        Map<String, Object> after = items.update(SCOPE, id, roundTrip).answer();
 
         assertThat(after.get("description")).isEqualTo("changed one thing");
         assertThat(after.get("id"))
@@ -819,7 +819,7 @@ class ItemDomainIT {
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
 
         Map<String, Object> after = items.withdraw(SCOPE, id, statusNameOf(closedStatus()),
-            (String) items.read(SCOPE, id).get("conflict_token"));
+            (String) items.read(SCOPE, id).get("conflict_token")).answer();
         assertThat(after.get("status"))
             .isEqualTo(vocabulary.requireStatus(SCOPE, closedStatus()).name);
     }
@@ -1774,7 +1774,7 @@ class ItemDomainIT {
         itemView();
         return items.create(SCOPE, Map.of(
             "title", title,
-            "status", statusNameOf(openStatus())));
+            "status", statusNameOf(openStatus()))).answer();
     }
 
     /**
@@ -1805,7 +1805,7 @@ class ItemDomainIT {
         Map<String, Object> arguments = new HashMap<>();
         arguments.put(field, value);
         arguments.put("conflict_token", items.read(SCOPE, id).get("conflict_token"));
-        return items.update(SCOPE, id, arguments);
+        return items.update(SCOPE, id, arguments).answer();
     }
 
     private long numberOf(UUID id) {

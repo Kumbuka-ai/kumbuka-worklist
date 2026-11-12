@@ -74,7 +74,7 @@ class ItemWorkstreamInvariantIT {
 
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "no-workstream item",
-            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name));
+            Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
 
         assertThat(item.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(defaultWs.token);
     }
@@ -87,7 +87,7 @@ class ItemWorkstreamInvariantIT {
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "a mobile item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
-            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token)).answer();
 
         assertThat(item.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(mobile.token);
     }
@@ -144,7 +144,7 @@ class ItemWorkstreamInvariantIT {
 
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
             Field.WORKSTREAM_ID.canonicalName(), backend.token,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
         assertThat(updated.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(backend.token);
     }
 
@@ -172,7 +172,7 @@ class ItemWorkstreamInvariantIT {
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(),
             workstreams.require(scope, workstreamId).token))
-            .get(Field.ID.canonicalName());
+            .answer().get(Field.ID.canonicalName());
     }
 
     private String tokenOf(UUID itemId) {

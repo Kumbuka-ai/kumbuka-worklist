@@ -28,16 +28,6 @@ public final class VerbName {
         return new VerbName(name);
     }
 
-    /**
-     * The declared verb of this name.
-     *
-     * @throws IllegalArgumentException for a name the declaration does not hold
-     */
-    public static VerbName declared(String name) {
-        return SurfaceDeclaration.verbName(name)
-            .orElseThrow(() -> new IllegalArgumentException("an undeclared verb name"));
-    }
-
     public String name() {
         return name;
     }

@@ -14,7 +14,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import io.quarkus.qute.i18n.MessageBundles;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 
 import java.time.Clock;
 import java.util.LinkedHashMap;
@@ -56,9 +55,11 @@ public class WorkstreamService {
     private static final String TOKEN = "token";
     private static final String DESCRIPTION = "description";
 
-
-    /** An address, a scope id, a token, a transition. Never a description, never an actor. */
-    private static final Logger LOG = Logger.getLogger(WorkstreamService.class);
+    /*
+     * Nothing here logs (DEC-0051, C4). A workstream is declared on no verb of
+     * the surface today, so no line is written for it until a surface that
+     * calls these methods writes one -- and that line never carries the token.
+     */
 
     @Inject WorkstreamRepository workstreams;
     @Inject Clock clock;
@@ -133,8 +134,6 @@ public class WorkstreamService {
         // number_space row is planted by bootstrap or by the first
         // `selectors.open(scope, MILESTONE)` call.
 
-        LOG.debugf("default workstream created lazily in scope %s (number %d)",
-            scopeId, number);
         return defaultRow;
     }
 
@@ -181,7 +180,6 @@ public class WorkstreamService {
         // V12 (2026-09-09): no per-workstream milestone counter is opened;
         // the counter is scope-wide (see class comment above).
 
-        LOG.infof("workstream %d declared in scope %s", number, scopeId);
         return workstream;
     }
 
@@ -201,8 +199,6 @@ public class WorkstreamService {
         workstream.description = cleaned;
         workstream.stamp(clock.instant());
         workstreams.flush();
-        LOG.infof("workstream %d description updated in scope %s", workstream.number,
-            scopeId);
         return workstream;
     }
 
@@ -240,7 +236,6 @@ public class WorkstreamService {
         workstream.token = newToken;
         workstream.stamp(clock.instant());
         workstreams.flush();
-        LOG.infof("workstream %d renamed in scope %s", workstream.number, scopeId);
         return workstream;
     }
 
@@ -259,7 +254,6 @@ public class WorkstreamService {
         workstream.status = Workstream.WITHDRAWN;
         workstream.stamp(clock.instant());
         workstreams.flush();
-        LOG.infof("workstream %d withdrawn in scope %s", workstream.number, scopeId);
         return workstream;
     }
 

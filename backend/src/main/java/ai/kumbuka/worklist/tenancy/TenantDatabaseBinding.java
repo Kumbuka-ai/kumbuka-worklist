@@ -12,11 +12,10 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Synchronization;
 import jakarta.transaction.TransactionSynchronizationRegistry;
-import org.jboss.logging.Logger;
-
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Sets the PostgreSQL session GUC {@code app.tenant_id} once per transaction
@@ -37,7 +36,6 @@ import java.util.Set;
 @ApplicationScoped
 public class TenantDatabaseBinding {
 
-    private static final Logger LOG = Logger.getLogger(TenantDatabaseBinding.class);
     private static final String BOUND_KEY = "ai.kumbuka.worklist.tenancy.bound";
 
     @Inject TenantContext context;
@@ -62,12 +60,15 @@ public class TenantDatabaseBinding {
             return;
         }
         Set<String> alreadyBound = registry.get();
-        String tenant = context.current().toString();
+        UUID current = context.current();
+        String tenant = current.toString();
         if (alreadyBound.contains(tenant)) {
             return;
         }
         if (!alreadyBound.isEmpty()) {
-            LOG.warnf("tenant rebinding inside one transaction: %s -> %s", alreadyBound, tenant);
+            TenancyLog.rebinding(
+                TenancyLog.TenantId.of(UUID.fromString(alreadyBound.iterator().next())),
+                TenancyLog.TenantId.of(current));
         }
         em.createNativeQuery("SELECT set_config('app.tenant_id', :v, true)")
             .setParameter("v", tenant)

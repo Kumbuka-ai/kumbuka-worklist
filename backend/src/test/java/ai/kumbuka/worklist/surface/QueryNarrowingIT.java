@@ -1067,13 +1067,13 @@ class QueryNarrowingIT {
         workstreams.withdraw(SCOPE_ID, gamma.id, gamma.conflictToken().orElseThrow());
 
         Map<String, Object> active = milestones.create(SCOPE_ID, Map.of(
-            "title", "the active goal", "vision", "a north star"));
+            "title", "the active goal", "vision", "a north star")).answer();
         milestones.update(SCOPE_ID, (UUID) active.get("id"), Map.of(
             "status", Milestone.ACTIVE, "conflict_token", active.get("conflict_token")));
         Map<String, Object> planned = milestones.create(SCOPE_ID, Map.of(
-            "title", "the planned goal", "vision", "another north star"));
+            "title", "the planned goal", "vision", "another north star")).answer();
         Map<String, Object> marker = milestones.create(SCOPE_ID, Map.of(
-            "title", "off the path", "kind", Milestone.OFF_PATH));
+            "title", "off the path", "kind", Milestone.OFF_PATH)).answer();
 
         String a = item("open on the active goal in alpha", OPEN, "alpha", (Long) active.get("number"));
         String b = item("done in the default stream", DONE, null, null);
@@ -1082,9 +1082,9 @@ class QueryNarrowingIT {
         String e = item("open again in the default stream", OPEN, null, null);
 
         Map<String, Object> openIteration = iterations.create(SCOPE_ID, Map.of(
-            "title", "open", "motto", "open", "description", "stays open", "rank", 1));
+            "title", "open", "motto", "open", "description", "stays open", "rank", 1)).answer();
         Map<String, Object> closedIteration = iterations.create(SCOPE_ID, Map.of(
-            "title", "closed", "motto", "closed", "description", "gets closed", "rank", 2));
+            "title", "closed", "motto", "closed", "description", "gets closed", "rank", 2)).answer();
         iterations.close(SCOPE_ID, (UUID) closedIteration.get("id"), "nothing, deliberately",
             String.valueOf(closedIteration.get("conflict_token")));
 
@@ -1157,7 +1157,7 @@ class QueryNarrowingIT {
         if (workstream != null) {
             fields.put("workstream", workstream);
         }
-        Map<String, Object> created = items.create(SCOPE_ID, fields);
+        Map<String, Object> created = items.create(SCOPE_ID, fields).answer();
         if (milestone != null) {
             items.update(SCOPE_ID, (UUID) created.get("id"), Map.of(
                 "milestone", milestone, "conflict_token", created.get("conflict_token")));

@@ -98,7 +98,7 @@ class ClaimExclusivityIT {
     void a_second_claim_on_the_same_item_is_refused() {
         UUID item = createItem();
         Map<String, Object> first = claims.claim(scope, item, "first-holder",
-            Duration.ofMinutes(30));
+            Duration.ofMinutes(30)).answer();
         String firstReceipt = String.valueOf(first.get(ClaimService.F_RECEIPT));
 
         WorklistException refusal = refusalFrom(() ->
@@ -147,7 +147,7 @@ class ClaimExclusivityIT {
     void a_claim_that_has_lapsed_admits_a_fresh_one() {
         UUID item = createItem();
         Map<String, Object> first = claims.claim(scope, item, "first-holder",
-            Duration.ofMinutes(30));
+            Duration.ofMinutes(30)).answer();
         String firstReceipt = String.valueOf(first.get(ClaimService.F_RECEIPT));
 
         // Expire the row directly rather than sleeping: a real clock is a
@@ -156,7 +156,7 @@ class ClaimExclusivityIT {
         expireByRow(item);
 
         Map<String, Object> refresh = claims.claim(scope, item, "later-holder",
-            Duration.ofMinutes(30));
+            Duration.ofMinutes(30)).answer();
 
         assertThat(String.valueOf(refresh.get(ClaimService.F_RECEIPT)))
             .as("a lapsed lease is over, and the next claimant writes the row in place. "
@@ -180,7 +180,7 @@ class ClaimExclusivityIT {
     void a_release_ends_a_lease_and_a_wrong_receipt_does_not() {
         UUID item = createItem();
         Map<String, Object> held = claims.claim(scope, item, "holder",
-            Duration.ofMinutes(30));
+            Duration.ofMinutes(30)).answer();
         String receipt = String.valueOf(held.get(ClaimService.F_RECEIPT));
 
         WorklistException wrong = refusalFrom(() ->
@@ -207,7 +207,7 @@ class ClaimExclusivityIT {
             .isFalse();
 
         Map<String, Object> reclaimed = claims.claim(scope, item, "successor",
-            Duration.ofMinutes(30));
+            Duration.ofMinutes(30)).answer();
         assertThat(String.valueOf(reclaimed.get(ClaimService.F_RECEIPT)))
             .as("and the fresh claim after a legitimate release goes through — the same "
                 + "counter-probe as after natural expiry, on a different transition")
@@ -222,7 +222,7 @@ class ClaimExclusivityIT {
         String openName = vocabulary.requireStatus(scope, openStatus).name;
         Map<String, Object> created = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item to claim",
-            Field.STATUS.canonicalName(), openName));
+            Field.STATUS.canonicalName(), openName)).answer();
         return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
     }
 

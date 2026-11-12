@@ -110,7 +110,7 @@ class KeysetPagingIT {
     void a_rank_tie_across_page_boundaries_loses_and_repeats_nothing() {
         List<Long> created = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
-            created.add((Long) milestones.create(scope, Map.of("title", "goal " + i)).get("number"));
+            created.add((Long) milestones.create(scope, Map.of("title", "goal " + i)).answer().get("number"));
         }
 
         assertThat(walk(SortKey.RANK, SortKey.Direction.ASC, Selector.MILESTONE, milestones::query))
@@ -252,7 +252,7 @@ class KeysetPagingIT {
         List<Long> numbers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             numbers.add((Long) items.create(in, Map.of("title", "item " + i, "status", "open"))
-                .get("number"));
+                .answer().get("number"));
         }
         return numbers;
     }

@@ -191,7 +191,7 @@ class MilestoneWorkstreamRetractionIT {
             scope, (UUID) created.get(Field.ID.canonicalName()),
             Map.of(Field.TITLE.canonicalName(), "a goal, renamed",
                 Field.CONFLICT_TOKEN.canonicalName(),
-                created.get(Field.CONFLICT_TOKEN.canonicalName())));
+                created.get(Field.CONFLICT_TOKEN.canonicalName()))).answer();
 
         assertThat(updated)
             .as("the answer an effective write gives back is the same projection again")
@@ -317,7 +317,7 @@ class MilestoneWorkstreamRetractionIT {
         Map<String, Object> answer = new HashMap<>(milestones.read(scope, id));
         answer.put(Field.TITLE.canonicalName(), "a goal, round-tripped");
 
-        assertThat(milestones.update(scope, id, answer))
+        assertThat(milestones.update(scope, id, answer).answer())
             .as("the read answer carries no retracted name, so sending it back whole is "
                 + "not a refusal. If this fails, the projection and the catalogue have "
                 + "been changed apart")
@@ -337,7 +337,7 @@ class MilestoneWorkstreamRetractionIT {
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item in a stream",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
-            Field.WORKSTREAM_ID.canonicalName(), mobile.token));
+            Field.WORKSTREAM_ID.canonicalName(), mobile.token)).answer();
 
         assertThat(item)
             .as("the edge that stands: an item belongs to exactly one workstream, and "
@@ -377,7 +377,7 @@ class MilestoneWorkstreamRetractionIT {
     private Map<String, Object> aMilestone(String title) {
         return milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.VISION.canonicalName(), "the north star of " + title));
+            Field.VISION.canonicalName(), "the north star of " + title)).answer();
     }
 
     /**

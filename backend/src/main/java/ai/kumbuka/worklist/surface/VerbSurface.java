@@ -21,21 +21,24 @@ import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.TagService;
 import ai.kumbuka.worklist.domain.WorkstreamService;
+import ai.kumbuka.worklist.domain.Written;
 import ai.kumbuka.worklist.platform.ScopeDirectory;
 import ai.kumbuka.worklist.platform.ScopeDirectory.Access;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -103,13 +106,14 @@ import java.util.regex.Pattern;
 @TenantBound
 public class VerbSurface {
 
-    /**
-     * The convention this service's loggers keep: an address, a scope id, a
-     * count, a transition — never a title, a motto, a description, a token or
-     * the subject. The operator boundary of this service is a missing GRANT, and
-     * a log line carrying content walks around it by a different road.
+    /*
+     * Every line a verb leaves is written here, through PlatformLog, and only
+     * once the domain's Written says the write stored something: a technical
+     * address and a scope id, never a title, a motto, a description, a token
+     * or the subject. The operator boundary of this service is a missing GRANT,
+     * and a log line carrying content walks around it by a different road. The
+     * domain logs nothing (DEC-0051, C4).
      */
-    private static final Logger LOG = Logger.getLogger(VerbSurface.class);
 
     /**
      * A string that looks like a uuid.
@@ -184,23 +188,32 @@ public class VerbSurface {
         Optional<Long> first = key.flatMap(given ->
             idempotency.firstAnswer(in.scopeId(), given, CREATE, digest));
         if (first.isPresent()) {
-            LOG.debugf("create repeated under its key, answered by %s in scope %s",
-                in.view(), in.scopeId());
+            PlatformLog.createRepeated(in.scope());
             return at(in.view(), produced(in, first.get()));
         }
 
         Map<String, Object> created = switch (in.view()) {
-            case Selector.ITEM -> items.create(in.scopeId(), fields);
-            case Selector.ITERATION -> iterations.create(in.scopeId(), fields);
-            case Selector.MILESTONE -> milestones.create(in.scopeId(), fields);
+            case Selector.ITEM -> logged(items.create(in.scopeId(), fields),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.itemCreated(address, in.scope());
+                    PlatformLog.created(address, in.scope());
+                });
+            case Selector.ITERATION -> logged(iterations.create(in.scopeId(), fields),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.iterationCreated(address, in.scope());
+                    PlatformLog.created(address, in.scope());
+                });
+            case Selector.MILESTONE -> logged(milestones.create(in.scopeId(), fields),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.milestoneCreated(address, in.scope());
+                    PlatformLog.created(address, in.scope());
+                });
             default -> throw unreachableView(in.view());
         };
         key.ifPresent(given -> idempotency.remember(in.scopeId(), given,
             new IdempotencyService.Spent(CREATE, digest, in.view(), numberOf(created))));
 
-        Result result = at(in.view(), created);
-        LOG.infof("create %s in scope %s", result.address().id(), in.scopeId());
-        return result;
+        return at(in.view(), created);
     }
 
     /** The number of what a create produced, read off its projection: its address in the view. */
@@ -275,8 +288,7 @@ public class VerbSurface {
             case Selector.WORKSTREAM -> workstreams.query(in.scopeId(), request);
             default -> throw unreachableView(in.view());
         };
-        LOG.debugf("query %s in scope %s: %d hit(s), more=%s",
-            in.view(), in.scopeId(), answered.objects().size(), answered.next() != null);
+        PlatformLog.queried(in.scope(), PlatformLog.Count.of(answered.objects()));
         return new Listing(answered.objects().stream().map(row -> at(in.view(), row)).toList(),
             answered.next());
     }
@@ -327,14 +339,24 @@ public class VerbSurface {
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
-        Result result = at(target, switch (in.view()) {
-            case Selector.ITEM -> items.update(in.scopeId(), id, fields);
-            case Selector.ITERATION -> iterations.update(in.scopeId(), id, fields);
-            case Selector.MILESTONE -> milestones.update(in.scopeId(), id, fields);
+        return at(target, switch (in.view()) {
+            case Selector.ITEM -> logged(items.update(in.scopeId(), id, fields),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.itemUpdated(in.scope());
+                    PlatformLog.updated(address, in.scope());
+                }, () -> PlatformLog.itemUnchanged(in.scope()));
+            case Selector.ITERATION -> logged(iterations.update(in.scopeId(), id, fields),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.iterationUpdated(address, in.scope());
+                    PlatformLog.updated(address, in.scope());
+                }, () -> PlatformLog.iterationUnchanged(in.scope()));
+            case Selector.MILESTONE -> logged(milestones.update(in.scopeId(), id, fields),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.milestoneUpdated(address, in.scope());
+                    PlatformLog.updated(address, in.scope());
+                }, () -> PlatformLog.milestoneUnchanged(in.scope()));
             default -> throw unreachableView(in.view());
         });
-        LOG.infof("update %s in scope %s", target.id(), in.scopeId());
-        return result;
     }
 
     // ======================================================================
@@ -405,10 +427,14 @@ public class VerbSurface {
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "withdraw");
         UUID id = resolve(in, target);
 
-        Result result = at(target, items.withdraw(in.scopeId(), id,
-            requireLabel(STATUS, required(body, STATUS).status()), requireToken(conflictToken)));
-        LOG.infof("withdraw %s in scope %s", target.id(), in.scopeId());
-        return result;
+        return at(target, logged(items.withdraw(in.scopeId(), id,
+                requireLabel(STATUS, required(body, STATUS).status()),
+                requireToken(conflictToken)),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.itemUpdated(in.scope());
+                PlatformLog.itemWithdrawn(in.scope());
+                PlatformLog.withdrawn(address, in.scope());
+            }, () -> PlatformLog.itemUnchanged(in.scope())));
     }
 
     /**
@@ -451,17 +477,24 @@ public class VerbSurface {
         UUID id = resolve(in, target);
         String token = requireToken(conflictToken);
 
-        Result result = at(target, switch (in.view()) {
-            case Selector.ITERATION -> iterations.close(in.scopeId(), id, produced, token);
-            case Selector.MILESTONE -> milestones.close(in.scopeId(), id, token);
+        return at(target, switch (in.view()) {
+            case Selector.ITERATION -> logged(iterations.close(in.scopeId(), id, produced, token),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.iterationClosed(address, in.scope());
+                    PlatformLog.closed(address, in.scope());
+                });
+            case Selector.MILESTONE -> logged(milestones.close(in.scopeId(), id, token),
+                PlatformLog.TechnicalAddress::of, address -> {
+                    PlatformLog.milestoneUpdated(address, in.scope());
+                    PlatformLog.milestoneClosed(in.scope());
+                    PlatformLog.closed(address, in.scope());
+                }, () -> PlatformLog.milestoneUnchanged(in.scope()));
             case Selector.ITEM -> throw SurfaceException.of(
                 RefusalCode.VERB_UNCARRIED, CLOSE);
             case Selector.WORKSTREAM -> throw SurfaceException.of(
                 RefusalCode.VERB_UNCARRIED, CLOSE);
             default -> throw unreachableView(in.view());
         });
-        LOG.infof("close %s in scope %s", target.id(), in.scopeId());
-        return result;
     }
 
     /**
@@ -489,9 +522,12 @@ public class VerbSurface {
             throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "advance");
         }
 
-        Map<String, Object> setting = iterations.advance(in.scopeId(),
-            requireToken(conflictToken));
-        LOG.infof("advance %s in scope %s", in.view(), in.scopeId());
+        Map<String, Object> setting = logged(iterations.advance(in.scopeId(),
+                requireToken(conflictToken)),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.iterationPromoted(address, in.scope());
+                PlatformLog.advanced(address, in.scope());
+            });
 
         // The answer is the SETTINGS row, because that is what the verb wrote:
         // it moved a pointer. Dressing it as the promoted iteration would be
@@ -529,10 +565,13 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
-        Result result = at(target, memberships.plan(in.scopeId(), at.iterationId(),
-            at.itemId(), requireToken(conflictToken)));
-        LOG.infof("plan %s in scope %s", target.id(), in.scopeId());
-        return result;
+        return at(target, loggedAs(memberships.plan(in.scopeId(), at.iterationId(),
+                at.itemId(), requireToken(conflictToken)),
+            membership -> {
+                PlatformLog.itemPlanned(PlatformLog.TechnicalAddress.iterationOf(membership),
+                    in.scope());
+                PlatformLog.planned(PlatformLog.TechnicalAddress.of(membership), in.scope());
+            }, () -> { }));
     }
 
     /**
@@ -550,10 +589,13 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
-        Result result = at(target, memberships.unplan(in.scopeId(), at.iterationId(),
-            at.itemId(), requireToken(conflictToken)));
-        LOG.infof("unplan %s in scope %s", target.id(), in.scopeId());
-        return result;
+        return at(target, loggedAs(memberships.unplan(in.scopeId(), at.iterationId(),
+                at.itemId(), requireToken(conflictToken)),
+            membership -> {
+                PlatformLog.itemUnplanned(PlatformLog.TechnicalAddress.iterationOf(membership),
+                    in.scope());
+                PlatformLog.unplanned(PlatformLog.TechnicalAddress.of(membership), in.scope());
+            }, () -> { }));
     }
 
     /**
@@ -576,10 +618,13 @@ public class VerbSurface {
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
-        Result result = at(target, memberships.update(in.scopeId(), at.iterationId(),
-            at.itemId(), fields));
-        LOG.infof("update %s in scope %s", target.id(), in.scopeId());
-        return result;
+        return at(target, loggedAs(memberships.update(in.scopeId(), at.iterationId(),
+                at.itemId(), fields),
+            membership -> {
+                PlatformLog.membershipMoved(PlatformLog.TechnicalAddress.iterationOf(membership),
+                    in.scope());
+                PlatformLog.updated(PlatformLog.TechnicalAddress.of(membership), in.scope());
+            }, () -> PlatformLog.membershipUnchanged(in.scope())));
     }
 
     // ======================================================================
@@ -605,9 +650,11 @@ public class VerbSurface {
         UUID id = resolve(in, target);
 
         Duration lease = requireLease(body);
-        Map<String, Object> answered = claims.claim(in.scopeId(), id, subject, lease);
-        LOG.infof("claim on %s in scope %s", target.id(), in.scopeId());
-        return at(target, answered);
+        return at(target, logged(claims.claim(in.scopeId(), id, subject, lease),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.claimTaken(address, in.scope());
+                PlatformLog.claimed(address, in.scope());
+            }));
     }
 
     /**
@@ -629,9 +676,11 @@ public class VerbSurface {
         UUID id = resolve(in, target);
 
         String receipt = requireText(RECEIPT, required(body, RECEIPT).receipt());
-        Map<String, Object> answered = claims.release(in.scopeId(), id, subject, receipt);
-        LOG.infof("release on %s in scope %s", target.id(), in.scopeId());
-        return at(target, answered);
+        return at(target, logged(claims.release(in.scopeId(), id, subject, receipt),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.claimReleased(address, in.scope());
+                PlatformLog.released(address, in.scope());
+            }));
     }
 
     /**
@@ -656,13 +705,15 @@ public class VerbSurface {
         addresses.requireView(in.scopeId(), in.view());
 
         Duration lease = requireLease(body);
-        Map<String, Object> answered = claims.claimNext(in.scopeId(), subject, lease);
+        Map<String, Object> answered = logged(claims.claimNext(in.scopeId(), subject, lease),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.claimDrawn(address, in.scope());
+                PlatformLog.drawn(address, in.scope());
+            });
         // The answer's address is the item that was drawn; read from the
         // projection rather than remembered from the call, exactly as
         // {@link #create} does.
-        Result drawn = at(Selector.ITEM, answered);
-        LOG.infof("claim_next %s in scope %s", drawn.address().id(), in.scopeId());
-        return drawn;
+        return at(Selector.ITEM, answered);
     }
 
     // ======================================================================
@@ -697,10 +748,12 @@ public class VerbSurface {
         String toAddress = requireLabel(TO_ITEM, edge.toItem());
         String typeName = requireLabel(TYPE, edge.type());
 
-        Map<String, Object> answered = items.relate(in.scopeId(), from, toAddress, typeName,
-            requireToken(conflictToken));
-        LOG.infof("relate on %s in scope %s", target.id(), in.scopeId());
-        return at(target, answered);
+        return at(target, logged(items.relate(in.scopeId(), from, toAddress, typeName,
+                requireToken(conflictToken)),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.relationAsserted(address, in.scope());
+                PlatformLog.related(address, in.scope());
+            }));
     }
 
     /**
@@ -722,10 +775,12 @@ public class VerbSurface {
         String toAddress = requireLabel(TO_ITEM, edge.toItem());
         String typeName = requireLabel(TYPE, edge.type());
 
-        Map<String, Object> answered = items.unrelate(in.scopeId(), from, toAddress, typeName,
-            requireToken(conflictToken));
-        LOG.infof("unrelate on %s in scope %s", target.id(), in.scopeId());
-        return at(target, answered);
+        return at(target, logged(items.unrelate(in.scopeId(), from, toAddress, typeName,
+                requireToken(conflictToken)),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.relationWithdrawn(address, in.scope());
+                PlatformLog.unrelated(address, in.scope());
+            }));
     }
 
     // ======================================================================
@@ -752,10 +807,12 @@ public class VerbSurface {
         AddressParser.Target target = requireItem(rawView, rawId);
         UUID id = resolve(in, target);
 
-        Result result = at(target, tags.tagAttach(in.scopeId(), id, requireText(TAG, rawTag),
-            subject));
-        LOG.infof("tag_attach on %s in scope %s", target.id(), in.scopeId());
-        return result;
+        return at(target, logged(tags.tagAttach(in.scopeId(), id, requireText(TAG, rawTag),
+                subject),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.tagAttachedTo(address, in.scope());
+                PlatformLog.tagAttached(address, in.scope());
+            }, () -> PlatformLog.tagAlreadyOn(in.scope())));
     }
 
     /**
@@ -771,9 +828,11 @@ public class VerbSurface {
         AddressParser.Target target = requireItem(rawView, rawId);
         UUID id = resolve(in, target);
 
-        Result result = at(target, tags.tagDetach(in.scopeId(), id, requireText(TAG, rawTag)));
-        LOG.infof("tag_detach on %s in scope %s", target.id(), in.scopeId());
-        return result;
+        return at(target, logged(tags.tagDetach(in.scopeId(), id, requireText(TAG, rawTag)),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.tagDetachedFrom(address, in.scope());
+                PlatformLog.tagDetached(address, in.scope());
+            }, () -> PlatformLog.tagAbsent(in.scope())));
     }
 
     /**
@@ -818,7 +877,10 @@ public class VerbSurface {
         addresses.requireView(in.scopeId(), in.view());
 
         Map<String, Object> answered = items.validate(in.scopeId());
-        LOG.debugf("validate over scope %s", in.scopeId());
+        if (answered.get(FINDINGS) instanceof Collection<?> findings) {
+            PlatformLog.validationReported(PlatformLog.Count.of(findings), in.scope());
+        }
+        PlatformLog.validated(in.scope());
         return new Result(new AddressParser.Target(Selector.ITEM, null, null), answered);
     }
 
@@ -913,7 +975,63 @@ public class VerbSurface {
     private Entry entry(String subject, String rawScope, String rawView, Access access) {
         String slug = AddressParser.scope(rawScope);
         String view = AddressParser.view(rawView);
-        return new Entry(scopes.resolve(subject, slug, access).scopeId(), view);
+        Entry in = new Entry(scopes.resolve(subject, slug, access).scopeId(), view);
+        PlatformLog.scopeResolved(in.scope());
+        return in;
+    }
+
+    // ======================================================================
+    // The lines a write leaves
+    // ======================================================================
+
+    /**
+     * The answer of a write, after its lines: written exactly when the write
+     * stored something (C13.3), by the technical address of what it stored.
+     * Written here and not in the domain, which logs nothing (DEC-0051, C4).
+     */
+    private static <T, E> T logged(Written<T, E> written,
+                                   Function<E, PlatformLog.TechnicalAddress> address,
+                                   Consumer<PlatformLog.TechnicalAddress> lines) {
+        return logged(written, address, lines, () -> { });
+    }
+
+    /**
+     * {@link #logged(Written, Function, Consumer)}, and the line a call that
+     * wrote nothing leaves instead.
+     */
+    private static <T, E> T logged(Written<T, E> written,
+                                   Function<E, PlatformLog.TechnicalAddress> address,
+                                   Consumer<PlatformLog.TechnicalAddress> lines,
+                                   Runnable unchanged) {
+        return loggedAs(written, stored -> lines.accept(address.apply(stored)), unchanged);
+    }
+
+    /**
+     * The answer of a write, with its lines handed what it stored: for a
+     * write whose lines name more than one address of it, as a membership's
+     * name its iteration and itself.
+     */
+    private static <T, E> T loggedAs(Written<T, E> written, Consumer<E> lines,
+                                     Runnable unchanged) {
+        E stored = written.stored();
+        if (stored == null) {
+            unchanged.run();
+        } else {
+            lines.accept(stored);
+        }
+        return written.answer();
+    }
+
+    /**
+     * The verb the declaration holds under this name: the declared instance,
+     * never one made from the text, as {@code valueOf} answers a constant of
+     * an enum.
+     *
+     * @throws IllegalArgumentException for a name the declaration does not hold
+     */
+    public static VerbName declaredVerb(String name) {
+        return SurfaceDeclaration.verbName(name)
+            .orElseThrow(() -> new IllegalArgumentException("an undeclared verb name"));
     }
 
     // ======================================================================
@@ -1062,6 +1180,9 @@ public class VerbSurface {
     private static final String SELECTOR = "selector";
     private static final String IDEMPOTENCY_KEY = "idempotency_key";
 
+    /** The member of a validation's answer that lists its findings. */
+    private static final String FINDINGS = "findings";
+
     /** The longest idempotency key taken, in characters. */
     private static final int KEY_LENGTH_MAX = 255;
 
@@ -1125,6 +1246,11 @@ public class VerbSurface {
 
     /** Everything one call needs once the first two stages have held. */
     private record Entry(UUID scopeId, String view) {
+
+        /** The scope as a log line takes it. */
+        PlatformLog.ScopeId scope() {
+            return PlatformLog.ScopeId.of(scopeId);
+        }
     }
 
     /** The two rows a membership address names. */

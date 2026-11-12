@@ -12,7 +12,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 
 import java.util.List;
 import java.util.UUID;
@@ -43,8 +42,11 @@ import java.util.UUID;
 @TenantBound
 public class SelectorRegistry {
 
-    /** An address, a scope id, a number. Never content, never an actor. */
-    private static final Logger LOG = Logger.getLogger(SelectorRegistry.class);
+    /*
+     * Nothing here logs (DEC-0051, C4): the line a write leaves is written by
+     * the surface that called it, and a view token is a selector, which no
+     * line carries.
+     */
 
     /** The argument a refusal about the addressed view names. */
     private static final String SELECTOR_ARGUMENT = "selector";
@@ -89,7 +91,6 @@ public class SelectorRegistry {
         }
 
         selectors.open(scopeId, token);
-        LOG.debugf("view %s open in scope %s", token, scopeId);
     }
 
     /** The views open in a scope, by token. */
@@ -138,10 +139,7 @@ public class SelectorRegistry {
         space.highWaterMark = space.highWaterMark + 1;
         selectors.flush();
 
-        long allocated = space.highWaterMark;
-        LOG.debugf("number %d allocated under view %s in scope %s",
-            allocated, view, scopeId);
-        return allocated;
+        return space.highWaterMark;
     }
 
     /**
@@ -166,8 +164,6 @@ public class SelectorRegistry {
         space.highWaterMark = mark;
 
         selectors.flush();
-        LOG.infof("high-water mark of view %s in scope %s carried to %d",
-            view, scopeId, mark);
         return mark;
     }
 

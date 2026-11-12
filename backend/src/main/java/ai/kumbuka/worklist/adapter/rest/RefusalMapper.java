@@ -11,6 +11,7 @@ import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.CallerActor;
+import ai.kumbuka.worklist.surface.PlatformLog;
 import ai.kumbuka.worklist.surface.RefusalCode;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.UnexpectedFailures;
@@ -24,7 +25,6 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -76,29 +76,30 @@ import java.util.Optional;
 @Provider
 public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
-    /**
-     * The one place every refusal that reaches a REST caller passes through; the
-     * MCP adapter logs the refusals it answers in the same words at the same
-     * level, and a defect is logged by {@link UnexpectedFailures} on both.
+    /*
+     * The one place every refusal that reaches a REST caller passes through,
+     * logged through PlatformLog by its code; the MCP adapter logs the
+     * refusals it answers in the same words at the same level, and a defect
+     * is logged by UnexpectedFailures on both.
      *
-     * <p>Logging here rather than at the throw sites is not tidiness: every site
+     * Logging here rather than at the throw sites is not tidiness: every site
      * is a chance to do it differently, and the one that gets forgotten is the
      * one somebody needed.
      *
-     * <p><strong>DEBUG and not WARN, deliberately.</strong> A malformed address
-     * arrives on every client typo, and a refusal log at WARN would make this
-     * service's operational log writable by whoever calls it — flood the surface
-     * with broken addresses and you fill the log. What belongs at WARN is a
-     * statement about the deployment, and those already live where they are
-     * decided: the scope directory warns on an unresolved scope, and the selector
-     * registry warns on nothing a caller can provoke.
+     * DEBUG and not WARN, deliberately. A malformed address arrives on every
+     * client typo, and a refusal log at WARN would make this service's
+     * operational log writable by whoever calls it — flood the surface with
+     * broken addresses and you fill the log. What belongs at WARN is a
+     * statement about the deployment: a scope that did not resolve with the
+     * session bound, and a session the read contract could not be bound for.
+     * The directory that finds them logs nothing (DEC-0051, C4), so they are
+     * written here, where their refusal arrives, by the code alone.
      *
-     * <p>The subject is absent, as everywhere in this service. Correlation runs
-     * through a request id; a second aggregatable record of who was refused what
-     * is how not-collecting-behavioural-data gets circumvented without anybody
-     * deciding to.
+     * The subject is absent, as everywhere in this service. Correlation runs
+     * through a request id; a second aggregatable record of who was refused
+     * what is how not-collecting-behavioural-data gets circumvented without
+     * anybody deciding to.
      */
-    private static final Logger LOG = Logger.getLogger(RefusalMapper.class);
 
     @Inject CallContext context;
 
@@ -123,7 +124,8 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
      *                  the request had not become a call
      */
     static Response answer(SurfaceException e, @Nullable String attempted) {
-        LOG.debugf("surface refusal: %s -> %d", e.reason().name(), e.reason().status());
+        PlatformLog.surfaceRefused(PlatformLog.Reason.of(e.reason()),
+            PlatformLog.Status.of(e.reason()));
 
         Response.ResponseBuilder response = Response.status(e.reason().status())
             .type(MediaType.APPLICATION_JSON)
@@ -133,6 +135,24 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
         // which is the one thing the status is required to carry.
         e.allow().ifPresent(allow -> response.header(HttpHeaders.ALLOW, allow));
         return response.build();
+    }
+
+    /**
+     * The WARN line of a refusal that is a statement about the deployment
+     * rather than about the call (C13.3): a scope that did not resolve with
+     * the session bound, and a session the read contract could not be bound
+     * for. Written where the refusal arrives at the surface, for REST here and
+     * for MCP in the same words by {@code McpAdapter}, by the code alone.
+     */
+    static void warnOnTheDeployment(WorklistException.Reason reason,
+                                           PlatformLog.Reason code) {
+        switch (reason) {
+            case SCOPE_UNRESOLVED -> PlatformLog.scopeUnresolved(code);
+            case SESSION_NOT_BOUND -> PlatformLog.sessionNotBound(code);
+            default -> {
+                // A refusal about the call: its DEBUG line is the whole of it.
+            }
+        }
     }
 
     /** The domain's refusals, on the same shape and the same discipline. */
@@ -145,14 +165,16 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
         @Override
         public Response toResponse(WorklistException e) {
-            int status = RefusalCode.of(e.reason()).status();
+            RefusalCode wire = RefusalCode.of(e.reason());
 
-            // Every refusal at DEBUG, by its code (C13.3), a 5xx among them:
-            // the anomaly behind SESSION_NOT_BOUND is logged at WARN where it
-            // is found, and ERROR belongs to the unexpected failure alone.
-            LOG.debugf("domain refusal: %s -> %d", e.reason().name(), status);
+            // Every refusal at DEBUG, by its code (C13.3), a 5xx among them;
+            // the two anomalies of the deployment beside it at WARN, and ERROR
+            // belongs to the unexpected failure alone.
+            PlatformLog.Reason code = PlatformLog.Reason.of(e.reason());
+            PlatformLog.domainRefused(code, PlatformLog.Status.of(wire));
+            warnOnTheDeployment(e.reason(), code);
 
-            return Response.status(status)
+            return Response.status(wire.status())
                 .type(MediaType.APPLICATION_JSON)
                 .entity(payload(e, context.attempted().orElse(null)))
                 .build();
@@ -222,7 +244,7 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
             }
             return Response.status(RefusalCode.UNEXPECTED_FAILURE.status())
                 .type(MediaType.APPLICATION_JSON)
-                .entity(RefusalPayload.unexpected(UnexpectedFailures.reference(null, e),
+                .entity(RefusalPayload.unexpected(UnexpectedFailures.logged(null, e),
                     context.attempted().orElse(null)))
                 .build();
         }

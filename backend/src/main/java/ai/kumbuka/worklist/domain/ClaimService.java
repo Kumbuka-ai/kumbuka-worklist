@@ -14,7 +14,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
@@ -82,9 +81,11 @@ public class ClaimService {
     private static final String ADDRESS = "address";
     private static final String DURATION = "duration_seconds";
 
-
-    /** An address, a scope id, a transition. Never a receipt, never the actor. */
-    private static final Logger LOG = Logger.getLogger(ClaimService.class);
+    /*
+     * Nothing here logs (DEC-0051, C4). A write answers a Written carrying the
+     * lease it stored, and the surface that called it writes the line, by the
+     * item's technical address: never the receipt, never the actor.
+     */
 
     @Inject ClaimRepository claims;
     @Inject Clock clock;
@@ -117,7 +118,7 @@ public class ClaimService {
      * the caller they made.
      */
     @Transactional
-    public Map<String, Object> claim(UUID scopeId, UUID itemId, String actor,
+    public Written<Map<String, Object>, Claim> claim(UUID scopeId, UUID itemId, String actor,
             Duration duration) {
         Item item = requireItem(scopeId, itemId);
         requireAddressed(item);
@@ -134,9 +135,7 @@ public class ClaimService {
 
         Claim claim = award(held, item, subject, now, lease);
 
-        LOG.debugf("claim taken on item %s in scope %s until %s",
-            itemId, scopeId, claim.expiresAt);
-        return project(item, claim, subject);
+        return new Written<>(project(item, claim, subject), claim);
     }
 
     /**
@@ -155,8 +154,8 @@ public class ClaimService {
      * lease is over sooner than it would have been.
      */
     @Transactional
-    public Map<String, Object> release(UUID scopeId, UUID itemId, String subject,
-            String receipt) {
+    public Written<Map<String, Object>, Claim> release(UUID scopeId, UUID itemId,
+            String subject, String receipt) {
         Item item = requireItem(scopeId, itemId);
         Claim claim = claims.lockByItem(item).orElse(null);
         if (claim == null || !claim.liveAt(clock.instant())) {
@@ -188,8 +187,7 @@ public class ClaimService {
         claim.expiresAt = claim.grantedAt.plusNanos(1_000);
         claims.flushAndRefresh(claim);
 
-        LOG.debugf("claim released on item %s in scope %s", itemId, scopeId);
-        return project(item, claim, subject);
+        return new Written<>(project(item, claim, subject), claim);
     }
 
     /**
@@ -209,7 +207,8 @@ public class ClaimService {
      * ITERATION_ABSENT / plan-vs-close split.
      */
     @Transactional
-    public Map<String, Object> claimNext(UUID scopeId, String actor, Duration duration) {
+    public Written<Map<String, Object>, Claim> claimNext(UUID scopeId, String actor,
+            Duration duration) {
         String subject = requireActor(actor);
         Duration lease = requirePositive(duration);
 
@@ -240,9 +239,7 @@ public class ClaimService {
 
         Claim claim = award(held, item, subject, now, lease);
 
-        LOG.debugf("claim drawn and taken on item %s in scope %s until %s",
-            item.id, scopeId, claim.expiresAt);
-        return project(item, claim, subject);
+        return new Written<>(project(item, claim, subject), claim);
     }
 
     // ------------------------------------------------------------------

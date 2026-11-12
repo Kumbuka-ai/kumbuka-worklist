@@ -112,7 +112,7 @@ class AttributeColumnRoundTripIT {
 
         Map<String, Object> retitled = items.update(scope, item, Map.of(
             Field.TITLE.canonicalName(), "another title",
-            Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName())));
+            Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName()))).answer();
         assertThat(column(item))
             .as("a write of another field leaves the column's bytes as they were")
             .isEqualTo(stored);
@@ -120,7 +120,7 @@ class AttributeColumnRoundTripIT {
         Map<String, Object> resent = items.update(scope, item, Map.of(
             Field.ATTRIBUTES.canonicalName(), attributes,
             Field.CONFLICT_TOKEN.canonicalName(),
-            retitled.get(Field.CONFLICT_TOKEN.canonicalName())));
+            retitled.get(Field.CONFLICT_TOKEN.canonicalName()))).answer();
         assertThat(resent.get(Field.CONFLICT_TOKEN.canonicalName()))
             .as("the attributes read, sent back, change nothing")
             .isEqualTo(retitled.get(Field.CONFLICT_TOKEN.canonicalName()));
@@ -148,7 +148,7 @@ class AttributeColumnRoundTripIT {
     private UUID created() {
         Map<String, Object> answer = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "attribute round trip",
-            Field.STATUS.canonicalName(), openName));
+            Field.STATUS.canonicalName(), openName)).answer();
         return UUID.fromString(String.valueOf(answer.get(Field.ID.canonicalName())));
     }
 

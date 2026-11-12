@@ -60,7 +60,7 @@ class IterationProducedCloseIT {
         String token = tokenOf(iterationId);
 
         Map<String, Object> closed = iterations.close(scope, iterationId,
-            "a specification and a set of corpus nodes", token);
+            "a specification and a set of corpus nodes", token).answer();
 
         assertThat(closed.get(Field.CLOSED_AT.canonicalName()))
             .as("close writes the timestamp when produced is named")
@@ -120,7 +120,7 @@ class IterationProducedCloseIT {
             Field.TITLE.canonicalName(), "a title",
             Field.MOTTO.canonicalName(), "a motto",
             Field.DESCRIPTION.canonicalName(), "a description"))
-            .get(Field.ID.canonicalName());
+            .answer().get(Field.ID.canonicalName());
     }
 
     private String tokenOf(UUID iterationId) {

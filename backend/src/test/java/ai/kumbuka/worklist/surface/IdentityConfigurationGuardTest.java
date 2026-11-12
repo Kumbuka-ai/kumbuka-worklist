@@ -74,18 +74,20 @@ class IdentityConfigurationGuardTest {
 
     @Test
     void the_refusal_stands_in_a_log_line_of_its_own() {
-        List<LogRecord> lines = LogLines.of(IdentityConfigurationGuard.class, () ->
+        List<LogRecord> lines = LogLines.of(PlatformLog.class, () ->
             IdentityConfigurationGuard.verify(configOf(
                 PRINCIPAL_CLAIM_KEY,
                 SUBJECT)));
 
         assertThat(lines)
-            .as("one WARN line says why the start was refused, and names what to set")
+            .as("one WARN line, on the platform facade, says why the start was refused by "
+                + "the problem's constant; the setting and its value stay in the exception "
+                + "(DEC-0051)")
             .singleElement()
             .satisfies(line -> {
                 assertThat(line.getLevel().intValue()).isEqualTo(Level.WARNING.intValue());
-                assertThat(LogLines.text(line)).contains(AUDIENCE_KEY)
-                    .contains("WORKLIST_OIDC_AUDIENCE");
+                assertThat(LogLines.text(line))
+                    .isEqualTo("start refused: " + PlatformLog.StartProblem.AUDIENCE_NOT_SET);
                 assertThat(line.getThrown()).as("the line carries no exception").isNull();
             });
     }

@@ -11,8 +11,8 @@ import io.quarkus.qute.i18n.MessageBundles;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import org.jboss.logging.Logger;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,15 +43,12 @@ import java.util.Map;
 @ApplicationScoped
 public class DeclarationGuard {
 
-    private static final Logger LOG = Logger.getLogger(DeclarationGuard.class);
-
     void onStart(@Observes StartupEvent event) {
         SurfaceDeclaration.requireServable(MessageBundles.get(ToolDescriptions.class),
             MessageBundles.get(ArgumentDescriptions.class));
         Map<String, Object> document = DeclarationDocument.document();
         DeclarationDocument.requireServable(document);
-        LOG.infof("declaration served: %s, %d calls, %d reasons",
-            document.get(DeclarationDocument.VERSION), SurfaceDeclaration.verbs().size(),
-            RefusalCode.values().length);
+        PlatformLog.declarationServed(PlatformLog.Count.of(SurfaceDeclaration.verbs()),
+            PlatformLog.Count.of(List.of(RefusalCode.values())));
     }
 }

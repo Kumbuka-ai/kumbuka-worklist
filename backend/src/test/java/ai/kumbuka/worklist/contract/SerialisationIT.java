@@ -217,7 +217,7 @@ class SerialisationIT {
         vocabulary.declareStatus(SCOPE_ID, "done", 2, false, false, true, true);
         workstreams.requireDefault(SCOPE_ID);
         milestone = milestones.create(SCOPE_ID, Map.of("title", "goal", "kind", "milestone"))
-            .get("number");
+            .answer().get("number");
         iterations.create(SCOPE_ID, Map.of("title", "first", "motto", "m", "description", "d"));
         iterations.create(SCOPE_ID, Map.of("title", "second", "motto", "m", "description", "d"));
     }

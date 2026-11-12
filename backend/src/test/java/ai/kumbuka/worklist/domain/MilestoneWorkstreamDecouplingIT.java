@@ -107,7 +107,7 @@ class MilestoneWorkstreamDecouplingIT {
 
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
 
         assertThat(updated.get(Field.MILESTONE_ID.canonicalName()))
             .as("the milestone attaches — the edge that would have vetoed it is retracted")
@@ -136,7 +136,7 @@ class MilestoneWorkstreamDecouplingIT {
 
         Map<String, Object> moved = items.update(scope, itemId, Map.of(
             Field.WORKSTREAM_ID.canonicalName(), backend.token,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
 
         assertThat(moved.get(Field.WORKSTREAM_ID.canonicalName()))
             .as("the item moved to backend — the milestone-workstream edge is gone")
@@ -156,7 +156,7 @@ class MilestoneWorkstreamDecouplingIT {
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(),
             workstreams.require(scope, workstreamId).token))
-            .get(Field.ID.canonicalName());
+            .answer().get(Field.ID.canonicalName());
     }
 
     /**
@@ -171,7 +171,7 @@ class MilestoneWorkstreamDecouplingIT {
         return (UUID) milestones.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.VISION.canonicalName(), "vision of " + title))
-            .get(Field.ID.canonicalName());
+            .answer().get(Field.ID.canonicalName());
     }
 
     private String tokenOf(UUID itemId) {

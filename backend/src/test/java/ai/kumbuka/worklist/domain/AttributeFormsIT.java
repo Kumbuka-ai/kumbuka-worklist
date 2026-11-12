@@ -82,7 +82,7 @@ class AttributeFormsIT {
 
         Map<String, Object> again = items.update(scope, item, Map.of(
             Field.ATTRIBUTES.canonicalName(), attributesOf(read),
-            Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName())));
+            Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName()))).answer();
         assertThat(again.get(Field.CONFLICT_TOKEN.canonicalName()))
             .as("the names the answer carried name the same options, so nothing changed and "
                 + "the token did not rotate")
@@ -97,7 +97,7 @@ class AttributeFormsIT {
         Map<String, Object> answer = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "attribute forms",
             Field.STATUS.canonicalName(), openName,
-            Field.ATTRIBUTES.canonicalName(), attributes));
+            Field.ATTRIBUTES.canonicalName(), attributes)).answer();
         return UUID.fromString(String.valueOf(answer.get(Field.ID.canonicalName())));
     }
 

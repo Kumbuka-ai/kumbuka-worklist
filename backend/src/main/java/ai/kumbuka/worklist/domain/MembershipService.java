@@ -13,7 +13,6 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -59,10 +58,10 @@ public class MembershipService extends PlanningService {
     /** The argument a refusal about the addressed membership names (DEC-0043 R18). */
     private static final String ADDRESS = "address";
 
-
-    /** An address, a scope id, a count, a transition. Never a title, never an actor. */
-    private static final Logger LOG = Logger.getLogger(MembershipService.class);
-
+    /*
+     * Nothing here logs (DEC-0051, C4). A write answers a Written, and the
+     * surface that called it writes the line exactly when it stored something.
+     */
 
     @Inject ItemRepository items;
     @Inject VocabularyRegistry vocabulary;
@@ -124,8 +123,8 @@ public class MembershipService extends PlanningService {
      * position.
      */
     @Transactional
-    public Map<String, Object> plan(UUID scopeId, UUID iterationId, UUID itemId,
-            String conflictToken) {
+    public Written<Map<String, Object>, IterationMembership> plan(UUID scopeId,
+            UUID iterationId, UUID itemId, String conflictToken) {
         Iteration iteration = requireLockedIteration(scopeId, iterationId);
         iteration.requireCurrentToken(conflictToken);
         Item item = refuseUnplannable(scopeId, itemId);
@@ -150,10 +149,10 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.debugf("item planned into iteration %d in scope %s", iteration.number, scopeId);
 
-        return project(iteration, membership, warnings(warningAt(afterwards,
-            setting.warnMembershipsPerIteration, Notice.MEMBERSHIPS_AT_THRESHOLD)));
+        return new Written<>(project(iteration, membership, warnings(warningAt(afterwards,
+            setting.warnMembershipsPerIteration, Notice.MEMBERSHIPS_AT_THRESHOLD))),
+            membership);
     }
 
     /**
@@ -174,14 +173,14 @@ public class MembershipService extends PlanningService {
      * silently rewrite it anyway.
      */
     @Transactional
-    public Map<String, Object> unplan(UUID scopeId, UUID iterationId, UUID itemId,
-            String conflictToken) {
+    public Written<Map<String, Object>, IterationMembership> unplan(UUID scopeId,
+            UUID iterationId, UUID itemId, String conflictToken) {
         Iteration iteration = requireLockedIteration(scopeId, iterationId);
         iteration.requireCurrentToken(conflictToken);
         IterationMembership membership = require(iteration, itemId);
 
         if (IterationMembership.DROPPED.equals(membership.status)) {
-            return project(iteration, membership, List.of());
+            return Written.unchanged(project(iteration, membership, List.of()));
         }
 
         membership.status = IterationMembership.DROPPED;
@@ -189,8 +188,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.debugf("item unplanned from iteration %d in scope %s", iteration.number, scopeId);
-        return project(iteration, membership, List.of());
+        return new Written<>(project(iteration, membership, List.of()), membership);
     }
 
     /**
@@ -211,8 +209,8 @@ public class MembershipService extends PlanningService {
      * in the store.
      */
     @Transactional
-    public Map<String, Object> update(UUID scopeId, UUID iterationId, UUID itemId,
-            Map<String, ?> arguments) {
+    public Written<Map<String, Object>, IterationMembership> update(UUID scopeId,
+            UUID iterationId, UUID itemId, Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MEMBERSHIP, arguments);
         Iteration iteration = requireLockedIteration(scopeId, iterationId);
         iteration.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
@@ -224,18 +222,15 @@ public class MembershipService extends PlanningService {
         Object wanted = settableOnly(Addressed.MEMBERSHIP, given)
             .get(Field.MEMBERSHIP_STATUS);
         if (wanted == null) {
-            LOG.debugf("update of a membership in scope %s named nothing settable and "
-                + "wrote nothing", scopeId);
-            return current;
+            // Named nothing settable, and wrote nothing.
+            return Written.unchanged(current);
         }
 
         String status = oneOf(Field.MEMBERSHIP_STATUS,
             required(Field.MEMBERSHIP_STATUS, wanted),
             IterationMembership.STATUSES);
         if (status.equals(membership.status)) {
-            LOG.debugf("update of a membership in scope %s changed nothing and wrote "
-                + "nothing", scopeId);
-            return current;
+            return Written.unchanged(current);
         }
 
         if (IterationMembership.ACTIVE.equals(status)) {
@@ -245,9 +240,7 @@ public class MembershipService extends PlanningService {
 
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
-        LOG.debugf("membership status moved in iteration %d, scope %s", iteration.number,
-            scopeId);
-        return project(iteration, membership, List.of());
+        return new Written<>(project(iteration, membership, List.of()), membership);
     }
 
     // ------------------------------------------------------------------

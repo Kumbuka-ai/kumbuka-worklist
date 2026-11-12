@@ -70,6 +70,7 @@
         <failsafe-plugin.version>3.5.0</failsafe-plugin.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <assertj.version>3.27.7</assertj.version>
+        <archunit.version>1.4.1</archunit.version>
 
         <!-- null inside the service: NullAway on every main source (C7.5). -->
         <compiler-plugin.version>3.14.1</compiler-plugin.version>
@@ -179,6 +180,17 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            The log facade guard (DEC-0051, C4) reads the compiled main tree:
+            no class but the two facades holds or calls a logger, writes to the
+            console, or hands a logger an exception.
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

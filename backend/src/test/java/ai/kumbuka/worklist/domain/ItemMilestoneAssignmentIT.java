@@ -89,7 +89,7 @@ class ItemMilestoneAssignmentIT {
 
         Map<String, Object> answer = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
         // The projection carries the milestone's NUMBER — the wire form
         // fixed in Sprint 180.4 — and the write path takes the same.
         assertThat(answer.get(Field.MILESTONE_ID.canonicalName()))
@@ -104,7 +104,7 @@ class ItemMilestoneAssignmentIT {
         Long markerNumber = numberOf(markerId);
         answer = items.update(scope, secondItem, Map.of(
             Field.MILESTONE_ID.canonicalName(), markerNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(secondItem)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(secondItem))).answer();
         assertThat(answer.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(markerNumber);
     }
 
@@ -133,7 +133,7 @@ class ItemMilestoneAssignmentIT {
         // regular state — the assignment is optional.
         Map<String, Object> answer = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "",
-            Field.CONFLICT_TOKEN.canonicalName(), settled));
+            Field.CONFLICT_TOKEN.canonicalName(), settled)).answer();
         assertThat(answer.get(Field.MILESTONE_ID.canonicalName())).isNull();
     }
 
@@ -153,7 +153,7 @@ class ItemMilestoneAssignmentIT {
         selectors.open(otherScope, Selector.MILESTONE);
         UUID foreignMilestone = (UUID) milestones.create(otherScope, Map.of(
             Field.TITLE.canonicalName(), "another scope's goal",
-            Field.VISION.canonicalName(), "elsewhere")).get(Field.ID.canonicalName());
+            Field.VISION.canonicalName(), "elsewhere")).answer().get(Field.ID.canonicalName());
         Long foreignNumber = numberInOtherScope(otherScope, foreignMilestone);
 
         // Foreign scope's milestone shares the number space of this scope
@@ -288,7 +288,7 @@ class ItemMilestoneAssignmentIT {
         String openName = vocabulary.requireStatus(scope, openStatus).name;
         return (UUID) items.create(scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(), openName)).get(Field.ID.canonicalName());
+            Field.STATUS.canonicalName(), openName)).answer().get(Field.ID.canonicalName());
     }
 
     private Long numberOf(UUID milestoneId) {
@@ -309,7 +309,7 @@ class ItemMilestoneAssignmentIT {
                 Field.VISION.canonicalName(), "the north star of " + title)
             : Map.of(Field.TITLE.canonicalName(), title,
                 Field.KIND.canonicalName(), Milestone.NO_VISION);
-        return (UUID) milestones.create(scope, arguments).get(Field.ID.canonicalName());
+        return (UUID) milestones.create(scope, arguments).answer().get(Field.ID.canonicalName());
     }
 
     /**
