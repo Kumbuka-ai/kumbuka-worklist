@@ -126,7 +126,7 @@ class ScopeOpeningProbeIT {
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the first item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
-        Map<String, Object>iteration = iterations.create(scope, Map.of(
+        Map<String, Object> iteration = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "the first iteration",
             Field.MOTTO.canonicalName(), "the first iteration",
             Field.DESCRIPTION.canonicalName(), "what it holds")).answer();
@@ -150,7 +150,7 @@ class ScopeOpeningProbeIT {
         Map<String, Object> item = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "an item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
-        Map<String, Object>iteration = iterations.create(scope, Map.of(
+        Map<String, Object> iteration = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "a title",
             Field.MOTTO.canonicalName(), "a motto",
             Field.DESCRIPTION.canonicalName(), "a description")).answer();
@@ -178,7 +178,7 @@ class ScopeOpeningProbeIT {
         Map<String, Object> secondItem = items.create(scope, Map.of(
             Field.TITLE.canonicalName(), "a second item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
-        Map<String, Object>secondIteration = iterations.create(scope, Map.of(
+        Map<String, Object> secondIteration = iterations.create(scope, Map.of(
             Field.TITLE.canonicalName(), "second",
             Field.MOTTO.canonicalName(), "later",
             Field.DESCRIPTION.canonicalName(), "held after")).answer();

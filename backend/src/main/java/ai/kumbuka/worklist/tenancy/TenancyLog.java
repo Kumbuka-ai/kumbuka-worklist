@@ -38,6 +38,14 @@ public final class TenancyLog {
     }
 
     /**
+     * INFO: one line per migration, when the callback has bound the tenant
+     * before it runs. The line starts with the callback's marker.
+     */
+    static void bindingApplied(TenantId tenant) {
+        LOG.infof(TenantMigrationCallback.MARKER + ": app.tenant_id=%s before a migration", tenant);
+    }
+
+    /**
      * WARN: one transaction asked to carry a second tenant, which can only be
      * a programming error.
      */

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.tenancy;
 
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -7,6 +14,7 @@ import org.flywaydb.core.api.callback.Event;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.UUID;
 
 /**
  * Binds {@code app.tenant_id} before every migration, so that a migration
@@ -41,6 +49,12 @@ import java.sql.SQLException;
  */
 public class TenantMigrationCallback extends BaseCallback {
 
+    /**
+     * The start of the line this callback leaves for every migration it binds
+     * ({@link TenancyLog#bindingApplied}), so the line names what wrote it.
+     */
+    static final String MARKER = "tenant-migration-callback";
+
     @Override
     public boolean supports(Event event, Context context) {
         return event == Event.BEFORE_EACH_MIGRATE;
@@ -55,20 +69,20 @@ public class TenantMigrationCallback extends BaseCallback {
         // carries (V8, V9, V12, V15, V16 — it is NOT pure DDL) would then
         // either fail on the uuid cast or, under FORCE row-level security,
         // match no rows and succeed having done nothing.
-        String tenantId = TenantConfigurationGuard.requireUsable(
-            ConfigProvider.getConfig().getValue(TenantConfigurationGuard.KEY, String.class))
-            .toString();
+        UUID tenant = TenantConfigurationGuard.requireUsable(
+            ConfigProvider.getConfig().getValue(TenantConfigurationGuard.KEY, String.class));
         // is_local = true scopes the binding to the transaction Flyway runs
         // the migration in, so it cannot outlive the migration on a pooled
         // connection. Parameterised rather than concatenated: a configured
         // value is still an input.
         try (PreparedStatement st = context.getConnection()
                 .prepareStatement("SELECT set_config('app.tenant_id', ?, true)")) {
-            st.setString(1, tenantId);
+            st.setString(1, tenant.toString());
             st.execute();
         } catch (SQLException e) {
             throw new IllegalStateException(
                 "failed to bind app.tenant_id before a Flyway migration", e);
         }
+        TenancyLog.bindingApplied(TenancyLog.TenantId.of(tenant));
     }
 }
