@@ -447,7 +447,7 @@ public class ItemService {
      * change lands on top of the state I read".
      */
     @Transactional
-    public Written<Map<String, Object>, Item> relate(UUID scopeId, UUID itemId,
+    public Written<Map<String, Object>, RelationWrite> relate(UUID scopeId, UUID itemId,
             String toItemAddress, String relationTypeName, String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
@@ -482,7 +482,7 @@ public class ItemService {
         }
         item.stamp(clock.instant());
         items.flushAndRefresh(item);
-        return new Written<>(project(item), item);
+        return new Written<>(project(item), new RelationWrite(item, target));
     }
 
     /**
@@ -499,7 +499,7 @@ public class ItemService {
      * which of the three parts they got wrong.
      */
     @Transactional
-    public Written<Map<String, Object>, Item> unrelate(UUID scopeId, UUID itemId,
+    public Written<Map<String, Object>, RelationWrite> unrelate(UUID scopeId, UUID itemId,
             String toItemAddress, String relationTypeName, String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
@@ -516,7 +516,7 @@ public class ItemService {
         edge.status = ItemRelation.WITHDRAWN;
         item.stamp(clock.instant());
         items.flushAndRefresh(item);
-        return new Written<>(project(item), item);
+        return new Written<>(project(item), new RelationWrite(item, target));
     }
 
     private Optional<ItemRelation> findEdge(Item from, Long toItemNumber, Long relationTypePk) {

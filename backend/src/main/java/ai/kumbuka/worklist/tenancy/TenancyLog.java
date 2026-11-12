@@ -30,11 +30,23 @@ public final class TenancyLog {
 
     /*
      * Each message is a literal inside its logger call, as in PlatformLog:
-     * constant, and written once.
+     * constant, and written once. The one exception is the migration line,
+     * whose start is the callback's marker; it is a constant of its own here.
      */
     private static final Logger LOG = Logger.getLogger(TenancyLog.class);
 
+    static final String BINDING_APPLIED =
+        TenantMigrationCallback.FIRED_MARKER + ": app.tenant_id=%s before a migration";
+
     private TenancyLog() {
+    }
+
+    /**
+     * INFO: one line per migration, when the callback has bound the tenant
+     * before it runs. The line starts with the callback's marker.
+     */
+    static void bindingApplied(TenantId tenant) {
+        LOG.infof(BINDING_APPLIED, tenant);
     }
 
     /**

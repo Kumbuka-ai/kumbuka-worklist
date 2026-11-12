@@ -102,12 +102,12 @@ public final class PlatformLog {
         LOG.infof("claim_next %s in scope %s", entry, scope);
     }
 
-    static void related(TechnicalAddress entry, ScopeId scope) {
-        LOG.infof("relate on %s in scope %s", entry, scope);
+    static void related(TechnicalAddress entry, TechnicalAddress target, ScopeId scope) {
+        LOG.infof("relate on %s to %s in scope %s", entry, target, scope);
     }
 
-    static void unrelated(TechnicalAddress entry, ScopeId scope) {
-        LOG.infof("unrelate on %s in scope %s", entry, scope);
+    static void unrelated(TechnicalAddress entry, TechnicalAddress target, ScopeId scope) {
+        LOG.infof("unrelate on %s to %s in scope %s", entry, target, scope);
     }
 
     static void tagAttached(TechnicalAddress entry, ScopeId scope) {
@@ -120,8 +120,8 @@ public final class PlatformLog {
 
     // ======================================================================
     // What a write did, at DEBUG: the lines the domain services wrote before
-    // they stopped logging, worded as they were, and written by the surface
-    // that called them.
+    // they stopped logging, the demotion of the active milestone and both
+    // ends of an edge among them, written by the surface that called them.
     // ======================================================================
 
     static void itemCreated(TechnicalAddress entry, ScopeId scope) {
@@ -140,12 +140,14 @@ public final class PlatformLog {
         LOG.debugf("item withdrawn in scope %s", scope);
     }
 
-    static void relationAsserted(TechnicalAddress entry, ScopeId scope) {
-        LOG.debugf("relation asserted from %s in scope %s", entry, scope);
+    static void relationAsserted(TechnicalAddress entry, TechnicalAddress target,
+                                 ScopeId scope) {
+        LOG.debugf("relation asserted from %s to %s in scope %s", entry, target, scope);
     }
 
-    static void relationWithdrawn(TechnicalAddress entry, ScopeId scope) {
-        LOG.debugf("relation withdrawn from %s in scope %s", entry, scope);
+    static void relationWithdrawn(TechnicalAddress entry, TechnicalAddress target,
+                                  ScopeId scope) {
+        LOG.debugf("relation withdrawn from %s to %s in scope %s", entry, target, scope);
     }
 
     static void iterationCreated(TechnicalAddress iteration, ScopeId scope) {
@@ -175,6 +177,10 @@ public final class PlatformLog {
 
     static void milestoneUpdated(TechnicalAddress milestone, ScopeId scope) {
         LOG.debugf("milestone %s updated in scope %s", milestone, scope);
+    }
+
+    static void milestoneDemoted(TechnicalAddress milestone, ScopeId scope) {
+        LOG.debugf("milestone %s demoted in scope %s", milestone, scope);
     }
 
     static void milestoneUnchanged(ScopeId scope) {

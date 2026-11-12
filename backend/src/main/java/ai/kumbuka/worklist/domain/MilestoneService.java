@@ -14,12 +14,14 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * The goal axis: which goal an item serves.
@@ -122,7 +124,7 @@ public class MilestoneService extends PlanningService {
      * active and that act should be visible as one.
      */
     @Transactional
-    public Written<Map<String, Object>, Milestone> create(UUID scopeId,
+    public Written<Map<String, Object>, MilestoneWrite> create(UUID scopeId,
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         refuseUnsettableChanges(Addressed.MILESTONE, Map.of(), given);
@@ -135,12 +137,13 @@ public class MilestoneService extends PlanningService {
 
         Map<Field, Object> settable = settableOnly(Addressed.MILESTONE, given);
         settable.remove(Field.TITLE);
-        applyEffectiveChanges(milestone, project(milestone, List.of()), settable);
+        List<Milestone> demoted = new ArrayList<>(1);
+        applyEffectiveChanges(milestone, project(milestone, List.of()), settable, demoted::add);
         refuseGoalOnAMarker(milestone);
 
         planning.insert(milestone);
         planning.flushAndRefresh(milestone);
-        return new Written<>(project(milestone, List.of()), milestone);
+        return new Written<>(project(milestone, List.of()), stored(milestone, demoted));
     }
 
     /**
@@ -158,7 +161,7 @@ public class MilestoneService extends PlanningService {
      * refuse the write that was expressing one intention.
      */
     @Transactional
-    public Written<Map<String, Object>, Milestone> update(UUID scopeId, UUID milestoneId,
+    public Written<Map<String, Object>, MilestoneWrite> update(UUID scopeId, UUID milestoneId,
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         Milestone milestone = requireLocked(scopeId, milestoneId);
@@ -167,14 +170,15 @@ public class MilestoneService extends PlanningService {
         Map<String, Object> current = project(milestone, List.of());
         refuseUnsettableChanges(Addressed.MILESTONE, current, given);
 
+        List<Milestone> demoted = new ArrayList<>(1);
         if (!applyEffectiveChanges(milestone, current,
-                settableOnly(Addressed.MILESTONE, given))) {
+                settableOnly(Addressed.MILESTONE, given), demoted::add)) {
             return Written.unchanged(current);
         }
         refuseGoalOnAMarker(milestone);
 
         planning.flushAndRefresh(milestone);
-        return new Written<>(project(milestone, List.of()), milestone);
+        return new Written<>(project(milestone, List.of()), stored(milestone, demoted));
     }
 
     /**
@@ -190,7 +194,7 @@ public class MilestoneService extends PlanningService {
      * code. A second write path is a second place for those three to drift.
      */
     @Transactional
-    public Written<Map<String, Object>, Milestone> close(UUID scopeId, UUID milestoneId,
+    public Written<Map<String, Object>, MilestoneWrite> close(UUID scopeId, UUID milestoneId,
             String conflictToken) {
         return update(scopeId, milestoneId, Map.of(
             Field.STATUS.canonicalName(), Milestone.CLOSED,
@@ -232,10 +236,11 @@ public class MilestoneService extends PlanningService {
      * of this method does not stamp again.
      */
     private boolean applyEffectiveChanges(Milestone milestone, Map<String, Object> current,
-            Map<Field, Object> settable) {
+            Map<Field, Object> settable, Consumer<Milestone> demoted) {
         boolean changed = false;
         for (Map.Entry<Field, Object> entry : settable.entrySet()) {
-            if (applyOne(milestone, current, entry.getKey(), entry.getValue()) && !changed) {
+            if (applyOne(milestone, current, entry.getKey(), entry.getValue(), demoted)
+                    && !changed) {
                 milestone.stamp(clock.instant());
                 changed = true;
             }
@@ -243,8 +248,13 @@ public class MilestoneService extends PlanningService {
         return changed;
     }
 
+    /** The write's answer to the surface: the milestone, and the one it demoted, if any. */
+    private static MilestoneWrite stored(Milestone milestone, List<Milestone> demoted) {
+        return new MilestoneWrite(milestone, demoted.isEmpty() ? null : demoted.get(0));
+    }
+
     private boolean applyOne(Milestone milestone, Map<String, Object> current, Field field,
-            Object value) {
+            Object value, Consumer<Milestone> demoted) {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
@@ -257,7 +267,7 @@ public class MilestoneService extends PlanningService {
                 return moved(held, kind, () -> milestone.kind = kind);
             }
             case STATUS -> {
-                return applyStatus(milestone, held, field, value);
+                return applyStatus(milestone, held, field, value, demoted);
             }
             case VISION -> {
                 String vision = ItemFields.text(field, value)
@@ -286,9 +296,12 @@ public class MilestoneService extends PlanningService {
      * Both rows carrying {@code active} at flush time is exactly what the
      * partial unique index refuses, and it would refuse the write that was
      * removing the condition.
+     *
+     * <p>The demoted milestone is handed to {@code demoted}, so that the
+     * surface can write the line of the demotion.
      */
     private boolean applyStatus(Milestone milestone, @Nullable Object held, Field field,
-            @Nullable Object value) {
+            @Nullable Object value, Consumer<Milestone> demoted) {
         String status = oneOf(field, required(field, value),
             Milestone.STATUSES);
         if (ItemFields.unchangedAsText(held, status)) {
@@ -301,6 +314,7 @@ public class MilestoneService extends PlanningService {
                 current.status = Milestone.PLANNED;
                 current.stamp(clock.instant());
                 planning.flush();
+                demoted.accept(current);
             }
         }
         milestone.status = status;

@@ -14,7 +14,9 @@ import ai.kumbuka.worklist.domain.IdempotencyService;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MembershipService;
+import ai.kumbuka.worklist.domain.Milestone;
 import ai.kumbuka.worklist.domain.MilestoneService;
+import ai.kumbuka.worklist.domain.MilestoneWrite;
 import ai.kumbuka.worklist.domain.Page;
 import ai.kumbuka.worklist.domain.PageRequest;
 import ai.kumbuka.worklist.domain.QuerySpec;
@@ -203,11 +205,14 @@ public class VerbSurface {
                     PlatformLog.iterationCreated(address, in.scope());
                     PlatformLog.created(address, in.scope());
                 });
-            case Selector.MILESTONE -> logged(milestones.create(in.scopeId(), fields),
-                PlatformLog.TechnicalAddress::of, address -> {
+            case Selector.MILESTONE -> loggedAs(milestones.create(in.scopeId(), fields),
+                write -> {
+                    PlatformLog.TechnicalAddress address =
+                        PlatformLog.TechnicalAddress.of(write.stored());
+                    demotionLogged(write, in);
                     PlatformLog.milestoneCreated(address, in.scope());
                     PlatformLog.created(address, in.scope());
-                });
+                }, () -> { });
             default -> throw unreachableView(in.view());
         };
         key.ifPresent(given -> idempotency.remember(in.scopeId(), given,
@@ -350,8 +355,11 @@ public class VerbSurface {
                     PlatformLog.iterationUpdated(address, in.scope());
                     PlatformLog.updated(address, in.scope());
                 }, () -> PlatformLog.iterationUnchanged(in.scope()));
-            case Selector.MILESTONE -> logged(milestones.update(in.scopeId(), id, fields),
-                PlatformLog.TechnicalAddress::of, address -> {
+            case Selector.MILESTONE -> loggedAs(milestones.update(in.scopeId(), id, fields),
+                write -> {
+                    PlatformLog.TechnicalAddress address =
+                        PlatformLog.TechnicalAddress.of(write.stored());
+                    demotionLogged(write, in);
                     PlatformLog.milestoneUpdated(address, in.scope());
                     PlatformLog.updated(address, in.scope());
                 }, () -> PlatformLog.milestoneUnchanged(in.scope()));
@@ -483,8 +491,10 @@ public class VerbSurface {
                     PlatformLog.iterationClosed(address, in.scope());
                     PlatformLog.closed(address, in.scope());
                 });
-            case Selector.MILESTONE -> logged(milestones.close(in.scopeId(), id, token),
-                PlatformLog.TechnicalAddress::of, address -> {
+            case Selector.MILESTONE -> loggedAs(milestones.close(in.scopeId(), id, token),
+                write -> {
+                    PlatformLog.TechnicalAddress address =
+                        PlatformLog.TechnicalAddress.of(write.stored());
                     PlatformLog.milestoneUpdated(address, in.scope());
                     PlatformLog.milestoneClosed(in.scope());
                     PlatformLog.closed(address, in.scope());
@@ -748,12 +758,14 @@ public class VerbSurface {
         String toAddress = requireLabel(TO_ITEM, edge.toItem());
         String typeName = requireLabel(TYPE, edge.type());
 
-        return at(target, logged(items.relate(in.scopeId(), from, toAddress, typeName,
+        return at(target, loggedAs(items.relate(in.scopeId(), from, toAddress, typeName,
                 requireToken(conflictToken)),
-            PlatformLog.TechnicalAddress::of, address -> {
-                PlatformLog.relationAsserted(address, in.scope());
-                PlatformLog.related(address, in.scope());
-            }));
+            write -> {
+                PlatformLog.TechnicalAddress source = PlatformLog.TechnicalAddress.of(write.stored());
+                PlatformLog.TechnicalAddress to = PlatformLog.TechnicalAddress.of(write.target());
+                PlatformLog.relationAsserted(source, to, in.scope());
+                PlatformLog.related(source, to, in.scope());
+            }, () -> { }));
     }
 
     /**
@@ -775,12 +787,14 @@ public class VerbSurface {
         String toAddress = requireLabel(TO_ITEM, edge.toItem());
         String typeName = requireLabel(TYPE, edge.type());
 
-        return at(target, logged(items.unrelate(in.scopeId(), from, toAddress, typeName,
+        return at(target, loggedAs(items.unrelate(in.scopeId(), from, toAddress, typeName,
                 requireToken(conflictToken)),
-            PlatformLog.TechnicalAddress::of, address -> {
-                PlatformLog.relationWithdrawn(address, in.scope());
-                PlatformLog.unrelated(address, in.scope());
-            }));
+            write -> {
+                PlatformLog.TechnicalAddress source = PlatformLog.TechnicalAddress.of(write.stored());
+                PlatformLog.TechnicalAddress to = PlatformLog.TechnicalAddress.of(write.target());
+                PlatformLog.relationWithdrawn(source, to, in.scope());
+                PlatformLog.unrelated(source, to, in.scope());
+            }, () -> { }));
     }
 
     // ======================================================================
@@ -1020,6 +1034,17 @@ public class VerbSurface {
             lines.accept(stored);
         }
         return written.answer();
+    }
+
+    /**
+     * The line of the demotion a milestone write stored, exactly where it
+     * demoted the active milestone: by the demoted milestone's number.
+     */
+    private static void demotionLogged(MilestoneWrite write, Entry in) {
+        Milestone demoted = write.demoted();
+        if (demoted != null) {
+            PlatformLog.milestoneDemoted(PlatformLog.TechnicalAddress.of(demoted), in.scope());
+        }
     }
 
     /**
