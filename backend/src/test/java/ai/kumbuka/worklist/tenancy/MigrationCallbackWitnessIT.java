@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.tenancy;
 
+import ai.kumbuka.worklist.fixture.LogLines;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
@@ -19,7 +20,10 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -169,6 +173,38 @@ class MigrationCallbackWitnessIT {
     }
 
     /**
+     * The callback says that it fired: one INFO line on the tenancy facade per
+     * migration it bound, starting with its marker and naming the tenant
+     * (DEC-0051; the line of the memory service's template).
+     *
+     * <p>The expected text is written here, not composed from the marker
+     * constant: a line built from the constant it is checked against would
+     * agree with any marker.
+     */
+    @Test
+    void with_the_callback_every_migration_leaves_its_binding_line() throws SQLException {
+        String url = freshDatabase("witness_binding_line");
+        String tenant = ConfigProvider.getConfig().getValue("worklist.tenant-id", String.class);
+        int[] executed = new int[1];
+
+        List<LogRecord> lines = LogLines.of(TenancyLog.class,
+            () -> executed[0] = migrate(url, true));
+
+        assertThat(executed[0])
+            .as("the chain migrated from nothing, so the callback had migrations to bind")
+            .isPositive();
+        assertThat(lines)
+            .as("one line per executed migration, the marker first, then the tenant")
+            .hasSize(executed[0])
+            .allSatisfy(line -> {
+                assertThat(line.getLevel().intValue()).isEqualTo(Level.INFO.intValue());
+                assertThat(LogLines.text(line))
+                    .isEqualTo("tenant binding applied: app.tenant_id=" + tenant
+                        + " before a migration");
+            });
+    }
+
+    /**
      * Runs the service's real migration set, plus the test-only DML migration
      * this probe needs, against this test's container.
      *
@@ -176,7 +212,7 @@ class MigrationCallbackWitnessIT {
      * @param withCallback whether to register the tenant-binding callback, which
      *                     is the single variable this probe changes
      */
-    private static void migrate(String url, boolean withCallback) {
+    private static int migrate(String url, boolean withCallback) {
         var config = ConfigProvider.getConfig();
         var flyway = Flyway.configure()
             .dataSource(url, MIGRATOR, MIGRATOR_PASSWORD)
@@ -194,6 +230,6 @@ class MigrationCallbackWitnessIT {
                 ? new org.flywaydb.core.api.callback.Callback[] { new TenantMigrationCallback() }
                 : new org.flywaydb.core.api.callback.Callback[] {})
             .load();
-        flyway.migrate();
+        return flyway.migrate().migrationsExecuted;
     }
 }

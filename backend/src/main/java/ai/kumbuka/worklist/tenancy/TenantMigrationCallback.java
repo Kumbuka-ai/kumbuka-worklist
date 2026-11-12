@@ -53,7 +53,7 @@ public class TenantMigrationCallback extends BaseCallback {
      * The start of the line this callback leaves for every migration it binds
      * ({@link TenancyLog#bindingApplied}), so the line names what wrote it.
      */
-    static final String MARKER = "tenant-migration-callback";
+    static final String FIRED_MARKER = "tenant binding applied";
 
     @Override
     public boolean supports(Event event, Context context) {
