@@ -449,10 +449,10 @@ public final class PlatformLog {
     /** The status a refusal is answered with, as its code carries it. */
     public static final class Status {
 
-        private final int status;
+        private final int code;
 
-        private Status(int status) {
-            this.status = status;
+        private Status(int code) {
+            this.code = code;
         }
 
         public static Status of(RefusalCode code) {
@@ -461,7 +461,7 @@ public final class PlatformLog {
 
         @Override
         public String toString() {
-            return Integer.toString(status);
+            return Integer.toString(code);
         }
     }
 
