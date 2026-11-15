@@ -324,3 +324,36 @@ jobs:
 
           Configuration is environment variables with a \`WORKLIST_\` prefix; see the README for the full set. The service role's password must be rotated away from the migration's placeholder before the service is reachable from outside a development machine.
           "
+
+  # -------------------------------------------------------------------------
+  # The documentation fragment of this release, put on GHCR as
+  # ghcr.io/<owner>/kumbuka-worklist-docs-fragment (contract:
+  # docs/docs-fragment.md in Kumbuka-ai/workflows).
+  #
+  # NON-BLOCKING ON PURPOSE: a missing fragment is a finding of whoever
+  # collects the fragments, never a reason to hold a release. So no job of
+  # this file needs this one, and it sits under no collecting job. The image,
+  # the library and the GitHub release come about exactly as without it.
+  # continue-on-error is carried by the called jobs; GitHub refuses it on a
+  # job that calls a reusable workflow, and the file would then not start.
+  #
+  # TAG PUSH ONLY. On a workflow_dispatch the checkout is a branch, not the
+  # tag, so the fragment would name the wrong commit; it does not run there.
+  #
+  # tools-ref carries the same commit as the pin, so the scripts and the
+  # schema come from the state of the workflow that runs them.
+  # -------------------------------------------------------------------------
+  docs-fragment:
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: Kumbuka-ai/workflows/.github/workflows/reusable-docs-fragment.yml@d2a0e114d3c2ce9fdb6591fa72112c9c37f7b9a8 # main
+    permissions:
+      contents: read
+      # For the called publish job: a called workflow cannot hold more than
+      # its caller, and GitHub requires the caller to grant it.
+      packages: write
+    with:
+      module: kumbuka-worklist
+      version: ${{ github.ref_name }}
+      publish: true
+      runs-on: apollo
+      tools-ref: d2a0e114d3c2ce9fdb6591fa72112c9c37f7b9a8
