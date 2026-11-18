@@ -149,7 +149,7 @@ class SerialisationIT {
         }
         assertThat(offences).as("members with no value, and instants of another form").isEmpty();
         assertThat(answers.values()).as("the instants were written at all")
-            .anySatisfy(a -> assertThat(a).contains("\"expires_at\""))
+            .anySatisfy(a -> assertThat(a).contains("\"created_at\""))
             .anySatisfy(a -> assertThat(a).contains("\"closed_at\""))
             .anySatisfy(a -> assertThat(a).contains("\"updated_at\""))
             .anySatisfy(a -> assertThat(a).contains("\"changed_at\""));
