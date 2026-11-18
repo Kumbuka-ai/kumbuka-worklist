@@ -201,37 +201,6 @@ class SurfaceCoverageIT {
             .statusCode(200)
             .body("fields.status", org.hamcrest.Matchers.is("closed"));
 
-        // ---- claim and release, at item depth ----------------------------
-        //
-        // The lease is minted by the surface — the receipt travels back in
-        // the answer, and 'release' presents it. Reached rather than
-        // refused: the semantics of the claim family live in their own
-        // probe, and here it is enough that the two forms travel end to
-        // end and answer through the surface.
-        String receipt = call("POST", item(Selector.ITEM, itemNumber) + ":claim", null,
-            Map.of("duration_seconds", 60))
-            .statusCode(200)
-            .body("fields.receipt", org.hamcrest.Matchers.notNullValue())
-            .extract().path("fields.receipt");
-        call("POST", item(Selector.ITEM, itemNumber) + ":release", null,
-            Map.of("receipt", receipt))
-            .statusCode(200);
-
-        // ---- claim_next, the draw at collection depth --------------------
-        //
-        // Runs against the same item — it is the only unclaimed
-        // addressable item in the scope — and the answer names it. The
-        // lease is released again so the withdraw below is not talking
-        // to a row a fresh claim just wrote.
-        String drawnReceipt = call("POST", collection(Selector.ITEM) + ":claim_next", null,
-            Map.of("duration_seconds", 60))
-            .statusCode(200)
-            .body("fields.receipt", org.hamcrest.Matchers.notNullValue())
-            .extract().path("fields.receipt");
-        call("POST", item(Selector.ITEM, itemNumber) + ":release", null,
-            Map.of("receipt", drawnReceipt))
-            .statusCode(200);
-
         // ---- validate, the scope walk at collection depth ----------------
         //
         // Reads the store and reports; mutates nothing. An empty findings
@@ -280,17 +249,6 @@ class SurfaceCoverageIT {
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
-        // ---- accept, which is carried and refuses -------------------------
-        call("POST", item(Selector.ITEM, itemNumber) + ":accept", itemToken, null)
-            .statusCode(501)
-            .body("reason", org.hamcrest.Matchers.is("IDENTIFIER_UNDECIDED"));
-
-        // ---- withdraw, which is the last thing done to this item ----------
-        call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
-            Map.of("status", closed))
-            .statusCode(200)
-            .body("fields.status", org.hamcrest.Matchers.is("coverage-done"));
-
         // ---- the seven the scheme does not carry --------------------------
         for (String verb : List.of("send", "append", "abandon", "block", "resume", "consume")) {
             call("POST", item(Selector.ITEM, itemNumber) + ":" + verb, null, null)
@@ -302,14 +260,28 @@ class SurfaceCoverageIT {
             .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
 
         // ---- and the refusal of a writing verb on a truncated address -----
-        call("POST", collection(Selector.ITEM) + ":withdraw", null, null)
+        call("POST", collection(Selector.ITEM) + ":close", null, null)
             .statusCode(405)
             .header("Allow", org.hamcrest.Matchers.is("GET, POST"))
             .body("reason", org.hamcrest.Matchers.is("WRITE_ON_TRUNCATED_ADDRESS"));
 
+        // ---- the verbs that left the surface are no verbs here --------------
+        //
+        // accept, withdraw, claim, release and claim_next: a colon naming no
+        // verb of its depth, answered as any other spelling nothing carries.
+        for (String retired : List.of("accept", "withdraw", "claim", "release")) {
+            call("POST", item(Selector.ITEM, itemNumber) + ":" + retired, itemToken,
+                    Map.of())
+                .statusCode(405)
+                .body("reason", org.hamcrest.Matchers.is("WRITE_ON_TRUNCATED_ADDRESS"));
+        }
+        call("POST", collection(Selector.ITEM) + ":claim_next", null, Map.of())
+            .statusCode(405)
+            .body("reason", org.hamcrest.Matchers.is("WRITE_ON_TRUNCATED_ADDRESS"));
+
         // ---- a verb aimed at the wrong kind of thing ----------------------
-        call("POST", item(Selector.MILESTONE, milestoneNumber) + ":withdraw", milestoneToken,
-            Map.of("status", closed))
+        call("POST", item(Selector.MILESTONE, milestoneNumber) + ":relate", milestoneToken,
+            Map.of("to_item", itemAddress, "type", "carries"))
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
 
@@ -339,18 +311,15 @@ class SurfaceCoverageIT {
         // VALUE_UNDECLARED refusal — Sprint 180.4 fixes the wire form as the
         // declared display name, so a name nobody declared is a rejection
         // of a scope's vocabulary rather than a surface-level payload fault.
-        call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
+        call("PATCH", item(Selector.ITEM, itemNumber), itemToken,
             Map.of("status", "not a status name here"))
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
-        // A UUID in the status field is a form refusal — the wire form is
-        // the display name, and the platform's identity is not something a
-        // caller reads back any more.
-        call("POST", item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
-            Map.of("status", UUID.randomUUID().toString()))
-            .statusCode(400)
-            .body("reason", org.hamcrest.Matchers.is("ARGUMENT_INVALID"));
+        // ---- the item closes through update, the last thing done to it ----
+        call("PATCH", item(Selector.ITEM, itemNumber), itemToken, Map.of("status", closed))
+            .statusCode(200)
+            .body("fields.status", org.hamcrest.Matchers.is("coverage-done"));
 
         // ---- POST on an item address with no verb in it --------------------
         call("POST", item(Selector.ITEM, itemNumber), null, null)

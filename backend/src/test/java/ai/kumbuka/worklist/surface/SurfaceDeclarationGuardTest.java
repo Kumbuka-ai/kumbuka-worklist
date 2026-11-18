@@ -38,7 +38,7 @@ class SurfaceDeclarationGuardTest {
     @Test
     void two_calls_under_one_name_refuse_the_start() {
         assertThatThrownBy(() -> SurfaceDeclaration.requireDistinctNames(
-            List.of("worklist_read", "worklist_claim", "worklist_read")))
+            List.of("worklist_read", "worklist_close", "worklist_read")))
             .as("RED STATE, observed: a duplicate call name refuses the start, and names it")
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("worklist_read");
@@ -120,19 +120,19 @@ class SurfaceDeclarationGuardTest {
             .doesNotThrowAnyException();
 
         assertThatThrownBy(() -> SurfaceDeclaration.requireServable(
-                bundle(ToolDescriptions.class, "claimNext"),
+                bundle(ToolDescriptions.class, "tagAttach"),
                 bundle(ArgumentDescriptions.class, null)))
             .as("RED STATE, observed: the verb whose text is blank is refused by its call name")
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("worklist_claim_next");
+            .hasMessageContaining("worklist_tag_attach");
 
         assertThatThrownBy(() -> SurfaceDeclaration.requireServable(
                 bundle(ToolDescriptions.class, null),
-                bundle(ArgumentDescriptions.class, "receipt")))
+                bundle(ArgumentDescriptions.class, "tag")))
             .as("RED STATE, observed: the argument whose text is blank is refused by name")
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("worklist_release")
-            .hasMessageContaining("'receipt'");
+            .hasMessageContaining("worklist_tag_attach")
+            .hasMessageContaining("'tag'");
     }
 
     @Test

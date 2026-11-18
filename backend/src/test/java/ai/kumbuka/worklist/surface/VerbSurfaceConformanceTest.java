@@ -72,9 +72,15 @@ class VerbSurfaceConformanceTest {
 
     /**
      * The verb set is twenty-six: the catalogue's twenty-four, after its two
-     * reductions, and the two tag verbs of sprint/210.
+     * reductions, and the two tag verbs of sprint/210. Five of them left this
+     * scheme's surface with its target cut, so the specification places
+     * twenty-one.
      */
-    private static final int VOCABULARY_SIZE = 26;
+    private static final int PLACED = 21;
+
+    /** The five verbs that left the surface: no class of the specification names them. */
+    private static final List<String> RETIRED =
+        List.of("accept", "withdraw", "claim", "release", "claim_next");
 
     // =======================================================================
     // Closure, on the bindings
@@ -203,7 +209,8 @@ class VerbSurfaceConformanceTest {
     // =======================================================================
 
     /**
-     * Every one of the twenty-six is accounted for, in exactly one class.
+     * Every verb of the vocabulary that stays on this surface is accounted
+     * for, in exactly one class, and the five that left it are named in none.
      *
      * <p>This is what makes the file a decision record rather than a route list.
      * A verb nobody put in a class is a verb nobody decided about, and the
@@ -221,9 +228,10 @@ class VerbSurfaceConformanceTest {
 
         assertThat(named)
             .as("the catalogue settles on twenty-four verbs after two reductions, sprint/210 "
-                + "adds the two tag verbs, and every one of the twenty-six is either carried, "
-                + "refused by name, declared-but-unbuilt, or the platform's")
-            .hasSize(VOCABULARY_SIZE);
+                + "adds the two tag verbs, and of the twenty-six the twenty-one that stay are "
+                + "either carried, refused by name, declared-but-unbuilt, or the platform's")
+            .hasSize(PLACED)
+            .doesNotContainAnyElementsOf(RETIRED);
 
         for (String verb : named) {
             assertThat(classesOf(verb))

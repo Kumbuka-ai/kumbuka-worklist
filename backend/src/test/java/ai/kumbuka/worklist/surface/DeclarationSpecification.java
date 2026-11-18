@@ -90,10 +90,13 @@ public final class DeclarationSpecification {
     /** Where every argument of this service travels: the top level. */
     public static final String PLACEMENT = "TOP";
 
-    /** The members each answer shape carries at its top level. */
+    /**
+     * The members each answer shape carries at its top level: an answer about
+     * one object names the calls open to the caller under {@code next} (C6.1).
+     */
     public static final Map<String, List<String>> ANSWER_MEMBERS = Map.of(
-        "OBJECT", List.of("address", "fields", "[conflict_token]"),
-        "OBJECT_CREATED", List.of("address", "fields", "[conflict_token]"),
+        "OBJECT", List.of("address", "fields", "[conflict_token]", "next"),
+        "OBJECT_CREATED", List.of("address", "fields", "[conflict_token]", "next"),
         "OBJECT_LISTING", List.of("objects", "[next_cursor]"));
 
     /** The effect classes the worklist verbs take, in the order the declaration lists them. */
@@ -107,8 +110,6 @@ public final class DeclarationSpecification {
     private static final Arg ADDRESS = Arg.req("address", "string");
     private static final Arg TOKEN = Arg.req("conflict_token", "string");
     private static final Arg FIELDS = Arg.req("fields", "object");
-    /** A lease of no length is refused: one second at least, no ceiling. */
-    private static final Arg DURATION = Arg.req("duration_seconds", "integer").bounded(1, null);
     private static final Arg TO_ITEM = Arg.req("to_item", "string");
     private static final Arg TYPE = Arg.req("type", "string");
     private static final Arg TAG = Arg.req("tag", "string");
@@ -141,7 +142,7 @@ public final class DeclarationSpecification {
             List.of(ADDRESS, TOKEN, FIELDS),
             reasons(WRITE, TOKENED, List.of("SELECTOR_DECLARED_NOT_WRITTEN",
                 "FIELD_RETRACTED", "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
-                "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "ITERATION_CLOSED"))),
+                "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "TRANSITION_REFUSED"))),
         new Verb("worklist_query", "COLLECTION_READ", "OBJECT_LISTING",
             List.of(SCOPE, Arg.view("item", "iteration", "milestone", "workstream"),
                 Arg.opt("filter", "object", null),
@@ -152,15 +153,9 @@ public final class DeclarationSpecification {
             reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "PREDICATE_UNKNOWN",
                 "VALUE_UNDECLARED", "PAGE_SIZE_REJECTED", "CURSOR_MALFORMED", "CURSOR_FOREIGN",
                 "SORT_UNDECLARED"))),
-        new Verb("worklist_accept", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TOKEN),
-            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "IDENTIFIER_UNDECIDED"))),
-        new Verb("worklist_withdraw", "ITEM_TRANSITION", "OBJECT",
-            List.of(ADDRESS, TOKEN, Arg.req("status", "string")),
-            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
-                "VALUE_UNDECLARED"))),
         new Verb("worklist_close", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, Arg.opt("produced", "string", null)),
-            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "ITERATION_CLOSED",
+            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "TRANSITION_REFUSED",
                 "ITERATION_INCOMPLETE", "ITERATION_PRODUCED_MISSING"))),
         new Verb("worklist_advance", "COLLECTION_COMPOUND", "OBJECT",
             List.of(SCOPE, ITERATION_VIEW, TOKEN),
@@ -168,20 +163,10 @@ public final class DeclarationSpecification {
                 "ITERATION_ABSENT", "SETTING_ABSENT"))),
         new Verb("worklist_plan", "GRAPH_ADD_OR_REMOVE", "OBJECT_CREATED",
             List.of(ADDRESS, TOKEN),
-            reasons(WRITE, TOKENED, List.of("MEMBERSHIP_PRESENT", "ITERATION_CLOSED",
+            reasons(WRITE, TOKENED, List.of("MEMBERSHIP_PRESENT", "TRANSITION_REFUSED",
                 "ITEM_UNPLANNABLE", "SETTING_ABSENT", "CARDINALITY_EXCEEDED"))),
         new Verb("worklist_unplan", "GRAPH_ADD_OR_REMOVE", "OBJECT", List.of(ADDRESS, TOKEN),
-            reasons(WRITE, TOKENED, List.of("ITERATION_CLOSED"))),
-        new Verb("worklist_claim", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, DURATION),
-            reasons(WRITE, List.of("VERB_UNCARRIED", "ADDRESS_READ_ONLY", "INVALID_VALUE",
-                "CLAIM_HELD"))),
-        new Verb("worklist_release", "ITEM_TRANSITION", "OBJECT",
-            List.of(ADDRESS, Arg.req("receipt", "string")),
-            reasons(WRITE, List.of("VERB_UNCARRIED", "ADDRESS_READ_ONLY", "CLAIM_ABSENT",
-                "CLAIM_RECEIPT_UNKNOWN"))),
-        new Verb("worklist_claim_next", "COLLECTION_COMPOUND", "OBJECT",
-            List.of(SCOPE, ITEM_VIEW, DURATION),
-            reasons(WRITE, List.of("VERB_UNCARRIED", "DRAW_EMPTY", "CLAIM_HELD"))),
+            reasons(WRITE, TOKENED, List.of("TRANSITION_REFUSED"))),
         new Verb("worklist_relate", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
@@ -194,7 +179,7 @@ public final class DeclarationSpecification {
             List.of(SCOPE, ITEM_VIEW),
             reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "VERB_UNCARRIED"))),
         // The tags (sprint/210): a write on an addressed object that presents
-        // no conflict token, classed as claim and release are.
+        // no conflict token, classed as an item transition.
         new Verb("worklist_tag_attach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
             reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED", "TAG_WITHDRAWN"))),
         new Verb("worklist_tag_detach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),

@@ -76,7 +76,7 @@ class CounterProbeIndependenceTest {
 
             @CounterProbe
             class Planted {
-                Object kind = %1$s.domain.HolderState.NOBODY;
+                Object kind = %1$s.domain.ItemStatus.class;
                 Object form = Bound.MAX;
             }
             """.formatted(SourceTree.BASE);
@@ -86,7 +86,7 @@ class CounterProbeIndependenceTest {
                 + "package must each be reported, and a type of the test tree must not")
             .containsExactly(
                 "Planted imports " + SourceTree.BASE + ".surface.RefusalCode",
-                "Planted names " + SourceTree.BASE + ".domain.HolderState",
+                "Planted names " + SourceTree.BASE + ".domain.ItemStatus",
                 "Planted uses Bound of its own package");
     }
 

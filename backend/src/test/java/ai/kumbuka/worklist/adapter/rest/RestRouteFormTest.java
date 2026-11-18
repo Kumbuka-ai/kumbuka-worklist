@@ -71,12 +71,12 @@ class RestRouteFormTest {
 
     @Test
     void the_check_reports_a_verb_whose_declaration_is_missing() {
-        List<String> withoutClaim = declared().stream()
-            .filter(verb -> !verb.equals("claim")).toList();
-        assertThat(routeOffences(served(), withoutClaim))
+        List<String> withoutClose = declared().stream()
+            .filter(verb -> !verb.equals("close")).toList();
+        assertThat(routeOffences(served(), withoutClose))
             .as("RED STATE, observed: a served verb with its declaration removed must be "
                 + "reported by name")
-            .containsExactly("undeclared: claim");
+            .containsExactly("undeclared: close");
     }
 
     /** The verbs one set has and the other lacks, named. */
@@ -301,11 +301,11 @@ class RestRouteFormTest {
         assertThat(RefusalCode.VERB_NOT_CARRIED.status()).as("C3.3").isEqualTo(405);
         assertThat(CustomMethod.accepts(CustomMethod.Depth.COLLECTION))
             .as("a collection carries create, query and its custom methods")
-            .containsExactlyInAnyOrder("create", "query", "advance", "validate", "claim_next");
+            .containsExactlyInAnyOrder("create", "query", "advance", "validate");
         assertThat(CustomMethod.accepts(CustomMethod.Depth.ITEM))
             .as("an object carries read, update and its custom methods")
-            .containsExactlyInAnyOrder("read", "update", "accept", "withdraw", "close",
-                "claim", "release", "relate", "unrelate", "tag_attach", "tag_detach");
+            .containsExactlyInAnyOrder("read", "update", "close", "relate", "unrelate",
+                "tag_attach", "tag_detach");
         assertThat(CustomMethod.accepts(CustomMethod.Depth.MEMBERSHIP))
             .as("a membership carries read, update, plan and unplan")
             .containsExactlyInAnyOrder("read", "update", "plan", "unplan");

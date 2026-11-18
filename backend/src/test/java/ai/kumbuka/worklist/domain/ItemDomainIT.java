@@ -440,10 +440,12 @@ class ItemDomainIT {
         assertThat(numberOf(second)).isEqualTo(numberOf(first) + 1);
         assertThat(thirdNumber).isEqualTo(numberOf(second) + 1);
 
-        // The highest one is taken back. This is what the predecessor's
-        // `delete` would have done, and it removed the row.
-        items.withdraw(SCOPE, third, statusNameOf(closedStatus()),
-            (String) items.read(SCOPE, third).get("conflict_token"));
+        // The highest one is taken back -- through `update`, into the scope's
+        // terminal status, the one way an item's state moves. This is what
+        // the predecessor's `delete` would have done, and it removed the row.
+        items.update(SCOPE, third, Map.of(
+            "status", statusNameOf(closedStatus()),
+            "conflict_token", (String) items.read(SCOPE, third).get("conflict_token")));
         assertThat(items.read(SCOPE, third).get("number"))
             .as("a withdrawn item keeps its address. That is what makes the mark a mark "
                 + "by construction rather than by a rule somebody has to keep")
@@ -743,7 +745,7 @@ class ItemDomainIT {
      * <p>An empty value takes the same path a null does — it is normalised to
      * the empty absence, and the refusal names the field. The predecessor's
      * delete does not become "clear the status"; it is a terminal declared
-     * status now, reached through {@code withdraw}.
+     * status now, reached through {@code update}.
      */
     @Test
     void an_update_clearing_the_status_is_refused() {
@@ -805,68 +807,28 @@ class ItemDomainIT {
             .isEqualTo("INVALID_VALUE");
     }
 
-    /** Withdrawing an item moves it to a status the scope declared as closed. */
+    /**
+     * An item reaches a status the scope declared as closed through
+     * {@code update}, the one way its state moves, and stays writable there:
+     * a closed item takes the next write like any other.
+     */
     @Test
-    void a_withdrawal_is_terminal_and_the_value_is_the_scopes_own() {
-        UUID id = createdId("withdrawal probe");
+    void an_item_closes_through_update_and_stays_writable() {
+        UUID id = createdId("closing probe");
 
-        WorklistException refusal = catchWorklistException(() -> items.withdraw(SCOPE, id,
-            statusNameOf(openStatus()),
-            (String) items.read(SCOPE, id).get("conflict_token")));
-        assertThat(refusal.reason())
-            .as("that a withdrawal is terminal is the platform's; which value a scope "
-                + "closes with is the scope's own declaration")
-            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-
-        Map<String, Object> after = items.withdraw(SCOPE, id, statusNameOf(closedStatus()),
-            (String) items.read(SCOPE, id).get("conflict_token")).answer();
-        assertThat(after.get("status"))
+        Map<String, Object> closed = items.update(SCOPE, id, Map.of(
+            "status", statusNameOf(closedStatus()),
+            "conflict_token", (String) items.read(SCOPE, id).get("conflict_token"))).answer();
+        assertThat(closed.get("status"))
+            .as("the value a scope closes with is the scope's own declaration")
             .isEqualTo(vocabulary.requireStatus(SCOPE, closedStatus()).name);
-    }
 
-    /**
-     * A withdrawal without a status name — null or whitespace — is refused
-     * before the token check runs, because the missing field is the sharper
-     * fact.
-     */
-    @Test
-    void a_withdrawal_without_a_status_name_is_refused() {
-        UUID id = createdId("withdraw missing status probe");
-        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
-
-        WorklistException nullName = catchWorklistException(() ->
-            items.withdraw(SCOPE, id, null, conflictToken));
-        assertThat(nullName.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(nullName.offenders()).containsExactly("status");
-
-        WorklistException blankName = catchWorklistException(() ->
-            items.withdraw(SCOPE, id, "   ", conflictToken));
-        assertThat(blankName.reason())
-            .as("whitespace-only is the same fact as null — no status name arrived, "
-                + "and the withdrawal cannot decide which value the scope closes with")
-            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(blankName.offenders()).containsExactly("status");
-    }
-
-    /**
-     * A withdrawal into a status the scope has not declared is refused as
-     * {@link WorklistException.Reason#VALUE_UNDECLARED}.
-     *
-     * <p>Distinct from the not-closed refusal at
-     * {@link #a_withdrawal_is_terminal_and_the_value_is_the_scopes_own()}: this
-     * is a name nobody declared, and the answer says so rather than pretending
-     * the name is a valid non-closed one.
-     */
-    @Test
-    void a_withdrawal_into_an_undeclared_status_is_refused() {
-        UUID id = createdId("withdraw undeclared status probe");
-        String conflictToken = (String) items.read(SCOPE, id).get("conflict_token");
-
-        WorklistException refusal = catchWorklistException(() ->
-            items.withdraw(SCOPE, id, "no such status name here", conflictToken));
-
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
-        assertThat(refusal.offenders()).containsExactly("status");
+        Map<String, Object> retitled = items.update(SCOPE, id, Map.of(
+            "title", "closing probe, retitled",
+            "conflict_token", String.valueOf(closed.get("conflict_token")))).answer();
+        assertThat(retitled.get("title"))
+            .as("a closed item stays writable")
+            .isEqualTo("closing probe, retitled");
     }
 
     // ==================================================================
@@ -1217,33 +1179,6 @@ class ItemDomainIT {
     // The remaining refusals, each named.
     // ==================================================================
 
-    /**
-     * The intake gate refuses, and names the decision it is waiting for.
-     *
-     * <p>This probe used to assert that an address is allocated once, by
-     * accepting twice. Under the view model the address is allocated with the
-     * object, so there is no second allocation to refuse — and what {@code
-     * accept} would allocate instead is an open question about this store. The
-     * guarantee the probe made is not dropped: it is asserted below, on the
-     * address the item already has, which the refusal must leave exactly where
-     * it was.
-     */
-    @Test
-    void the_intake_gate_refuses_and_leaves_the_address_untouched() {
-        UUID id = createdId("intake gate probe");
-        long allocated = numberOf(id);
-
-        WorklistException refusal = catchWorklistException(() -> items.accept(SCOPE, id,
-            (String) items.read(SCOPE, id).get("conflict_token")));
-
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.IDENTIFIER_UNDECIDED);
-        assertThat(refusal.offenders()).containsExactly(String.valueOf(id));
-
-        assertThat(numberOf(id))
-            .as("and the address is untouched — a gate that quietly re-allocated would "
-                + "make every reference to the old address resolve to something else")
-            .isEqualTo(allocated);
-    }
 
     /** An item of another scope, or of no scope, is not this scope's item. */
     @Test

@@ -115,18 +115,12 @@ class NullIsAbsentIT {
         calls.put("query", args("scope", SCOPE, "selector", Selector.ITEM,
             "filter", Map.of("status", "open"), "page_size", 1, "after", null,
             "sort", "id", "direction", "asc"));
-        calls.put("accept", args("address", item, "conflict_token", "stale"));
-        calls.put("withdraw", args("address", item, "conflict_token", "stale", "status", "done"));
         calls.put("close", args("address", iteration, "conflict_token", "stale",
             "produced", "a release"));
         calls.put("advance", args("scope", SCOPE, "selector", Selector.ITERATION,
             "conflict_token", "stale"));
         calls.put("plan", args("address", membership, "conflict_token", "stale"));
         calls.put("unplan", args("address", membership, "conflict_token", "stale"));
-        calls.put("claim", args("address", item, "duration_seconds", 0));
-        calls.put("release", args("address", item, "receipt", "nobody-minted-this"));
-        calls.put("claim_next", args("scope", SCOPE, "selector", Selector.ITEM,
-            "duration_seconds", 0));
         calls.put("relate", args("address", item, "conflict_token", "stale",
             "to_item", "worklist://" + SCOPE + "/item/2", "type", "blocks"));
         calls.put("unrelate", args("address", item, "conflict_token", "stale",
@@ -333,14 +327,10 @@ class NullIsAbsentIT {
     void every_rest_body_answers_a_null_argument_as_the_argument_left_out() {
         String itemPath = "/api/" + SCOPE + "/" + Selector.ITEM;
         Map<String, Map<String, Object>> bodies = new LinkedHashMap<>();
-        bodies.put(itemPath + "/1:withdraw", args("status", "done"));
-        bodies.put(itemPath + "/1:claim", args("duration_seconds", 0));
-        bodies.put(itemPath + "/1:release", args("receipt", "nobody-minted-this"));
         bodies.put(itemPath + "/1:relate", args("to_item", "worklist://" + SCOPE + "/item/2",
             "type", "blocks"));
         bodies.put(itemPath + "/1:unrelate", args("to_item", "worklist://" + SCOPE + "/item/2",
             "type", "blocks"));
-        bodies.put(itemPath + ":claim_next", args("duration_seconds", 0));
         bodies.put(itemPath + "/1:tag_attach", args("tag", "no-such-tag"));
         bodies.put(itemPath + "/1:tag_detach", args("tag", "no-such-tag"));
         bodies.put("/api/" + SCOPE + "/iteration/1:close", args("produced", "a release"));

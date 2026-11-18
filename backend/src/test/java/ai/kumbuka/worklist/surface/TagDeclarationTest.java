@@ -49,9 +49,8 @@ class TagDeclarationTest {
                 .as("%s takes the complete address and the token, and no conflict token", verb)
                 .containsExactly("address", "tag");
             assertThat(declared.effectClass())
-                .as("%s is classed as claim and release are: a write on an addressed object "
+                .as("%s is classed as an item transition: a write on an addressed object "
                     + "that presents no conflict token", verb)
-                .isEqualTo(SurfaceDeclaration.verb("claim").orElseThrow().effectClass())
                 .isEqualTo(SurfaceDeclaration.EffectClass.ITEM_TRANSITION);
             assertThat(declared.answer()).isEqualTo(SurfaceDeclaration.Answer.OBJECT);
             assertThat(declared.reasons())

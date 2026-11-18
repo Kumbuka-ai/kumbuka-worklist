@@ -22,14 +22,18 @@
 #   depth     item | membership | collection | none
 #   repeat    the declared repetition behaviour
 #
-# THE TWENTY-SIX VERBS ARE ALL HERE, in one of four classes: the catalogue's
-# twenty-four and the two tag verbs of sprint/210 (tag_attach, tag_detach),
-# which worklist, dispatch and memory carry alike. A verb missing from this
-# file is a verb nobody decided about, which is the state this file exists to
-# make impossible.
+# TWENTY-ONE OF THE TWENTY-SIX VERBS ARE HERE, in one of four classes: the
+# catalogue's twenty-four and the two tag verbs of sprint/210 (tag_attach,
+# tag_detach), which worklist, dispatch and memory carry alike, less the five
+# that left this scheme's surface with its target cut: accept, withdraw,
+# claim, release and claim_next. They are decided too -- by their absence: no
+# route, no tool and no declared call names them, and an item's state changes
+# through `update` alone. Any other verb missing from this file is a verb
+# nobody decided about, which is the state this file exists to make
+# impossible.
 #
 # ---------------------------------------------------------------------------
-# CARRIED -- the eighteen this scheme has and this service has built
+# CARRIED -- the thirteen this scheme has and this service has built
 # ---------------------------------------------------------------------------
 # Probed END TO END against a running service and a running database: each is
 # called and must be answered by the surface rather than by the framework's
@@ -46,21 +50,16 @@ carried	read	GET	/api/{scope}/{selector}/{id}	item	none
 carried	read	GET	/api/{scope}/{selector}/{id}/{member}	membership	none
 carried	update	PATCH	/api/{scope}/{selector}/{id}	item	conflict-token
 carried	update	PATCH	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
-carried	accept	POST	/api/{scope}/{selector}/{id}:accept	item	transition-guard
-carried	withdraw	POST	/api/{scope}/{selector}/{id}:withdraw	item	transition-guard
 carried	close	POST	/api/{scope}/{selector}/{id}:close	item	transition-guard
 carried	advance	POST	/api/{scope}/{selector}:advance	collection	exactly-one
 carried	plan	POST	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
 carried	unplan	DELETE	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
-carried	claim	POST	/api/{scope}/{selector}/{id}:claim	item	transition-guard
-carried	release	POST	/api/{scope}/{selector}/{id}:release	item	receipt
-carried	claim_next	POST	/api/{scope}/{selector}:claim_next	collection	exactly-one
 carried	relate	POST	/api/{scope}/{selector}/{id}:relate	item	conflict-token
 carried	unrelate	POST	/api/{scope}/{selector}/{id}:unrelate	item	conflict-token
 carried	validate	POST	/api/{scope}/{selector}:validate	collection	none
-# The tags (sprint/210). A write on the item that presents no conflict token,
-# as claim and release are; repeating either is a successful call that
-# writes nothing. Only the item view carries tags.
+# The tags (sprint/210). A write on the item that presents no conflict token;
+# repeating either is a successful call that writes nothing. Only the item
+# view carries tags.
 carried	tag_attach	POST	/api/{scope}/{selector}/{id}:tag_attach	item	idempotent
 carried	tag_detach	POST	/api/{scope}/{selector}/{id}:tag_detach	item	idempotent
 
@@ -88,9 +87,9 @@ uncarried	digest	POST	/api/{scope}/{selector}:digest	collection	none
 # ---------------------------------------------------------------------------
 # UNBUILT -- none today
 # ---------------------------------------------------------------------------
-# The claim family, the graph verbs and validate were carried unbuilt in the
-# previous revision of this file. SPRINT_171.2 built them: they moved up into
-# the carried block above, and this section is empty.
+# The graph verbs and validate were carried unbuilt in an earlier revision of
+# this file. SPRINT_171.2 built them: they moved up into the carried block
+# above, and this section is empty.
 #
 # THE FORM OF THE GRAPH VERBS IS PROVISIONAL. `relate` and `unrelate` are
 # ratified as POST and DELETE on a sub-collection under the item, and this
@@ -151,8 +150,7 @@ binding	-	DELETE	/api/{scope}/{selector}/{id}/{member}	membership	-
 # Two new bindings arrived with SPRINT_171.2, and neither adds an outward
 # form. `POST /api/{scope}/{selector}/{id}` was already registered above and
 # still carries every item-depth colon verb; `POST /api/{scope}/{selector}`
-# was registered above too and carries `advance`, `claim_next` and
-# `validate`. The colon verb is split off from the routing table, so the
+# was registered above too and carries `advance` and `validate`. The colon verb is split off from the routing table, so the
 # number of bindings is bounded by depth rather than by verb count.
 
 # ---------------------------------------------------------------------------

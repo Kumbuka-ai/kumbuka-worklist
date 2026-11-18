@@ -138,18 +138,15 @@ class MarkerProbeIT {
         minimal.put("read", Map.of("address", item));
         minimal.put("update", Map.of("address", item, "conflict_token", "t"));
         minimal.put("query", Map.of("scope", SCOPE, "selector", Selector.ITEM));
-        minimal.put("accept", Map.of("address", item, "conflict_token", "t"));
-        minimal.put("withdraw", Map.of("address", item, "conflict_token", "t"));
         minimal.put("close", Map.of("address", milestone, "conflict_token", "t"));
         minimal.put("advance", Map.of("scope", SCOPE, "selector", Selector.ITERATION));
         minimal.put("plan", Map.of("address", membership, "conflict_token", "t"));
         minimal.put("unplan", Map.of("address", membership, "conflict_token", "t"));
-        minimal.put("claim", Map.of("address", item));
-        minimal.put("release", Map.of("address", item));
-        minimal.put("claim_next", Map.of("scope", SCOPE, "selector", Selector.ITEM));
         minimal.put("relate", Map.of("address", item, "conflict_token", "t"));
         minimal.put("unrelate", Map.of("address", item, "conflict_token", "t"));
         minimal.put("validate", Map.of("scope", SCOPE, "selector", Selector.ITEM));
+        minimal.put("tag_attach", Map.of("address", item));
+        minimal.put("tag_detach", Map.of("address", item));
         minimal.forEach((tool, args) -> {
             Map<String, Object> with = new LinkedHashMap<>(args);
             with.put(MARKER, MARKER);
@@ -215,14 +212,11 @@ class MarkerProbeIT {
         // The arguments of the transitions and the graph verbs.
         staleAbsent(soft, "update with a marked token", mcpRaw("update",
             Map.of("address", item, "conflict_token", MARKER, "fields", Map.of("title", "y"))));
-        absent(soft, "withdraw into a marked status", mcpRaw("withdraw",
-            Map.of("address", item, "conflict_token", tokenOf(item), "status", MARKER)));
-        absent(soft, "withdraw into an open status", mcpRaw("withdraw",
-            Map.of("address", item, "conflict_token", tokenOf(item), "status", OPEN)));
-        absent(soft, "claim with a marked duration", mcpRaw("claim",
-            Map.of("address", item, "duration_seconds", MARKER)));
-        absent(soft, "release with a marked receipt", mcpRaw("release",
-            Map.of("address", item, "receipt", MARKER)));
+        absent(soft, "update into a marked status", mcpRaw("update",
+            Map.of("address", item, "conflict_token", tokenOf(item),
+                "fields", Map.of("status", MARKER))));
+        absent(soft, "attach a marked tag", mcpRaw("tag_attach",
+            Map.of("address", item, "tag", MARKER)));
         absent(soft, "relate to a marked item", mcpRaw("relate",
             Map.of("address", item, "conflict_token", tokenOf(item),
                 "to_item", MARKER, "type", RELATION)));
@@ -259,9 +253,8 @@ class MarkerProbeIT {
         absent(soft, "a status", post(itemPath, Map.of("title", "x", "status", MARKER)));
         absent(soft, "a collection verb", post(itemPath + ":" + MARKER, Map.of()));
         absent(soft, "an item verb", post(itemPath + "/1:" + MARKER, Map.of()));
-        absent(soft, "a body argument", post(itemPath + "/1:withdraw", Map.of(MARKER, MARKER)));
-        absent(soft, "a lease", post(itemPath + "/1:claim", Map.of("duration_seconds", MARKER)));
-        absent(soft, "a receipt", post(itemPath + "/1:release", Map.of("receipt", MARKER)));
+        absent(soft, "a body argument", post(itemPath + "/1:tag_attach", Map.of(MARKER, MARKER)));
+        absent(soft, "a tag", post(itemPath + "/1:tag_attach", Map.of("tag", MARKER)));
         absent(soft, "an edge", post(itemPath + "/1:relate", Map.of("to_item", MARKER,
             "type", MARKER)));
         staleAbsent(soft, "a stale token", given().contentType(ContentType.JSON)

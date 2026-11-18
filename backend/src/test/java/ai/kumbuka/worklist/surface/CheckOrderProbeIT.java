@@ -133,33 +133,31 @@ class CheckOrderProbeIT {
     }
 
     /**
-     * The same order holds for the verbs SPRINT_171.2 built.
+     * The same order holds for the item verbs that take a body of their own.
      *
-     * <p>Worth its own case: the six that arrived with that sprint —
-     * {@code claim}, {@code release}, {@code claim_next}, {@code relate},
-     * {@code unrelate}, {@code validate} — used to answer 501 / VERB_UNBUILT.
-     * They now act, and the order they are checked in must be the same as
-     * every other carried verb's. A stranger addressing any of them answers
-     * SCOPE_UNRESOLVED and learns nothing else; a member gets a refusal about
-     * the address or the body, which is about the request they made rather
-     * than about the deployment they queried.
+     * <p>Worth its own case: {@code relate}, {@code tag_attach} and
+     * {@code validate} are checked in the same order as every other carried
+     * verb. A stranger addressing any of them answers SCOPE_UNRESOLVED and
+     * learns nothing else; a member gets a refusal about the address or the
+     * body, which is about the request they made rather than about the
+     * deployment they queried.
      *
-     * <p>The counter-probe is {@code claim} against an item that does not
+     * <p>The counter-probe is {@code tag_attach} against an item that does not
      * exist: the check order runs address resolution (stage 4) before body
      * validation, so the answer is ITEM_UNKNOWN rather than about the missing
-     * lease body. That is the answer a stranger must NOT see.
+     * tag. That is the answer a stranger must NOT see.
      */
     @Test
-    void the_verbs_built_by_sprint_171_2_leak_nothing_to_a_stranger() {
+    void the_verbs_with_a_body_of_their_own_leak_nothing_to_a_stranger() {
         SurfaceFixture.asStranger(identity);
         given()
-            .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":claim")
+            .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":tag_attach")
             .then()
             .statusCode(404)
             .body("reason", is("NOT_FOUND"));
 
         given()
-            .when().post(SurfaceFixture.collection(Selector.ITEM) + ":claim_next")
+            .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":relate")
             .then()
             .statusCode(404)
             .body("reason", is("NOT_FOUND"));
@@ -172,7 +170,7 @@ class CheckOrderProbeIT {
 
         SurfaceFixture.asMember(identity);
         given()
-            .when().post(SurfaceFixture.item(Selector.ITEM, 999_999) + ":claim")
+            .when().post(SurfaceFixture.item(Selector.ITEM, 999_999) + ":tag_attach")
             .then()
             .statusCode(404)
             .body("reason", is("NOT_FOUND"));

@@ -146,10 +146,10 @@ class SurfaceHeaderIT {
         headerInvalid(wrong().get("/api/probe-scope-nowhere/" + Selector.ITEM + "/1"),
             "before the scope: a scope the caller does not see");
         headerInvalid(wrong().contentType(ContentType.JSON).body("[not json")
-                .post(item + ":claim"),
+                .post(item + ":tag_attach"),
             "before the body: no JSON object");
         headerInvalid(wrong().contentType(ContentType.JSON).body(Map.of("invented", 1))
-                .post(item + ":claim"),
+                .post(item + ":tag_attach"),
             "before the body: an argument the call does not declare");
 
         SurfaceFixture.asStranger(identity);

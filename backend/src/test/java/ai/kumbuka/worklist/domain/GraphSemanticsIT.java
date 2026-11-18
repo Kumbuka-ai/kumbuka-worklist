@@ -14,7 +14,6 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -23,26 +22,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
- * The edge behaviour of the six verbs SPRINT_171.2 built.
+ * The edge behaviour of the graph verbs and of {@code validate}.
  *
- * <p>The happy paths sit in {@link ClaimExclusivityIT} (claim, release) and in
- * the two surface probes ({@code SurfaceCoverageIT} over REST,
- * {@code McpProjectionIT} over MCP). This class walks the OTHER branches — the
- * two different refusals {@code claim_next} tells apart, the three refusals
- * {@code relate} carries, {@code unrelate}'s missing-edge answer and the two
- * shapes of {@code validate}'s report (an empty findings list AND a blocking
- * cycle it walked). Together they close the coverage the ratified concept
- * fixes about the six.
+ * <p>The happy paths sit in the two surface probes ({@code SurfaceCoverageIT}
+ * over REST, {@code McpProjectionIT} over MCP). This class walks the OTHER
+ * branches — the three refusals {@code relate} carries, {@code unrelate}'s
+ * missing-edge answer and the two shapes of {@code validate}'s report (an
+ * empty findings list AND a blocking cycle it walked).
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
-class ClaimAndGraphSemanticsIT {
+class GraphSemanticsIT {
 
     private UUID scope;
     private Long openStatus;
 
     @Inject ItemService items;
-    @Inject ClaimService claims;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
 
@@ -52,51 +47,6 @@ class ClaimAndGraphSemanticsIT {
         selectors.open(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
             true, false, false, false).pk;
-    }
-
-    // ====================================================================
-    // claim_next: the two refusals it tells apart
-    // ====================================================================
-
-    /**
-     * A scope with nothing to draw answers {@code ITEM_UNKNOWN}, not
-     * {@code DRAW_EMPTY}. The remedy is different: add work, not wait.
-     */
-    @Test
-    void claim_next_on_an_empty_scope_answers_item_unknown() {
-        WorklistException refusal = refusalFrom(() ->
-            claims.claimNext(scope, "drawer", Duration.ofMinutes(30)));
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ITEM_UNKNOWN);
-    }
-
-    /**
-     * A scope whose only item is already held answers {@code DRAW_EMPTY}. The
-     * caller reads that as "wait", never as "there is nothing here at all".
-     */
-    @Test
-    void claim_next_when_every_item_is_held_answers_draw_empty() {
-        UUID item = createItem("held item");
-        claims.claim(scope, item, "first-holder", Duration.ofMinutes(30));
-
-        WorklistException refusal = refusalFrom(() ->
-            claims.claimNext(scope, "second-drawer", Duration.ofMinutes(30)));
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.DRAW_EMPTY);
-    }
-
-    /**
-     * With one unclaimed item, the draw takes it and reports its address.
-     */
-    @Test
-    void claim_next_takes_the_one_addressable_item_that_is_free() {
-        UUID item = createItem("free item");
-
-        Map<String, Object> drawn = claims.claimNext(scope, "drawer",
-            Duration.ofMinutes(30)).answer();
-
-        assertThat(drawn.get(Field.ID.canonicalName())).isEqualTo(item);
-        assertThat(drawn.get(ClaimService.F_RECEIPT))
-            .as("a receipt travels back with the answer, the same as claim mints")
-            .isNotNull();
     }
 
     // ====================================================================
