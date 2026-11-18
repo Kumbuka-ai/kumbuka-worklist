@@ -154,31 +154,7 @@ public class OpenCallService extends PlanningService {
                 setting.map(s -> within(held.size() + 1, s.maxMembershipsPerIteration))
                     .orElse(false)));
         }
-        Map<Long, ItemStatus> statuses = new HashMap<>();
-        Map<Long, Optional<Milestone>> milestones = new HashMap<>();
-        return number -> {
-            Item item = items.byAddress(scopeId, number).orElseThrow(() -> new WorklistException(
-                WorklistException.Reason.ITEM_UNKNOWN, List.of()));
-            ItemStatus status = statuses.computeIfAbsent(item.statusPk,
-                pk -> vocabulary.requireStatus(scopeId, pk));
-            Optional<Milestone> milestone = item.milestoneNumber == null ? Optional.empty()
-                : milestones.computeIfAbsent(item.milestoneNumber,
-                    n -> planning.milestoneByNumber(scopeId, n));
-            List<Call> calls = new ArrayList<>(List.of(
-                at(Verb.READ, Selector.ITEM, number), at(Verb.UPDATE, Selector.ITEM, number),
-                at(Verb.RELATE, Selector.ITEM, number), at(Verb.UNRELATE, Selector.ITEM, number),
-                at(Verb.TAG_ATTACH, Selector.ITEM, number),
-                at(Verb.TAG_DETACH, Selector.ITEM, number)));
-            if (MembershipService.plannable(status, milestone)) {
-                for (Room room : rooms) {
-                    if (room.admits() && !room.members().contains(number)) {
-                        calls.add(new Call(Verb.PLAN, Selector.ITERATION, room.iteration(),
-                            number));
-                    }
-                }
-            }
-            return new Open(status.name, List.copyOf(calls));
-        };
+        return new Items(scopeId, List.copyOf(rooms))::open;
     }
 
     /** The calls open on one iteration. */
@@ -256,5 +232,52 @@ public class OpenCallService extends PlanningService {
      * whether one more fits.
      */
     private record Room(long iteration, Set<Long> members, boolean admits) {
+    }
+
+    /**
+     * The items of one scope against its open iterations, with each status and
+     * milestone read once however many items name it.
+     */
+    private final class Items {
+
+        private final UUID scopeId;
+        private final List<Room> rooms;
+        private final Map<Long, ItemStatus> statuses = new HashMap<>();
+        private final Map<Long, Optional<Milestone>> milestones = new HashMap<>();
+
+        Items(UUID scopeId, List<Room> rooms) {
+            this.scopeId = scopeId;
+            this.rooms = rooms;
+        }
+
+        /** The calls open on the item of this number. */
+        Open open(long number) {
+            Item item = items.byAddress(scopeId, number).orElseThrow(() -> new WorklistException(
+                WorklistException.Reason.ITEM_UNKNOWN, List.of()));
+            ItemStatus status = statuses.computeIfAbsent(item.statusPk,
+                pk -> vocabulary.requireStatus(scopeId, pk));
+            List<Call> calls = new ArrayList<>(List.of(
+                at(Verb.READ, Selector.ITEM, number), at(Verb.UPDATE, Selector.ITEM, number),
+                at(Verb.RELATE, Selector.ITEM, number), at(Verb.UNRELATE, Selector.ITEM, number),
+                at(Verb.TAG_ATTACH, Selector.ITEM, number),
+                at(Verb.TAG_DETACH, Selector.ITEM, number)));
+            if (MembershipService.plannable(status, milestoneOf(item))) {
+                rooms.stream()
+                    .filter(room -> room.admits() && !room.members().contains(number))
+                    .forEach(room -> calls.add(new Call(Verb.PLAN, Selector.ITERATION,
+                        room.iteration(), number)));
+            }
+            return new Open(status.name, List.copyOf(calls));
+        }
+
+        /** The item's milestone; absent where it carries none or names none of the scope. */
+        private @Nullable Milestone milestoneOf(Item item) {
+            Long number = item.milestoneNumber;
+            if (number == null) {
+                return null;
+            }
+            return milestones.computeIfAbsent(number,
+                n -> planning.milestoneByNumber(scopeId, n)).orElse(null);
+        }
     }
 }

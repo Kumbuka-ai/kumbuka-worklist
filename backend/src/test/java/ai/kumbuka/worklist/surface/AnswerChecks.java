@@ -163,32 +163,29 @@ public final class AnswerChecks {
         List<String> offences = new ArrayList<>();
         List<String> named = new ArrayList<>();
         for (Object step : steps) {
-            if (!(step instanceof Map<?, ?> map) || !map.keySet().equals(STEP)) {
-                offences.add(where + ": a step is no {call, does}: " + step);
-                continue;
-            }
-            if (!(map.get("does") instanceof String does) || does.isBlank()) {
+            stepOffence(where, step).ifPresentOrElse(offences::add,
+                () -> named.add(String.valueOf(((Map<?, ?>) step).get("call"))));
+            if (step instanceof Map<?, ?> map && map.keySet().equals(STEP)
+                    && !(map.get("does") instanceof String does && !does.isBlank())) {
                 offences.add(where + ": " + map.get("call") + " says nothing it does");
             }
-            named.add(String.valueOf(map.get("call")));
         }
         Set<String> once = new TreeSet<>();
-        for (String call : named) {
-            if (!once.add(call)) {
-                offences.add(where + ": names " + call + " twice");
-            }
-        }
-        for (String call : new TreeSet<>(expected)) {
-            if (!named.contains(call)) {
-                offences.add(where + ": lacks " + call);
-            }
-        }
-        for (String call : new TreeSet<>(named)) {
-            if (!expected.contains(call)) {
-                offences.add(where + ": names " + call + " beyond the open calls");
-            }
-        }
+        named.stream().filter(call -> !once.add(call))
+            .forEach(call -> offences.add(where + ": names " + call + " twice"));
+        new TreeSet<>(expected).stream().filter(call -> !named.contains(call))
+            .forEach(call -> offences.add(where + ": lacks " + call));
+        new TreeSet<>(named).stream().filter(call -> !expected.contains(call))
+            .forEach(call -> offences.add(where + ": names " + call + " beyond the open calls"));
         return offences;
+    }
+
+    /** A step that is no {@code {call, does}}, as an offence; empty where it is one. */
+    private static java.util.Optional<String> stepOffence(String where, Object step) {
+        if (step instanceof Map<?, ?> map && map.keySet().equals(STEP)) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(where + ": a step is no {call, does}: " + step);
     }
 
     private static List<String> stringsOf(List<?> list) {

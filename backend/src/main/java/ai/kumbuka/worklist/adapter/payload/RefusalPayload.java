@@ -19,7 +19,9 @@ import ai.kumbuka.worklist.surface.VerbSurface;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The one refusal envelope, from DEC-0042: {@code reason}, {@code message},
@@ -129,11 +131,12 @@ public record RefusalPayload(
 
     /** Whether a domain refusal names the state of its object and the calls open on it. */
     public static boolean isByState(WorklistException e) {
-        return switch (RefusalCode.of(e.reason())) {
-            case TRANSITION_REFUSED, ITERATION_INCOMPLETE -> true;
-            default -> false;
-        };
+        return BY_STATE.contains(RefusalCode.of(e.reason()));
     }
+
+    /** The codes of a refusal by state, which name the state and the open calls (C8.7). */
+    private static final Set<RefusalCode> BY_STATE =
+        EnumSet.of(RefusalCode.TRANSITION_REFUSED, RefusalCode.ITERATION_INCOMPLETE);
 
     /**
      * A surface refusal, in the same envelope.

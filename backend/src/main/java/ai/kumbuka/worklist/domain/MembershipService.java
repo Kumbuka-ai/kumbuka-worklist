@@ -269,8 +269,8 @@ public class MembershipService extends PlanningService {
                 List.of(ADDRESS));
         }
         ItemStatus status = vocabulary.requireStatus(scopeId, item.statusPk);
-        Optional<Milestone> milestone = item.milestoneNumber == null ? Optional.empty()
-            : planning.milestoneByNumber(scopeId, item.milestoneNumber);
+        Milestone milestone = item.milestoneNumber == null ? null
+            : planning.milestoneByNumber(scopeId, item.milestoneNumber).orElse(null);
         if (!plannable(status, milestone)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
@@ -289,10 +289,11 @@ public class MembershipService extends PlanningService {
      * for the item's state.
      *
      * @param status    the item's status
-     * @param milestone the item's milestone; empty where it carries none
+     * @param milestone the item's milestone; absent where it carries none or
+     *                  names none of the scope
      */
-    static boolean plannable(ItemStatus status, Optional<Milestone> milestone) {
-        return status.actionable && milestone.map(Milestone::onTheProductPath).orElse(false);
+    static boolean plannable(ItemStatus status, @Nullable Milestone milestone) {
+        return status.actionable && milestone != null && milestone.onTheProductPath();
     }
 
     /**
