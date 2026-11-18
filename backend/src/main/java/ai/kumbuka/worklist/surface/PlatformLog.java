@@ -7,7 +7,6 @@
  */
 package ai.kumbuka.worklist.surface;
 
-import ai.kumbuka.worklist.domain.Claim;
 import ai.kumbuka.worklist.domain.Item;
 import ai.kumbuka.worklist.domain.ItemTag;
 import ai.kumbuka.worklist.domain.Iteration;
@@ -29,7 +28,7 @@ import java.util.UUID;
  * method here, with a constant message, and each parameter is a type the
  * service builds from what it holds itself, never from a {@code String}, a
  * number or a uuid a caller could have chosen. So a value a caller wrote --
- * a title, a scope name, a selector, a workstream token, a receipt -- cannot
+ * a title, a scope name, a selector, a workstream token -- cannot
  * reach a line: there is no parameter that would take it.
  *
  * <p>The domain, the platform and the repository log nothing. A write's lines
@@ -70,10 +69,6 @@ public final class PlatformLog {
         LOG.infof("update %s in scope %s", entry, scope);
     }
 
-    static void withdrawn(TechnicalAddress entry, ScopeId scope) {
-        LOG.infof("withdraw %s in scope %s", entry, scope);
-    }
-
     static void closed(TechnicalAddress entry, ScopeId scope) {
         LOG.infof("close %s in scope %s", entry, scope);
     }
@@ -88,18 +83,6 @@ public final class PlatformLog {
 
     static void unplanned(TechnicalAddress entry, ScopeId scope) {
         LOG.infof("unplan %s in scope %s", entry, scope);
-    }
-
-    static void claimed(TechnicalAddress entry, ScopeId scope) {
-        LOG.infof("claim on %s in scope %s", entry, scope);
-    }
-
-    static void released(TechnicalAddress entry, ScopeId scope) {
-        LOG.infof("release on %s in scope %s", entry, scope);
-    }
-
-    static void drawn(TechnicalAddress entry, ScopeId scope) {
-        LOG.infof("claim_next %s in scope %s", entry, scope);
     }
 
     static void related(TechnicalAddress entry, TechnicalAddress target, ScopeId scope) {
@@ -134,10 +117,6 @@ public final class PlatformLog {
 
     static void itemUnchanged(ScopeId scope) {
         LOG.debugf("update of an item in scope %s changed nothing and wrote nothing", scope);
-    }
-
-    static void itemWithdrawn(ScopeId scope) {
-        LOG.debugf("item withdrawn in scope %s", scope);
     }
 
     static void relationAsserted(TechnicalAddress entry, TechnicalAddress target,
@@ -207,18 +186,6 @@ public final class PlatformLog {
     static void membershipUnchanged(ScopeId scope) {
         LOG.debugf("update of a membership in scope %s changed nothing and wrote nothing",
             scope);
-    }
-
-    static void claimTaken(TechnicalAddress entry, ScopeId scope) {
-        LOG.debugf("claim taken on item %s in scope %s", entry, scope);
-    }
-
-    static void claimReleased(TechnicalAddress entry, ScopeId scope) {
-        LOG.debugf("claim released on item %s in scope %s", entry, scope);
-    }
-
-    static void claimDrawn(TechnicalAddress entry, ScopeId scope) {
-        LOG.debugf("claim drawn and taken on item %s in scope %s", entry, scope);
     }
 
     static void tagAttachedTo(TechnicalAddress entry, ScopeId scope) {
@@ -380,11 +347,6 @@ public final class PlatformLog {
 
         static TechnicalAddress of(Milestone milestone) {
             return new TechnicalAddress(String.valueOf(milestone.number));
-        }
-
-        /** A lease, by the item it is on. */
-        static TechnicalAddress of(Claim lease) {
-            return new TechnicalAddress(String.valueOf(lease.itemNumber));
         }
 
         /** A tag assignment, by the item it is on; the tag itself is the platform's. */

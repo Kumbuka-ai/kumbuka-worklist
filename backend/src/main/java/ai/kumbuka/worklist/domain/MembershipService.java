@@ -268,27 +268,31 @@ public class MembershipService extends PlanningService {
                 WorklistException.Reason.ITEM_UNKNOWN,
                 List.of(ADDRESS));
         }
-
         ItemStatus status = vocabulary.requireStatus(scopeId, item.statusPk);
-        if (!status.actionable) {
-            throw new WorklistException(
-                WorklistException.Reason.ITEM_UNPLANNABLE,
-                List.of(ADDRESS));
-        }
-
-        if (item.milestoneNumber == null) {
-            throw new WorklistException(
-                WorklistException.Reason.ITEM_UNPLANNABLE,
-                List.of(ADDRESS));
-        }
-
-        Milestone milestone = planning.milestoneByNumber(scopeId, item.milestoneNumber).orElse(null);
-        if (milestone == null || !milestone.onTheProductPath()) {
+        Optional<Milestone> milestone = item.milestoneNumber == null ? Optional.empty()
+            : planning.milestoneByNumber(scopeId, item.milestoneNumber);
+        if (!plannable(status, milestone)) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
                 List.of(ADDRESS));
         }
         return item;
+    }
+
+    /**
+     * Whether an item may enter an iteration at all: an actionable status and
+     * a milestone on the product path.
+     *
+     * <p>One decision for two readers: {@link #plan} refuses where it says
+     * no, and the open calls of an item name {@code plan} only where it says
+     * yes ({@link OpenCallService}), so a named {@code plan} is never refused
+     * for the item's state.
+     *
+     * @param status    the item's status
+     * @param milestone the item's milestone; empty where it carries none
+     */
+    static boolean plannable(ItemStatus status, Optional<Milestone> milestone) {
+        return status.actionable && milestone.map(Milestone::onTheProductPath).orElse(false);
     }
 
     /**
@@ -329,8 +333,13 @@ public class MembershipService extends PlanningService {
         }
     }
 
+    /**
+     * The iteration a read names, open or closed: a membership of a closed
+     * iteration stays readable, which is what makes the closed iteration a
+     * record, and {@code read} is the call it keeps open.
+     */
     private Iteration requireIteration(UUID scopeId, UUID iterationId) {
-        return requireOpen(scopeId, planning.iterationById(iterationId).orElse(null));
+        return requireIn(scopeId, planning.iterationById(iterationId).orElse(null));
     }
 
     /**
@@ -344,18 +353,31 @@ public class MembershipService extends PlanningService {
     }
 
     /**
+     * The iteration a write names, refused where it is closed: a closed
+     * iteration takes no plan, no unplan and no change of a membership, a
+     * transition its state refuses.
+     *
      * @param iteration the iteration the id named; absent where it names none,
      *                  which is refused like an iteration of another scope
      */
     private static Iteration requireOpen(UUID scopeId, @Nullable Iteration iteration) {
+        Iteration found = requireIn(scopeId, iteration);
+        if (!found.open()) {
+            throw new WorklistException(
+                WorklistException.Reason.TRANSITION_REFUSED,
+                List.of(ADDRESS));
+        }
+        return found;
+    }
+
+    /**
+     * @param iteration the iteration the id named; absent where it names none,
+     *                  which is refused like an iteration of another scope
+     */
+    private static Iteration requireIn(UUID scopeId, @Nullable Iteration iteration) {
         if (iteration == null || !iteration.scopeId.equals(scopeId)) {
             throw new WorklistException(
                 WorklistException.Reason.ITERATION_UNKNOWN,
-                List.of(ADDRESS));
-        }
-        if (!iteration.open()) {
-            throw new WorklistException(
-                WorklistException.Reason.ITERATION_CLOSED,
                 List.of(ADDRESS));
         }
         return iteration;

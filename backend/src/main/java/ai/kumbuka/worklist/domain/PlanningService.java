@@ -245,12 +245,21 @@ public abstract class PlanningService {
      * they may change.
      */
     protected static void refuseBeyond(int reached, int limit) {
-        if (reached <= limit) {
+        if (within(reached, limit)) {
             return;
         }
         throw new WorklistException(
             WorklistException.Reason.CARDINALITY_EXCEEDED,
             List.of());
+    }
+
+    /**
+     * Whether a count the write would reach stays within the scope's limit:
+     * the decision {@link #refuseBeyond} refuses on, and the one the open
+     * calls of an iteration name {@code plan} on.
+     */
+    protected static boolean within(int reached, int limit) {
+        return reached <= limit;
     }
 
     /** The warnings of one write, as the answer carries them. Empty is the normal case. */

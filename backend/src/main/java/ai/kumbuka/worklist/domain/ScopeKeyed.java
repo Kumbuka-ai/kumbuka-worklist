@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import ai.kumbuka.worklist.tenancy.StringUuidConverter;
@@ -12,7 +19,7 @@ import java.util.UUID;
 /**
  * The tenancy pair for a row whose identity starts with its scope.
  *
- * <p>A link between objects — a claim, a relation, a membership — is
+ * <p>A link between objects — a relation, a membership, a tag assignment — is
  * identified by the numbers of the objects it joins, and a number names an
  * object only within its scope (ADR-0042). So {@code scope_id} is part of the
  * key here, where {@link TenantScoped} carries it as an ordinary column. The

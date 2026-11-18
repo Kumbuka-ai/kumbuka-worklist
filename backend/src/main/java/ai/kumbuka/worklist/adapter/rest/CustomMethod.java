@@ -26,13 +26,13 @@ import java.util.Optional;
  * part, which is what makes it decidable. This is a consequence of the address
  * space, not a style choice, and it is why the table below exists at all.
  *
- * <h2>Why it is a table rather than seventeen annotations</h2>
+ * <h2>Why it is a table rather than an annotation per verb</h2>
  *
  * Measured against Quarkus REST 3.33.2 on 2026-09-01 in the sibling service: a
  * path template takes the whole segment it appears in. {@code @Path("{id}:close")}
  * registers as {@code {id}} and matches {@code 27:close} with the verb inside
  * the variable, and a narrowing regex on the template is ignored. So a route per
- * verb is not available from the framework, and the seventeen would silently
+ * verb is not available from the framework, and the routes would silently
  * collapse into one — which is the failure mode where every transition answers
  * whichever handler happened to sort first.
  *
@@ -46,25 +46,29 @@ import java.util.Optional;
  *
  * {@link Kind#CARRIED} acts. {@link Kind#UNCARRIED} is a category error: the
  * capability declaration does not give the verb to this scheme, and a caller
- * that hears it can stop looking. {@link Kind#UNBUILT} is neither: the
- * declaration gives the worklist scheme the claim family, the graph verbs and
- * {@code validate}, and this service has built none of them. Answering those as
- * uncarried would tell a caller the act does not exist here, which is false and
- * is exactly the kind of false that gets built around.
+ * that hears it can stop looking. {@link Kind#UNBUILT} is neither: a verb the
+ * declaration gives the worklist scheme and this service has yet to build;
+ * none is today. Answering such a verb as uncarried would tell a caller the
+ * act does not exist here, which is false and is exactly the kind of false
+ * that gets built around.
+ *
+ * <h2>The verbs of other services, refused by name</h2>
+ *
+ * {@code send}, {@code append}, {@code abandon}, {@code block}, {@code resume},
+ * {@code consume} and {@code digest} are {@link Kind#UNCARRIED}: they act on
+ * nothing here, and each is routed to the verb surface's refusal, which checks
+ * the address and the scope's visibility first and then answers
+ * {@code VERB_UNCARRIED} naming the verb. They are the platform's verbs of
+ * dispatch and memory, kept in this table so that a caller who sends one here
+ * hears that it lies elsewhere rather than a 405 about a spelling.
  */
 public enum CustomMethod {
 
     // ---- Carried, at item depth -----------------------------------------
-
-    /**
-     * The intake gate. Reachable, and it refuses — what it used to allocate was
-     * the address, which is now allocated with the object. The reasoning is on
-     * {@code ItemService.accept} and the decision it waits for is not a build's.
-     */
-    ACCEPT("accept", Depth.ITEM, Kind.CARRIED),
-
-    /** Takes an item back into a status its scope declared as closed. */
-    WITHDRAW("withdraw", Depth.ITEM, Kind.CARRIED),
+    //
+    // accept, withdraw, claim, release and claim_next left the surface with
+    // its target cut: a colon naming one of them names no verb of its depth,
+    // and is answered as any such spelling is.
 
     /** Terminal on an iteration or a milestone, and never on an item. */
     CLOSE("close", Depth.ITEM, Kind.CARRIED),
@@ -87,19 +91,16 @@ public enum CustomMethod {
     // Each answers by acting. The graph verbs sit at item depth with the
     // source as the address; their ratified form is a sub-collection, and this
     // surface still has none, so the form here is provisional and the
-    // specification says so. The claim family is at the addresses the verb
-    // catalogue names.
+    // specification says so.
 
-    CLAIM("claim", Depth.ITEM, Kind.CARRIED),
-    RELEASE("release", Depth.ITEM, Kind.CARRIED),
     RELATE("relate", Depth.ITEM, Kind.CARRIED),
     UNRELATE("unrelate", Depth.ITEM, Kind.CARRIED),
 
     // ---- Carried, at item depth: the tags --------------------------------
     //
-    // A write on the item that presents no conflict token, the same class as
-    // claim and release, so the same form: a custom method on the item URI.
-    // Only the item view answers to it; the other three refuse by name.
+    // A write on the item that presents no conflict token: a custom method on
+    // the item URI. Only the item view answers to it; the other three refuse
+    // by name.
 
     TAG_ATTACH("tag_attach", Depth.ITEM, Kind.CARRIED),
     TAG_DETACH("tag_detach", Depth.ITEM, Kind.CARRIED),
@@ -115,7 +116,6 @@ public enum CustomMethod {
     // collection form.
 
     VALIDATE("validate", Depth.COLLECTION, Kind.CARRIED),
-    CLAIM_NEXT("claim_next", Depth.COLLECTION, Kind.CARRIED),
 
     // ---- Not carried, and answered by name rather than left absent ------
 

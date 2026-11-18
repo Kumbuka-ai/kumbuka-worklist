@@ -150,6 +150,14 @@ public class Milestone extends AggregateRoot {
         return ON_THE_PRODUCT_PATH.contains(kind);
     }
 
+    /**
+     * Whether this milestone still takes a write: planned or active. A closed
+     * one is a record; read is the one call it keeps open.
+     */
+    public boolean open() {
+        return !CLOSED.equals(status);
+    }
+
     @Override
     protected String subject() {
         return Addressed.MILESTONE.description();

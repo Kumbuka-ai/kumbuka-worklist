@@ -27,6 +27,12 @@ import java.util.Map;
  * @param conflictToken absent except for a stale token
  * @param service absent except for a stale token: the service that holds the object
  * @param reference absent except for an unexpected failure
+ * @param state absent except for a refusal by state: the object's state as its
+ *              read answers it (C8.7)
+ * @param next absent except for a refusal by state: the calls open on the
+ *             object, as an answer names them (C6.1)
+ * @param children absent except where the refusal concerns objects under the
+ *                 addressed one: their complete addresses (C8.7)
  */
 public record RefusalDataPayload(
     @JsonProperty("attempted") @Nullable String attempted,
@@ -36,12 +42,16 @@ public record RefusalDataPayload(
     @JsonProperty("accepts") @Nullable List<String> accepts,
     @JsonProperty("conflict_token") @Nullable String conflictToken,
     @JsonProperty("service") @Nullable String service,
-    @JsonProperty("reference") @Nullable String reference) {
+    @JsonProperty("reference") @Nullable String reference,
+    @JsonProperty("state") @Nullable String state,
+    @JsonProperty("next") @Nullable List<NextPayload> next,
+    @JsonProperty("children") @Nullable List<String> children) {
 
     /** Whether there is nothing to act on, so that the refusal carries no {@code data}. */
     @JsonIgnore
     boolean isEmpty() {
         return attempted == null && address == null && fields == null && offenders == null
-            && accepts == null && conflictToken == null && service == null && reference == null;
+            && accepts == null && conflictToken == null && service == null && reference == null
+            && state == null && next == null && children == null;
     }
 }

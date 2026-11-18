@@ -102,10 +102,19 @@ public enum RefusalCode {
 
     /** The caller's copy is stale; it travels as If-Match, so 412. */
     CONFLICT(412),
-    IDENTIFIER_UNDECIDED(501),
     MARK_REGRESSION(409),
     MEMBERSHIP_PRESENT(409),
-    ITERATION_CLOSED(409),
+    /**
+     * The object's state keeps the call closed, and the way out is a call on
+     * the object itself: {@code data} names the state and the calls open on
+     * it (C8.7, DEC-0043).
+     */
+    TRANSITION_REFUSED(409),
+    /**
+     * An iteration closed over memberships neither done nor dropped: its own
+     * code, with the memberships under {@code data.children} beside the state
+     * and the open calls.
+     */
     ITERATION_INCOMPLETE(409),
     ITERATION_ABSENT(404),
     ITEM_UNPLANNABLE(409),
@@ -113,10 +122,6 @@ public enum RefusalCode {
     SETTING_PRESENT(409),
     IDEMPOTENCY_KEY_REUSED(409),
     CARDINALITY_EXCEEDED(409),
-    CLAIM_HELD(409),
-    CLAIM_ABSENT(409),
-    CLAIM_RECEIPT_UNKNOWN(422),
-    DRAW_EMPTY(409),
     WORKSTREAM_WITHDRAWN(409),
     WORKSTREAM_HAS_REFERENCES(409),
     WORKSTREAM_DEFAULT_LOCKED(409),
@@ -172,10 +177,9 @@ public enum RefusalCode {
             case ARGUMENT_UNKNOWN -> ARGUMENT_UNKNOWN;
             case ARGUMENT_INVALID -> ARGUMENT_INVALID;
             case PREDICATE_UNKNOWN -> PREDICATE_UNKNOWN;
-            case IDENTIFIER_UNDECIDED -> IDENTIFIER_UNDECIDED;
             case MARK_REGRESSION -> MARK_REGRESSION;
             case MEMBERSHIP_PRESENT -> MEMBERSHIP_PRESENT;
-            case ITERATION_CLOSED -> ITERATION_CLOSED;
+            case TRANSITION_REFUSED -> TRANSITION_REFUSED;
             case ITERATION_INCOMPLETE -> ITERATION_INCOMPLETE;
             case ITERATION_ABSENT -> ITERATION_ABSENT;
             case ITEM_UNPLANNABLE -> ITEM_UNPLANNABLE;
@@ -183,10 +187,6 @@ public enum RefusalCode {
             case SETTING_PRESENT -> SETTING_PRESENT;
             case IDEMPOTENCY_KEY_REUSED -> IDEMPOTENCY_KEY_REUSED;
             case CARDINALITY_EXCEEDED -> CARDINALITY_EXCEEDED;
-            case CLAIM_HELD -> CLAIM_HELD;
-            case CLAIM_ABSENT -> CLAIM_ABSENT;
-            case CLAIM_RECEIPT_UNKNOWN -> CLAIM_RECEIPT_UNKNOWN;
-            case DRAW_EMPTY -> DRAW_EMPTY;
             case WORKSTREAM_WITHDRAWN -> WORKSTREAM_WITHDRAWN;
             case WORKSTREAM_HAS_REFERENCES -> WORKSTREAM_HAS_REFERENCES;
             case WORKSTREAM_DEFAULT_LOCKED -> WORKSTREAM_DEFAULT_LOCKED;

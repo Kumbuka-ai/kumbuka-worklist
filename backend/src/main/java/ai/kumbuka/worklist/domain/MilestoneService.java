@@ -77,6 +77,9 @@ public class MilestoneService extends PlanningService {
     /** Matching {@code ck_milestone_mission_length} from V7. */
     static final int MISSION_MAX = 1500;
 
+    /** The argument a refusal about the addressed milestone names (DEC-0043 R18). */
+    private static final String ADDRESS = "address";
+
     /**
      * The number spaces the views allocate from are this registry's, one per
      * view and scope (V24), and the milestone view's is the one this allocator
@@ -165,6 +168,7 @@ public class MilestoneService extends PlanningService {
             Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.MILESTONE, arguments);
         Milestone milestone = requireLocked(scopeId, milestoneId);
+        refuseClosed(milestone);
         milestone.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
         Map<String, Object> current = project(milestone, List.of());
@@ -319,6 +323,21 @@ public class MilestoneService extends PlanningService {
         }
         milestone.status = status;
         return true;
+    }
+
+    /**
+     * A closed milestone takes no further write: an update, a reopening
+     * through its status, and a second close are transitions its state
+     * refuses, and {@code read} is the call it keeps open (DEC-0043). The
+     * same decision names the open calls ({@link Milestone#open}).
+     */
+    private static void refuseClosed(Milestone milestone) {
+        if (milestone.open()) {
+            return;
+        }
+        throw new WorklistException(
+            WorklistException.Reason.TRANSITION_REFUSED,
+            List.of(ADDRESS));
     }
 
     /**
