@@ -305,10 +305,10 @@ public class VerbSurface {
         PlatformLog.queried(in.scope(), PlatformLog.Count.of(answered.objects()));
         // The open calls of an item depend on the scope's open iterations,
         // which are read once for the page rather than once per entry.
-        LongFunction<OpenCallService.Open> items = Selector.ITEM.equals(in.view())
+        LongFunction<OpenCallService.Open> itemCalls = Selector.ITEM.equals(in.view())
             ? openCalls.itemsOf(in.scopeId()) : null;
         return new Listing(answered.objects().stream()
-            .map(row -> opened(in, at(in.view(), row), items)).toList(),
+            .map(row -> opened(in, at(in.view(), row), itemCalls)).toList(),
             answered.next());
     }
 
