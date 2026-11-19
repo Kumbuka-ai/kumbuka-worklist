@@ -128,8 +128,9 @@ class MessageBundleTest {
      * One bundle per kind of text, under the interface and file names of C12.2,
      * the same in every service: what a refusal, a remedy or a tool says is
      * found by the same name wherever it is looked for. A service declares only
-     * the kinds it uses; this one answers no {@code next} and has no
-     * {@code NextStepTexts}, and the day it does, the name is this table's.
+     * the kinds it uses; this one answers {@code next} and carries it as
+     * {@code NextStepTexts} in {@code messages/next.properties}, under this
+     * table's names.
      */
     static final java.util.Map<String, String> KINDS = java.util.Map.of(
         "RefusalMessages", "refusal", "RefusalRemedies", "remedy",
