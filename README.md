@@ -11,8 +11,8 @@ repository root for the full licence text.
 The worklist service.
 
 A scope states what it intends to do, as a list of items that are worked
-through a process. An item is created, characterised, planned, claimed, worked
-and terminated; that sequence takes weeks or months and every step changes the
+through a process. An item is created, characterised, planned, worked and
+terminated; that sequence takes weeks or months and every step changes the
 item.
 
 The service does not know what an item is *about*. In one estate an item is a
@@ -32,15 +32,22 @@ realm, the read of the platform's scope directory, and the operator boundary.
 
 The **domain** stands on that substrate: the declared vocabulary of
 selectors, customer-defined attributes, items with typed relations between
-them, milestones, workstreams and iterations, the claim lease and the number
-space.
+them, milestones, workstreams and iterations, and the number space.
 
 The **caller surface** carries the verbs of the worklist scheme -- `create`,
-`read`, `update`, `query`, `accept`, `withdraw`, `close`, `advance`, `plan`,
-`unplan`, `claim`, `claim_next`, `release`, `relate`, `unrelate` and
-`validate` -- over REST under `/api/{scope}` and over MCP at `/mcp`, both
-through the one verb surface. Beside them stand the service's declaration at
-`GET /api/declaration`, `GET /api/whoami` and the health endpoint.
+`read`, `update`, `query`, `relate`, `unrelate`, `validate`, `tag_attach`,
+`tag_detach`, `close`, `advance`, `plan` and `unplan` -- over REST under
+`/api/{scope}` and over MCP at `/mcp`, both through the one verb surface. An
+item's status moves through `update` alone. Every answer about an object names
+under `next` the calls open to the caller on it in its state, and a refusal by
+state names the state and those calls. Beside them stand the service's
+declaration at `GET /api/declaration`, `GET /api/whoami` and the health
+endpoint.
+
+The lease (`claim`, `claim_next`, `release`) has left the surface: no answer
+carries a holder or a receipt. Its table stays in the schema until the
+release after this one removes it, so that the image before this one still
+runs against this schema.
 
 ## How isolation is built
 

@@ -65,16 +65,7 @@ public interface ArgumentDescriptions {
     String direction();
 
     @Message
-    String status();
-
-    @Message
     String produced();
-
-    @Message
-    String durationSeconds();
-
-    @Message
-    String receipt();
 
     @Message
     String toItem();

@@ -66,7 +66,7 @@ class NoUuidLabelsAtSurfaceIT {
     /**
      * The fields the guard is allowed to see uuids in.
      *
-     * <p>Three by design and one by construction:
+     * <p>Two by design and one by construction:
      * <ul>
      *   <li>{@code id} — the platform's own row identity, still surfaced on
      *       every projection so a caller can hold it beside the address.
@@ -74,14 +74,13 @@ class NoUuidLabelsAtSurfaceIT {
      *       depends on, minted as a uuid because uuids are what the store
      *       generates cheaply. Its shape is not a wire commitment; treating
      *       it as an ordering identifier would defeat the aggregate rule.
-     *   <li>{@code receipt} — the opaque proof a claim mints, checked against
-     *       the row and never rendered.
      * </ul>
      * The strip removes every quoted "field": "&lt;uuid&gt;" of the exempt
-     * names from the body before the shape match runs.
+     * names from the body before the shape match runs. A receipt was exempt
+     * while the lease stood on the surface; no answer carries one now.
      */
     private static final Pattern EXEMPT_FIELD = Pattern.compile(
-        "\"(?:id|conflict_token|receipt|structuredContent)\"\\s*:\\s*"
+        "\"(?:id|conflict_token|structuredContent)\"\\s*:\\s*"
             + "\"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
             + "[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\"");
 
@@ -204,13 +203,13 @@ class NoUuidLabelsAtSurfaceIT {
         validated.then().statusCode(200);
         assertNoUuid("validate", validated);
 
-        // withdraw — the terminal write on the item, the status name at
-        // both ends of the round trip.
-        Response withdrawn = restCall("POST",
-            SurfaceFixture.item(Selector.ITEM, itemNumber) + ":withdraw", itemToken,
+        // update into the closed status — the terminal write on the item,
+        // the status name at both ends of the round trip.
+        Response closed = restCall("PATCH",
+            SurfaceFixture.item(Selector.ITEM, itemNumber), itemToken,
             Map.of("status", closedStatusName));
-        withdrawn.then().statusCode(200);
-        assertNoUuid("withdraw", withdrawn);
+        closed.then().statusCode(200);
+        assertNoUuid("update into the closed status", closed);
     }
 
     /**

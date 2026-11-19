@@ -8,7 +8,6 @@
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.AddressRegistry;
-import ai.kumbuka.worklist.domain.ClaimService;
 import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.IdempotencyService;
 import ai.kumbuka.worklist.domain.ItemService;
@@ -17,6 +16,7 @@ import ai.kumbuka.worklist.domain.MembershipService;
 import ai.kumbuka.worklist.domain.Milestone;
 import ai.kumbuka.worklist.domain.MilestoneService;
 import ai.kumbuka.worklist.domain.MilestoneWrite;
+import ai.kumbuka.worklist.domain.OpenCallService;
 import ai.kumbuka.worklist.domain.Page;
 import ai.kumbuka.worklist.domain.PageRequest;
 import ai.kumbuka.worklist.domain.QuerySpec;
@@ -32,15 +32,16 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jspecify.annotations.Nullable;
 
-import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.LongFunction;
 import java.util.regex.Pattern;
 
 /**
@@ -74,18 +75,26 @@ import java.util.regex.Pattern;
  *
  * <h2>Three classes of verb, answered three ways</h2>
  *
- * <p><strong>Carried</strong> — the sixteen this scheme has and this service
- * has built. They act. The count is the distinct verbs of the catalogue in the
- * carried class, and the authoritative list is transcribed in the specification
- * {@code verb-surface.tsv} the conformance probe reads.
+ * <p><strong>Carried</strong> — the verbs of the target cut this scheme has and
+ * this service has built. They act. The authoritative list is transcribed in
+ * the specification {@code verb-surface.tsv} the conformance probe reads.
+ *
+ * <h2>Every answer names the calls open to its caller</h2>
+ *
+ * <p>An answer about an object carries {@code next}: the calls open on it in
+ * its state, as {@link OpenCallService} decides them from the same predicates
+ * the verbs refuse on, and of those the writing ones only where the platform's
+ * read contract lets the caller write into the scope -- the same answer the
+ * write path is refused on. So a named call is never refused for the object's
+ * state, and a caller who may only read is named the reading calls alone.
  *
  * <p><strong>Uncarried</strong> — {@code send}, {@code append}, {@code digest},
  * {@code abandon}, {@code block}, {@code resume}, {@code consume}. The capability
  * declaration does not give them to this scheme; they answer a typed category
  * error naming the reason, never a not-found and never a silent absence.
  *
- * <p><strong>Unbuilt</strong> — none today. The claim family, the graph verbs
- * and {@code validate} sat here in a previous revision; they were built in
+ * <p><strong>Unbuilt</strong> — none today. The graph verbs and
+ * {@code validate} sat here in an earlier revision; they were built in
  * SPRINT_171.2 and moved up into the carried class. The section is kept in the
  * register so that a verb the scheme carries and this service has not built
  * again gets its own sentence — {@code VERB_UNBUILT} rather than the two
@@ -100,9 +109,9 @@ import java.util.regex.Pattern;
  * act exists and runs on the selector-declaration surface, not here. {@code read}
  * and {@code query} on the same view do act — a workstream is addressable like
  * any other declared view — and every other verb refuses on the existing view
- * checks (item-only for {@code accept}/{@code withdraw}/{@code claim} et al.,
- * iteration-only for {@code close}/{@code advance}, iteration-and-milestone for
- * {@code close}, iteration-only for the membership addresses).
+ * checks (item-only for the graph and tag verbs, iteration-only for
+ * {@code advance}, iteration-and-milestone for {@code close}, iteration-only
+ * for the membership addresses).
  */
 @ApplicationScoped
 @TenantBound
@@ -135,7 +144,7 @@ public class VerbSurface {
     @Inject MilestoneService milestones;
     @Inject WorkstreamService workstreams;
     @Inject MembershipService memberships;
-    @Inject ClaimService claims;
+    @Inject OpenCallService openCalls;
     @Inject TagService tags;
     @Inject IdempotencyService idempotency;
     @Inject AddressRegistry addresses;
@@ -191,7 +200,7 @@ public class VerbSurface {
             idempotency.firstAnswer(in.scopeId(), given, CREATE, digest));
         if (first.isPresent()) {
             PlatformLog.createRepeated(in.scope());
-            return at(in.view(), produced(in, first.get()));
+            return opened(in, at(in.view(), produced(in, first.get())));
         }
 
         Map<String, Object> created = switch (in.view()) {
@@ -218,7 +227,7 @@ public class VerbSurface {
         key.ifPresent(given -> idempotency.remember(in.scopeId(), given,
             new IdempotencyService.Spent(CREATE, digest, in.view(), numberOf(created))));
 
-        return at(in.view(), created);
+        return opened(in, at(in.view(), created));
     }
 
     /** The number of what a create produced, read off its projection: its address in the view. */
@@ -294,7 +303,12 @@ public class VerbSurface {
             default -> throw unreachableView(in.view());
         };
         PlatformLog.queried(in.scope(), PlatformLog.Count.of(answered.objects()));
-        return new Listing(answered.objects().stream().map(row -> at(in.view(), row)).toList(),
+        // The open calls of an item depend on the scope's open iterations,
+        // which are read once for the page rather than once per entry.
+        LongFunction<OpenCallService.Open> itemCalls = Selector.ITEM.equals(in.view())
+            ? openCalls.itemsOf(in.scopeId()) : null;
+        return new Listing(answered.objects().stream()
+            .map(row -> opened(in, at(in.view(), row), itemCalls)).toList(),
             answered.next());
     }
 
@@ -308,13 +322,13 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         UUID id = resolve(in, target);
 
-        return at(target, switch (in.view()) {
+        return opened(in, at(target, switch (in.view()) {
             case Selector.ITEM -> items.read(in.scopeId(), id);
             case Selector.ITERATION -> iterations.read(in.scopeId(), id);
             case Selector.MILESTONE -> milestones.read(in.scopeId(), id);
             case Selector.WORKSTREAM -> workstreams.read(in.scopeId(), id);
             default -> throw unreachableView(in.view());
-        });
+        }));
     }
 
     /**
@@ -344,7 +358,7 @@ public class VerbSurface {
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
-        return at(target, switch (in.view()) {
+        return opened(in, at(target, switch (in.view()) {
             case Selector.ITEM -> logged(items.update(in.scopeId(), id, fields),
                 PlatformLog.TechnicalAddress::of, address -> {
                     PlatformLog.itemUpdated(in.scope());
@@ -364,86 +378,12 @@ public class VerbSurface {
                     PlatformLog.updated(address, in.scope());
                 }, () -> PlatformLog.milestoneUnchanged(in.scope()));
             default -> throw unreachableView(in.view());
-        });
+        }));
     }
 
     // ======================================================================
     // The transitions this scheme carries
     // ======================================================================
-
-    /**
-     * The intake gate.
-     *
-     * <p>It refuses, and the refusal is the domain's rather than this class's.
-     * That placement is the whole of it: what {@code accept} would allocate is a
-     * question about the store, and a surface that answered it — by executing
-     * something, or by refusing on its own authority — would be deciding a
-     * specification gap in an adapter. See {@link ItemService#accept}.
-     *
-     * @param conflictToken the token the transport carried; absent where it carried
-     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
-     */
-    @Transactional
-    public Result accept(String subject, String rawScope, String rawView, String rawId,
-                         @Nullable String conflictToken) {
-        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
-        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "accept");
-        UUID id = resolve(in, target);
-
-        return at(target, items.accept(in.scopeId(), id, requireToken(conflictToken)));
-    }
-
-    /**
-     * Takes an item back. It keeps its address forever.
-     *
-     * <p><strong>This is the declared semantic deviation of the mapping table,
-     * and it is named here rather than smoothed over.</strong> The catalogue
-     * maps {@code withdraw} onto the predecessor's {@code delete}, and the two
-     * do different things: {@code delete} removes the row entirely, and this
-     * tombstones. The reconciliation is open — it is a decision about the
-     * predecessor's corpus and its migration, not about this surface — and what
-     * this build owes it is that neither side is picked silently.
-     *
-     * <p>Which side this service is on is not in doubt and never was: there is
-     * no hard delete anywhere in this store, and the reason is specific rather
-     * than doctrinal. An address that was issued must not later resolve to
-     * nothing. The predecessor did the opposite and the consequence was
-     * measured: a removed item's number became allocatable again, so two items
-     * in one corpus's history could carry one number and every external
-     * reference to the first kept resolving, at the wrong item.
-     *
-     * <p>What the deviation costs, stated so that the migration can price it: a
-     * corpus imported from the predecessor carries rows that were deleted and
-     * are simply absent, and nothing here can tell those apart from rows that
-     * were never created. That is a gap in the imported history and not
-     * something this verb can repair.
-     *
-     * <p>The status it moves into is the scope's own and travels in the body:
-     * which values a scope closes with is its declaration, and that a withdrawal
-     * is terminal is the platform's. A terminal status named here would be the
-     * literal vocabulary the store was rebuilt to remove.
-     *
-     * @param conflictToken the token the transport carried; absent where it carried
-     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
-     * @param body          the body the transport carried; absent where it carried
-     *                      none, which this surface refuses where the verb needs one
-     */
-    @Transactional
-    public Result withdraw(String subject, String rawScope, String rawView, String rawId,
-                           @Nullable String conflictToken, VerbInput.@Nullable Withdrawal body) {
-        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
-        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "withdraw");
-        UUID id = resolve(in, target);
-
-        return at(target, logged(items.withdraw(in.scopeId(), id,
-                requireLabel(STATUS, required(body, STATUS).status()),
-                requireToken(conflictToken)),
-            PlatformLog.TechnicalAddress::of, address -> {
-                PlatformLog.itemUpdated(in.scope());
-                PlatformLog.itemWithdrawn(in.scope());
-                PlatformLog.withdrawn(address, in.scope());
-            }, () -> PlatformLog.itemUnchanged(in.scope())));
-    }
 
     /**
      * Closes an iteration or a milestone.
@@ -485,7 +425,7 @@ public class VerbSurface {
         UUID id = resolve(in, target);
         String token = requireToken(conflictToken);
 
-        return at(target, switch (in.view()) {
+        return opened(in, at(target, switch (in.view()) {
             case Selector.ITERATION -> logged(iterations.close(in.scopeId(), id, produced, token),
                 PlatformLog.TechnicalAddress::of, address -> {
                     PlatformLog.iterationClosed(address, in.scope());
@@ -504,15 +444,15 @@ public class VerbSurface {
             case Selector.WORKSTREAM -> throw SurfaceException.of(
                 RefusalCode.VERB_UNCARRIED, CLOSE);
             default -> throw unreachableView(in.view());
-        });
+        }));
     }
 
     /**
      * Promotes the first planned iteration to current.
      *
-     * <p>A write on a truncated address, admissible for the same reason the
-     * claiming draw is: the verb contract declares set semantics and the only
-     * declarable one is exactly one. It promotes the first open iteration in the
+     * <p>A write on a truncated address, admissible because the verb contract
+     * declares set semantics and the only declarable one is exactly one. It
+     * promotes the first open iteration in the
      * scope's own order — not one the caller names, which is why there is no
      * address for it to take.
      *
@@ -542,8 +482,14 @@ public class VerbSurface {
         // The answer is the SETTINGS row, because that is what the verb wrote:
         // it moved a pointer. Dressing it as the promoted iteration would be
         // this class inventing an answer the domain did not give, and the two
-        // would disagree the first time the domain returned a warning.
-        return new Result(new AddressParser.Target(Selector.ITERATION, null, null), setting);
+        // would disagree the first time the domain returned a warning. Its
+        // address is the pointer, and the one call it names is the read of
+        // the iteration the pointer now names; the writes go to that
+        // iteration's number, which the read answers.
+        AddressParser.Target pointer = new AddressParser.Target(Selector.ITERATION, null, null);
+        return new Result(pointer, setting,
+            List.of(new NextStep(declaredVerb(READ), Selector.ITERATION, pointer,
+                NextStepTexts::read)), null);
     }
 
     // ======================================================================
@@ -557,7 +503,8 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
-        return at(target, memberships.read(in.scopeId(), at.iterationId(), at.itemId()));
+        return opened(in, at(target, memberships.read(in.scopeId(), at.iterationId(),
+            at.itemId())));
     }
 
     /**
@@ -575,13 +522,13 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
-        return at(target, loggedAs(memberships.plan(in.scopeId(), at.iterationId(),
+        return opened(in, at(target, loggedAs(memberships.plan(in.scopeId(), at.iterationId(),
                 at.itemId(), requireToken(conflictToken)),
             membership -> {
                 PlatformLog.itemPlanned(PlatformLog.TechnicalAddress.iterationOf(membership),
                     in.scope());
                 PlatformLog.planned(PlatformLog.TechnicalAddress.of(membership), in.scope());
-            }, () -> { }));
+            }, () -> { })));
     }
 
     /**
@@ -599,13 +546,13 @@ public class VerbSurface {
         AddressParser.Target target = AddressParser.membership(rawView, rawIteration, rawItem);
         Membership at = membership(in, target);
 
-        return at(target, loggedAs(memberships.unplan(in.scopeId(), at.iterationId(),
-                at.itemId(), requireToken(conflictToken)),
+        return opened(in, at(target, loggedAs(memberships.unplan(in.scopeId(),
+                at.iterationId(), at.itemId(), requireToken(conflictToken)),
             membership -> {
                 PlatformLog.itemUnplanned(PlatformLog.TechnicalAddress.iterationOf(membership),
                     in.scope());
                 PlatformLog.unplanned(PlatformLog.TechnicalAddress.of(membership), in.scope());
-            }, () -> { }));
+            }, () -> { })));
     }
 
     /**
@@ -628,102 +575,13 @@ public class VerbSurface {
             .withToken(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken))
             .values();
 
-        return at(target, loggedAs(memberships.update(in.scopeId(), at.iterationId(),
-                at.itemId(), fields),
+        return opened(in, at(target, loggedAs(memberships.update(in.scopeId(),
+                at.iterationId(), at.itemId(), fields),
             membership -> {
                 PlatformLog.membershipMoved(PlatformLog.TechnicalAddress.iterationOf(membership),
                     in.scope());
                 PlatformLog.updated(PlatformLog.TechnicalAddress.of(membership), in.scope());
-            }, () -> PlatformLog.membershipUnchanged(in.scope())));
-    }
-
-    // ======================================================================
-    // The claim family
-    // ======================================================================
-
-    /**
-     * Take a lease on a named item.
-     *
-     * <p>Only addressable at the item view. The lease is on an item — a
-     * milestone or an iteration has no claim to take, and refusing the
-     * mismatched view here says so as a category error rather than as a
-     * cascaded not-found from the id lookup.
-     *
-     * @param body          the body the transport carried; absent where it carried
-     *                      none, which this surface refuses where the verb needs one
-     */
-    @Transactional
-    public Result claim(String subject, String rawScope, String rawView, String rawId,
-                        VerbInput.@Nullable Lease body) {
-        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
-        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "claim");
-        UUID id = resolve(in, target);
-
-        Duration lease = requireLease(body);
-        return at(target, logged(claims.claim(in.scopeId(), id, subject, lease),
-            PlatformLog.TechnicalAddress::of, address -> {
-                PlatformLog.claimTaken(address, in.scope());
-                PlatformLog.claimed(address, in.scope());
-            }));
-    }
-
-    /**
-     * Give up a lease on a named item, by presenting its receipt.
-     *
-     * <p>No conflict token: the receipt IS the token, minted at claim time and
-     * checked against the row. A caller that has to present two proofs of hold
-     * for the same act is a caller doing two things at once, and one of the
-     * two would eventually stop meaning what it says.
-     *
-     * @param body          the body the transport carried; absent where it carried
-     *                      none, which this surface refuses where the verb needs one
-     */
-    @Transactional
-    public Result release(String subject, String rawScope, String rawView, String rawId,
-                          VerbInput.@Nullable Release body) {
-        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
-        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "release");
-        UUID id = resolve(in, target);
-
-        String receipt = requireText(RECEIPT, required(body, RECEIPT).receipt());
-        return at(target, logged(claims.release(in.scopeId(), id, subject, receipt),
-            PlatformLog.TechnicalAddress::of, address -> {
-                PlatformLog.claimReleased(address, in.scope());
-                PlatformLog.released(address, in.scope());
-            }));
-    }
-
-    /**
-     * Draw the next unclaimed item in a scope and take the lease atomically.
-     *
-     * <p>A truncated address, admissible for the same reason {@code advance}
-     * is: the verb contract declares set semantics and the only declarable one
-     * is exactly one. What is drawn is the oldest unclaimed addressable item,
-     * and the domain runs the pick and the write in one transaction so the
-     * two do not race.
-     *
-     * @param body          the body the transport carried; absent where it carried
-     *                      none, which this surface refuses where the verb needs one
-     */
-    @Transactional
-    public Result claimNext(String subject, String rawScope, String rawView,
-                            VerbInput.@Nullable Lease body) {
-        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
-        if (!Selector.ITEM.equals(in.view())) {
-            throw SurfaceException.of(RefusalCode.VERB_UNCARRIED, "claim_next");
-        }
-        addresses.requireView(in.scopeId(), in.view());
-
-        Duration lease = requireLease(body);
-        Map<String, Object> answered = logged(claims.claimNext(in.scopeId(), subject, lease),
-            PlatformLog.TechnicalAddress::of, address -> {
-                PlatformLog.claimDrawn(address, in.scope());
-                PlatformLog.drawn(address, in.scope());
-            });
-        // The answer's address is the item that was drawn; read from the
-        // projection rather than remembered from the call, exactly as
-        // {@link #create} does.
-        return at(Selector.ITEM, answered);
+            }, () -> PlatformLog.membershipUnchanged(in.scope()))));
     }
 
     // ======================================================================
@@ -758,14 +616,14 @@ public class VerbSurface {
         String toAddress = requireLabel(TO_ITEM, edge.toItem());
         String typeName = requireLabel(TYPE, edge.type());
 
-        return at(target, loggedAs(items.relate(in.scopeId(), from, toAddress, typeName,
-                requireToken(conflictToken)),
+        return opened(in, at(target, loggedAs(items.relate(in.scopeId(), from, toAddress,
+                typeName, requireToken(conflictToken)),
             write -> {
                 PlatformLog.TechnicalAddress source = PlatformLog.TechnicalAddress.of(write.stored());
                 PlatformLog.TechnicalAddress to = PlatformLog.TechnicalAddress.of(write.target());
                 PlatformLog.relationAsserted(source, to, in.scope());
                 PlatformLog.related(source, to, in.scope());
-            }, () -> { }));
+            }, () -> { })));
     }
 
     /**
@@ -787,14 +645,14 @@ public class VerbSurface {
         String toAddress = requireLabel(TO_ITEM, edge.toItem());
         String typeName = requireLabel(TYPE, edge.type());
 
-        return at(target, loggedAs(items.unrelate(in.scopeId(), from, toAddress, typeName,
-                requireToken(conflictToken)),
+        return opened(in, at(target, loggedAs(items.unrelate(in.scopeId(), from, toAddress,
+                typeName, requireToken(conflictToken)),
             write -> {
                 PlatformLog.TechnicalAddress source = PlatformLog.TechnicalAddress.of(write.stored());
                 PlatformLog.TechnicalAddress to = PlatformLog.TechnicalAddress.of(write.target());
                 PlatformLog.relationWithdrawn(source, to, in.scope());
                 PlatformLog.unrelated(source, to, in.scope());
-            }, () -> { }));
+            }, () -> { })));
     }
 
     // ======================================================================
@@ -821,12 +679,12 @@ public class VerbSurface {
         AddressParser.Target target = requireItem(rawView, rawId);
         UUID id = resolve(in, target);
 
-        return at(target, logged(tags.tagAttach(in.scopeId(), id, requireText(TAG, rawTag),
-                subject),
+        return opened(in, at(target, logged(tags.tagAttach(in.scopeId(), id,
+                requireText(TAG, rawTag), subject),
             PlatformLog.TechnicalAddress::of, address -> {
                 PlatformLog.tagAttachedTo(address, in.scope());
                 PlatformLog.tagAttached(address, in.scope());
-            }, () -> PlatformLog.tagAlreadyOn(in.scope())));
+            }, () -> PlatformLog.tagAlreadyOn(in.scope()))));
     }
 
     /**
@@ -842,11 +700,12 @@ public class VerbSurface {
         AddressParser.Target target = requireItem(rawView, rawId);
         UUID id = resolve(in, target);
 
-        return at(target, logged(tags.tagDetach(in.scopeId(), id, requireText(TAG, rawTag)),
+        return opened(in, at(target, logged(tags.tagDetach(in.scopeId(), id,
+                requireText(TAG, rawTag)),
             PlatformLog.TechnicalAddress::of, address -> {
                 PlatformLog.tagDetachedFrom(address, in.scope());
                 PlatformLog.tagDetached(address, in.scope());
-            }, () -> PlatformLog.tagAbsent(in.scope())));
+            }, () -> PlatformLog.tagAbsent(in.scope()))));
     }
 
     /**
@@ -895,6 +754,8 @@ public class VerbSurface {
             PlatformLog.validationReported(PlatformLog.Count.of(findings), in.scope());
         }
         PlatformLog.validated(in.scope());
+        // A report about the scope and no object of it: no call stands open
+        // on it, and it waits for nobody.
         return new Result(new AddressParser.Target(Selector.ITEM, null, null), answered);
     }
 
@@ -989,9 +850,79 @@ public class VerbSurface {
     private Entry entry(String subject, String rawScope, String rawView, Access access) {
         String slug = AddressParser.scope(rawScope);
         String view = AddressParser.view(rawView);
-        Entry in = new Entry(scopes.resolve(subject, slug, access).scopeId(), view);
+        ScopeDirectory.ScopeAccess resolved = scopes.resolve(subject, slug, access);
+        Entry in = new Entry(resolved.scopeId(), view, resolved.writable());
         PlatformLog.scopeResolved(in.scope());
         return in;
+    }
+
+    // ======================================================================
+    // The calls an answer names as open
+    // ======================================================================
+
+    /**
+     * The answer with the calls open on its object, and the object's state.
+     *
+     * <p>The open calls are {@link OpenCallService}'s, decided by the same
+     * predicates the verbs refuse on; the writing ones stand only where this
+     * caller may write into the scope, by the read contract's answer that
+     * {@link #entry} holds -- the one a write is refused on. Every call is
+     * named at the object's numbered address, never through the pointer
+     * {@code current}, which takes no write.
+     */
+    private Result opened(Entry in, Result answered) {
+        return opened(in, answered, null);
+    }
+
+    /**
+     * @param items the open calls of the items of this scope, read once for a
+     *              page; absent where the answer is not about items, and then
+     *              asked of the service for the one object
+     */
+    private Result opened(Entry in, Result answered,
+                          @Nullable LongFunction<OpenCallService.Open> items) {
+        AddressParser.Target target = answered.address();
+        OpenCallService.Open open;
+        if (target.isMembership()) {
+            open = openCalls.forMembership(in.scopeId(), Objects.requireNonNull(target.number()),
+                Objects.requireNonNull(target.member()));
+        } else {
+            long number = numberOf(answered.fields());
+            open = switch (target.view()) {
+                case Selector.ITEM -> items != null ? items.apply(number)
+                    : openCalls.forItem(in.scopeId(), number);
+                case Selector.ITERATION -> openCalls.forIteration(in.scopeId(), number);
+                case Selector.MILESTONE -> openCalls.forMilestone(in.scopeId(), number);
+                case Selector.WORKSTREAM -> openCalls.forWorkstream(in.scopeId(), number);
+                default -> throw unreachableView(target.view());
+            };
+        }
+        List<NextStep> next = open.calls().stream()
+            .filter(call -> !call.verb().writes() || in.writable())
+            .map(VerbSurface::step)
+            .toList();
+        return new Result(target, answered.fields(), next, open.state());
+    }
+
+    /** One open call as the surface names it: its declared verb, its address, its text. */
+    private static NextStep step(OpenCallService.Call call) {
+        VerbName verb = declaredVerb(call.verb().name().toLowerCase(Locale.ROOT));
+        AddressParser.Target at = call.number() == null ? null
+            : new AddressParser.Target(call.view(), call.number(), call.member());
+        Function<NextStepTexts, String> does = switch (call.verb()) {
+            case READ -> NextStepTexts::read;
+            case UPDATE -> NextStepTexts::update;
+            case CLOSE -> NextStepTexts::close;
+            case ADVANCE -> NextStepTexts::advance;
+            case PLAN -> call.member() == null ? NextStepTexts::planIteration
+                : NextStepTexts::planItem;
+            case UNPLAN -> NextStepTexts::unplan;
+            case RELATE -> NextStepTexts::relate;
+            case UNRELATE -> NextStepTexts::unrelate;
+            case TAG_ATTACH -> NextStepTexts::tagAttach;
+            case TAG_DETACH -> NextStepTexts::tagDetach;
+        };
+        return new NextStep(verb, call.view(), at, does);
     }
 
     // ======================================================================
@@ -1156,18 +1087,6 @@ public class VerbSurface {
         return body;
     }
 
-    /** A lease duration, refused when the body arrives without a positive one. */
-    private static Duration requireLease(VerbInput.@Nullable Lease body) {
-        VerbInput.Lease lease = required(body, DURATION);
-        if (lease.durationSeconds() == null) {
-            throw SurfaceException.missing(DURATION);
-        }
-        if (lease.durationSeconds() <= 0) {
-            throw SurfaceException.invalid(DURATION);
-        }
-        return Duration.ofSeconds(lease.durationSeconds());
-    }
-
     /**
      * A mandatory text argument that names a declared value or an address,
      * refused by its declared name and never by what arrived.
@@ -1194,13 +1113,11 @@ public class VerbSurface {
 
     /** The argument names this class refuses by. */
     private static final String FIELDS = "fields";
-    private static final String STATUS = "status";
-    private static final String RECEIPT = "receipt";
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String TAG = "tag";
-    private static final String DURATION = "duration_seconds";
     private static final String CLOSE = "close";
+    private static final String READ = "read";
     private static final String CREATE = "create";
     private static final String SELECTOR = "selector";
     private static final String IDEMPOTENCY_KEY = "idempotency_key";
@@ -1233,8 +1150,23 @@ public class VerbSurface {
     // Answers
     // ======================================================================
 
-    /** The answer to any verb: what the domain projected, at the address it is. */
-    public record Result(AddressParser.Target address, Map<String, Object> fields) {
+    /**
+     * The answer to any verb: what the domain projected, at the address it
+     * is, with the calls open to the caller on it (C6.1).
+     *
+     * @param next  the calls open to this caller on the object in its state;
+     *              empty for an answer about no single object
+     * @param state the object's state as its read answers it, which a refusal
+     *              by state names (C8.7); absent for an answer about no
+     *              single object
+     */
+    public record Result(AddressParser.Target address, Map<String, Object> fields,
+                         List<NextStep> next, @Nullable String state) {
+
+        /** An answer before its open calls are known, or about no single object. */
+        Result(AddressParser.Target address, Map<String, Object> fields) {
+            this(address, fields, List.of(), null);
+        }
 
         /**
          * The conflict token the answer carries, where it carries one.
@@ -1269,8 +1201,43 @@ public class VerbSurface {
     public record Listing(List<Result> objects, @Nullable String next) {
     }
 
-    /** Everything one call needs once the first two stages have held. */
-    private record Entry(UUID scopeId, String view) {
+    /**
+     * One call open to the caller, as an answer names it under {@code next}:
+     * the declared verb, the address it is made at, and the text of what it
+     * does. The adapter words it in the names of the caller's surface (C6.2).
+     *
+     * @param target the address the call is made at; absent where it is made
+     *               at the view's collection, which only {@code advance} is
+     */
+    public record NextStep(VerbName verb, String view, AddressParser.@Nullable Target target,
+                           Function<NextStepTexts, String> does) {
+
+        /** The complete address the call is made at, or the view's collection. */
+        public String address(String scope) {
+            return target == null ? AddressParser.renderCollection(scope, view)
+                : AddressParser.render(scope, target);
+        }
+
+        /**
+         * The call as the caller's surface names it: the verb, a space, the
+         * address.
+         *
+         * @param toolNames whether the caller came through the assistant
+         *                  surface, which names the tool ({@code worklist_read});
+         *                  REST names the verb ({@code read})
+         */
+        public String call(String scope, boolean toolNames) {
+            return (toolNames ? verb.toolName() : verb.name()) + " " + address(scope);
+        }
+    }
+
+    /**
+     * Everything one call needs once the first two stages have held.
+     *
+     * @param writable whether the caller may write into the scope, by the
+     *                 read contract's answer the write path is refused on
+     */
+    private record Entry(UUID scopeId, String view, boolean writable) {
 
         /** The scope as a log line takes it. */
         PlatformLog.ScopeId scope() {

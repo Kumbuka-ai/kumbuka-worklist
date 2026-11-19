@@ -37,8 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>A scope the caller cannot see answers {@code NOT_FOUND} whatever else that
  * depends on the scope is wrong with the call: a view the scope does not
- * declare, a stale conflict token, a missing one, a receipt that is not the
- * holder's. A fault of grammar or of form -- an address out of the grammar, an
+ * declare, a stale conflict token, a missing one, a relation type the scope
+ * does not declare. A fault of grammar or of form -- an address out of the grammar, an
  * argument the call does not declare -- says nothing about any scope and is
  * answered first, the same whether the scope is there or not.
  *
@@ -76,8 +76,9 @@ class CheckOrderConformanceIT {
             "fields", Map.of("title", "t")));
         calls.put("worklist_update", Map.of("address", ADDRESS, "conflict_token", "stale",
             "fields", Map.of("title", "t")));
-        calls.put("worklist_accept", Map.of("address", ADDRESS));
-        calls.put("worklist_release", Map.of("address", ADDRESS, "receipt", "not-the-holder"));
+        calls.put("worklist_close", Map.of("address", ADDRESS, "conflict_token", "stale"));
+        calls.put("worklist_relate", Map.of("address", ADDRESS, "conflict_token", "stale",
+            "to_item", ADDRESS, "type", "never-declared"));
         calls.put("worklist_send", Map.of("address", ADDRESS));
         calls.forEach((tool, arguments) -> {
             assertThat(Mcp.reason(Mcp.call(tool, arguments))).as("%s over MCP", tool)
@@ -113,19 +114,19 @@ class CheckOrderConformanceIT {
     @Test
     void a_form_fault_on_an_invisible_scope_is_decided_before_the_scope() {
         Response overRest = given().contentType(ContentType.JSON).body(Map.of("bogus", "x"))
-            .post("/api/" + INVISIBLE + "/" + Selector.ITEM + "/1:claim");
+            .post("/api/" + INVISIBLE + "/" + Selector.ITEM + "/1:tag_attach");
         assertThat(overRest.statusCode()).as(overRest.asString()).isEqualTo(400);
         assertThat(overRest.jsonPath().getString("reason")).isEqualTo("ARGUMENT_UNKNOWN");
         assertThat(overRest.jsonPath().getList("data.accepts", String.class))
-            .containsExactly("duration_seconds");
+            .containsExactly("tag");
 
         Response visible = given().contentType(ContentType.JSON).body(Map.of("bogus", "x"))
-            .post(SurfaceFixture.item(Selector.ITEM, 1) + ":claim");
+            .post(SurfaceFixture.item(Selector.ITEM, 1) + ":tag_attach");
         assertThat(overRest.asString()).as("the same refusal whether the scope is there or not")
             .isEqualTo(visible.asString());
 
         Response notJson = given().contentType(ContentType.JSON).body("[not json")
-            .post("/api/" + INVISIBLE + "/" + Selector.ITEM + "/1:claim");
+            .post("/api/" + INVISIBLE + "/" + Selector.ITEM + "/1:tag_attach");
         assertThat(notJson.jsonPath().getString("reason")).as("a body that is no JSON object")
             .isEqualTo("PAYLOAD_MALFORMED");
 
@@ -133,8 +134,8 @@ class CheckOrderConformanceIT {
             "selector", Selector.ITEM, "bogus", "x", "fields", Map.of("title", "t")));
         assertThat(Mcp.reason(overMcp)).isEqualTo("ARGUMENT_UNKNOWN");
         assertThat(Mcp.refusal(overMcp)).containsKey("data");
-        assertThat(Mcp.reason(Mcp.call("worklist_claim", Map.of("address", ADDRESS,
-                "duration_seconds", "an hour"))))
+        assertThat(Mcp.reason(Mcp.call("worklist_update", Map.of("address", ADDRESS,
+                "conflict_token", "t", "fields", "an object, written as text"))))
             .as("a value of the wrong type").isEqualTo("ARGUMENT_INVALID");
     }
 
@@ -186,7 +187,8 @@ class CheckOrderConformanceIT {
         assertThat(put.jsonPath().getString("reason")).isEqualTo("VERB_NOT_CARRIED");
         assertThat(put.header("Allow")).as("the methods the route carries").isNotBlank();
         assertThat(put.jsonPath().getList("data.accepts", String.class))
-            .as("the verbs carried at an object").contains("read", "update", "claim");
+            .as("the verbs carried at an object").contains("read", "update", "close")
+            .doesNotContain("claim", "release", "accept", "withdraw");
 
         Response delete = given().delete(SurfaceFixture.collection(Selector.ITEM));
         assertThat(delete.statusCode()).as(delete.asString()).isEqualTo(405);

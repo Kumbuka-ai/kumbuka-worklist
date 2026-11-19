@@ -46,6 +46,9 @@ public class CallContext {
     /** The object the call names; absent for a call at a collection. */
     private @Nullable Target target;
 
+    /** Whether the request named the assistant surface, whose names are the tool names. */
+    private boolean assistant;
+
     /**
      * Records the verb the route named.
      *
@@ -55,6 +58,15 @@ public class CallContext {
     void call(String verb, boolean assistant) {
         VerbName name = VerbSurface.declaredVerb(verb);
         this.attempted = assistant ? name.toolName() : name.name();
+        this.assistant = assistant;
+    }
+
+    /**
+     * Whether the calls a refusal names are named by their tool names: the
+     * request named the assistant surface (C6.2, C14.4).
+     */
+    boolean toolNames() {
+        return assistant;
     }
 
     /** Records the object the call names. */

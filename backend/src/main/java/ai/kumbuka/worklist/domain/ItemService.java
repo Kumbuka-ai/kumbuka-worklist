@@ -34,15 +34,15 @@ import java.util.UUID;
  *
  * <h2>The verbs</h2>
  *
- * {@code create} a call-in, {@code accept} it into the corpus,
- * {@code update} what is known about it, {@code withdraw} it, {@code read}
- * one, {@code query} a scope. Six, and every one of them is the platform's
- * own word for the act, spelled identically.
+ * {@code create} a call-in, {@code update} what is known about it,
+ * {@code read} one, {@code query} a scope, and the graph verbs and
+ * {@code validate} below. Every one of them is the platform's own word for the
+ * act, spelled identically.
  *
- * <p>Five of the six act. {@code accept} is carried and refuses, because the
- * identifier it used to allocate was the address the view model now allocates
- * at creation; the reasoning is on the method and the decision it waits for is
- * not a build's to make.
+ * <p>An item's state moves through {@code update} alone: a status the scope
+ * declared as closed is reached by updating into it, and a closed item stays
+ * writable. The intake gate {@code accept} and the withdrawal
+ * {@code withdraw} left this scheme's surface with its target cut.
  *
  * <p><strong>Identity is deliberate, and a shared name is not a collision.</strong>
  * These names exist in sibling services too, and that is the mechanism rather
@@ -73,9 +73,8 @@ import java.util.UUID;
  * second vocabulary impossible.
  *
  * <p><strong>The transition rules are not here.</strong> An item may not
- * become closed under a live claim; an item may not enter an iteration while
- * it is not actionable. Both are expressed over the PREDICATES and both need
- * the claim and the planning verbs to exist first. Writing them against the
+ * enter an iteration while it is not actionable: that rule is expressed over
+ * the PREDICATES and sits with the planning verbs. Writing it against the
  * estate's status names would be the predecessor's mistake in a new file.
  *
  * <h2>One naming, in both directions</h2>
@@ -108,7 +107,6 @@ public class ItemService {
      */
 
     /** The argument names of the verbs this service answers, as refusals name them. */
-    private static final String WITHDRAW_STATUS = "status";
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String RELATIONS = Field.RELATIONS.path();
@@ -229,11 +227,9 @@ public class ItemService {
      *
      * <p><strong>A created item carries its address from the insert.</strong>
      * The selector is the view {@code item} and the number is drawn from the
-     * scope's counter inside this transaction. That is a change: the address
-     * used to arrive at {@link #accept}, because the family at the head of it
-     * was not known before a second party decided what kind of thing this was.
-     * The head is now the view, it is known at creation, and an item that
-     * existed without an address would be an item no verb could address.
+     * scope's counter inside this transaction. The head is the view, it is
+     * known at creation, and an item that existed without an address would be
+     * an item no verb could address.
      */
     @Transactional
     public Written<Map<String, Object>, Item> create(UUID scopeId, Map<String, ?> arguments) {
@@ -301,50 +297,9 @@ public class ItemService {
     }
 
     /**
-     * The intake gate — and it has nothing left to allocate.
-     *
-     * <p><strong>This verb is carried, reachable, and refuses.</strong> What
-     * it used to do was allocate the pair {@code (selector, number)}, which
-     * was both the item's address and its business identifier because the two
-     * were one thing: {@code FEAT-51} named the item and said what kind of
-     * item it was. The selector is now the view, so the address is allocated
-     * with the object ({@link #create}) and the family that made the
-     * identifier an identifier is no longer an address space.
-     *
-     * <p>The ratified vocabulary keeps the two apart — {@code create}
-     * allocates the address, {@code accept} allocates the business identifier
-     * — and under the view model this service has no carrier for the second.
-     * <strong>What that carrier should be is a decision about the store and
-     * not one a build makes.</strong> Three answers are available and they are
-     * not equivalent: a column of its own, the family as declared vocabulary
-     * with the identifier composed from it, or the acknowledgement that the
-     * two allocations have collapsed into one for this scheme and the gate
-     * marks a state rather than minting a name.
-     *
-     * <p>So the verb refuses, by name, and says which decision is missing. The
-     * alternatives were both worse. Executing it as a no-op would report a
-     * ratification that is written nowhere and would move the change trail
-     * while doing so. Leaving the method out would take a verb out of the
-     * vocabulary this scheme is recorded as carrying, and the surface would
-     * answer "no such verb" where the truth is "this verb has no carrier yet".
-     *
-     * <p>The item is resolved first, so that a call against something that is
-     * not there is a not-found and only a call against a real item reaches the
-     * refusal. A caller that cannot tell the two apart cannot tell a typo from
-     * a gap.
-     */
-    @Transactional
-    public Map<String, Object> accept(UUID scopeId, UUID itemId, String conflictToken) {
-        Item item = requireLocked(scopeId, itemId);
-        item.requireCurrentToken(conflictToken);
-
-        throw new WorklistException(
-            WorklistException.Reason.IDENTIFIER_UNDECIDED,
-            List.of(String.valueOf(itemId)));
-    }
-
-    /**
-     * Change what is known about an item.
+     * Change what is known about an item, its status included: the one way
+     * an item's state moves, into a closed status the scope declared as much
+     * as into any other, and a closed item takes the next write like any.
      *
      * <p><strong>A write that changes nothing writes nothing.</strong> Not a
      * timestamp, not a rotated token, not a statement. The comparison below
@@ -386,43 +341,6 @@ public class ItemService {
 
         items.flushAndRefresh(item);
         return new Written<>(project(item), item);
-    }
-
-    /**
-     * Withdraw an item: it is taken back, and it keeps its number forever.
-     *
-     * <p>This is what the predecessor's {@code delete} becomes, and the status
-     * it moves to is <strong>the scope's own</strong>. A terminal value named
-     * in this file would be the literal vocabulary all over again, so the
-     * caller names the status it means and this verb is what says the act is
-     * a withdrawal rather than an ordinary change.
-     *
-     * <p>It goes through {@link #update} rather than beside it, so that the
-     * conflict token, the no-op rule and the field validation are the same
-     * code — a second write path is a second place for those three to drift.
-     */
-    @Transactional
-    public Written<Map<String, Object>, Item> withdraw(UUID scopeId, UUID itemId,
-            String statusName, String conflictToken) {
-        if (statusName == null || statusName.isBlank()) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(WITHDRAW_STATUS));
-        }
-        ItemFields.refuseUuidShape(WITHDRAW_STATUS, statusName);
-        ItemStatus status = vocabulary.statusByName(scopeId, statusName)
-            .orElseThrow(() -> new WorklistException(
-                WorklistException.Reason.VALUE_UNDECLARED,
-                List.of(WITHDRAW_STATUS)));
-        if (!status.closed) {
-            throw new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(WITHDRAW_STATUS));
-        }
-
-        return update(scopeId, itemId, Map.of(
-            Field.STATUS.canonicalName(), status.name,
-            Field.CONFLICT_TOKEN.canonicalName(), String.valueOf(conflictToken)));
     }
 
     /**

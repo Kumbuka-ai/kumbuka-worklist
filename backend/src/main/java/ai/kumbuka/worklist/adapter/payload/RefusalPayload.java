@@ -19,7 +19,9 @@ import ai.kumbuka.worklist.surface.VerbSurface;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The one refusal envelope, from DEC-0042: {@code reason}, {@code message},
@@ -99,8 +101,42 @@ public record RefusalPayload(
         String token = held != null ? held : e.currentToken().orElse(null);
         return new RefusalPayload(code.name(), message(code, null),
             new RefusalDataPayload(attempted, current.address(), current.fields(),
-                present(declared(code, e.offenders())), null, token, SERVICE, null));
+                present(declared(code, e.offenders())), null, token, SERVICE, null,
+                null, null, null));
     }
+
+    /**
+     * A refusal by state (C8.7, DEC-0043): the object's state and the calls
+     * open on it, as its own read answers them now that the refused write has
+     * rolled back, and, where the refusal concerns objects under it, their
+     * addresses under {@code children}. The adapter reads the object; where
+     * that read cannot be made, {@link #of(WorklistException, String)}
+     * answers with the code alone.
+     *
+     * @param attempted the call as the caller's surface names it (C6.2)
+     * @param scope     the scope as the call named it, which the addresses of
+     *                  the open calls carry
+     * @param current   the refused object, read now
+     * @param toolNames whether the open calls are named by their tool names
+     */
+    public static RefusalPayload byState(WorklistException e, @Nullable String attempted,
+                                         String scope, VerbSurface.Result current,
+                                         boolean toolNames) {
+        RefusalCode code = RefusalCode.of(e.reason());
+        return new RefusalPayload(code.name(), message(code, null),
+            new RefusalDataPayload(attempted, null, null, null, null, null, null, null,
+                current.state(), Payloads.next(scope, current.next(), toolNames),
+                present(e.children())));
+    }
+
+    /** Whether a domain refusal names the state of its object and the calls open on it. */
+    public static boolean isByState(WorklistException e) {
+        return BY_STATE.contains(RefusalCode.of(e.reason()));
+    }
+
+    /** The codes of a refusal by state, which name the state and the open calls (C8.7). */
+    private static final Set<RefusalCode> BY_STATE =
+        EnumSet.of(RefusalCode.TRANSITION_REFUSED, RefusalCode.ITERATION_INCOMPLETE);
 
     /**
      * A surface refusal, in the same envelope.
@@ -130,7 +166,8 @@ public record RefusalPayload(
     public static RefusalPayload unexpected(String reference, @Nullable String attempted) {
         RefusalCode code = RefusalCode.UNEXPECTED_FAILURE;
         return new RefusalPayload(code.name(), message(code, null),
-            new RefusalDataPayload(attempted, null, null, null, null, null, null, reference));
+            new RefusalDataPayload(attempted, null, null, null, null, null, null, reference,
+                null, null, null));
     }
 
     /** @param attempted the verb the text names; absent where it names none */
@@ -156,7 +193,7 @@ public record RefusalPayload(
                                                        @Nullable String conflictToken) {
         RefusalDataPayload data = new RefusalDataPayload(attempted, null, null,
             present(declared(code, offenders)), present(declared(code, accepts)),
-            conflictToken, null, null);
+            conflictToken, null, null, null, null, null);
         return data.isEmpty() ? null : data;
     }
 

@@ -27,10 +27,10 @@ import java.util.Optional;
  * refusal concerns, and nothing a call sent (DEC-0043 R18).
  *
  * <p>The first two below are the substrate's. The rest arrived with the item
- * domain, and each one names a refusal something in this service actually
- * raises — the planning layer's and the claim lease's are still absent for
- * the same reason as before, that enumerating a refusal nothing can raise is
- * guessing.
+ * domain and the planning layer, and each one names a refusal something in
+ * this service actually raises: enumerating a refusal nothing can raise is
+ * guessing. The lease's reasons left with the lease, which no call of the
+ * surface takes or answers any more.
  */
 public class WorklistException extends RuntimeException {
 
@@ -228,26 +228,6 @@ public class WorklistException extends RuntimeException {
         PREDICATE_UNKNOWN,
 
         /**
-         * The intake gate was reached and this scheme has no carrier for the
-         * business identifier it is supposed to allocate.
-         *
-         * <p>It replaces {@code ALREADY_ACCEPTED}, which said that an item
-         * carried its identifier already and that one is allocated once. That
-         * sentence stopped being the truth when the selector became the view:
-         * the address is allocated with the object, and the family that made
-         * {@code FEAT-51} an identifier is no longer an address space. Keeping
-         * the old reason would have answered a caller with a statement about
-         * an allocation that no longer happens.
-         *
-         * <p>Replacing a refusal reason is a change to a published name, and
-         * it is admissible here for a reason that is measured rather than
-         * assumed: nothing consumes this surface — the estate still runs the
-         * predecessor and this store holds no row. It would not be admissible
-         * later.
-         */
-        IDENTIFIER_UNDECIDED,
-
-        /**
          * A high-water mark may be carried forward and never back. Moving it
          * back would hand out numbers that are already in use, which is the
          * one thing the mark exists to prevent.
@@ -281,14 +261,17 @@ public class WorklistException extends RuntimeException {
         MEMBERSHIP_PRESENT,
 
         /**
-         * The iteration is closed, and a closed iteration takes no further
-         * writes.
+         * The object's state keeps the call closed, and the way out is a call
+         * on the object itself (service contract C8.7, DEC-0043): a write to
+         * a closed iteration or to a membership of one, a plan into a closed
+         * iteration, an update or a second close of a closed milestone.
          *
-         * <p>Closing is the one act on this axis that is not reversible
-         * through a verb. Its memberships stay readable, which is what makes
-         * a closed iteration a record rather than a gap.
+         * <p>Closing is the one act on these axes that is not reversible
+         * through a verb. What a closed object holds stays readable, which is
+         * what makes it a record rather than a gap; {@code read} is the call
+         * the refusal names as open.
          */
-        ITERATION_CLOSED,
+        TRANSITION_REFUSED,
 
         /**
          * The iteration still holds memberships that are neither done nor
@@ -296,8 +279,8 @@ public class WorklistException extends RuntimeException {
          *
          * <p>Closing over live memberships would decide for the operator what
          * happened to each one. The refusal names the iteration's address as
-         * its offender, not the live memberships; the contract has no member
-         * that would carry them.
+         * its offender and the live memberships, by their complete addresses,
+         * as its {@link #children()}.
          */
         ITERATION_INCOMPLETE,
 
@@ -348,54 +331,6 @@ public class WorklistException extends RuntimeException {
          * setting they may raise from a platform ceiling they may not.
          */
         CARDINALITY_EXCEEDED,
-
-        // --- the claim lease -------------------------------------------
-        //
-        // These arrive with the claim family, and not before. The class
-        // comment above says why: enumerating a refusal nothing can raise is
-        // guessing, and a reason with no thrower is a reason nobody has
-        // checked the wording of.
-
-        /**
-         * A live lease already stands on that item.
-         *
-         * <p>The exact race the row exists to prevent, refused rather than
-         * queued: the point of a lease is that one holder acts at a time.
-         */
-        CLAIM_HELD,
-
-        /**
-         * No live lease stands on that item.
-         *
-         * <p>Answered apart from {@code CLAIM_HELD} deliberately: the two
-         * describe the two states a claim can be in from a caller's side, and
-         * a caller told the wrong one goes to the wrong remedy.
-         */
-        CLAIM_ABSENT,
-
-        /**
-         * The receipt presented to {@code release} does not name the lease
-         * held by the row.
-         *
-         * <p>The check is on the value in the row, not on the actor: a holder
-         * that hands the receipt on has passed the lease, and the release from
-         * the second holder is legitimate. A receipt nobody minted is not.
-         */
-        CLAIM_RECEIPT_UNKNOWN,
-
-        /**
-         * The claim draw ran and every addressable item in the scope is
-         * currently leased.
-         *
-         * <p>Kept apart from {@code ITEM_UNKNOWN}, which the same call raises
-         * when the scope holds no addressed item at all — a call to add work
-         * rather than a call to wait. Spelled {@code DRAW_EMPTY} rather than
-         * {@code NOTHING_TO_CLAIM}: the subject is the draw and the state is
-         * empty, matching {@code <SUBJECT>_<STATE>}. The sibling service's
-         * verbatim spelling of the same reason leads with the negation, which
-         * is what the local convention refuses.
-         */
-        DRAW_EMPTY,
 
         // --- the graph verbs -------------------------------------------
 
@@ -480,6 +415,7 @@ public class WorklistException extends RuntimeException {
     private final transient List<String> accepts;
     /** The object's token on a {@code CONFLICT}; absent on every other refusal. */
     private final transient @Nullable String currentToken;
+    private final transient List<String> children;
 
     public WorklistException(Reason reason) {
         this(reason, List.of());
@@ -496,16 +432,38 @@ public class WorklistException extends RuntimeException {
      *                  answers with (DEC-0043 R19)
      */
     public WorklistException(Reason reason, List<String> offenders, List<String> accepts) {
-        this(reason, offenders, accepts, null);
+        this(reason, offenders, accepts, null, List.of());
     }
 
     private WorklistException(Reason reason, List<String> offenders, List<String> accepts,
-                              @Nullable String currentToken) {
+                              @Nullable String currentToken, List<String> children) {
         super(reason.name());
         this.reason = reason;
         this.offenders = List.copyOf(offenders);
         this.accepts = List.copyOf(accepts);
         this.currentToken = currentToken;
+        this.children = List.copyOf(children);
+    }
+
+    /**
+     * An {@code ITERATION_INCOMPLETE} on {@code address}, naming the live
+     * memberships it found.
+     *
+     * @param children the complete addresses of the memberships neither done
+     *                 nor dropped, as the service spells them
+     */
+    public static WorklistException incomplete(List<String> children) {
+        return new WorklistException(Reason.ITERATION_INCOMPLETE, List.of("address"), List.of(),
+            null, children);
+    }
+
+    /**
+     * The complete addresses of the objects under the addressed one that the
+     * refusal concerns (C8.7 {@code children}); empty on every refusal but an
+     * {@code ITERATION_INCOMPLETE}.
+     */
+    public List<String> children() {
+        return children;
     }
 
     public Reason reason() {
@@ -542,7 +500,7 @@ public class WorklistException extends RuntimeException {
      */
     public static WorklistException conflict(@Nullable String currentToken) {
         return new WorklistException(Reason.CONFLICT, List.of("conflict_token"), List.of(),
-            currentToken);
+            currentToken, List.of());
     }
 
     /** The declared names a refusal of an undeclared name answers with. */

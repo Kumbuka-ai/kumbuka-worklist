@@ -115,53 +115,6 @@ public final class VerbInput {
     }
 
     /**
-     * The status an item is withdrawn into.
-     *
-     * <p>The value is the scope's own: which statuses are terminal is a
-     * declaration, and a terminal value named at the surface would be the
-     * literal vocabulary the whole store was rebuilt to get rid of. What the
-     * verb contributes is that the act is a withdrawal; which closed status it
-     * lands in is the caller's to say and the domain's to check.
-     *
-     * @param status the status; absent where the body named none, which the
-     *               surface refuses as ARGUMENT_MISSING
-     */
-    public record Withdrawal(@Nullable String status) {
-    }
-
-    /**
-     * How long a claim lease lasts.
-     *
-     * <p>Carried as seconds because the transport carries integers legibly and
-     * a duration string is a form callers have to guess at. The domain refuses
-     * a non-positive value with a message that says why — the same refusal
-     * that turns a zero-duration claim into a typed error.
-     *
-     * <p>Never a service constant: the concept fixes that a claim is a lease
-     * for a duration and rejects a non-positive one, and it does not fix the
-     * duration itself. A number chosen here would be a platform decision
-     * wearing an implementation's clothes.
-     *
-     * @param durationSeconds the duration; absent where the body named none,
-     *                        which the surface refuses as ARGUMENT_MISSING
-     */
-    public record Lease(@Nullable Long durationSeconds) {
-    }
-
-    /**
-     * The receipt {@code release} presents to the row it ends.
-     *
-     * <p>Opaque to the surface — the domain compares it as a string. A caller
-     * that parses it is a caller that breaks when the generator changes; the
-     * check is on the value in the row, not on a shape.
-     *
-     * @param receipt the receipt; absent where the body named none, which the
-     *                surface refuses as ARGUMENT_MISSING
-     */
-    public record Release(@Nullable String receipt) {
-    }
-
-    /**
      * An edge {@code relate} asserts, or {@code unrelate} withdraws.
      *
      * <p>The source is the address the verb runs against. The target and the

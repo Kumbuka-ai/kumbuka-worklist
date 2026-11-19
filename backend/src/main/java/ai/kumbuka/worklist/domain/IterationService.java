@@ -286,9 +286,8 @@ public class IterationService extends PlanningService {
         ScopeSetting setting = requireLockedSetting(scopeId);
         setting.requireCurrentToken(conflictToken);
 
-        Iteration next = planning.openIterations(scopeId).stream()
-            .filter(iteration -> !Objects.equals(iteration.number, setting.currentIterationNumber))
-            .findFirst()
+        Iteration next = promotable(planning.openIterations(scopeId),
+                setting.currentIterationNumber)
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.ITERATION_ABSENT,
                 List.of()));
@@ -302,6 +301,26 @@ public class IterationService extends PlanningService {
     // ------------------------------------------------------------------
     // The mechanisms the verbs above are made of.
     // ------------------------------------------------------------------
+
+    /**
+     * The iteration {@link #advance} promotes: the first open one, in the
+     * axis's own order, that is not the current one; absent where none
+     * stands, which {@code advance} refuses as {@code ITERATION_ABSENT}.
+     *
+     * <p>One decision for two readers: {@code advance} acts on it, and the
+     * open calls of an iteration name {@code advance} exactly while it finds
+     * one ({@link OpenCallService}), so a named {@code advance} is never
+     * refused for want of an iteration to promote.
+     *
+     * @param open    the open iterations of the scope, in the axis's order
+     * @param current the number of the current iteration; absent where the
+     *                scope works none
+     */
+    static Optional<Iteration> promotable(List<Iteration> open, @Nullable Long current) {
+        return open.stream()
+            .filter(iteration -> !Objects.equals(iteration.number, current))
+            .findFirst();
+    }
 
     /**
      * The next number on the time axis, from the scope's persisted mark for
@@ -434,7 +453,8 @@ public class IterationService extends PlanningService {
     }
 
     /**
-     * A closed iteration takes no further writes.
+     * A closed iteration takes no further writes: a transition its state
+     * refuses, whose one open call is {@code read}.
      *
      * <p>Its memberships stay readable — that is what makes a closed
      * iteration a record rather than a gap — but nothing moves in it again.
@@ -445,27 +465,29 @@ public class IterationService extends PlanningService {
             return;
         }
         throw new WorklistException(
-            WorklistException.Reason.ITERATION_CLOSED,
+            WorklistException.Reason.TRANSITION_REFUSED,
             List.of(ADDRESS));
     }
 
     /**
-     * The close refuses while live memberships stand.
+     * The close refuses while live memberships stand, and names them.
      *
-     * <p>The refusal carries {@code address} as its only offender: it says
-     * that the iteration still holds live memberships, not which ones. The
-     * reader lists the iteration's memberships to find them; naming them in
-     * the refusal itself would need a member the contract does not have.
+     * <p>The refusal carries {@code address} as its offender and the live
+     * memberships, by their complete addresses, as its children (C8.7), so
+     * that a caller can mark each done or dropped without listing the
+     * iteration first.
      */
     private void refuseLiveMemberships(Iteration iteration) {
-        boolean live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()
-            .anyMatch(IterationMembership::live);
-        if (!live) {
+        String slug = slugOf(iteration.scopeId);
+        List<String> live = planning.membershipsOf(iteration.scopeId, iteration.number).stream()
+            .filter(IterationMembership::live)
+            .map(membership -> "worklist://" + slug + "/" + Selector.ITERATION + "/"
+                + iteration.number + "/" + membership.itemNumber)
+            .toList();
+        if (live.isEmpty()) {
             return;
         }
-        throw new WorklistException(
-            WorklistException.Reason.ITERATION_INCOMPLETE,
-            List.of(ADDRESS));
+        throw WorklistException.incomplete(live);
     }
 
     private static boolean moved(@Nullable Object held, @Nullable Object wanted, Runnable write) {

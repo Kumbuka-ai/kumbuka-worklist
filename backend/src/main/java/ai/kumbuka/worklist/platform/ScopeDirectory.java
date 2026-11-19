@@ -225,5 +225,16 @@ public class ScopeDirectory {
      */
     public record ScopeAccess(UUID scopeId, UUID tenantId, String slug, boolean archived,
                               String kind, boolean locked, boolean canWrite) {
+
+        /**
+         * Whether a write of this subject into the scope gets past
+         * {@link #resolve}: the scope is unlocked and the subject holds the
+         * write right, the same two answers the write path refuses on. What
+         * the open calls of an answer name for the caller rests on it, so a
+         * caller who may only read is named the reading calls alone.
+         */
+        public boolean writable() {
+            return !locked && canWrite;
+        }
     }
 }

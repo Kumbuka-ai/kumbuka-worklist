@@ -117,11 +117,12 @@ class VerbVocabularyGuardTest {
      * and the two entries below that DO carry {@code close} are what makes it
      * an asymmetry rather than an omission.
      *
-     * <p>The claim family sits on {@link ClaimService}, a service of its own,
-     * because the lease has its own table and its own lifecycle and the item
-     * domain knows nothing about it. Its three verbs — {@code claim},
-     * {@code release} and {@code claim_next} — are the platform's own words
-     * spelled identically to the sibling service's.
+     * <p>The claim family -- {@code claim}, {@code release}, {@code claim_next}
+     * -- and the item verbs {@code accept} and {@code withdraw} left this
+     * scheme's surface with the target cut of the work surface: an item's
+     * state changes through {@code update} alone, and no answer carries a
+     * lease. They are platform verbs still, and no class of this scheme
+     * carries them.
      *
      * <p>{@code relate}, {@code unrelate} and {@code validate} sit on
      * {@link ItemService}: the graph edges the first two move are stored
@@ -132,11 +133,7 @@ class VerbVocabularyGuardTest {
      */
     private static final Map<Class<?>, Set<String>> CARRIED_BY_THIS_SCHEME = Map.of(
         ItemService.class,
-        Set.of("create", "read", "update", "withdraw", "query", "accept",
-            "relate", "unrelate", "validate"),
-
-        ClaimService.class,
-        Set.of("claim", "release", "claim_next"),
+        Set.of("create", "read", "update", "query", "relate", "unrelate", "validate"),
 
         MilestoneService.class,
         Set.of("create", "read", "update", "query", "close"),

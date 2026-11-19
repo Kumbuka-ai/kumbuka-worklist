@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>A set of answers is collected over both surfaces -- the three MCP
  * methods, a JSON-RPC error, an item created without a description, read and
- * listed, a claim with its lease, a planned membership, a closed iteration, a
+ * listed, a validation report, a planned membership, a closed iteration, a
  * {@code whoami}, and refusals with and without {@code data} -- and every node
  * of every answer is walked: no member is {@code null}, and every member that
  * names an instant has the one form.
@@ -69,7 +69,7 @@ class SerialisationIT {
     private static final Pattern INSTANT = Pattern.compile(
         "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z");
     private static final List<String> INSTANT_MEMBERS = List.of("created_at", "changed_at",
-        "updated_at", "closed_at", "granted_at", "expires_at");
+        "updated_at", "closed_at");
 
     private static boolean staged;
 
@@ -111,8 +111,8 @@ class SerialisationIT {
         answers.put("read over MCP", call("read", Map.of("address", address)).asString());
         answers.put("query over MCP", call("query", Map.of("scope", SCOPE,
             "selector", Selector.ITEM, "page_size", 1)).asString());
-        answers.put("claim over MCP", call("claim", Map.of("address", address,
-            "duration_seconds", 600)).asString());
+        answers.put("validate over MCP", call("validate", Map.of("scope", SCOPE,
+            "selector", Selector.ITEM)).asString());
 
         String first = "worklist://" + SCOPE + "/iteration/1";
         answers.put("plan over MCP", call("plan", Map.of("address", first + "/" + number,
@@ -149,7 +149,7 @@ class SerialisationIT {
         }
         assertThat(offences).as("members with no value, and instants of another form").isEmpty();
         assertThat(answers.values()).as("the instants were written at all")
-            .anySatisfy(a -> assertThat(a).contains("\"expires_at\""))
+            .anySatisfy(a -> assertThat(a).contains("\"created_at\""))
             .anySatisfy(a -> assertThat(a).contains("\"closed_at\""))
             .anySatisfy(a -> assertThat(a).contains("\"updated_at\""))
             .anySatisfy(a -> assertThat(a).contains("\"changed_at\""));

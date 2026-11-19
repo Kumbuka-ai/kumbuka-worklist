@@ -66,7 +66,7 @@ import java.util.Optional;
  *
  * <p>The colon is split off in {@link CustomMethod} rather than routed by the
  * framework, because the framework cannot: a path template takes the whole
- * segment it appears in, so seventeen {@code @Path("{id}:verb")} routes would
+ * segment it appears in, so one {@code @Path("{id}:verb")} route per verb would
  * collapse into one. That measurement is recorded on {@code CustomMethod}. The
  * outward form is unchanged and it is the outward form that is probed.
  *
@@ -166,8 +166,6 @@ public class WorklistResource {
                 yield ok(scope, verbs.advance(caller.subject(), scope, at.address(),
                     unquote(ifMatch).orElse(null)));
             }
-            case CLAIM_NEXT -> ok(scope, verbs.claimNext(caller.subject(), scope,
-                at.address(), lease(arguments(body, DURATION)).orElse(null)));
             case VALIDATE -> {
                 arguments(body);
                 yield ok(scope, verbs.validate(caller.subject(), scope, at.address()));
@@ -238,7 +236,7 @@ public class WorklistResource {
             paging.get(QuerySpec.AFTER_ARGUMENT), paging.get(QuerySpec.SORT_ARGUMENT),
             paging.get(QuerySpec.DIRECTION_ARGUMENT), untaken);
         return Response.ok(Payloads.of(scope,
-            verbs.query(caller.subject(), scope, selector, spec))).build();
+            verbs.query(caller.subject(), scope, selector, spec), assistant())).build();
     }
 
     // ======================================================================
@@ -311,19 +309,9 @@ public class WorklistResource {
         String id = at.address();
 
         return switch (at.known()) {
-            case ACCEPT -> {
-                arguments(body);
-                yield ok(scope, verbs.accept(subject, scope, selector, id, token));
-            }
-            case WITHDRAW -> ok(scope, verbs.withdraw(subject, scope, selector, id, token,
-                withdrawal(arguments(body, STATUS)).orElse(null)));
             case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token,
                 arguments(body, PRODUCED).text(PRODUCED).orElse(null)));
 
-            case CLAIM -> ok(scope, verbs.claim(subject, scope, selector, id,
-                lease(arguments(body, DURATION)).orElse(null)));
-            case RELEASE -> ok(scope, verbs.release(subject, scope, selector, id,
-                release(arguments(body, RECEIPT)).orElse(null)));
             case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
                 edge(arguments(body, TO_ITEM, TYPE)).orElse(null)));
             case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
@@ -337,7 +325,7 @@ public class WorklistResource {
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
 
-            case VALIDATE, ADVANCE, CLAIM_NEXT, DIGEST -> throw new IllegalStateException(
+            case VALIDATE, ADVANCE, DIGEST -> throw new IllegalStateException(
                 "'" + at.verb() + "' acts at collection depth and cannot arrive here");
         };
     }
@@ -383,7 +371,7 @@ public class WorklistResource {
      *
      * <p>The one DELETE this surface offers, and it is not a delete of an object:
      * a membership is a relation with a position, and removing it is the verb
-     * {@code unplan}. Nothing in this scheme is hard-deleted — an item withdrawn
+     * {@code unplan}. Nothing in this scheme is hard-deleted — an item closed
      * keeps its address forever — so the method is available here precisely
      * because what it removes is not an object.
      */
@@ -428,7 +416,15 @@ public class WorklistResource {
      * names of the surface the caller came through (C6.2).
      */
     private void calling(String verb) {
-        context.call(verb, ASSISTANT.equals(headers.getHeaderString(SURFACE)));
+        context.call(verb, assistant());
+    }
+
+    /**
+     * Whether the request names the assistant surface, so that the calls an
+     * answer names under {@code next} carry their tool names (C6.2, C14.4).
+     */
+    private boolean assistant() {
+        return ASSISTANT.equals(headers.getHeaderString(SURFACE));
     }
 
     // ======================================================================
@@ -455,8 +451,8 @@ public class WorklistResource {
     // Dressing a result in HTTP
     // ======================================================================
 
-    private static Response ok(String scope, VerbSurface.Result result) {
-        return tagged(Response.ok(Payloads.of(scope, result)), result);
+    private Response ok(String scope, VerbSurface.Result result) {
+        return tagged(Response.ok(Payloads.of(scope, result, assistant())), result);
     }
 
     /**
@@ -467,14 +463,14 @@ public class WorklistResource {
      * passed through, so a tolerated trailing slash does not survive into a
      * header other clients will treat as an identity.
      */
-    private static Response created(String scope, VerbSurface.Result result) {
+    private Response created(String scope, VerbSurface.Result result) {
         return tagged(Response
             .created(UriBuilder.fromResource(WorklistResource.class)
                 .path("{selector}/{id}")
                 .build(new Object[] {
                     scope, result.address().view(), result.address().id()
                 }, false))
-            .entity(Payloads.of(scope, result)), result);
+            .entity(Payloads.of(scope, result, assistant())), result);
     }
 
     /**
@@ -496,10 +492,7 @@ public class WorklistResource {
     // The arguments of a body
     // ======================================================================
 
-    private static final String STATUS = "status";
     private static final String PRODUCED = "produced";
-    private static final String DURATION = "duration_seconds";
-    private static final String RECEIPT = "receipt";
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String TAG = "tag";
@@ -513,29 +506,10 @@ public class WorklistResource {
         return ArgumentsPayload.declared(json, body, declared);
     }
 
-    private static Optional<VerbInput.Withdrawal> withdrawal(ArgumentsPayload arguments) {
-        return arguments.isEmpty() ? Optional.empty()
-            : Optional.of(new VerbInput.Withdrawal(arguments.text(STATUS).orElse(null)));
-    }
-
-    private static Optional<VerbInput.Release> release(ArgumentsPayload arguments) {
-        return arguments.isEmpty() ? Optional.empty()
-            : Optional.of(new VerbInput.Release(arguments.text(RECEIPT).orElse(null)));
-    }
-
     private static Optional<VerbInput.Edge> edge(ArgumentsPayload arguments) {
         return arguments.isEmpty() ? Optional.empty()
             : Optional.of(new VerbInput.Edge(arguments.text(TO_ITEM).orElse(null),
                 arguments.text(TYPE).orElse(null)));
-    }
-
-    /** The lease of a claim or a draw: a whole number of seconds, where the body names one. */
-    private static Optional<VerbInput.Lease> lease(ArgumentsPayload arguments) {
-        if (arguments.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(new VerbInput.Lease(arguments.integer(DURATION)
-            .orElseThrow(() -> SurfaceException.invalid(DURATION))));
     }
 
     /**

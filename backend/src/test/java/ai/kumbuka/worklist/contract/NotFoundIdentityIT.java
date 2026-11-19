@@ -146,8 +146,8 @@ class NotFoundIdentityIT {
     @Test
     void a_write_to_any_of_the_three_answers_the_same_bytes_as_a_read() {
         List<Response> writes = causes().stream()
-            .map(address -> Mcp.call("worklist_withdraw", Map.of("address", address,
-                "conflict_token", "t", "status", "dropped")))
+            .map(address -> Mcp.call("worklist_update", Map.of("address", address,
+                "conflict_token", "t", "fields", Map.of("status", "dropped"))))
             .toList();
         for (Response write : writes) {
             assertThat(notFoundOffences(Mcp.refusal(write)))

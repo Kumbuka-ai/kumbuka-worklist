@@ -8,10 +8,13 @@
 package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.surface.AddressParser;
+import ai.kumbuka.worklist.surface.NextStepTexts;
 import ai.kumbuka.worklist.surface.NoticeTexts;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
+import io.quarkus.qute.i18n.MessageBundles;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,6 +37,13 @@ import java.util.Map;
  * either refuse it as unknown or, worse, silently accept a key that means
  * something to nobody. Keeping them apart is what makes read-modify-write safe:
  * everything under {@code fields} may be sent back untouched.
+ *
+ * <h2>The names of the calls under {@code next}</h2>
+ *
+ * The calls are named in the verb names of the surface the caller came
+ * through (C6.2): the tool names on MCP and on REST under
+ * {@code Kumbuka-Surface: assistant}, the REST verbs otherwise. Which one is
+ * the adapter's to say, so each translation below takes it.
  */
 public final class Payloads {
 
@@ -60,10 +70,28 @@ public final class Payloads {
     // Verb answer to wire shape
     // ----------------------------------------------------------------------
 
-    /** One object, at its address. */
-    public static ObjectPayload of(String scope, VerbSurface.Result result) {
+    /**
+     * One object, at its address, with the calls open on it.
+     *
+     * @param toolNames whether the calls are named by their tool names, as the
+     *                  assistant surface names them (C6.2)
+     */
+    public static ObjectPayload of(String scope, VerbSurface.Result result, boolean toolNames) {
         return new ObjectPayload(AddressParser.render(scope, result.address()),
-            worded(result.fields()), result.conflictToken().orElse(null));
+            worded(result.fields()), result.conflictToken().orElse(null),
+            next(scope, result.next(), toolNames));
+    }
+
+    /**
+     * The open calls, as {@code next} carries them: the call in the names of
+     * the caller's surface, and the sentence of what it does.
+     */
+    public static List<NextPayload> next(String scope, List<VerbSurface.NextStep> steps,
+                                         boolean toolNames) {
+        NextStepTexts texts = MessageBundles.get(NextStepTexts.class);
+        return steps.stream()
+            .map(step -> new NextPayload(step.call(scope, toolNames), step.does().apply(texts)))
+            .toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -72,9 +100,10 @@ public final class Payloads {
     }
 
     /** A set of them. */
-    public static ListingPayload of(String scope, VerbSurface.Listing listing) {
+    public static ListingPayload of(String scope, VerbSurface.Listing listing,
+                                    boolean toolNames) {
         return new ListingPayload(listing.objects().stream()
-            .map(result -> of(scope, result))
+            .map(result -> of(scope, result, toolNames))
             .toList(), listing.next());
     }
 }

@@ -68,10 +68,9 @@ import java.util.Optional;
  * without being taught anything about this scheme. 409 is kept for the states
  * that are conflicts of the object rather than of the caller's copy of it.
  *
- * <p>{@code IDENTIFIER_UNDECIDED} answers <strong>501</strong>. The call is
- * well-formed, addressed at a real item, and correct; what is missing is on our
- * side. A 4xx would tell the caller to change something, and there is nothing
- * they could change.
+ * <p>{@code VERB_UNBUILT} answers <strong>501</strong>. The call is
+ * well-formed and correct; what is missing is on our side. A 4xx would tell
+ * the caller to change something, and there is nothing they could change.
  */
 @Provider
 public class RefusalMapper implements ExceptionMapper<SurfaceException> {
@@ -182,26 +181,49 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
 
         /**
          * The envelope of a domain refusal. A stale token carries the object
-         * as it stands (DEC-0041), read again at the address the path named,
-         * now that the refused write has rolled back; a call at a collection
-         * -- the settings token of {@code advance} -- or an object the read
-         * cannot reach is answered with the token alone.
+         * as it stands (DEC-0041), and a refusal by state the object's state
+         * and the calls open on it (C8.7), each read again at the address the
+         * path named, now that the refused write has rolled back. A call at a
+         * collection -- the settings token of {@code advance} -- or an object
+         * the read cannot reach is answered with the code alone.
          */
         private RefusalPayload payload(WorklistException e, @Nullable String attempted) {
             Optional<CallContext.Target> named = context.target();
-            if (e.reason() != WorklistException.Reason.CONFLICT || named.isEmpty()) {
+            boolean stale = e.reason() == WorklistException.Reason.CONFLICT;
+            if (named.isEmpty() || !(stale || RefusalPayload.isByState(e))) {
                 return RefusalPayload.of(e, attempted);
             }
             CallContext.Target at = named.get();
-            String member = at.member();
-            try {
-                VerbSurface.Result now = member == null
-                    ? verbs.read(caller.subject(), at.scope(), at.view(), at.id())
-                    : verbs.readMembership(caller.subject(), at.scope(), at.view(), at.id(),
-                        member);
-                return RefusalPayload.stale(e, attempted, Payloads.of(at.scope(), now));
-            } catch (WorklistException | SurfaceException unreadable) {
+            Optional<VerbSurface.Result> now = readAgain(at);
+            if (now.isEmpty()) {
                 return RefusalPayload.of(e, attempted);
+            }
+            return stale
+                ? RefusalPayload.stale(e, attempted,
+                    Payloads.of(at.scope(), now.get(), context.toolNames()))
+                : RefusalPayload.byState(e, attempted, at.scope(), now.get(),
+                    context.toolNames());
+        }
+
+        /**
+         * The object the path named, as it stands now: the membership, or,
+         * where none stands at that address -- a plan the state refused --
+         * the iteration it would have stood in; empty where neither reads.
+         */
+        private Optional<VerbSurface.Result> readAgain(CallContext.Target at) {
+            String member = at.member();
+            if (member != null) {
+                try {
+                    return Optional.of(verbs.readMembership(caller.subject(), at.scope(),
+                        at.view(), at.id(), member));
+                } catch (WorklistException | SurfaceException absent) {
+                    // No membership at this address: the iteration answers for it.
+                }
+            }
+            try {
+                return Optional.of(verbs.read(caller.subject(), at.scope(), at.view(), at.id()));
+            } catch (WorklistException | SurfaceException unreadable) {
+                return Optional.empty();
             }
         }
 

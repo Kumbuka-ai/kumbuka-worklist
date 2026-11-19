@@ -52,9 +52,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       carries no {@code data} at all, and a refusal before the route none.</li>
  * </ul>
  *
- * <p>{@code next} and {@code waiting_for} are not asserted: this service does
- * not answer them yet, and the clause that does belongs to the step that
- * builds them.
+ * <p>An answer about one object and every listing entry carry {@code next},
+ * a list of {@code {call, does}}, and never {@code waiting_for}: no object of
+ * this service waits for another party, and which calls stand in {@code next}
+ * per state is {@code OpenCallsIT}'s.
  *
  * <p>The member names are written here from the contract; the answers are
  * read off the wire.
@@ -75,7 +76,8 @@ class AnswerShapeConformanceIT {
     private static final UUID SCOPE_ID = UUID.fromString("5a1d3c7e-0b2f-4c6e-9a8d-1f2e3d4c5b6a");
 
     /** The members of an answer about one object that this service carries (C6.1). */
-    private static final List<String> OBJECT = List.of("address", "fields", "conflict_token");
+    private static final List<String> OBJECT =
+        List.of("address", "fields", "conflict_token", "next");
 
     private static boolean staged;
 
@@ -238,6 +240,20 @@ class AnswerShapeConformanceIT {
         soft.assertThat(answer.get("conflict_token"))
             .as("the token at the top is the one still in fields").isNotNull()
             .isEqualTo(inFields);
+        soft.assertThat(answer).as("no object of this service waits for another party")
+            .doesNotContainKey("waiting_for");
+        if (answer.get("next") instanceof List<?> next) {
+            soft.assertThat(next).as("an object always has read open").isNotEmpty();
+            for (Object step : next) {
+                soft.assertThat(step).as("each step is {call, does}: %s", step)
+                    .isInstanceOfSatisfying(Map.class, entry -> soft.assertThat(
+                        ((Map<String, Object>) entry).keySet())
+                        .containsExactlyInAnyOrder("call", "does"));
+            }
+        } else {
+            soft.assertThat(answer.get("next")).as("next is a list: %s", answer)
+                .isInstanceOf(List.class);
+        }
     }
 
     @SuppressWarnings("unchecked")

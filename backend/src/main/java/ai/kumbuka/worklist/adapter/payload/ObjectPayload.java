@@ -10,10 +10,12 @@ package ai.kumbuka.worklist.adapter.payload;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.Map;
 
 /**
- * One object as it goes out: its address, and what the domain projected.
+ * One object as it goes out: its address, what the domain projected, and the
+ * calls open to the caller on it.
  *
  * <p>The field map is passed through unaltered. An adapter that reshaped it
  * would be a second naming of the same values -- which is the defect the
@@ -26,11 +28,17 @@ import java.util.Map;
  * today keeps reading it there. Both are the same value, read off the one
  * projection ({@code VerbSurface.Result#conflictToken}).
  *
+ * <p>{@code next} names the calls open to the caller on the object in its
+ * state, each as {@code {call, does}} in the names of the caller's surface
+ * (C6.1, C6.2). No object of this service waits for another party, so no
+ * answer carries {@code waiting_for}.
+ *
  * @param conflictToken the object's token; absent for an answer about no
  *                      single object that carries one, and then left out
  */
 public record ObjectPayload(
     @JsonProperty("address") String address,
     @JsonProperty("fields") Map<String, Object> fields,
-    @JsonProperty("conflict_token") @Nullable String conflictToken) {
+    @JsonProperty("conflict_token") @Nullable String conflictToken,
+    @JsonProperty("next") List<NextPayload> next) {
 }

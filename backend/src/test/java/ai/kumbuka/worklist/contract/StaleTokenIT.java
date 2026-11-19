@@ -69,6 +69,7 @@ class StaleTokenIT {
             selectors.open(SCOPE_ID, Selector.ITEM);
             vocabulary.declareStatus(SCOPE_ID, "open", 1, true, false, false, false);
             vocabulary.declareStatus(SCOPE_ID, "done", 2, false, false, true, true);
+            vocabulary.declareRelationType(SCOPE_ID, "carries", false, 1);
             workstreams.requireDefault(SCOPE_ID);
             staged = true;
         }
@@ -101,14 +102,16 @@ class StaleTokenIT {
     }
 
     @Test
-    void a_stale_token_on_a_transition_carries_the_object_too() {
-        Map<String, Object> created = created("stale on withdraw");
+    void a_stale_token_on_a_graph_verb_carries_the_object_too() {
+        Map<String, Object> created = created("stale on relate");
         String address = String.valueOf(created.get("address"));
-        Map<String, Object> refusal = Mcp.refusal(Mcp.call("worklist_withdraw", Map.of(
-            "address", address, "conflict_token", "stale", "status", "done")));
+        String target = String.valueOf(created("the edge's target").get("address"));
+        Map<String, Object> refusal = Mcp.refusal(Mcp.call("worklist_relate", Map.of(
+            "address", address, "conflict_token", "stale", "to_item", target,
+            "type", "carries")));
         Map<String, Object> now = Mcp.answer(Mcp.call("worklist_read", Map.of("address", address)));
 
-        assertStale(refusal, now, "worklist_withdraw");
+        assertStale(refusal, now, "worklist_relate");
     }
 
     // ======================================================================

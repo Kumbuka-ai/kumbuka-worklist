@@ -207,11 +207,14 @@ class LifecycleChainIT {
 
         // 10. The closed iteration stays readable — a closed iteration is a
         //     record, not a gap. Its own read succeeds and reports the
-        //     timestamp; membership reads through the axis's write path are
-        //     the one thing that refuses, and correctly so.
+        //     timestamp, and so does the read of each membership it held;
+        //     the writes on the axis are the ones that refuse.
         Map<String, Object> after = iterations.read(scope, iterationId);
         assertThat(after.get(Field.CLOSED_AT.canonicalName())).isNotNull();
         assertThat(after.get(Field.TITLE.canonicalName())).isEqualTo("week 34");
+        assertThat(memberships.read(scope, iterationId, itemId)
+                .get(Field.MEMBERSHIP_STATUS.canonicalName()))
+            .isEqualTo(IterationMembership.DONE);
     }
 
     // ==================================================================

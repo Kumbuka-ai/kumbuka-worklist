@@ -157,6 +157,18 @@ public final class AddressParser {
     }
 
     /**
+     * The address of one view's collection, {@code worklist://<scope>/<view>}.
+     *
+     * <p>A truncated address, and the one named exception to "every address
+     * in an answer is accepted by read" (C6.4): {@code advance} acts on the
+     * iteration collection and on no object, so the step of {@code next} that
+     * names it can name no complete address. It is named nowhere else.
+     */
+    public static String renderCollection(String scope, String view) {
+        return SCHEME + "://" + scope + "/" + view;
+    }
+
+    /**
      * The scope name, checked against the authority production.
      *
      * @return the same string, unchanged. Nothing is normalised here: a value

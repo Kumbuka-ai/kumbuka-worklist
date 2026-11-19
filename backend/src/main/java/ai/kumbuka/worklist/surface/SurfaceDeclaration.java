@@ -53,6 +53,9 @@ public final class SurfaceDeclaration {
     /** The argument a token travels in, and the member at the top of an answer that carries it (C6.1). */
     private static final String TOKEN_MEMBER = "conflict_token";
 
+    /** The member at the top of an answer that names the calls open on the object (C6.1). */
+    private static final String NEXT_MEMBER = "next";
+
     private SurfaceDeclaration() {
     }
 
@@ -151,12 +154,15 @@ public final class SurfaceDeclaration {
      */
     public enum Answer {
         /**
-         * One object: {@code address}, {@code fields}, and {@code conflict_token}
-         * where the object carries one (C6.1).
+         * One object: {@code address}, {@code fields}, {@code conflict_token}
+         * where the object carries one, and {@code next}, the calls open to
+         * the caller on the object in its state (C6.1).
          */
-        OBJECT(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT, "[" + TOKEN_MEMBER + "]")),
+        OBJECT(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT, "[" + TOKEN_MEMBER + "]",
+            NEXT_MEMBER)),
         /** One object at 201, with {@code Location}. */
-        OBJECT_CREATED(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT, "[" + TOKEN_MEMBER + "]")),
+        OBJECT_CREATED(List.of(ADDRESS_MEMBER, Field.FIELDS_ARGUMENT, "[" + TOKEN_MEMBER + "]",
+            NEXT_MEMBER)),
         /** A page of objects and {@code next_cursor} while more follow. */
         OBJECT_LISTING(List.of("objects", "[next_cursor]"));
 
@@ -239,10 +245,6 @@ public final class SurfaceDeclaration {
         required(TOKEN_MEMBER, ArgumentType.STRING, ArgumentDescriptions::conflictToken);
     private static final Argument FIELDS =
         required(Field.FIELDS_ARGUMENT, ArgumentType.OBJECT, d -> d.fields(TITLE_MAX));
-    /** A lease of no length is refused, so the least duration is one second. */
-    private static final Argument DURATION = new Argument(name("duration_seconds"),
-        ArgumentType.INTEGER, true, null, List.of(), false, 1, null,
-        ArgumentDescriptions::durationSeconds);
     private static final Argument TO_ITEM =
         required("to_item", ArgumentType.STRING, ArgumentDescriptions::toItem);
     private static final Argument TYPE =
@@ -318,7 +320,7 @@ public final class SurfaceDeclaration {
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.ITERATION_ABSENT)),
             ADDRESS),
         verb("update", ToolDescriptions::update, EffectClass.FIELD_WRITE, Answer.OBJECT,
-            reasons(WRITE, TOKENED, FIELD_WRITE, codes(RefusalCode.ITERATION_CLOSED)),
+            reasons(WRITE, TOKENED, FIELD_WRITE, codes(RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TOKEN, FIELDS),
         verb("query", ToolDescriptions::query, EffectClass.COLLECTION_READ, Answer.OBJECT_LISTING,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.SELECTOR_WITHDRAWN,
@@ -345,18 +347,10 @@ public final class SurfaceDeclaration {
                     new Value(SortKey.Direction.DESC.wireName(),
                         ValueDescriptions::directionDesc)),
                 ArgumentDescriptions::direction)),
-        verb("accept", ToolDescriptions::accept, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
-            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
-                RefusalCode.IDENTIFIER_UNDECIDED)),
-            ADDRESS, TOKEN),
-        verb("withdraw", ToolDescriptions::withdraw, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
-            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
-                RefusalCode.VALUE_UNDECLARED)),
-            ADDRESS, TOKEN,
-            required("status", ArgumentType.STRING, ArgumentDescriptions::status)),
         verb("close", ToolDescriptions::close, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
-            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.ITERATION_CLOSED,
-                RefusalCode.ITERATION_INCOMPLETE, RefusalCode.ITERATION_PRODUCED_MISSING)),
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
+                RefusalCode.TRANSITION_REFUSED, RefusalCode.ITERATION_INCOMPLETE,
+                RefusalCode.ITERATION_PRODUCED_MISSING)),
             ADDRESS, TOKEN,
             optional("produced", ArgumentType.STRING, null, ArgumentDescriptions::produced)),
         verb("advance", ToolDescriptions::advance, EffectClass.COLLECTION_COMPOUND, Answer.OBJECT,
@@ -368,26 +362,12 @@ public final class SurfaceDeclaration {
                 ArgumentDescriptions::conflictTokenSetting)),
         verb("plan", ToolDescriptions::plan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT_CREATED,
             reasons(WRITE, TOKENED, codes(RefusalCode.MEMBERSHIP_PRESENT,
-                RefusalCode.ITERATION_CLOSED, RefusalCode.ITEM_UNPLANNABLE,
+                RefusalCode.TRANSITION_REFUSED, RefusalCode.ITEM_UNPLANNABLE,
                 RefusalCode.SETTING_ABSENT, RefusalCode.CARDINALITY_EXCEEDED)),
             MEMBERSHIP, TOKEN),
         verb("unplan", ToolDescriptions::unplan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT,
-            reasons(WRITE, TOKENED, codes(RefusalCode.ITERATION_CLOSED)),
+            reasons(WRITE, TOKENED, codes(RefusalCode.TRANSITION_REFUSED)),
             MEMBERSHIP, TOKEN),
-        verb("claim", ToolDescriptions::claim, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
-            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.ADDRESS_READ_ONLY,
-                RefusalCode.INVALID_VALUE, RefusalCode.CLAIM_HELD)),
-            ADDRESS, DURATION),
-        verb("release", ToolDescriptions::release, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
-            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.ADDRESS_READ_ONLY,
-                RefusalCode.CLAIM_ABSENT, RefusalCode.CLAIM_RECEIPT_UNKNOWN)),
-            ADDRESS,
-            required("receipt", ArgumentType.STRING, ArgumentDescriptions::receipt)),
-        verb("claim_next", ToolDescriptions::claimNext, EffectClass.COLLECTION_COMPOUND,
-            Answer.OBJECT,
-            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.DRAW_EMPTY,
-                RefusalCode.CLAIM_HELD)),
-            SCOPE, selector(ArgumentDescriptions::selectorItem, Selector.ITEM), DURATION),
         verb("relate", ToolDescriptions::relate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
                 RefusalCode.VALUE_UNDECLARED)),
@@ -402,9 +382,9 @@ public final class SurfaceDeclaration {
                 RefusalCode.VERB_UNCARRIED)),
             SCOPE, selector(ArgumentDescriptions::selectorItem, Selector.ITEM)),
         // The tags. A write on an addressed object that presents no conflict
-        // token, which this declaration classes as claim and release are
-        // classed; the assignment is a relation and moves neither the item's
-        // timestamp nor its token. The answer is the item, its tags included.
+        // token, classed as an item transition; the assignment is a relation
+        // and moves neither the item's timestamp nor its token. The answer is
+        // the item, its tags included.
         verb("tag_attach", ToolDescriptions::tagAttach, EffectClass.ITEM_TRANSITION,
             Answer.OBJECT,
             reasons(WRITE, codes(RefusalCode.TAG_ITEM_ONLY, RefusalCode.VALUE_UNDECLARED,

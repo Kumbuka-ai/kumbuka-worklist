@@ -57,7 +57,7 @@ import static org.hamcrest.Matchers.is;
  * sentence.
  *
  * <p><strong>Every other verb is a category error</strong> — the transition
- * verbs, the claim family, the graph verbs and validate refuse with
+ * verbs, the graph verbs and validate refuse with
  * {@code VERB_UNCARRIED}. Most are refused by the existing
  * {@code requireView(...,ITEM,...)} / {@code !ITERATION}-checks; {@code close}
  * grows a dedicated arm.
@@ -252,21 +252,22 @@ class WorkstreamViewIT {
     }
 
     @Test
-    void accept_on_workstream_is_a_category_error() {
+    void relate_on_workstream_is_a_category_error() {
         given()
             .header("If-Match", "any-token")
-            .when().post(SurfaceFixture.item(Selector.WORKSTREAM, workstreamNumber) + ":accept")
+            .contentType(ContentType.JSON)
+            .body(Map.of("to_item", SurfaceFixture.address(Selector.ITEM, 1), "type", "any"))
+            .when().post(SurfaceFixture.item(Selector.WORKSTREAM, workstreamNumber) + ":relate")
             .then()
             .statusCode(422)
             .body("reason", is("VERB_UNCARRIED"));
     }
 
     @Test
-    void claim_on_workstream_is_a_category_error() {
+    void advance_on_workstream_is_a_category_error() {
         given()
-            .contentType(ContentType.JSON)
-            .body(Map.of("duration_seconds", 60))
-            .when().post(SurfaceFixture.item(Selector.WORKSTREAM, workstreamNumber) + ":claim")
+            .header("If-Match", "any-token")
+            .when().post(SurfaceFixture.collection(Selector.WORKSTREAM) + ":advance")
             .then()
             .statusCode(422)
             .body("reason", is("VERB_UNCARRIED"));

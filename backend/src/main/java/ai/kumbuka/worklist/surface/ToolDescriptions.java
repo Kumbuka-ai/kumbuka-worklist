@@ -38,12 +38,6 @@ public interface ToolDescriptions {
     String query();
 
     @Message
-    String accept();
-
-    @Message
-    String withdraw();
-
-    @Message
     String close();
 
     @Message
@@ -54,15 +48,6 @@ public interface ToolDescriptions {
 
     @Message
     String unplan();
-
-    @Message
-    String claim();
-
-    @Message
-    String release();
-
-    @Message
-    String claimNext();
 
     @Message
     String relate();

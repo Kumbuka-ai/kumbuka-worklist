@@ -251,7 +251,12 @@ class PlanningRefusalIT {
             .isNotNull();
     }
 
-    /** A closed iteration takes no further writes, on itself or its memberships. */
+    /**
+     * A closed iteration takes no further writes, on itself or its
+     * memberships: each is a transition the state refuses, and the code says
+     * so ({@code TRANSITION_REFUSED}, service contract C8.7). The code is
+     * compared by its name, written here from the contract.
+     */
     @Test
     void a_closed_iteration_takes_no_further_writes() {
         UUID iteration = iteration("finished");
@@ -264,20 +269,30 @@ class PlanningRefusalIT {
         iterations.close(scope, iteration, "test outcome", last);
 
         assertThat(refusalFrom(() -> iterations.update(scope, iteration, Map.of(
-                "motto", "reopened", "conflict_token", token(iteration)))).reason())
-            .isEqualTo(WorklistException.Reason.ITERATION_CLOSED);
+                "motto", "reopened", "conflict_token", token(iteration)))).reason().name())
+            .isEqualTo("TRANSITION_REFUSED");
         assertThat(refusalFrom(() ->
-                iterations.close(scope, iteration, "test outcome", token(iteration))).reason())
+                iterations.close(scope, iteration, "test outcome", token(iteration))).reason()
+                .name())
             .as("and closing it twice is the same refusal")
-            .isEqualTo(WorklistException.Reason.ITERATION_CLOSED);
+            .isEqualTo("TRANSITION_REFUSED");
         assertThat(refusalFrom(() -> memberships.plan(scope, iteration,
-                onPath("too late"), token(iteration))).reason())
-            .isEqualTo(WorklistException.Reason.ITERATION_CLOSED);
+                onPath("too late"), token(iteration))).reason().name())
+            .isEqualTo("TRANSITION_REFUSED");
+        assertThat(refusalFrom(() -> memberships.update(scope, iteration, item, Map.of(
+                "membership_status", IterationMembership.DROPPED,
+                "conflict_token", token(iteration)))).reason().name())
+            .as("a membership of a closed iteration takes no write either")
+            .isEqualTo("TRANSITION_REFUSED");
 
         assertThat(iterations.read(scope, iteration).get("order"))
             .as("what it held stays READABLE — that is what makes a closed iteration a "
                 + "record of what was worked rather than a gap")
             .isEqualTo(List.of(addressOfItem(item)));
+        assertThat(memberships.read(scope, iteration, item).get("membership_status"))
+            .as("and each membership it held reads as it was closed over: read is the call "
+                + "a membership of a closed iteration keeps")
+            .isEqualTo(IterationMembership.DONE);
     }
 
     /** {@code advance} with nothing left to promote is a call to plan, and says so. */
@@ -397,6 +412,38 @@ class PlanningRefusalIT {
             .as("a closed milestone stays in the table, so every reference still resolves "
                 + "and the allocator counts past it")
             .hasSize(3);
+    }
+
+    /**
+     * A closed milestone takes no further write: {@code update} and a second
+     * {@code close} are transitions its state refuses, answered as
+     * {@code TRANSITION_REFUSED} (DEC-0043; the commissioner's decision of
+     * 2026-11-18). The code is compared by its name, written here from the
+     * contract. Read stays open.
+     */
+    @Test
+    void a_closed_milestone_takes_no_further_write() {
+        UUID milestone = (UUID) milestones.create(scope, Map.of("title", "reached"))
+            .answer().get("id");
+        milestones.close(scope, milestone, milestoneToken(milestone));
+
+        assertThat(refusalFrom(() -> milestones.update(scope, milestone, Map.of(
+                "title", "reached again", "conflict_token", milestoneToken(milestone))))
+                .reason().name())
+            .as("an update of a closed milestone is refused by its state")
+            .isEqualTo("TRANSITION_REFUSED");
+        assertThat(refusalFrom(() -> milestones.update(scope, milestone, Map.of(
+                "status", Milestone.ACTIVE, "conflict_token", milestoneToken(milestone))))
+                .reason().name())
+            .as("and reopening it through update is the same refusal")
+            .isEqualTo("TRANSITION_REFUSED");
+        assertThat(refusalFrom(() -> milestones.close(scope, milestone,
+                milestoneToken(milestone))).reason().name())
+            .as("and closing it twice")
+            .isEqualTo("TRANSITION_REFUSED");
+        assertThat(milestones.read(scope, milestone).get("title"))
+            .as("read stays open on a closed milestone")
+            .isEqualTo("reached");
     }
 
     /** An unknown milestone status is refused against the platform's own three. */

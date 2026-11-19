@@ -207,12 +207,9 @@ class McpProjectionIT {
         call("close", Map.of("address", milestone, "conflict_token", tokenOf(milestone)))
             .body("result.structuredContent.fields.status", is("closed"));
 
-        call("accept", Map.of("address", item, "conflict_token", itemToken))
-            .body("result.isError", is(true))
-            .body("result.structuredContent.reason", is("IDENTIFIER_UNDECIDED"));
-
-        call("withdraw", Map.of("address", item, "conflict_token", itemToken,
-            "status", closed))
+        // The item closes through update, the one way its state moves.
+        call("update", Map.of("address", item, "conflict_token", itemToken,
+            "fields", Map.of("status", closed)))
             .body("result.isError", is(false))
             .body("result.structuredContent.fields.status", is("mcp-chain-done"));
     }
@@ -264,12 +261,11 @@ class McpProjectionIT {
     }
 
     // The counter-probe against an unbuilt verb answered by name lived here
-    // before SPRINT_171.2 built the six that were then unbuilt. That
-    // sub-sprint moved 'claim', 'release', 'claim_next', 'relate', 'unrelate'
-    // and 'validate' from UNBUILT to CARRIED and left the class empty — the
-    // TSV under test/resources says so plainly. A probe against VERB_UNBUILT
-    // now has no verb to point at; it will come back when the surface has a
-    // planned-but-not-yet-built verb again, and stays absent until then.
+    // before SPRINT_171.2 built the verbs that were then unbuilt and left the
+    // class empty — the TSV under test/resources says so plainly. A probe
+    // against VERB_UNBUILT now has no verb to point at; it will come back
+    // when the surface has a planned-but-not-yet-built verb again, and stays
+    // absent until then.
 
     /**
      * A tool this server does not have is a fault of the protocol, -32602, and
@@ -285,18 +281,17 @@ class McpProjectionIT {
     }
 
     /**
-     * The six verbs SPRINT_171.2 built, exercised end to end over MCP.
+     * The graph verbs and validate, exercised end to end over MCP.
      *
      * <p>The chain probe above walks the object lifecycle. This one walks the
-     * claim family, the graph verbs, and validate — each one built for this
-     * sub-sprint, each one reached through the MCP adapter, its projection
-     * of the surface, and the domain behind it.
+     * graph verbs and validate, each one reached through the MCP adapter, its
+     * projection of the surface, and the domain behind it.
      *
      * <p>Two items and one declared relation type are the whole of the
      * setup — the smallest scope in which relate and unrelate have a target.
      */
     @Test
-    void every_verb_built_by_this_sub_sprint_reaches_its_act_over_mcp() {
+    void the_graph_verbs_and_validate_reach_their_acts_over_mcp() {
         String status = vocabulary
             .declareStatus(SCOPE_ID, "carrier-open", 3, true, false, false, false).name;
         String relationTypeName = vocabulary
@@ -306,32 +301,6 @@ class McpProjectionIT {
             Map.of("title", "the source", "status", status));
         String second = created(Selector.ITEM,
             Map.of("title", "the target", "status", status));
-
-        // ---- claim + release, at item depth --------------------------------
-        String receipt = call("claim",
-                Map.of("address", first, "duration_seconds", 60))
-            .body("result.isError", is(false))
-            .body("result.structuredContent.fields.receipt",
-                org.hamcrest.Matchers.notNullValue())
-            .extract().path("result.structuredContent.fields.receipt");
-        call("release", Map.of("address", first, "receipt", receipt))
-            .body("result.isError", is(false));
-
-        // ---- claim_next: the draw at collection depth ----------------------
-        //
-        // Two items are unclaimed; the draw takes one and reports its
-        // address so the caller can release it.
-        Map<String, Object> drawn = call("claim_next",
-                Map.of("scope", SurfaceFixture.SCOPE,
-                    "selector", Selector.ITEM,
-                    "duration_seconds", 60))
-            .body("result.isError", is(false))
-            .extract().path("result.structuredContent");
-        String drawnAddress = String.valueOf(((Map<?, ?>) drawn).get("address"));
-        String drawnReceipt = String.valueOf(
-            ((Map<?, ?>) ((Map<?, ?>) drawn).get("fields")).get("receipt"));
-        call("release", Map.of("address", drawnAddress, "receipt", drawnReceipt))
-            .body("result.isError", is(false));
 
         // ---- relate + unrelate, at item depth ------------------------------
         String firstToken = tokenOf(first);

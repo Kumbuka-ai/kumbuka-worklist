@@ -42,14 +42,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the floor is the same ratio, 100/139 of 94, rounded up, as kumbuka-memory
  * set its own.
  *
- * <p>This service declares no next-step texts: its answers carry no
- * {@code next} yet. The day they do, their file joins the list below.
+ * <p>The next-step texts instruct as well: each says what the call it stands
+ * beside in {@code next} does (C6.1, C12.2), so their file is in the list
+ * below beside the others.
  */
 class PositivePhrasingLintTest {
 
     /** The bundles whose texts instruct. */
     private static final List<String> INSTRUCTING = List.of(
-        "remedy", "tool", "argument", "value", "protocol");
+        "remedy", "tool", "argument", "value", "protocol", "next");
 
     /** The words of DEC-0043 R21, whole and in any case; "n't" ends a word. */
     private static final Pattern FORBIDDEN = Pattern.compile(

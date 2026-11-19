@@ -72,7 +72,7 @@ import java.util.Optional;
  * asymmetric by nature rather than by accident, and neither is a round trip of
  * the other.
  *
- * <h2>The thirteen verbs that do not act are not simply missing</h2>
+ * <h2>The verbs of other services are not simply missing</h2>
  *
  * They are absent from {@code tools/list}, which is what "MCP omits" means. But a
  * call naming one of them answers the same typed refusal the REST surface
@@ -119,14 +119,8 @@ public class McpAdapter {
     private static final String ARG_TOKEN = "conflict_token";
     private static final String ARG_FIELDS = "fields";
 
-    /** The claim family's shared duration argument. */
-    private static final String ARG_DURATION = "duration_seconds";
-
     /** The idempotency key of a create (C10.4). */
     private static final String ARG_KEY = "idempotency_key";
-
-    /** The receipt {@code release} presents. */
-    private static final String ARG_RECEIPT = "receipt";
 
     /** The graph verbs' target and type arguments. */
     private static final String ARG_TO_ITEM = "to_item";
@@ -266,21 +260,57 @@ public class McpAdapter {
 
     /**
      * A domain refusal in the envelope. A stale token carries the object as it
-     * stands (DEC-0041), read again at the address the call named, now that
-     * the refused write has rolled back. A call that names no address -- the
-     * settings token of {@code advance} -- or an object the read cannot reach
-     * is answered with the token alone.
+     * stands (DEC-0041), and a refusal by state the object's state and the
+     * calls open on it (C8.7), each read again at the address the call named,
+     * now that the refused write has rolled back. A call that names no address
+     * -- the settings token of {@code advance} -- or an object the read cannot
+     * reach is answered with the code alone.
      */
     private RefusalPayload domainRefusal(WorklistException e, String attempted,
                                          Map<String, Object> in) {
-        if (e.reason() != WorklistException.Reason.CONFLICT
+        boolean stale = e.reason() == WorklistException.Reason.CONFLICT;
+        if (!(stale || RefusalPayload.isByState(e))
                 || !(in.get(ARG_ADDRESS) instanceof String address)) {
             return RefusalPayload.of(e, attempted);
         }
-        try {
-            return RefusalPayload.stale(e, attempted, read(Map.of(ARG_ADDRESS, address)));
-        } catch (WorklistException | SurfaceException unreadable) {
+        Optional<Address> at = readable(address);
+        Optional<VerbSurface.Result> now = at.flatMap(this::readAgain);
+        if (now.isEmpty()) {
             return RefusalPayload.of(e, attempted);
+        }
+        return stale
+            ? RefusalPayload.stale(e, attempted, Payloads.of(at.get().scope(), now.get(), true))
+            : RefusalPayload.byState(e, attempted, at.get().scope(), now.get(), true);
+    }
+
+    /** The address a refused call named, where it parses; empty where it does not. */
+    private Optional<Address> readable(String address) {
+        try {
+            return Optional.of(address(Map.of(ARG_ADDRESS, address)));
+        } catch (SurfaceException unparsed) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * The object the call named, as it stands now: the membership, or, where
+     * none stands at that address -- a plan the state refused -- the iteration
+     * it would have stood in; empty where neither reads.
+     */
+    private Optional<VerbSurface.Result> readAgain(Address at) {
+        String member = at.member();
+        if (member != null) {
+            try {
+                return Optional.of(verbs.readMembership(caller.subject(), at.scope(), at.view(),
+                    at.head(), member));
+            } catch (WorklistException | SurfaceException absent) {
+                // No membership at this address: the iteration answers for it.
+            }
+        }
+        try {
+            return Optional.of(verbs.read(caller.subject(), at.scope(), at.view(), at.head()));
+        } catch (WorklistException | SurfaceException unreadable) {
+            return Optional.empty();
         }
     }
 
@@ -327,17 +357,12 @@ public class McpAdapter {
             case "read" -> read(in);
             case "update" -> update(in);
             case "query" -> query(in);
-            case "accept" -> accept(in);
-            case "withdraw" -> withdraw(in);
             case "close" -> close(in);
             case "advance" -> advance(in);
             case "plan" -> plan(in);
             case "unplan" -> unplan(in);
 
             // Built by SPRINT_171.2, addressed at the item view.
-            case "claim" -> claim(in);
-            case "release" -> release(in);
-            case "claim_next" -> claimNext(in);
             case "relate" -> relate(in);
             case "unrelate" -> unrelate(in);
             case "validate" -> validate(in);
@@ -396,20 +421,7 @@ public class McpAdapter {
         QuerySpec spec = new QuerySpec(in.get(ARG_FILTER), in.get(ARG_PAGE_SIZE),
             in.get(ARG_AFTER), in.get(ARG_SORT), in.get(ARG_DIRECTION), List.of());
         return Payloads.of(scope,
-            verbs.query(caller.subject(), scope, selector, spec));
-    }
-
-    private Object accept(Map<String, Object> in) {
-        Address at = address(in);
-        return dressed(at.scope(), verbs.accept(caller.subject(), at.scope(), at.view(),
-            at.head(), required(in, ARG_TOKEN)));
-    }
-
-    private Object withdraw(Map<String, Object> in) {
-        Address at = address(in);
-        return dressed(at.scope(), verbs.withdraw(caller.subject(), at.scope(), at.view(),
-            at.head(), required(in, ARG_TOKEN),
-            new VerbInput.Withdrawal(required(in, "status"))));
+            verbs.query(caller.subject(), scope, selector, spec), true);
     }
 
     private Object close(Map<String, Object> in) {
@@ -436,28 +448,6 @@ public class McpAdapter {
         Address at = address(in);
         return dressed(at.scope(), verbs.unplan(caller.subject(), at.scope(), at.view(),
             at.head(), at.member(), required(in, ARG_TOKEN)));
-    }
-
-    private Object claim(Map<String, Object> in) {
-        Address at = address(in);
-        return dressed(at.scope(), verbs.claim(caller.subject(), at.scope(), at.view(),
-            at.head(), new VerbInput.Lease(requireLong(in).orElse(null))));
-    }
-    // NOTE: the actor is derived from `subject` inside the surface and
-    // handed to the domain; both adapters pass the same value along the same
-    // path.
-
-    private Object release(Map<String, Object> in) {
-        Address at = address(in);
-        return dressed(at.scope(), verbs.release(caller.subject(), at.scope(), at.view(),
-            at.head(), new VerbInput.Release(required(in, ARG_RECEIPT))));
-    }
-
-    private Object claimNext(Map<String, Object> in) {
-        String scope = required(in, ARG_SCOPE);
-        return dressed(scope, verbs.claimNext(caller.subject(), scope,
-            required(in, ARG_SELECTOR),
-            new VerbInput.Lease(requireLong(in).orElse(null))));
     }
 
     private Object relate(Map<String, Object> in) {
@@ -493,7 +483,7 @@ public class McpAdapter {
     }
 
     /**
-     * The thirteen that do not act.
+     * The seven verbs of other services, which do not act here.
      *
      * <p>The address is optional here, and that is deliberate: a caller reaching
      * for a verb this scheme does not have has often not worked out what it would
@@ -565,8 +555,9 @@ public class McpAdapter {
         return Optional.of(new VerbInput.Fields((Map<String, Object>) raw));
     }
 
+    /** An answer, with the calls open on it named by their tool names (C6.2). */
     private static ObjectPayload dressed(String scope, VerbSurface.Result result) {
-        return Payloads.of(scope, result);
+        return Payloads.of(scope, result, true);
     }
 
     private String required(Map<String, Object> in, String name) {
@@ -619,35 +610,6 @@ public class McpAdapter {
 
     private static Optional<String> optional(Map<String, Object> in, String name) {
         return Optional.ofNullable(in.get(name)).map(Object::toString);
-    }
-
-    /**
-     * The lease duration a claim or a draw carries, as an integral number.
-     *
-     * <p>Read here so the domain sees a {@code long} rather than a string. JSON
-     * carries numbers as their own type and a caller sending {@code 3600} does
-     * not expect the surface to reject their integer as unparseable. A missing
-     * or non-numeric value is a typed refusal — the domain will refuse a
-     * non-positive one for its own reason.
-     */
-    private Optional<Long> requireLong(Map<String, Object> in) {
-        Object value = in.get(ARG_DURATION);
-        if (value == null) {
-            // Refused by the surface, behind the scope check.
-            return Optional.empty();
-        }
-        if (value instanceof Number number) {
-            return Optional.of(number.longValue());
-        }
-        if (value instanceof CharSequence text) {
-            try {
-                return Optional.of(Long.parseLong(text.toString().trim()));
-            } catch (NumberFormatException notNumeric) {
-                // fall through to the refusal below
-            }
-        }
-        // A form fault: decided before the scope (C1.3).
-        throw SurfaceException.invalid(ARG_DURATION);
     }
 
     @SuppressWarnings("unchecked")

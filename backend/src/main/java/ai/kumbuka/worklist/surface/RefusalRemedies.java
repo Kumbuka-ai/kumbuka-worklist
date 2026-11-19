@@ -116,16 +116,13 @@ public interface RefusalRemedies {
     String predicateUnknown();
 
     @Message
-    String identifierUndecided();
-
-    @Message
     String markRegression();
 
     @Message
     String membershipPresent();
 
     @Message
-    String iterationClosed();
+    String transitionRefused();
 
     @Message
     String iterationIncomplete();
@@ -144,18 +141,6 @@ public interface RefusalRemedies {
 
     @Message
     String cardinalityExceeded();
-
-    @Message
-    String claimHeld();
-
-    @Message
-    String claimAbsent();
-
-    @Message
-    String claimReceiptUnknown();
-
-    @Message
-    String drawEmpty();
 
     @Message
     String workstreamWithdrawn();

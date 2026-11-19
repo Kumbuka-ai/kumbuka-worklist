@@ -106,12 +106,12 @@ class LocalMcpOffIT {
     void an_undeclared_argument_is_refused_by_name_as_with_the_surface_on() {
         Map<String, Object> invented = Map.of("invented", 1);
         Response refused = given().contentType(ContentType.JSON).body(invented)
-            .post(SurfaceFixture.item(Selector.ITEM, 1) + ":claim");
+            .post(SurfaceFixture.item(Selector.ITEM, 1) + ":tag_attach");
 
         assertThat(refused.statusCode()).isEqualTo(400);
         assertThat(refused.jsonPath().getString("reason")).isEqualTo("ARGUMENT_UNKNOWN");
         assertThat(refused.jsonPath().getString("message")).doesNotContain("invented");
         assertThat(refused.jsonPath().getList("data.accepts", String.class))
-            .containsExactly("duration_seconds");
+            .containsExactly("tag");
     }
 }
