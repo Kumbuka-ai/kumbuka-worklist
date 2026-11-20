@@ -275,6 +275,43 @@ public enum Field {
      */
     WORKSTREAM_ID("workstream", Set.of(ITEM), Set.of(ITEM)),
 
+    // --- the item's property core (DEC-0037 C3, TAR-0002 Annex A2) -------
+
+    /**
+     * The identity that created the item. Read-only: the service writes the
+     * calling subject at the create (TAR-0002 B4), and a caller who names one
+     * is refused as for any field of the service.
+     */
+    CREATOR("creator", Set.of(ITEM), Set.of()),
+
+    /**
+     * The identities of the platform responsible for the work the item needs,
+     * as a list of text in the caller's order; any number.
+     */
+    CONTRIBUTOR("contributor", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * The item this item is part of, as its address
+     * {@code worklist://<scope>/item/<number>}: at most one, in the same
+     * scope, the chain free of cycles.
+     */
+    PARENT("parent", Set.of(ITEM), Set.of(ITEM)),
+
+    /** One of {@code high}, {@code medium}, {@code low}, {@code unassigned}. */
+    PRIORITY("priority", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * One of {@code blocker}, {@code critical}, {@code major}, {@code normal},
+     * {@code minor}, {@code unassigned}.
+     */
+    SEVERITY("severity", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * When the item closed. Read-only: the service writes it when the item
+     * moves into a closed status, and clears it when the item leaves one.
+     */
+    CLOSE_DATE("close_date", Set.of(ITEM), Set.of()),
+
     /**
      * Whether a milestone is a goal or one of the three positions on the axis
      * that never carry one.

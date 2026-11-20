@@ -39,10 +39,14 @@ import java.util.UUID;
  * {@code validate} below. Every one of them is the platform's own word for the
  * act, spelled identically.
  *
- * <p>An item's state moves through {@code update} alone: a status the scope
- * declared as closed is reached by updating into it, and a closed item stays
- * writable. The intake gate {@code accept} and the withdrawal
- * {@code withdraw} left this scheme's surface with its target cut.
+ * <p>An item's state moves through {@code update}, and through one relation:
+ * a status the scope declared as closed is reached by updating into it, a
+ * closed item stays writable, and {@code relate} with the type
+ * {@code duplicate_of} closes the item into the target status that type
+ * declares (REA-0011 D18). Moving into a closed status sets
+ * {@code close_date}, and leaving one clears it. The intake gate
+ * {@code accept} and the withdrawal {@code withdraw} left this scheme's
+ * surface with its target cut.
  *
  * <p><strong>Identity is deliberate, and a shared name is not a collision.</strong>
  * These names exist in sibling services too, and that is the mechanism rather
@@ -230,9 +234,17 @@ public class ItemService {
      * scope's counter inside this transaction. The head is the view, it is
      * known at creation, and an item that existed without an address would be
      * an item no verb could address.
+     *
+     * <p><strong>The creator is the caller, and the caller cannot say
+     * so.</strong> The surface hands in the subject it derived from the token,
+     * as it does for {@code tag_attach}; a {@code creator} in the fields is a
+     * field of the service and refused like any other.
+     *
+     * @param creator the calling subject, stored as the item's creator
      */
     @Transactional
-    public Written<Map<String, Object>, Item> create(UUID scopeId, Map<String, ?> arguments) {
+    public Written<Map<String, Object>, Item> create(UUID scopeId, String creator,
+            Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
 
         List<String> notSettable = given.keySet().stream()
@@ -278,6 +290,7 @@ public class ItemService {
         item.statusPk = initialStatus.pk;
         item.number = number;
         item.workstreamNumber = workstream.number;
+        item.creator = creator;
         items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
@@ -289,7 +302,7 @@ public class ItemService {
         rest.remove(Field.TITLE);
         rest.remove(Field.STATUS);
         rest.remove(Field.WORKSTREAM_ID);
-        if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
+        if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest, true)) {
             items.flush();
         }
 
@@ -297,9 +310,12 @@ public class ItemService {
     }
 
     /**
-     * Change what is known about an item, its status included: the one way
-     * an item's state moves, into a closed status the scope declared as much
-     * as into any other, and a closed item takes the next write like any.
+     * Change what is known about an item, its status included: into a closed
+     * status the scope declared as much as into any other, and a closed item
+     * takes the next write like any. Moving from a status that is not closed
+     * into one that is sets {@code close_date}; moving out of a closed status
+     * clears it, because an open item has no close date (until S9, where an
+     * item still leaves a closed status this way).
      *
      * <p><strong>A write that changes nothing writes nothing.</strong> Not a
      * timestamp, not a rotated token, not a statement. The comparison below
@@ -331,7 +347,7 @@ public class ItemService {
             }
         });
 
-        boolean changed = applyEffectiveChanges(item, current, settable);
+        boolean changed = applyEffectiveChanges(item, current, settable, false);
         if (!changed) {
             // The whole point. No statement is issued, so the modification
             // date and the token stay where they are, and the change trail
@@ -363,6 +379,15 @@ public class ItemService {
      * that had to present two tokens for one edge would be asked to prove that
      * nothing had moved on either item, which is a different rule from "this
      * change lands on top of the state I read".
+     *
+     * <p><strong>{@code duplicate_of} closes the item that carries it</strong>
+     * (TAR-0002 B5, REA-0011 D18): in the same write the source item moves
+     * into the target status the scope declared on that type and its
+     * {@code close_date} is set. Closing is open only where the item is not
+     * closed and the target status is declared, not withdrawn, of this scope,
+     * closed and not successful; otherwise the call is refused with
+     * {@code TRANSITION_REFUSED} before anything is written, so no edge is
+     * made and the token stays.
      */
     @Transactional
     public Written<Map<String, Object>, RelationWrite> relate(UUID scopeId, UUID itemId,
@@ -377,9 +402,21 @@ public class ItemService {
                 List.of(TO_ITEM));
         }
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName, TYPE);
+        Optional<ItemStatus> closing = type.isDuplicateOf()
+            ? Optional.of(closingStatus(item, type))
+            : Optional.empty();
 
         ItemRelation edge = findEdge(item, target.number, type.pk).orElse(null);
-        boolean changed;
+        boolean edgeChanged = edge == null || !ItemRelation.ASSERTED.equals(edge.status);
+        if (!edgeChanged && closing.isEmpty()) {
+            return Written.unchanged(project(item));
+        }
+
+        item.stamp(clock.instant());
+        closing.ifPresent(status -> {
+            item.statusPk = status.pk;
+            item.closeDate = item.changedAt;
+        });
         if (edge == null) {
             edge = new ItemRelation();
             edge.scopeId = scopeId;
@@ -387,20 +424,40 @@ public class ItemService {
             edge.toItemNumber = target.number;
             edge.relationTypePk = type.pk;
             items.insertEdge(edge);
-            changed = true;
-        } else if (!ItemRelation.ASSERTED.equals(edge.status)) {
+        } else if (edgeChanged) {
             edge.status = ItemRelation.ASSERTED;
-            changed = true;
-        } else {
-            changed = false;
         }
-
-        if (!changed) {
-            return Written.unchanged(project(item));
-        }
-        item.stamp(clock.instant());
         items.flushAndRefresh(item);
         return new Written<>(project(item), new RelationWrite(item, target));
+    }
+
+    /**
+     * The status a {@code duplicate_of} edge closes this item into, or the
+     * refusal by state where closing is not open: the item is closed already,
+     * or the type names no target status that is declared, not withdrawn, of
+     * the item's scope, closed and not successful (REA-0011 D18).
+     */
+    private ItemStatus closingStatus(Item item, RelationType type) {
+        if (closed(item.statusPk)) {
+            throw transitionRefused();
+        }
+        return Optional.ofNullable(type.targetStatusPk)
+            .flatMap(vocabulary::statusByPk)
+            .filter(status -> status.scopeId.equals(item.scopeId))
+            .filter(status -> DeclaredValue.DECLARED.equals(status.status))
+            .filter(status -> status.closed && !status.successful)
+            .orElseThrow(ItemService::transitionRefused);
+    }
+
+    /** Whether the status of that surrogate is a closed one. */
+    private boolean closed(@Nullable Long statusPk) {
+        return statusPk != null
+            && vocabulary.statusByPk(statusPk).map(status -> status.closed).orElse(false);
+    }
+
+    /** A refusal by the item's state; the surface adds the state and the open calls. */
+    private static WorklistException transitionRefused() {
+        return new WorklistException(WorklistException.Reason.TRANSITION_REFUSED, List.of());
     }
 
     /**
@@ -415,6 +472,9 @@ public class ItemService {
      * already-withdrawn one answers the same way — from a caller's side those
      * are one state, and the refusal names the triple so the caller knows
      * which of the three parts they got wrong.
+     *
+     * <p>Withdrawing a {@code duplicate_of} edge reopens nothing: the item
+     * stays in the status the edge closed it into (REA-0011 D18).
      */
     @Transactional
     public Written<Map<String, Object>, RelationWrite> unrelate(UUID scopeId, UUID itemId,
@@ -612,12 +672,15 @@ public class ItemService {
      * a query lets the persistence context flush the changed item first; an
      * item changed and not yet stamped is refused at that flush. So a caller
      * of this method does not stamp again.
+     *
+     * @param creating whether the item is being created, which decides how a
+     *                 {@code duplicate_of} edge in the relations is refused
      */
     private boolean applyEffectiveChanges(Item item, Map<String, Object> current,
-            Map<Field, Object> settable) {
+            Map<Field, Object> settable, boolean creating) {
         boolean changed = false;
         for (Map.Entry<Field, Object> entry : settable.entrySet()) {
-            if (applyOne(item, current, entry.getKey(), entry.getValue()) && !changed) {
+            if (applyOne(item, current, entry.getKey(), entry.getValue(), creating) && !changed) {
                 item.stamp(clock.instant());
                 changed = true;
             }
@@ -626,7 +689,7 @@ public class ItemService {
     }
 
     private boolean applyOne(Item item, Map<String, Object> current, Field field,
-            @Nullable Object value) {
+            @Nullable Object value, boolean creating) {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
@@ -663,10 +726,82 @@ public class ItemService {
                 return applyReferences(item, ItemFields.references(value));
             }
             case RELATIONS -> {
-                return applyRelations(item, ItemFields.relations(value));
+                return applyRelations(item, ItemFields.relations(value), creating);
+            }
+            case CONTRIBUTOR -> {
+                List<String> contributors = ItemFields.contributors(value);
+                if (Objects.equals(held, contributors)) {
+                    return false;
+                }
+                item.contributor = contributors.isEmpty() ? null : contributors;
+                return true;
+            }
+            case PARENT -> {
+                return applyParent(item, held, field, value);
+            }
+            case PRIORITY -> {
+                String priority = ItemFields.oneOf(field, ItemFields.PRIORITIES, value).orElse(null);
+                if (Objects.equals(held, priority)) {
+                    return false;
+                }
+                item.priority = priority;
+                return true;
+            }
+            case SEVERITY -> {
+                String severity = ItemFields.oneOf(field, ItemFields.SEVERITIES, value).orElse(null);
+                if (Objects.equals(held, severity)) {
+                    return false;
+                }
+                item.severity = severity;
+                return true;
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable and has no application");
+        }
+    }
+
+    /**
+     * The parent: the item this item is part of, named by its address as
+     * {@code relate} names the other end, and an empty string clears it.
+     *
+     * <p>An address of another scope is refused as an item this scope does
+     * not hold. The item itself, and an item whose own chain of parents
+     * reaches this item, are refused as {@code INVALID_VALUE} naming the
+     * field: either would make the chain a cycle.
+     */
+    private boolean applyParent(Item item, @Nullable Object held, Field field,
+            @Nullable Object value) {
+        Optional<String> wanted = ItemFields.text(field, value);
+        if (ItemFields.unchangedAsText(held, wanted.orElse(null))) {
+            return false;
+        }
+        if (wanted.isEmpty()) {
+            item.parentNumber = null;
+            return true;
+        }
+        Item parent = resolveItemAddress(item.scopeId, wanted.get(), field.path());
+        refuseParentCycle(item, parent, field);
+        item.parentNumber = parent.number;
+        return true;
+    }
+
+    /**
+     * Walks the chain up from the would-be parent and refuses where it reaches
+     * the item. The chain in the store is free of cycles, because every write
+     * of a parent passed this walk; the set of numbers seen ends the walk
+     * anyway, so a chain planted around the domain cannot hold it forever.
+     */
+    private void refuseParentCycle(Item item, Item parent, Field field) {
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        Optional<Item> at = Optional.of(parent);
+        while (at.isPresent() && seen.add(at.get().number)) {
+            if (at.get().number.equals(item.number)) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(field.path()));
+            }
+            Long up = at.get().parentNumber;
+            at = up == null ? Optional.empty() : items.byAddress(item.scopeId, up);
         }
     }
 
@@ -837,6 +972,11 @@ public class ItemService {
      * <p>The value travels as the string the reader saw — the display name
      * the scope declared the status under. A uuid on the wire is a form
      * refusal, and an unknown name is refused as an undeclared value.
+     *
+     * <p>The close date follows the predicate {@code closed} of the two
+     * statuses: set at the move from a status that is not closed into one
+     * that is, cleared at the move out of a closed one, and left as it is
+     * between two closed statuses or two open ones.
      */
     private boolean applyStatus(Item item, @Nullable Object held, Field field,
             @Nullable Object value) {
@@ -851,7 +991,13 @@ public class ItemService {
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
                 List.of(field.path())));
+        boolean wasClosed = closed(item.statusPk);
         item.statusPk = status.pk;
+        if (!wasClosed && status.closed) {
+            item.closeDate = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        } else if (wasClosed && !status.closed) {
+            item.closeDate = null;
+        }
         return true;
     }
 
@@ -1104,9 +1250,23 @@ public class ItemService {
      * relations still can be written: no constraint expresses acyclicity,
      * the walk that finds one is a domain check with a red probe of its own,
      * and it is not built here.
+     *
+     * <p><strong>A {@code duplicate_of} edge is set and withdrawn by
+     * {@code relate} and {@code unrelate} alone</strong> (REA-0011 D18):
+     * setting it closes the item, and a whole-set write is an ordinary write
+     * that performs no transition. A set that adds or removes such an edge is
+     * refused before anything is written -- by state on an update, whose
+     * refusal names the open calls, and as a value outside what the field
+     * admits on a create, which has no object yet. An edge that stands and
+     * comes back unchanged with a read answer changes nothing and is
+     * accepted, so a read answer may go back as it came.
+     *
+     * @param creating whether the item is being created
      */
-    private boolean applyRelations(Item item, List<Map<String, Object>> wanted) {
+    private boolean applyRelations(Item item, List<Map<String, Object>> wanted,
+            boolean creating) {
         List<ResolvedEdge> resolved = new ArrayList<>(wanted.size());
+        java.util.Set<Long> duplicateTypes = new java.util.HashSet<>();
         for (Map<String, Object> entry : wanted) {
             String typeName = (String) entry.get(ItemFields.TYPE);
             String itemAddress = (String) entry.get(ItemFields.ITEM);
@@ -1117,10 +1277,14 @@ public class ItemService {
                     WorklistException.Reason.INVALID_VALUE,
                     List.of(Field.RELATIONS.path()));
             }
+            if (type.isDuplicateOf()) {
+                duplicateTypes.add(type.pk);
+            }
             resolved.add(new ResolvedEdge(type.pk, target.number));
         }
 
         List<ItemRelation> edges = items.edgesOf(item);
+        refuseDuplicateMoves(edges, resolved, duplicateTypes, creating);
         boolean changed = false;
 
         List<ResolvedEdge> present = new ArrayList<>();
@@ -1152,6 +1316,46 @@ public class ItemService {
             items.flush();
         }
         return changed;
+    }
+
+    /**
+     * Refuses a relation set that would assert or withdraw a
+     * {@code duplicate_of} edge, comparing the wanted set with the edges the
+     * item holds; an asserted edge wanted again is no move.
+     *
+     * @param duplicateTypes the surrogates of the wanted entries' types that
+     *                       are {@code duplicate_of}
+     */
+    private void refuseDuplicateMoves(List<ItemRelation> edges, List<ResolvedEdge> resolved,
+            java.util.Set<Long> duplicateTypes, boolean creating) {
+        List<ResolvedEdge> asserted = new ArrayList<>();
+        boolean moved = false;
+        for (ItemRelation edge : edges) {
+            if (!ItemRelation.ASSERTED.equals(edge.status)) {
+                continue;
+            }
+            ResolvedEdge key = new ResolvedEdge(edge.relationTypePk, edge.toItemNumber);
+            asserted.add(key);
+            boolean duplicate = vocabulary.relationTypeByPk(edge.relationTypePk)
+                .map(RelationType::isDuplicateOf).orElse(false);
+            if (duplicate && !resolved.contains(key)) {
+                moved = true;
+            }
+        }
+        for (ResolvedEdge entry : resolved) {
+            if (duplicateTypes.contains(entry.typePk()) && !asserted.contains(entry)) {
+                moved = true;
+            }
+        }
+        if (!moved) {
+            return;
+        }
+        if (creating) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(Field.RELATIONS.path()));
+        }
+        throw transitionRefused();
     }
 
     /** One resolved edge, keyed for set membership. */
@@ -1293,6 +1497,17 @@ public class ItemService {
         fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneNumber);
         fields.put(Field.WORKSTREAM_ID.canonicalName(),
             workstreamTokenOf(item.scopeId, item.workstreamNumber).orElse(null));
+        // The property core. A value an item does not carry is answered
+        // absent, so an item from before the core arrived reads as it did; the
+        // contributors are a list, and empty where there are none, as the tags.
+        fields.put(Field.CREATOR.canonicalName(), item.creator);
+        fields.put(Field.CONTRIBUTOR.canonicalName(),
+            item.contributor == null ? List.of() : List.copyOf(item.contributor));
+        fields.put(Field.PARENT.canonicalName(),
+            itemAddressOf(scopeSlug, item.parentNumber).orElse(null));
+        fields.put(Field.PRIORITY.canonicalName(), item.priority);
+        fields.put(Field.SEVERITY.canonicalName(), item.severity);
+        fields.put(Field.CLOSE_DATE.canonicalName(), item.closeDate);
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken().orElse(null));

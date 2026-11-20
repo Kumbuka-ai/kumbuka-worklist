@@ -370,7 +370,7 @@ public final class SurfaceDeclaration {
             MEMBERSHIP, TOKEN),
         verb("relate", ToolDescriptions::relate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
-                RefusalCode.VALUE_UNDECLARED)),
+                RefusalCode.VALUE_UNDECLARED, RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TOKEN, TO_ITEM, TYPE),
         verb("unrelate", ToolDescriptions::unrelate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,

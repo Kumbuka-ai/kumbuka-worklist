@@ -123,7 +123,7 @@ class ScopeOpeningProbeIT {
         // an absent view is a refusal on the first write that reaches it,
         // and the writes here are the same two the surface offers on a
         // freshly opened scope.
-        Map<String, Object> item = items.create(scope, Map.of(
+        Map<String, Object> item = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "the first item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
         Map<String, Object> iteration = iterations.create(scope, Map.of(
@@ -147,7 +147,7 @@ class ScopeOpeningProbeIT {
             "max_memberships_per_iteration", 10,
             "warn_memberships_per_iteration", 9));
 
-        Map<String, Object> item = items.create(scope, Map.of(
+        Map<String, Object> item = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "an item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
         Map<String, Object> iteration = iterations.create(scope, Map.of(
@@ -175,7 +175,7 @@ class ScopeOpeningProbeIT {
             .isEqualTo(1L);
 
         // A second item and a second iteration keep to their own counters.
-        Map<String, Object> secondItem = items.create(scope, Map.of(
+        Map<String, Object> secondItem = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "a second item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
         Map<String, Object> secondIteration = iterations.create(scope, Map.of(

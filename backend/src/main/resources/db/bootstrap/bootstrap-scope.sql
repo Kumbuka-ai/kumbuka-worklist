@@ -57,7 +57,7 @@
 -- changes nothing and fails nowhere. A bootstrap that cannot be repeated gets
 -- taken apart by hand the second time. A conflict clause only fires on a
 -- unique key, and `item_status` and `relation_type` have none on the name:
--- their two inserts are therefore guarded by NOT EXISTS on the name, which is
+-- their inserts are therefore guarded by NOT EXISTS on the name, which is
 -- what keeps a repeat from declaring every status and relation type twice.
 --
 -- REFERENCES BY KEY, NOT BY UUID. Since V20 (ADR-0042) a support row carries
@@ -341,13 +341,13 @@ ON CONFLICT DO NOTHING;
 -- rather than invented here.
 
 -- ---------------------------------------------------------------------------
--- The relation type.
+-- The relation types.
 --
 -- The predecessor recorded dependencies WITHOUT a type, deliberately: the
 -- moment types exist, something has to interpret them. This model requires a
 -- named type, and `blocks` is the property the readiness computation reads.
 --
--- ONE type, `depends_on`, blocking. That is the faithful reading of the
+-- Two types. `depends_on`, blocking. That is the faithful reading of the
 -- predecessor's `Deps` — "the target must be done first" — but it does name a
 -- meaning the predecessor refused to name, and it is recorded here as such.
 -- ---------------------------------------------------------------------------
@@ -359,6 +359,26 @@ SELECT :'tenant_id', :'scope_id', 'depends_on',
        SELECT 1 FROM worklist.relation_type x
         WHERE x.tenant_id = :'tenant_id' AND x.scope_id = :'scope_id'
           AND x.name = 'depends_on')
+ON CONFLICT DO NOTHING;
+
+-- `duplicate_of`, the relation the platform reads (REA-0011 D18): setting it
+-- closes the item that carries it, as closed and not successful, into the
+-- target status the type names. The scope declares two such statuses,
+-- `dropped` and `obsolete`, and the target is `obsolete`: a duplicate is work
+-- that no longer applies, not work somebody decided against. Not blocking.
+-- A scope this script ran on before the type existed gets it on the next
+-- run, which the NOT EXISTS guard keeps a repeat of.
+INSERT INTO worklist.relation_type
+    (tenant_id, scope_id, name, description, rank, blocks, target_status_pk)
+SELECT :'tenant_id', :'scope_id', 'duplicate_of',
+       'Die Zeile ist ein Duplikat der Zielzeile und wird damit als gegenstandslos geschlossen.',
+       20, false, s.pk
+  FROM worklist.item_status s
+ WHERE s.tenant_id = :'tenant_id' AND s.scope_id = :'scope_id' AND s.name = 'obsolete'
+   AND NOT EXISTS (
+       SELECT 1 FROM worklist.relation_type x
+        WHERE x.tenant_id = :'tenant_id' AND x.scope_id = :'scope_id'
+          AND x.name = 'duplicate_of')
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------

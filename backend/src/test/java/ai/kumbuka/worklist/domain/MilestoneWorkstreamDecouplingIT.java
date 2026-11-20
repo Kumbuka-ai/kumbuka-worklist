@@ -151,7 +151,7 @@ class MilestoneWorkstreamDecouplingIT {
     // ==================================================================
 
     private UUID createItem(String title, UUID workstreamId) {
-        return (UUID) items.create(scope, Map.of(
+        return (UUID) items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(),

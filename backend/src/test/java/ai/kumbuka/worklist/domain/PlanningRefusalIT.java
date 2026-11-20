@@ -346,7 +346,7 @@ class PlanningRefusalIT {
      */
     @Test
     void a_field_of_another_object_is_unknown_on_this_one() {
-        WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
+        WorklistException refusal = refusalFrom(() -> items.create(scope, "probe-subject", Map.of(
             "title", "an item", "status", vocabulary.requireStatus(scope, openStatus).name,
             "motto", "which an item does not have")));
 
@@ -535,7 +535,7 @@ class PlanningRefusalIT {
         // The item view, declared before anything is created under it: the
         // address is allocated at creation now. Declaring is idempotent.
         selectors.open(scope, Selector.ITEM);
-        UUID item = (UUID) items.create(scope, Map.of(
+        UUID item = (UUID) items.create(scope, "probe-subject", Map.of(
             "title", title, "status", vocabulary.requireStatus(scope, openStatus).name)).answer().get("id");
         UUID milestone = (UUID) milestones.create(scope, Map.of(
             "title", "a goal for " + title, "vision", "the north star")).answer().get("id");

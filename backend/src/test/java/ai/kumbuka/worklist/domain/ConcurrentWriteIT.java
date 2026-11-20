@@ -91,7 +91,7 @@ class ConcurrentWriteIT {
 
     @Test
     void two_writers_with_one_token_on_an_item_exactly_one_writes() throws Exception {
-        Map<String, Object> created = items.create(scope, Map.of(
+        Map<String, Object> created = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "contested",
             Field.STATUS.canonicalName(), openStatus)).answer();
         UUID id = idOf(created);

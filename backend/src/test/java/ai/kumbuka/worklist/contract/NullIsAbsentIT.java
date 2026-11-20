@@ -451,7 +451,7 @@ class NullIsAbsentIT {
         vocabulary.declareAttribute(SCOPE_ID, "size", "Size", "text", 2, false);
         workstreams.requireDefault(SCOPE_ID);
         for (int i = 0; i < 2; i++) {
-            items.create(SCOPE_ID, Map.of("title", "null probe " + i, "status", "open"));
+            items.create(SCOPE_ID, "probe-subject", Map.of("title", "null probe " + i, "status", "open"));
         }
         iterations.create(SCOPE_ID, Map.of("title", "first", "motto", "m", "description", "d"));
     }

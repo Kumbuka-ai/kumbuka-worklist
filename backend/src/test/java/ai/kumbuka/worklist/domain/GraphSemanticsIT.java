@@ -197,7 +197,7 @@ class GraphSemanticsIT {
     // ====================================================================
 
     private UUID createItem(String title) {
-        Map<String, Object> created = items.create(scope, Map.of(
+        Map<String, Object> created = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(),
             vocabulary.requireStatus(scope, openStatus).name)).answer();

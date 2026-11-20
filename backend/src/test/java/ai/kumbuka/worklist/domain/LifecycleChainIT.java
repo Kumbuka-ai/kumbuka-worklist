@@ -146,7 +146,7 @@ class LifecycleChainIT {
         // 4. An item, created through the verb surface with the actionable
         //    status, then pointed at the milestone THROUGH item.update — the
         //    thing the SPRINT_180.5 fixture reached past the surface for.
-        Map<String, Object> itemAnswer = items.create(scope, Map.of(
+        Map<String, Object> itemAnswer = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "close the last beta reader thread",
             Field.STATUS.canonicalName(), actionable.name)).answer();
         UUID itemId = (UUID) itemAnswer.get(Field.ID.canonicalName());

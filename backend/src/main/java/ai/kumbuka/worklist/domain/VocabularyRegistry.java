@@ -12,6 +12,7 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
@@ -340,7 +341,39 @@ public class VocabularyRegistry {
     @Transactional
     public RelationType declareRelationType(UUID scopeId, String name, boolean blocks,
             int rank) {
+        return declareRelationType(scopeId, name, blocks, rank, null);
+    }
+
+    /**
+     * Declare a relation type with the target status of the duplicate
+     * relation (REA-0011 D18).
+     *
+     * <p>Only the type named {@link RelationType#DUPLICATE_OF} takes a target
+     * status, and the status is named by the name it is declared under in
+     * the same scope. Whether it is closed and not successful, and still
+     * declared, is asked at {@code relate}, where it decides; a target that
+     * fails it there refuses the relation rather than this declaration.
+     *
+     * @param targetStatus the name of the target status; absent where the
+     *                     type names none
+     */
+    @Transactional
+    public RelationType declareRelationType(UUID scopeId, String name, boolean blocks,
+            int rank, @Nullable String targetStatus) {
         requireName(name);
+        Long targetStatusPk = null;
+        if (targetStatus != null) {
+            if (!RelationType.DUPLICATE_OF.equals(name.trim())) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of());
+            }
+            targetStatusPk = vocabulary.statusByName(scopeId, targetStatus)
+                .orElseThrow(() -> new WorklistException(
+                    WorklistException.Reason.VALUE_UNDECLARED,
+                    List.of()))
+                .pk;
+        }
 
         // Idempotent for the same reason declareStatus is: the name is the
         // wire form of a relation entry, and a second row under the same name
@@ -355,6 +388,7 @@ public class VocabularyRegistry {
         type.name = name.trim();
         type.blocks = blocks;
         type.rank = rank;
+        type.targetStatusPk = targetStatusPk;
         vocabulary.insert(type);
 
         return type;

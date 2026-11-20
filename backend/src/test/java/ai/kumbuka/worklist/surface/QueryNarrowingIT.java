@@ -1113,7 +1113,7 @@ class QueryNarrowingIT {
         vocabulary.declareStatus(OTHER_SCOPE_ID, OPEN, 1, true, false, false, false);
         workstreams.requireDefault(OTHER_SCOPE_ID);
         for (int i = 0; i < 2; i++) {
-            items.create(OTHER_SCOPE_ID, Map.of("title", "elsewhere " + i, "status", OPEN));
+            items.create(OTHER_SCOPE_ID, "probe-subject", Map.of("title", "elsewhere " + i, "status", OPEN));
         }
     }
 
@@ -1145,7 +1145,7 @@ class QueryNarrowingIT {
             vocabulary.declareStatus(SCOPE_IN_B, OPEN, 1, true, false, false, false);
             workstreams.requireDefault(SCOPE_IN_B);
             for (int i = 0; i < 2; i++) {
-                items.create(SCOPE_IN_B, Map.of("title", "in tenant B " + i, "status", OPEN));
+                items.create(SCOPE_IN_B, "probe-subject", Map.of("title", "in tenant B " + i, "status", OPEN));
             }
         }
     }
@@ -1157,7 +1157,7 @@ class QueryNarrowingIT {
         if (workstream != null) {
             fields.put("workstream", workstream);
         }
-        Map<String, Object> created = items.create(SCOPE_ID, fields).answer();
+        Map<String, Object> created = items.create(SCOPE_ID, "probe-subject", fields).answer();
         if (milestone != null) {
             items.update(SCOPE_ID, (UUID) created.get("id"), Map.of(
                 "milestone", milestone, "conflict_token", created.get("conflict_token")));

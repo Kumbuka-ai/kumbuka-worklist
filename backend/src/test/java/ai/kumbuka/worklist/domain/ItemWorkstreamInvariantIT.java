@@ -72,7 +72,7 @@ class ItemWorkstreamInvariantIT {
         selectors.open(scope, Selector.ITEM);
         Workstream defaultWs = workstreams.requireDefault(scope);
 
-        Map<String, Object> item = items.create(scope, Map.of(
+        Map<String, Object> item = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "no-workstream item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name)).answer();
 
@@ -84,7 +84,7 @@ class ItemWorkstreamInvariantIT {
         selectors.open(scope, Selector.ITEM);
         Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
 
-        Map<String, Object> item = items.create(scope, Map.of(
+        Map<String, Object> item = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "a mobile item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(), mobile.token)).answer();
@@ -95,7 +95,7 @@ class ItemWorkstreamInvariantIT {
     @Test
     void create_refuses_an_unknown_workstream() {
         selectors.open(scope, Selector.ITEM);
-        WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
+        WorklistException refusal = refusalFrom(() -> items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "orphan item",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(), "no-such-workstream")));
@@ -109,7 +109,7 @@ class ItemWorkstreamInvariantIT {
     @Test
     void create_refuses_a_uuid_where_a_workstream_token_is_expected() {
         selectors.open(scope, Selector.ITEM);
-        WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
+        WorklistException refusal = refusalFrom(() -> items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "malformed ws",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(), UUID.randomUUID().toString())));
@@ -167,7 +167,7 @@ class ItemWorkstreamInvariantIT {
     // ==================================================================
 
     private UUID createItem(String title, UUID workstreamId) {
-        return (UUID) items.create(scope, Map.of(
+        return (UUID) items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(),
