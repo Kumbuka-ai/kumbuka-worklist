@@ -129,4 +129,21 @@ public final class VerbInput {
      */
     public record Edge(@Nullable String toItem, @Nullable String type) {
     }
+
+    /**
+     * A booking {@code book} records in an item's fulfilment ledger.
+     *
+     * <p>The entries are handed on as the list that arrived, and read by the
+     * domain, which checks each against the criteria the item issued: an
+     * entry is what an instance reported, and the check of what it names
+     * needs the store.
+     *
+     * @param instance the address of the reporting instance; absent where the
+     *                 call named none, which the surface refuses as
+     *                 ARGUMENT_MISSING
+     * @param entries  the entries as they arrived; absent where the call named
+     *                 none, which the surface refuses as ARGUMENT_MISSING
+     */
+    public record Booking(@Nullable String instance, @Nullable List<?> entries) {
+    }
 }

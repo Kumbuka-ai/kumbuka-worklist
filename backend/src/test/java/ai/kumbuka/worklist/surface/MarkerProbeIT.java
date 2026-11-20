@@ -147,6 +147,7 @@ class MarkerProbeIT {
         minimal.put("validate", Map.of("scope", SCOPE, "selector", Selector.ITEM));
         minimal.put("tag_attach", Map.of("address", item));
         minimal.put("tag_detach", Map.of("address", item));
+        minimal.put("book", Map.of("address", item));
         minimal.forEach((tool, args) -> {
             Map<String, Object> with = new LinkedHashMap<>(args);
             with.put(MARKER, MARKER);
@@ -217,6 +218,19 @@ class MarkerProbeIT {
                 "fields", Map.of("status", MARKER))));
         absent(soft, "attach a marked tag", mcpRaw("tag_attach",
             Map.of("address", item, "tag", MARKER)));
+        absent(soft, "book a marked criterion", mcpRaw("book",
+            Map.of("address", item, "instance", "https://instances.example/run/1",
+                "entries", List.of(Map.of("criterion", MARKER, "status", "met",
+                    "evidence", "a report")))));
+        absent(soft, "book a marked status", mcpRaw("book",
+            Map.of("address", item, "instance", "https://instances.example/run/1",
+                "entries", List.of(Map.of("criterion", 1, "status", MARKER,
+                    "evidence", "a report")))));
+        absent(soft, "book a marked entry member", mcpRaw("book",
+            Map.of("address", item, "instance", "https://instances.example/run/1",
+                "entries", List.of(Map.of(MARKER, MARKER)))));
+        absent(soft, "read with a marked ledger option", mcpRaw("read",
+            Map.of("address", item, "fulfilment", MARKER)));
         absent(soft, "relate to a marked item", mcpRaw("relate",
             Map.of("address", item, "conflict_token", tokenOf(item),
                 "to_item", MARKER, "type", RELATION)));
@@ -255,6 +269,12 @@ class MarkerProbeIT {
         absent(soft, "an item verb", post(itemPath + "/1:" + MARKER, Map.of()));
         absent(soft, "a body argument", post(itemPath + "/1:tag_attach", Map.of(MARKER, MARKER)));
         absent(soft, "a tag", post(itemPath + "/1:tag_attach", Map.of("tag", MARKER)));
+        absent(soft, "a booking argument", post(itemPath + "/1:book", Map.of(MARKER, MARKER)));
+        absent(soft, "a booked status", post(itemPath + "/1:book", Map.of(
+            "instance", "https://instances.example/run/1", "entries", List.of(Map.of(
+                "criterion", 1, "status", MARKER, "evidence", "a report")))));
+        absent(soft, "a ledger option", given().queryParam("fulfilment", MARKER)
+            .when().get(itemPath + "/1").then().extract().asString());
         absent(soft, "an edge", post(itemPath + "/1:relate", Map.of("to_item", MARKER,
             "type", MARKER)));
         staleAbsent(soft, "a stale token", given().contentType(ContentType.JSON)

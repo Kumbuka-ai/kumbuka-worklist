@@ -43,10 +43,12 @@ import java.util.function.LongFunction;
  * <p>Per object and state:
  * <ul>
  *   <li>an item, in every state: {@code read}, {@code update}, {@code relate},
- *       {@code unrelate}, {@code tag_attach}, {@code tag_detach}, and
- *       {@code plan} into each open iteration it is no member of, where the
- *       item may enter an iteration at all and the iteration has room. A
- *       closed item stays writable;</li>
+ *       {@code unrelate}, {@code tag_attach}, {@code tag_detach}, {@code book},
+ *       and {@code plan} into each open iteration it is no member of, where
+ *       the item may enter an iteration at all and the iteration has room. A
+ *       closed item stays writable, and takes a booking from every caller
+ *       who may write; narrowing {@code book} on a closed item to the
+ *       identity that concludes an instance comes with a later step;</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
  *       {@code plan} at its own address while it has room, and
  *       {@code advance} at the iteration collection while an open iteration
@@ -91,7 +93,8 @@ public class OpenCallService extends PlanningService {
         RELATE(true),
         UNRELATE(true),
         TAG_ATTACH(true),
-        TAG_DETACH(true);
+        TAG_DETACH(true),
+        BOOK(true);
 
         private final boolean writes;
 
@@ -260,7 +263,8 @@ public class OpenCallService extends PlanningService {
                 at(Verb.READ, Selector.ITEM, number), at(Verb.UPDATE, Selector.ITEM, number),
                 at(Verb.RELATE, Selector.ITEM, number), at(Verb.UNRELATE, Selector.ITEM, number),
                 at(Verb.TAG_ATTACH, Selector.ITEM, number),
-                at(Verb.TAG_DETACH, Selector.ITEM, number)));
+                at(Verb.TAG_DETACH, Selector.ITEM, number),
+                at(Verb.BOOK, Selector.ITEM, number)));
             if (MembershipService.plannable(status, milestoneOf(item))) {
                 rooms.stream()
                     .filter(room -> room.admits() && !room.members().contains(number))

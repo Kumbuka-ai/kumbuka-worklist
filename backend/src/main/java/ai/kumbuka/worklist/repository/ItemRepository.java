@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Item;
 import ai.kumbuka.worklist.domain.ItemCriterion;
+import ai.kumbuka.worklist.domain.ItemFulfilment;
 import ai.kumbuka.worklist.domain.ItemReference;
 import ai.kumbuka.worklist.domain.ItemRelation;
 import ai.kumbuka.worklist.domain.PageRequest;
@@ -301,6 +302,22 @@ public class ItemRepository {
             .getResultList();
     }
 
+    /**
+     * The fulfilment ledger of an item, every entry, in booking order: by
+     * the time of the booking, and by the row's surrogate where two share an
+     * instant.
+     */
+    @Transactional
+    public List<ItemFulfilment> fulfilmentOf(Item item) {
+        return em.createQuery(
+                "SELECT f FROM ItemFulfilment f WHERE f.scopeId = :" + P_SCOPE
+                    + " AND f.itemNumber = :" + P_ITEM + " ORDER BY f.bookedAt, f.pk",
+                ItemFulfilment.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .getResultList();
+    }
+
     // ------------------------------------------------------------------
     // Writing
     // ------------------------------------------------------------------
@@ -351,6 +368,18 @@ public class ItemRepository {
         criterion.createdAt = now();
         criterion.updatedAt = criterion.createdAt;
         em.persist(criterion);
+    }
+
+    /**
+     * Inserts the entries of one booking, in their order, and flushes, so a
+     * constraint the table holds is reported at the call site. There is no
+     * counterpart that changes or removes an entry, and there cannot be: V30
+     * grants SELECT and INSERT on the ledger and nothing else.
+     */
+    @Transactional
+    public void insertFulfilment(List<ItemFulfilment> entries) {
+        entries.forEach(em::persist);
+        em.flush();
     }
 
     /** Flushes pending changes for the same reason {@link #insert} does. */

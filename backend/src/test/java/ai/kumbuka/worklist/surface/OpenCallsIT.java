@@ -42,10 +42,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * cut, never read from the service:
  * <ul>
  *   <li>an item, in every state: {@code read}, {@code update}, {@code relate},
- *       {@code unrelate}, {@code tag_attach}, {@code tag_detach}, and
- *       {@code plan} into each open iteration it is no member of, where the
- *       item may enter an iteration at all (an actionable status and a
- *       milestone on the product path). A closed item stays writable;</li>
+ *       {@code unrelate}, {@code tag_attach}, {@code tag_detach}, {@code book},
+ *       and {@code plan} into each open iteration it is no member of, where
+ *       the item may enter an iteration at all (an actionable status and a
+ *       milestone on the product path). A closed item stays writable and
+ *       takes a booking;</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
  *       {@code plan} at its own address, and {@code advance} at the iteration
  *       collection while an open iteration stands that is not the current one;
@@ -114,7 +115,8 @@ class OpenCallsIT {
         // ---- items: one that may enter an iteration, one that may not ------
         String path = address(at.create(Selector.MILESTONE, Map.of("title", "the path")));
         String a = address(at.create(Selector.ITEM, Map.of("title", "plannable",
-            "status", OPEN, "milestone", number(path))));
+            "status", OPEN, "milestone", number(path),
+            "criteria", List.of(Map.of("text", "the criterion book reports on")))));
         String b = address(at.create(Selector.ITEM, Map.of("title", "without a milestone",
             "status", OPEN)));
         at.relateTo(b);
@@ -393,6 +395,12 @@ class OpenCallsIT {
                     arguments.put("address", address);
                     arguments.put("tag", TAG);
                 }
+                case "worklist_book" -> {
+                    arguments.put("address", address);
+                    arguments.put("instance", "https://instances.example/run/1");
+                    arguments.put("entries", List.of(Map.of("criterion", 1,
+                        "status", "met", "evidence", "a report of the instance")));
+                }
                 case "worklist_advance" -> {
                     arguments.put("scope", slug);
                     arguments.put("selector", Selector.ITERATION);
@@ -433,7 +441,8 @@ class OpenCallsIT {
             List<String> calls = new ArrayList<>(List.of(
                 "worklist_read " + address, "worklist_update " + address,
                 "worklist_relate " + address, "worklist_unrelate " + address,
-                "worklist_tag_attach " + address, "worklist_tag_detach " + address));
+                "worklist_tag_attach " + address, "worklist_tag_detach " + address,
+                "worklist_book " + address));
             for (String membership : plans) {
                 calls.add("worklist_plan " + membership);
             }

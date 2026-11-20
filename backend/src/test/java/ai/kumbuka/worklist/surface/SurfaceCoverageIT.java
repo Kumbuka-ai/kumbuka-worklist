@@ -249,6 +249,17 @@ class SurfaceCoverageIT {
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
+        // ---- book, at item depth -------------------------------------------
+        //
+        // Reached, refused by the domain: the identifier names no criterion
+        // the item ever issued. The semantics sit in FulfilmentLedgerIT. It
+        // presents no token, and refused it writes nothing.
+        call("POST", item(Selector.ITEM, itemNumber) + ":book", null,
+            Map.of("instance", "https://instances.example/run/1", "entries", List.of(
+                Map.of("criterion", 9999, "status", "met", "evidence", "a report"))))
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("INVALID_VALUE"));
+
         // ---- the seven the scheme does not carry --------------------------
         for (String verb : List.of("send", "append", "abandon", "block", "resume", "consume")) {
             call("POST", item(Selector.ITEM, itemNumber) + ":" + verb, null, null)

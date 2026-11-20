@@ -73,16 +73,20 @@ class ServiceRolePrivilegeIT {
     private static final Set<String> PERMITTED = Set.of("SELECT", "INSERT", "UPDATE");
 
     /**
-     * The tables whose verbs genuinely delete, each with exactly what it
-     * grants instead of {@link #PERMITTED}.
+     * The tables that grant other than {@link #PERMITTED}, each with exactly
+     * what it grants instead.
      *
-     * <p>One, from V26: {@code tag_detach} removes an assignment, which has no
+     * <p>From V26: {@code tag_detach} removes an assignment, which has no
      * status to fall back to (V2: "the day a verb genuinely deletes is the day
-     * the grant is added with that verb"). Named table by table, so DELETE on
-     * any other table is still a defect.
+     * the grant is added with that verb"). From V30: the fulfilment ledger is
+     * append-only, so it grants SELECT and INSERT and neither UPDATE nor
+     * DELETE -- nothing in it is ever changed or removed. Named table by
+     * table, so DELETE on any other table is still a defect, and UPDATE on the
+     * ledger is one.
      */
     private static final Map<String, Set<String>> PERMITTED_HERE = Map.of(
-        "item_tag", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"));
+        "item_tag", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"),
+        "item_fulfilment", Set.of("SELECT", "INSERT"));
 
     /**
      * Everything {@code has_table_privilege} can be asked about a table.
@@ -156,6 +160,9 @@ class ServiceRolePrivilegeIT {
         // SELECT/INSERT/UPDATE, and no DELETE -- a criterion is withdrawn and
         // keeps its number.
         "item_criterion",
+        // The fulfilment ledger of an item, from V30: SELECT and INSERT and
+        // nothing else (PERMITTED_HERE) -- append-only by grant.
+        "item_fulfilment",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);
@@ -381,6 +388,37 @@ class ServiceRolePrivilegeIT {
 
             assertThat(privilegeDefects(c, tablesIn(c, schema())))
                 .as("and closed again")
+                .isEmpty();
+        }
+    }
+
+    /**
+     * The ledger's own red state: UPDATE on the append-only table is a defect.
+     *
+     * <p>A separate case because the ledger is checked against a set narrower
+     * than every other domain table's, and a detection that read the general
+     * set for it would accept exactly the grant that lets an entry be changed.
+     */
+    @Test
+    void the_check_reports_update_on_the_append_only_ledger() throws SQLException {
+        String table = schema() + ".item_fulfilment";
+        try (Connection c = admin()) {
+            try {
+                exec(c, "GRANT UPDATE ON " + table + " TO " + role());
+
+                assertThat(privilegeDefects(c, tablesIn(c, schema())))
+                    .as("RED STATE, observed: UPDATE on the fulfilment ledger must be reported. "
+                        + "The ledger is append-only by grant, and an entry the runtime role "
+                        + "could change is a record nobody can rely on")
+                    .anySatisfy(defect -> assertThat(defect)
+                        .contains("item_fulfilment")
+                        .contains("UPDATE"));
+            } finally {
+                exec(c, "REVOKE UPDATE ON " + table + " FROM " + role());
+            }
+
+            assertThat(privilegeDefects(c, tablesIn(c, schema())))
+                .as("and gone again")
                 .isEmpty();
         }
     }

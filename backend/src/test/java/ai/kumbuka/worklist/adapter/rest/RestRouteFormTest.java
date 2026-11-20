@@ -305,7 +305,7 @@ class RestRouteFormTest {
         assertThat(CustomMethod.accepts(CustomMethod.Depth.ITEM))
             .as("an object carries read, update and its custom methods")
             .containsExactlyInAnyOrder("read", "update", "close", "relate", "unrelate",
-                "tag_attach", "tag_detach");
+                "tag_attach", "tag_detach", "book");
         assertThat(CustomMethod.accepts(CustomMethod.Depth.MEMBERSHIP))
             .as("a membership carries read, update, plan and unplan")
             .containsExactlyInAnyOrder("read", "update", "plan", "unplan");
