@@ -377,6 +377,33 @@ class ItemFieldsTest {
         assertThat(ItemFields.unchangedAsText(null, "something")).isFalse();
     }
 
+    /**
+     * The predicates are an object of the read answer, set by the service
+     * from the status: read-only, and an echo with its members in another
+     * order is still the value held (REA-0011 S3).
+     */
+    @Test
+    void the_predicates_are_read_only_and_compare_as_an_object() {
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "predicates"))
+            .contains(Field.PREDICATES);
+        assertThat(Field.PREDICATES.settableOn(Addressed.ITEM))
+            .as("a predicate holds because the status declares it (REA-0011 D1)")
+            .isFalse();
+
+        Map<String, Object> held = new java.util.LinkedHashMap<>();
+        held.put("closed", false);
+        held.put("actionable", true);
+        held.put("in_progress", false);
+        Map<String, Object> reordered = new java.util.LinkedHashMap<>();
+        reordered.put("in_progress", false);
+        reordered.put("closed", false);
+        reordered.put("actionable", true);
+
+        assertThat(ItemFields.unchangedAsText(held, reordered)).isTrue();
+        assertThat(ItemFields.unchangedAsText(held, Map.of("closed", true, "actionable", true,
+            "in_progress", false))).isFalse();
+    }
+
     // ------------------------------------------------------------------
     // The two patterns, and the inputs that made them worth writing out.
     // ------------------------------------------------------------------

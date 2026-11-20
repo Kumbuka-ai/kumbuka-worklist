@@ -184,11 +184,25 @@ public enum Field {
      * milestone, one of three values the platform fixes.
      *
      * <p>The asymmetry is the concept's rather than an oversight. An item's
-     * status is a scope's way of describing its own work and the four
-     * predicates hang off it; a milestone is planned, active or closed, and
+     * status is a scope's way of describing its own work and the
+     * predicates hang off it ({@link #PREDICATES}); a milestone is planned, active or closed, and
      * those three are the platform's planning mechanism.
      */
     STATUS("status", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
+
+    /**
+     * The predicates an item answers from its status (TAR-0002 B3, Annex
+     * A1), as one object: {@code closed}, {@code actionable} and
+     * {@code in_progress} always; {@code successful} only where
+     * {@code closed} holds; {@code reviewed}, {@code approved} and
+     * {@code verified} only where the item's scope uses them. A predicate the
+     * item does not answer is absent from the object, never false.
+     *
+     * <p>Read-only: a predicate holds because the status declares it, and the
+     * status changes through {@code update} (REA-0011 D1). A read answer sent
+     * back with it unchanged is accepted, as every read-only field is.
+     */
+    PREDICATES("predicates", Set.of(ITEM), Set.of()),
 
     /**
      * The declared attributes, as a map from a definition's stable key to its
@@ -297,12 +311,18 @@ public enum Field {
      */
     PARENT("parent", Set.of(ITEM), Set.of(ITEM)),
 
-    /** One of {@code high}, {@code medium}, {@code low}, {@code unassigned}. */
+    /**
+     * One of {@code high}, {@code medium}, {@code low}, {@code unassigned}.
+     * Carried only by an item of a scope that uses it (DEC-0037 C5); in any
+     * other scope the answer names none, a value is refused, and a value
+     * stored before stays in the column.
+     */
     PRIORITY("priority", Set.of(ITEM), Set.of(ITEM)),
 
     /**
      * One of {@code blocker}, {@code critical}, {@code major}, {@code normal},
-     * {@code minor}, {@code unassigned}.
+     * {@code minor}, {@code unassigned}. Carried only by an item of a scope
+     * that uses it, as {@link #PRIORITY}.
      */
     SEVERITY("severity", Set.of(ITEM), Set.of(ITEM)),
 
