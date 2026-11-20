@@ -1285,17 +1285,52 @@ public class ItemService {
      * timestamp and conflict token where they are.
      */
     private boolean applyCriteria(Item item, Object value) {
-        String itemAddress = itemAddressOf(slugOf(item.scopeId), item.number)
-            .orElseThrow(() -> new IllegalStateException("a stored item has an address"));
-        List<ItemFields.CriterionEntry> wanted = ItemFields.criteria(value, itemAddress);
-
+        List<ItemFields.CriterionEntry> wanted =
+            ItemFields.criteria(value, addressOf(item, slugOf(item.scopeId)));
         List<ItemCriterion> every = items.criteriaOf(item);
+        Map<Long, ItemCriterion> living = livingByNumber(every);
+        refuseUnknownCriteria(wanted, living);
+
+        java.time.Instant now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        long next = ItemFields.nextCriterionNumber(every);
+        java.util.Set<Long> kept = new java.util.HashSet<>();
+        boolean changed = false;
+        for (ItemFields.CriterionEntry entry : wanted) {
+            Long named = entry.number();
+            if (named == null) {
+                insertCriterion(item, next++, entry.text());
+                changed = true;
+            } else {
+                kept.add(named);
+                changed |= setCriterionText(living, named, entry.text(), now);
+            }
+        }
+        changed |= withdrawLeftOut(living.values(), kept, now);
+
+        if (changed) {
+            items.flush();
+        }
+        return changed;
+    }
+
+    /** The asserted criteria among these, keyed by their identifier. */
+    private static Map<Long, ItemCriterion> livingByNumber(List<ItemCriterion> every) {
         Map<Long, ItemCriterion> living = new LinkedHashMap<>();
         for (ItemCriterion criterion : every) {
             if (ItemCriterion.ASSERTED.equals(criterion.status)) {
                 living.put(criterion.number, criterion);
             }
         }
+        return living;
+    }
+
+    /**
+     * Refuses an entry naming an identifier that is not among the living
+     * criteria -- one the item never issued, or one it withdrew -- before
+     * anything is written.
+     */
+    private static void refuseUnknownCriteria(List<ItemFields.CriterionEntry> wanted,
+            Map<Long, ItemCriterion> living) {
         for (ItemFields.CriterionEntry entry : wanted) {
             if (entry.number() != null && !living.containsKey(entry.number())) {
                 throw new WorklistException(
@@ -1303,44 +1338,53 @@ public class ItemService {
                     List.of(Field.CRITERIA.path()));
             }
         }
+    }
 
-        java.time.Instant now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        long next = ItemFields.nextCriterionNumber(every);
-        java.util.Set<Long> kept = new java.util.HashSet<>();
-        boolean changed = false;
-        for (ItemFields.CriterionEntry entry : wanted) {
-            if (entry.number() == null) {
-                ItemCriterion criterion = new ItemCriterion();
-                criterion.scopeId = item.scopeId;
-                criterion.itemNumber = item.number;
-                criterion.number = next++;
-                criterion.text = entry.text();
-                items.insertCriterion(criterion);
-                changed = true;
-                continue;
-            }
-            // Checked above: every identifier an entry names is a living one.
-            ItemCriterion criterion = Optional.ofNullable(living.get(entry.number()))
-                .orElseThrow(() -> new IllegalStateException("a named criterion was checked"));
-            kept.add(criterion.number);
-            if (!criterion.text.equals(entry.text())) {
-                criterion.text = entry.text();
-                criterion.updatedAt = now;
-                changed = true;
-            }
+    /** A new criterion of the item under the identifier given. */
+    private void insertCriterion(Item item, long number, String text) {
+        ItemCriterion criterion = new ItemCriterion();
+        criterion.scopeId = item.scopeId;
+        criterion.itemNumber = item.number;
+        criterion.number = number;
+        criterion.text = text;
+        items.insertCriterion(criterion);
+    }
+
+    /**
+     * Sets the text of a living criterion where it differs, and reports
+     * whether it did. The identifier was checked by
+     * {@link #refuseUnknownCriteria}.
+     */
+    private static boolean setCriterionText(Map<Long, ItemCriterion> living, Long number,
+            String text, java.time.Instant now) {
+        ItemCriterion criterion = Optional.ofNullable(living.get(number))
+            .orElseThrow(() -> new IllegalStateException("a named criterion was checked"));
+        if (criterion.text.equals(text)) {
+            return false;
         }
-        for (ItemCriterion criterion : living.values()) {
+        criterion.text = text;
+        criterion.updatedAt = now;
+        return true;
+    }
+
+    /** Withdraws every living criterion the list left out, and reports whether any. */
+    private static boolean withdrawLeftOut(java.util.Collection<ItemCriterion> living,
+            java.util.Set<Long> kept, java.time.Instant now) {
+        boolean changed = false;
+        for (ItemCriterion criterion : living) {
             if (!kept.contains(criterion.number)) {
                 criterion.status = ItemCriterion.WITHDRAWN;
                 criterion.updatedAt = now;
                 changed = true;
             }
         }
-
-        if (changed) {
-            items.flush();
-        }
         return changed;
+    }
+
+    /** The complete address of a stored item, which always has one. */
+    private static String addressOf(Item item, String scopeSlug) {
+        return itemAddressOf(scopeSlug, item.number)
+            .orElseThrow(() -> new IllegalStateException("a stored item has an address"));
     }
 
     /**
@@ -1776,8 +1820,7 @@ public class ItemService {
         if (asserted.isEmpty()) {
             return List.of();
         }
-        String itemAddress = itemAddressOf(scopeSlug, item.number)
-            .orElseThrow(() -> new IllegalStateException("a stored item has an address"));
+        String itemAddress = addressOf(item, scopeSlug);
         List<Map<String, Object>> answer = new ArrayList<>(asserted.size());
         for (ItemCriterion criterion : asserted) {
             Map<String, Object> entry = new LinkedHashMap<>();
