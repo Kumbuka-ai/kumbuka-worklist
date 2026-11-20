@@ -41,12 +41,25 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * on the first ({@link LockWaits}) before the first commits. Without the lock
  * the second reads the committed row, finds its token current, and writes
  * too — it waits only on the row lock of the first one's UPDATE, and once
- * that commits it writes over it.
+ * that commits it writes over it. The cases are the three roots that carry a
+ * token through {@code update}: the item, the iteration and the milestone.
  *
  * <p>RED STATE, observed against worklist {@code b20d27f}, where the
  * aggregate is read with a bare {@code em.find} and compared in memory: in
  * both cases the second writer wrote as well, and each case failed on the
  * refusal it expected, with "the second writer must be refused, not write: Expecting actual not to be null".
+ *
+ * <p>RED STATE of the milestone case, reasoned and not observed: the probe
+ * replaces {@code requireLocked(scopeId, milestoneId)} in
+ * {@code MilestoneService.update} with {@code require(scopeId, milestoneId)},
+ * which reads through {@code PlanningRepository.milestoneById}, a bare
+ * {@code em.find}. The second writer then reads the committed row, whose token
+ * is still the one both present, passes {@code requireCurrentToken}, and waits
+ * only on the row lock of the first one's UPDATE; the milestone carries no
+ * version column, so once the first commits the second writes over it. The
+ * case fails where the item and iteration cases failed on {@code b20d27f},
+ * with "the second writer must be refused, not write". The probe was not run:
+ * the run that wrote this case had no database.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -57,6 +70,7 @@ class ConcurrentWriteIT {
 
     @Inject ItemService items;
     @Inject IterationService iterations;
+    @Inject MilestoneService milestones;
     @Inject ScopeSettingService settings;
     @Inject SelectorRegistry selectors;
     @Inject VocabularyRegistry vocabulary;
@@ -105,6 +119,24 @@ class ConcurrentWriteIT {
             Field.CONFLICT_TOKEN.canonicalName(), token)).answer());
 
         assertThat(iterations.read(scope, id).get(Field.TITLE.canonicalName()))
+            .as("the first writer's change stands").isEqualTo("first");
+    }
+
+    @Test
+    void two_writers_with_one_token_on_a_milestone_exactly_one_writes() throws Exception {
+        // A milestone's number comes from the scope's milestone selector,
+        // which a scope has only once it is opened.
+        selectors.open(scope, Selector.MILESTONE);
+        Map<String, Object> created = milestones.create(scope, Map.of(
+            Field.TITLE.canonicalName(), "contested")).answer();
+        UUID id = idOf(created);
+        String token = tokenOf(created);
+
+        contest(title -> milestones.update(scope, id, Map.of(
+            Field.TITLE.canonicalName(), title,
+            Field.CONFLICT_TOKEN.canonicalName(), token)).answer());
+
+        assertThat(milestones.read(scope, id).get(Field.TITLE.canonicalName()))
             .as("the first writer's change stands").isEqualTo("first");
     }
 
