@@ -1782,7 +1782,7 @@ public class ItemService {
         for (ItemCriterion criterion : asserted) {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put(ItemFields.ADDRESS, ItemFields.criterionAddress(itemAddress, criterion.number));
-            entry.put(ItemFields.TEXT, criterion.text);
+            entry.put(ItemFields.CRITERION_TEXT, criterion.text);
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);

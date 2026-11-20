@@ -61,7 +61,7 @@ final class ItemFields {
     /** The key of a criterion entry's own address, which carries its identifier. */
     static final String ADDRESS = "address";
     /** The key of a criterion entry's text. */
-    static final String TEXT = "text";
+    static final String CRITERION_TEXT = "text";
     /** The segment of a criterion's address beneath its item (D14). */
     static final String CRITERION = "criterion";
 
@@ -290,11 +290,11 @@ final class ItemFields {
         for (Object element : elements(Field.CRITERIA, raw)) {
             Map<?, ?> entry = entry(Field.CRITERIA, element);
             for (Object key : entry.keySet()) {
-                if (!ADDRESS.equals(key) && !TEXT.equals(key)) {
+                if (!ADDRESS.equals(key) && !CRITERION_TEXT.equals(key)) {
                     throw criteriaRefusal();
                 }
             }
-            String text = text(Field.CRITERIA, entry.get(TEXT)).orElseThrow(ItemFields::criteriaRefusal);
+            String text = text(Field.CRITERIA, entry.get(CRITERION_TEXT)).orElseThrow(ItemFields::criteriaRefusal);
             Long number = null;
             Object address = entry.get(ADDRESS);
             if (address != null) {
