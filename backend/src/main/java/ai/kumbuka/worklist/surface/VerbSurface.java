@@ -204,7 +204,7 @@ public class VerbSurface {
         }
 
         Map<String, Object> created = switch (in.view()) {
-            case Selector.ITEM -> logged(items.create(in.scopeId(), fields),
+            case Selector.ITEM -> logged(items.create(in.scopeId(), subject, fields),
                 PlatformLog.TechnicalAddress::of, address -> {
                     PlatformLog.itemCreated(address, in.scope());
                     PlatformLog.created(address, in.scope());

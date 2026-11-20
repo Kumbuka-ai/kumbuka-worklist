@@ -317,14 +317,14 @@ class UnstampedWriteIT {
     }
 
     private Map<String, Object> item(String title) {
-        return items.create(scope, Map.of(
+        return items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), openStatus)).answer();
     }
 
     /** An item pointed at a milestone, which is what makes it plannable. */
     private Map<String, Object> itemOnPath(String title, Object milestoneNumber) {
-        return items.create(scope, Map.of(
+        return items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), openStatus,
             Field.MILESTONE_ID.canonicalName(), milestoneNumber)).answer();

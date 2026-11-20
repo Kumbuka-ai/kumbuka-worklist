@@ -146,7 +146,7 @@ class AttributeColumnRoundTripIT {
     // -----------------------------------------------------------------------
 
     private UUID created() {
-        Map<String, Object> answer = items.create(scope, Map.of(
+        Map<String, Object> answer = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "attribute round trip",
             Field.STATUS.canonicalName(), openName)).answer();
         return UUID.fromString(String.valueOf(answer.get(Field.ID.canonicalName())));

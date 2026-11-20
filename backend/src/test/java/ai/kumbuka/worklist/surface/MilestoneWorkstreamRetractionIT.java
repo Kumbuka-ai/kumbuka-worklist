@@ -334,7 +334,7 @@ class MilestoneWorkstreamRetractionIT {
     void an_item_still_carries_its_workstream() {
         Workstream mobile = workstreams.declare(scope, "mobile", "mobile stream");
 
-        Map<String, Object> item = items.create(scope, Map.of(
+        Map<String, Object> item = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "an item in a stream",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(), mobile.token)).answer();

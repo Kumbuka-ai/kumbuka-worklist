@@ -180,7 +180,7 @@ class ItemDomainIT {
     @Test
     void an_update_that_changes_nothing_writes_nothing() throws SQLException {
         String key = attribute("text");
-        Map<String, Object> created = items.create(SCOPE, Map.of(
+        Map<String, Object> created = items.create(SCOPE, "probe-subject", Map.of(
             "title", "no-op probe",
             "status", statusNameOf(openStatus()),
             "description", "what it is and why",
@@ -531,7 +531,7 @@ class ItemDomainIT {
         UUID untouchedScope = UUID.randomUUID();
 
         WorklistException refusal = catchWorklistException(() ->
-            items.create(untouchedScope, Map.of(
+            items.create(untouchedScope, "probe-subject", Map.of(
                 "title", "undeclared probe",
                 "status", statusNameOf(openStatus()))));
 
@@ -781,7 +781,7 @@ class ItemDomainIT {
     void create_with_an_undeclared_status_is_refused() {
         itemView();
         WorklistException refusal = catchWorklistException(() ->
-            items.create(SCOPE, Map.of(
+            items.create(SCOPE, "probe-subject", Map.of(
                 "title", "undeclared status at intake",
                 "status", "no such status name here")));
 
@@ -1203,7 +1203,7 @@ class ItemDomainIT {
         arguments.put("status", statusNameOf(openStatus()));
         arguments.put("number", 7L);
 
-        WorklistException refusal = catchWorklistException(() -> items.create(SCOPE, arguments));
+        WorklistException refusal = catchWorklistException(() -> items.create(SCOPE, "probe-subject", arguments));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders())
@@ -1215,11 +1215,11 @@ class ItemDomainIT {
     @Test
     void an_item_without_a_title_or_a_status_is_refused() {
         assertThat(catchWorklistException(() ->
-            items.create(SCOPE, Map.of("status", statusNameOf(openStatus())))).reason())
+            items.create(SCOPE, "probe-subject", Map.of("status", statusNameOf(openStatus())))).reason())
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
 
         WorklistException statusless = catchWorklistException(() ->
-            items.create(SCOPE, Map.of("title", "no status given")));
+            items.create(SCOPE, "probe-subject", Map.of("title", "no status given")));
         assertThat(statusless.reason())
             .as("a status is a declared value now, so there is no default to fall back "
                 + "on — inventing one here would be this service deciding what a scope's "
@@ -1707,7 +1707,7 @@ class ItemDomainIT {
     /** A created item, with the scope's actionable status. */
     private Map<String, Object> created(String title) {
         itemView();
-        return items.create(SCOPE, Map.of(
+        return items.create(SCOPE, "probe-subject", Map.of(
             "title", title,
             "status", statusNameOf(openStatus()))).answer();
     }

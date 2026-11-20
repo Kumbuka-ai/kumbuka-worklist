@@ -98,7 +98,72 @@ final class ItemFields {
             List.of(argument));
     }
 
+    /** The value set of {@code priority}, from the standard (DEC-0037 C3). */
+    static final List<String> PRIORITIES = List.of("high", "medium", "low", "unassigned");
+
+    /** The value set of {@code severity}, from the standard (DEC-0037 C3). */
+    static final List<String> SEVERITIES =
+        List.of("blocker", "critical", "major", "normal", "minor", "unassigned");
+
+    /** The most contributors one item names. */
+    static final int CONTRIBUTORS_MAX = 50;
+
+    /** The longest identity a contributor entry may be. */
+    static final int CONTRIBUTOR_LENGTH_MAX = 255;
+
     private ItemFields() {
+    }
+
+    /**
+     * A caller's value of a field with a fixed value set: the value, empty
+     * where the caller gave the empty absence, or a refusal naming the field
+     * for anything outside the set.
+     */
+    static Optional<String> oneOf(Field field, List<String> values, @Nullable Object raw) {
+        Optional<String> given = text(field, raw);
+        if (given.isPresent() && !values.contains(given.get())) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(field.path()));
+        }
+        return given;
+    }
+
+    /**
+     * The contributors as the column holds them: the identities in the
+     * caller's order, trimmed and distinct; an empty list where none is
+     * given.
+     *
+     * <p>An identity is a string of at most {@link #CONTRIBUTOR_LENGTH_MAX}
+     * characters, not blank, and a list holds at most
+     * {@link #CONTRIBUTORS_MAX}. Which identities the platform knows is the
+     * platform's to say and not this service's, so an identity is taken as
+     * given.
+     */
+    static List<String> contributors(@Nullable Object raw) {
+        List<String> out = new ArrayList<>();
+        for (Object element : elements(Field.CONTRIBUTOR, raw)) {
+            if (!(element instanceof CharSequence)) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(Field.CONTRIBUTOR.path()));
+            }
+            String identity = element.toString().trim();
+            if (identity.isEmpty() || identity.length() > CONTRIBUTOR_LENGTH_MAX) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(Field.CONTRIBUTOR.path()));
+            }
+            if (!out.contains(identity)) {
+                out.add(identity);
+            }
+        }
+        if (out.size() > CONTRIBUTORS_MAX) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(Field.CONTRIBUTOR.path()));
+        }
+        return List.copyOf(out);
     }
 
     /**

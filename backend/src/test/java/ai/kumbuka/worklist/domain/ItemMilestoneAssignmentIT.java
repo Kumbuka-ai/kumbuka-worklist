@@ -286,7 +286,7 @@ class ItemMilestoneAssignmentIT {
     private UUID itemAt(String title) {
         selectors.open(scope, Selector.ITEM);
         String openName = vocabulary.requireStatus(scope, openStatus).name;
-        return (UUID) items.create(scope, Map.of(
+        return (UUID) items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), openName)).answer().get(Field.ID.canonicalName());
     }

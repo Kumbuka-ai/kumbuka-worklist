@@ -62,19 +62,21 @@ class ItemFieldsTest {
     void the_settable_names_are_the_ones_a_caller_may_change() {
         assertThat(Field.settableNames(Addressed.ITEM))
             .contains("title", "description", "status", "milestone", "attributes",
-                "references", "relations")
+                "references", "relations", "contributor", "parent", "priority", "severity")
             .doesNotContain("id", "number", "selector", "created_at",
-                "conflict_token", "tags");
+                "conflict_token", "tags", "creator", "close_date");
     }
 
     /**
      * A scope's own attributes are not fields, and that is the change the
      * whole declaration mechanism rests on.
      *
-     * <p>{@code cluster}, {@code type}, {@code priority} and {@code size} were
-     * four entries in this enum, so a fifth axis was a code change. They
-     * travel inside {@code attributes} now, under the key they were declared
-     * with, and a sixth of them is a row.
+     * <p>{@code cluster}, {@code type} and {@code size} were entries in this
+     * enum, so a further axis was a code change. They travel inside
+     * {@code attributes} now, under the key they were declared with, and a
+     * further one of them is a row. {@code priority} is a field again since the
+     * property core (DEC-0037 C3), with the standard's value set; a scope's
+     * own attribute of that key stays inside {@code attributes}.
      */
     @Test
     void a_declared_attribute_is_not_a_field_of_its_own() {
@@ -266,6 +268,93 @@ class ItemFieldsTest {
             ItemFields.refuseUuidShape(Field.ATTRIBUTES.path(), "S")))
             .as("and a name is not a uuid, so it passes")
             .isNull();
+    }
+
+    // ------------------------------------------------------------------
+    // The property core (DEC-0037 C3, TAR-0002 Annex A2).
+    // ------------------------------------------------------------------
+
+    /**
+     * {@code priority} takes the four values of the standard and nothing else;
+     * the empty absence clears it. The set is written here from the node, not
+     * read from the class under test.
+     */
+    @Test
+    void priority_takes_the_four_values_of_the_standard_and_refuses_any_other() {
+        for (String value : List.of("high", "medium", "low", "unassigned")) {
+            assertThat(ItemFields.oneOf(Field.PRIORITY, ItemFields.PRIORITIES, value))
+                .contains(value);
+        }
+        assertThat(ItemFields.oneOf(Field.PRIORITY, ItemFields.PRIORITIES, " ")).isEmpty();
+
+        for (String outside : List.of("P1", "urgent", "High", "blocker")) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.oneOf(Field.PRIORITY, ItemFields.PRIORITIES, outside));
+            assertThat(refusal.reason())
+                .as("'%s' lies outside the value set of priority", outside)
+                .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.priority");
+        }
+    }
+
+    /** {@code severity} takes the six values of the standard and nothing else. */
+    @Test
+    void severity_takes_the_six_values_of_the_standard_and_refuses_any_other() {
+        for (String value : List.of("blocker", "critical", "major", "normal", "minor",
+                "unassigned")) {
+            assertThat(ItemFields.oneOf(Field.SEVERITY, ItemFields.SEVERITIES, value))
+                .contains(value);
+        }
+
+        for (String outside : List.of("high", "trivial", "Major")) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.oneOf(Field.SEVERITY, ItemFields.SEVERITIES, outside));
+            assertThat(refusal.reason())
+                .as("'%s' lies outside the value set of severity", outside)
+                .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.severity");
+        }
+    }
+
+    /**
+     * The contributors keep the caller's order, drop a repeat and refuse an
+     * entry that is no identity.
+     */
+    @Test
+    void contributors_keep_their_order_and_refuse_an_entry_that_is_no_identity() {
+        assertThat(ItemFields.contributors(List.of("agent-b", " person-a ", "agent-b")))
+            .containsExactly("agent-b", "person-a");
+        assertThat(ItemFields.contributors(null)).isEmpty();
+        assertThat(ItemFields.contributors(List.of())).isEmpty();
+
+        for (Object malformed : List.<Object>of(List.of("  "), List.of(7), "person-a",
+                List.of("x".repeat(256)))) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.contributors(malformed));
+            assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.contributor");
+        }
+
+        List<String> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            many.add("identity-" + i);
+        }
+        assertThat(((WorklistException) catchThrowable(() -> ItemFields.contributors(many)))
+            .reason())
+            .as("fifty contributors at most")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+    }
+
+    /** {@code creator} and {@code close_date} are the service's; the caller sets the rest. */
+    @Test
+    void creator_and_close_date_are_carried_and_read_only() {
+        for (String name : List.of("creator", "close_date")) {
+            assertThat(Field.byCanonicalName(Addressed.ITEM, name)).isPresent();
+            assertThat(Field.byCanonicalName(Addressed.ITEM, name).orElseThrow()
+                .settableOn(Addressed.ITEM))
+                .as("%s is set by the service (TAR-0002 B4)", name)
+                .isFalse();
+        }
     }
 
     // ------------------------------------------------------------------

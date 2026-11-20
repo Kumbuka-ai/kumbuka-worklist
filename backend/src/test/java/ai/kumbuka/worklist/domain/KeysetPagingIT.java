@@ -251,7 +251,7 @@ class KeysetPagingIT {
     private List<Long> createItems(UUID in, int count) {
         List<Long> numbers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            numbers.add((Long) items.create(in, Map.of("title", "item " + i, "status", "open"))
+            numbers.add((Long) items.create(in, "probe-subject", Map.of("title", "item " + i, "status", "open"))
                 .answer().get("number"));
         }
         return numbers;

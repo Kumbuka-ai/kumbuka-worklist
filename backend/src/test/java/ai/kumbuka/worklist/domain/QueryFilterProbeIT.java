@@ -281,7 +281,7 @@ class QueryFilterProbeIT {
     // ==================================================================
 
     private UUID createItem(String title, Long statusId) {
-        Map<String, Object> created = items.create(scope, Map.of(
+        Map<String, Object> created = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(),
             vocabulary.requireStatus(scope, statusId).name)).answer();

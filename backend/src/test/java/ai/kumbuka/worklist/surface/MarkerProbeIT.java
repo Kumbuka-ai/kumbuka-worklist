@@ -285,7 +285,7 @@ class MarkerProbeIT {
         // The scope warns at one membership: planning the second item provokes
         // the notice. The item's own title carries the marker, and the
         // notice must not.
-        Map<String, Object> created = items.create(SCOPE_ID,
+        Map<String, Object> created = items.create(SCOPE_ID, "probe-subject",
             Map.of("title", MARKER, "status", OPEN, "milestone", 1)).answer();
         Object number = created.get("number");
         String iteration = address(Selector.ITERATION, 1);
@@ -421,7 +421,7 @@ class MarkerProbeIT {
             Map.of("title", "goal", "kind", "milestone")).answer();
         List<Object> numbers = new ArrayList<>();
         for (int i = 0; i < 2; i++) {
-            numbers.add(items.create(SCOPE_ID, Map.of("title", "marked " + i, "status", OPEN,
+            numbers.add(items.create(SCOPE_ID, "probe-subject", Map.of("title", "marked " + i, "status", OPEN,
                 "milestone", milestone.get("number"))).answer().get("number"));
         }
         iterations.create(SCOPE_ID, Map.of("title", "first", "motto", "m", "description", "d"));

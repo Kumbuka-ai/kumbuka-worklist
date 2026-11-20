@@ -167,10 +167,12 @@ public final class DeclarationSpecification {
                 "ITEM_UNPLANNABLE", "SETTING_ABSENT", "CARDINALITY_EXCEEDED"))),
         new Verb("worklist_unplan", "GRAPH_ADD_OR_REMOVE", "OBJECT", List.of(ADDRESS, TOKEN),
             reasons(WRITE, TOKENED, List.of("TRANSITION_REFUSED"))),
+        // TRANSITION_REFUSED: duplicate_of closes the item and is open only
+        // where closing is (REA-0011 D18).
         new Verb("worklist_relate", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
-                "VALUE_UNDECLARED"))),
+                "VALUE_UNDECLARED", "TRANSITION_REFUSED"))),
         new Verb("worklist_unrelate", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",

@@ -19,6 +19,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,17 +31,22 @@ import java.util.UUID;
  * property of the Markdown store being replaced, and not "issue", which two
  * foreign products already occupy.
  *
- * <h2>A small fixed core plus declared attributes</h2>
+ * <h2>A fixed core plus declared attributes</h2>
  *
- * The core is what the SERVICE itself reasons about, and the test for
- * admission is sharp: a field is core only if the service asks a question
- * about it. Title and description are core because every listing and every
- * reader needs them. Status is core because the four predicates hang on it.
- * References are core because their form is validated. Cluster, size,
- * priority, type and the component tags are core in none of these senses —
- * the service never asks a question about them — and they are therefore
+ * The core is what the SERVICE itself reasons about or what the platform's
+ * model fixes for every item. Title and description are core because every
+ * listing and every reader needs them. Status is core because the four
+ * predicates hang on it. References are core because their form is
+ * validated. The property core of DEC-0037 — {@link #creator},
+ * {@link #contributor}, {@link #parentNumber}, {@link #priority},
+ * {@link #severity} and {@link #closeDate} — is core because the model
+ * carries it on every item, under one name and with the value sets of the
+ * standard: {@code priority} and {@code severity} are columns with a fixed
+ * value set, not declarations of a scope. Cluster, size, type and the
+ * component tags are core in none of these senses, and they are therefore
  * DECLARED attributes, stored in {@link #attributes} under the identity of
- * their declaration.
+ * their declaration; a scope that declared an attribute of its own with the
+ * key {@code priority} keeps it there, beside the core field.
  *
  * <p>That is the single most important structural change from the
  * predecessor, whose specification fixes an item at exactly sixteen cells: a
@@ -83,7 +89,8 @@ import java.util.UUID;
  * of columns exists only because a markdown table cannot join.
  *
  * <p><strong>No relation column.</strong> Relations are rows with a type, in
- * {@link ItemRelation}.
+ * {@link ItemRelation}. {@link #parentNumber} is not one of them: an item has
+ * at most one parent, so the model holds it as a field of the item.
  *
  * <p>{@link #scopeId} is stored and never resolved from here. The platform
  * publishes a read contract for scope access; consuming it is a runtime read
@@ -188,6 +195,50 @@ public class Item extends AggregateRoot {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "attributes", nullable = false, columnDefinition = "jsonb")
     public Map<String, Object> attributes = new LinkedHashMap<>();
+
+    // --- the property core (DEC-0037 C3) ----------------------------------
+
+    /**
+     * The identity that created the item: the calling subject, written by the
+     * service at the create and never again. Absent on an item created before
+     * the property core arrived, which nothing fills retroactively.
+     */
+    @Column(name = "creator", updatable = false)
+    public @Nullable String creator;
+
+    /**
+     * The identities of the platform responsible for the work the item needs,
+     * in the caller's order and distinct. Absent where none was ever set; an
+     * item reads an absent list and an empty one alike, as no contributor.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "contributor", columnDefinition = "jsonb")
+    public @Nullable List<String> contributor;
+
+    /**
+     * The number of the item this item is part of, in the same scope; absent
+     * where it is part of none. The chain is free of cycles, which
+     * {@link ItemService} holds when it is written.
+     */
+    @Column(name = "parent_number")
+    public @Nullable Long parentNumber;
+
+    /** One of {@link ItemFields#PRIORITIES}; absent where none was set. */
+    @Column(name = "priority")
+    public @Nullable String priority;
+
+    /** One of {@link ItemFields#SEVERITIES}; absent where none was set. */
+    @Column(name = "severity")
+    public @Nullable String severity;
+
+    /**
+     * When the item closed: set by the service when the item moves from a
+     * status that is not closed into one that is, and cleared when it leaves
+     * a closed status again. Absent on an open item, and on an item closed
+     * before the property core arrived.
+     */
+    @Column(name = "close_date")
+    public @Nullable Instant closeDate;
 
     // --- technical fields, server-derived ---------------------------------
 

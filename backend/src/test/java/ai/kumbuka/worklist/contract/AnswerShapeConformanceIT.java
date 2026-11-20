@@ -97,7 +97,7 @@ class AnswerShapeConformanceIT {
             vocabulary.declareStatus(SCOPE_ID, "open", 1, true, false, false, false);
             workstreams.requireDefault(SCOPE_ID);
             for (int i = 0; i < 3; i++) {
-                items.create(SCOPE_ID, Map.of("title", "shaped " + i, "status", "open"));
+                items.create(SCOPE_ID, "probe-subject", Map.of("title", "shaped " + i, "status", "open"));
             }
             staged = true;
         }

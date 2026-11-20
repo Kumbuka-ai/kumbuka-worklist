@@ -223,7 +223,7 @@ class ConflictTokenIT {
     // -----------------------------------------------------------------------
 
     private Map<String, Object> item(String title) {
-        return items.create(scope, Map.of(
+        return items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), openStatus)).answer();
     }

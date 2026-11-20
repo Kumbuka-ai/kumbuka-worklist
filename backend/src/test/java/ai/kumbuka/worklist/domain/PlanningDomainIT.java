@@ -758,7 +758,7 @@ class PlanningDomainIT {
         // has to exist by then. Declaring is idempotent.
         selectors.open(scope, Selector.ITEM);
         String statusName = vocabulary.requireStatus(scope, statusId).name;
-        return (UUID) items.create(scope, Map.of(
+        return (UUID) items.create(scope, "probe-subject", Map.of(
             "title", title, "status", statusName)).answer().get("id");
     }
 

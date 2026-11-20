@@ -329,7 +329,7 @@ class PageQueryPlanIT {
         vocabulary.declareStatus(id, "open", 1, true, false, false, false);
         workstreams.requireDefault(id);
         workstreams.declare(id, "probe", "the template of the probe's workstreams");
-        items.create(id, Map.of("title", "probe", "status", "open"));
+        items.create(id, "probe-subject", Map.of("title", "probe", "status", "open"));
         milestones.create(id, Map.of("title", "probe"));
         iterations.create(id, Map.of("title", "probe", "motto", "m", "description", "d"));
         return id;

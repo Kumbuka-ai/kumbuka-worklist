@@ -216,11 +216,11 @@ class FailClosedProbeIT {
     private void plantOneItemPerTenant() throws Exception {
         try (AutoCloseable ignored = tenantContext.bind(tenantA)) {
             itemView();
-            items.create(SCOPE, java.util.Map.of("title", titleA(), "status", status()));
+            items.create(SCOPE, "probe-subject", java.util.Map.of("title", titleA(), "status", status()));
         }
         try (AutoCloseable ignored = tenantContext.bind(tenantB)) {
             itemView();
-            items.create(SCOPE, java.util.Map.of("title", titleB(), "status", status()));
+            items.create(SCOPE, "probe-subject", java.util.Map.of("title", titleB(), "status", status()));
         }
     }
 

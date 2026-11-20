@@ -310,7 +310,7 @@ class QueryRefusalWordingIT {
         vocabulary.declareStatus(SCOPE_ID, "open", 1, true, false, false, false);
         workstreams.requireDefault(SCOPE_ID);
         for (int i = 0; i < 2; i++) {
-            items.create(SCOPE_ID, Map.of("title", "worded " + i, "status", "open"));
+            items.create(SCOPE_ID, "probe-subject", Map.of("title", "worded " + i, "status", "open"));
         }
 
         SurfaceFixture.publishScope(SPARSE, SPARSE_ID, "project", false);
