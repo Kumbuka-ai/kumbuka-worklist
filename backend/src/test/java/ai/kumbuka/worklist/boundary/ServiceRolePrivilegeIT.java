@@ -149,6 +149,9 @@ class ServiceRolePrivilegeIT {
         // The tags an item carries, from V26: the one table with DELETE, for
         // tag_detach (PERMITTED_HERE).
         "item_tag",
+        // What a scope declares it uses, from V28: the same SELECT/INSERT/UPDATE,
+        // and no DELETE -- no verb takes a usage back.
+        "scope_usage",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);

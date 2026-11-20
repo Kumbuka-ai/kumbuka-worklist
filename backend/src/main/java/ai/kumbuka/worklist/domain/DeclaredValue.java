@@ -24,7 +24,7 @@ import java.time.Instant;
  * nevertheless carries three tables for it — {@link ItemStatus},
  * {@link AttributeOption} and {@link RelationType} — plus
  * {@link AttributeDefinition} for the declaration an option belongs to. The
- * reason is the platform properties: a status carries the four predicates, a
+ * reason is the platform properties: a status carries the predicates, a
  * relation type carries whether it blocks, an option carries neither. In one
  * table those become two blocks of columns that are null for two of the three
  * kinds and mandatory for the third, which no check constraint expresses

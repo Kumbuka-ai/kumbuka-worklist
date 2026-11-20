@@ -58,6 +58,12 @@ final class ItemFields {
     /** The key of a relation entry's other end, as its identity. */
     static final String ITEM = "item";
 
+    /** The keys of the predicates every scope answers (TAR-0002 Annex A1). */
+    static final String CLOSED = "closed";
+    static final String SUCCESSFUL = "successful";
+    static final String ACTIONABLE = "actionable";
+    static final String IN_PROGRESS = "in_progress";
+
     /**
      * A string that looks like a UUID.
      *
@@ -336,8 +342,15 @@ final class ItemFields {
      * answer back may have carried a uuid through JSON as a string and an
      * instant as its ISO form, and treating those as different values would
      * turn every honest round trip into a refusal.
+     *
+     * <p>Two maps are compared as maps, so an object such as
+     * {@code predicates} that comes back with its members in another order
+     * is still the value held.
      */
     static boolean unchangedAsText(@Nullable Object current, @Nullable Object incoming) {
+        if (current instanceof Map<?, ?> held && incoming instanceof Map<?, ?> given) {
+            return held.equals(given);
+        }
         return Objects.equals(
             current == null ? null : String.valueOf(current),
             incoming == null ? null : String.valueOf(incoming));

@@ -93,6 +93,37 @@ class PropertyCoreSurfaceIT {
             .doesNotContainKeys("parent", "priority", "severity", "close_date");
     }
 
+    /**
+     * The predicates on the wire (REA-0011 S3): an object of the item's
+     * fields on both surfaces, with {@code successful} only where
+     * {@code closed} holds, and no member at all for {@code reviewed},
+     * {@code approved} and {@code verified} in a scope that does not use them.
+     */
+    @Test
+    void s3_the_predicates_travel_on_both_surfaces_and_an_unused_one_is_absent() {
+        long item = createItem("carries its predicates");
+
+        Map<String, Object> overRest = read(item).jsonPath().getMap("fields.predicates");
+        assertThat(overRest)
+            .as("an open item: closed, actionable and in_progress, and nothing more")
+            .isEqualTo(Map.of("closed", false, "actionable", true, "in_progress", false));
+
+        Map<String, Object> overMcp = Mcp.answer(Mcp.call("worklist_read", Map.of(
+            "address", address(item))));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> fields = (Map<String, Object>) overMcp.get("fields");
+        assertThat(fields.get("predicates"))
+            .as("the same object over MCP")
+            .isEqualTo(overRest);
+
+        long duplicate = createItem("closed as a duplicate");
+        relate(duplicate, item).then().statusCode(200);
+        assertThat(read(duplicate).jsonPath().getMap("fields.predicates"))
+            .as("a closed item answers successful too")
+            .isEqualTo(Map.of("closed", true, "successful", false, "actionable", false,
+                "in_progress", false));
+    }
+
     @Test
     void k1_a_create_naming_its_creator_is_refused_at_the_surface() {
         Response refused = given().contentType(ContentType.JSON)

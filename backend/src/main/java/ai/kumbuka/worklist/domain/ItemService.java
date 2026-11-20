@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -70,7 +71,7 @@ import java.util.UUID;
  * <h2>The status is a declared value and this class knows none of them</h2>
  *
  * {@link Field#STATUS} carries the IDENTITY of a status the scope declared,
- * and the four predicates hang off that declaration rather than off a list in
+ * and the predicates hang off that declaration rather than off a list in
  * this file. That is the change this class exists on the far side of: the
  * shape it replaces carried five literals in a check constraint and a
  * matching list in Java, which is exactly the construction that makes a
@@ -741,6 +742,7 @@ public class ItemService {
             }
             case PRIORITY -> {
                 String priority = ItemFields.oneOf(field, ItemFields.PRIORITIES, value).orElse(null);
+                refuseUnused(item, ScopeUsage.Property.PRIORITY, field, priority);
                 if (Objects.equals(held, priority)) {
                     return false;
                 }
@@ -749,6 +751,7 @@ public class ItemService {
             }
             case SEVERITY -> {
                 String severity = ItemFields.oneOf(field, ItemFields.SEVERITIES, value).orElse(null);
+                refuseUnused(item, ScopeUsage.Property.SEVERITY, field, severity);
                 if (Objects.equals(held, severity)) {
                     return false;
                 }
@@ -757,6 +760,22 @@ public class ItemService {
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable and has no application");
+        }
+    }
+
+    /**
+     * Refuses a value for a property the item's scope does not use
+     * (DEC-0037 C5): such an item carries none, so a write that gives it one
+     * is {@code INVALID_VALUE} naming the field. The empty value passes, and
+     * so does a read answer sent back, which names no value there; neither
+     * changes a value the column holds from before the usage was declared.
+     */
+    private void refuseUnused(Item item, ScopeUsage.Property property, Field field,
+            @Nullable String value) {
+        if (value != null && !vocabulary.usages(item.scopeId).contains(property)) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(field.path()));
         }
     }
 
@@ -1482,6 +1501,8 @@ public class ItemService {
      */
     private Map<String, Object> project(Item item) {
         String scopeSlug = slugOf(item.scopeId);
+        Set<ScopeUsage.Property> used = vocabulary.usages(item.scopeId);
+        Optional<ItemStatus> status = vocabulary.statusByPk(item.statusPk);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), item.id);
         fields.put(Field.SCOPE.canonicalName(), scopeSlug);
@@ -1489,7 +1510,9 @@ public class ItemService {
         fields.put(Field.NUMBER.canonicalName(), item.number);
         fields.put(Field.TITLE.canonicalName(), item.title);
         fields.put(Field.DESCRIPTION.canonicalName(), item.description);
-        fields.put(Field.STATUS.canonicalName(), statusNameOf(item.statusPk).orElse(null));
+        fields.put(Field.STATUS.canonicalName(), status.map(s -> s.name).orElse(null));
+        fields.put(Field.PREDICATES.canonicalName(),
+            status.map(s -> predicatesOf(s, used)).orElse(null));
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
@@ -1500,13 +1523,17 @@ public class ItemService {
         // The property core. A value an item does not carry is answered
         // absent, so an item from before the core arrived reads as it did; the
         // contributors are a list, and empty where there are none, as the tags.
+        // Priority and severity are answered only in a scope that uses them
+        // (DEC-0037 C5); a value the column holds elsewhere stays unanswered.
         fields.put(Field.CREATOR.canonicalName(), item.creator);
         fields.put(Field.CONTRIBUTOR.canonicalName(),
             item.contributor == null ? List.of() : List.copyOf(item.contributor));
         fields.put(Field.PARENT.canonicalName(),
             itemAddressOf(scopeSlug, item.parentNumber).orElse(null));
-        fields.put(Field.PRIORITY.canonicalName(), item.priority);
-        fields.put(Field.SEVERITY.canonicalName(), item.severity);
+        fields.put(Field.PRIORITY.canonicalName(),
+            used.contains(ScopeUsage.Property.PRIORITY) ? item.priority : null);
+        fields.put(Field.SEVERITY.canonicalName(),
+            used.contains(ScopeUsage.Property.SEVERITY) ? item.severity : null);
         fields.put(Field.CLOSE_DATE.canonicalName(), item.closeDate);
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
@@ -1534,12 +1561,35 @@ public class ItemService {
         }
     }
 
-    /** The display name of a declared status, if it has one. */
-    private Optional<String> statusNameOf(@Nullable Long statusPk) {
-        if (statusPk == null) {
-            return Optional.empty();
+    /**
+     * The predicates an item in this status answers, in the order of
+     * TAR-0002 Annex A1 (TAR-0002 B3, DEC-0037 C5).
+     *
+     * <p>{@code closed}, {@code actionable} and {@code in_progress} always;
+     * {@code successful} only where {@code closed} holds; {@code reviewed},
+     * {@code approved} and {@code verified} only where the scope uses them.
+     * One the item does not answer is left out of the object rather than
+     * answered false: false would say the scope asked and the answer is no.
+     */
+    static Map<String, Object> predicatesOf(ItemStatus status,
+            Set<ScopeUsage.Property> used) {
+        Map<String, Object> predicates = new LinkedHashMap<>();
+        predicates.put(ItemFields.CLOSED, status.closed);
+        if (status.closed) {
+            predicates.put(ItemFields.SUCCESSFUL, status.successful);
         }
-        return vocabulary.statusByPk(statusPk).map(status -> status.name);
+        predicates.put(ItemFields.ACTIONABLE, status.actionable);
+        predicates.put(ItemFields.IN_PROGRESS, status.inProgress);
+        if (used.contains(ScopeUsage.Property.REVIEWED)) {
+            predicates.put(ScopeUsage.Property.REVIEWED.token(), status.reviewed);
+        }
+        if (used.contains(ScopeUsage.Property.APPROVED)) {
+            predicates.put(ScopeUsage.Property.APPROVED.token(), status.approved);
+        }
+        if (used.contains(ScopeUsage.Property.VERIFIED)) {
+            predicates.put(ScopeUsage.Property.VERIFIED.token(), status.verified);
+        }
+        return Collections.unmodifiableMap(predicates);
     }
 
     /** The token of a workstream in a scope, if it has one. */

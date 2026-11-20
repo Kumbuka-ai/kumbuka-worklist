@@ -12,6 +12,7 @@ import ai.kumbuka.worklist.domain.AttributeOption;
 import ai.kumbuka.worklist.domain.DeclaredValue;
 import ai.kumbuka.worklist.domain.ItemStatus;
 import ai.kumbuka.worklist.domain.RelationType;
+import ai.kumbuka.worklist.domain.ScopeUsage;
 import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -33,11 +34,15 @@ import java.util.UUID;
  * describes ONE kind of object — a declared value with an identity, a display
  * name, a rank and an optional description — and the schema carries three
  * tables for it only because the platform properties differ: a status carries
- * the four predicates, a relation type carries {@code blocks}, an option
+ * the predicates, a relation type carries {@code blocks}, an option
  * carries neither and belongs to a definition. What survives of "one kind of
  * object" is the naming and the behaviour, and this class is where that
  * survival is visible: the same lookups, the same withdrawal rule, the same
  * ordering by rank then name.
+ *
+ * <p>Beside them, the declarations of what a scope uses
+ * ({@link ScopeUsage}): read with the statuses whenever an item answers its
+ * predicates, and declared through the same registry.
  *
  * <p>Refusals stay above, as in the other two repositories. A lookup that
  * finds nothing returns null, and the caller decides whether that is an
@@ -225,6 +230,34 @@ public class VocabularyRepository {
                     + "ORDER BY r.rank, r.name", RelationType.class)
             .setParameter(P_SCOPE, scopeId)
             .getResultList();
+    }
+
+    // ------------------------------------------------------------------
+    // What a scope uses
+    // ------------------------------------------------------------------
+
+    /** The names of everything a scope declared it uses, in no particular order. */
+    @Transactional
+    public List<String> usagesIn(UUID scopeId) {
+        return em.createQuery(
+                "SELECT u.name FROM ScopeUsage u WHERE u.scopeId = :scope", String.class)
+            .setParameter(P_SCOPE, scopeId)
+            .getResultList();
+    }
+
+    /** The declaration that a scope uses that name, if there is one. */
+    @Transactional
+    public Optional<ScopeUsage> usage(UUID scopeId, String name) {
+        return Optional.ofNullable(em.find(ScopeUsage.class, new ScopeUsage.Key(scopeId, name)));
+    }
+
+    /** Inserts a usage declaration and flushes, so its constraints answer here. */
+    @Transactional
+    public ScopeUsage insert(ScopeUsage usage) {
+        usage.createdAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        em.persist(usage);
+        em.flush();
+        return usage;
     }
 
     // ------------------------------------------------------------------

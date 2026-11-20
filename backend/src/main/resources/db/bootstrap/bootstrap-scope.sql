@@ -382,6 +382,22 @@ SELECT :'tenant_id', :'scope_id', 'duplicate_of',
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
+-- What the scope uses (DEC-0037 C5).
+--
+-- `priority` and `severity`, so the scope keeps the two properties the
+-- item's property core gave it. None of the optional predicates `reviewed`,
+-- `approved` and `verified`: the status vocabulary above declares none of
+-- them, and an item of this scope answers no value for them. A scope this
+-- script ran on before the usage existed gets it on the next run; the key of
+-- `scope_usage` keeps a repeat from declaring it twice.
+-- ---------------------------------------------------------------------------
+INSERT INTO worklist.scope_usage (tenant_id, scope_id, name)
+VALUES
+    (:'tenant_id', :'scope_id', 'priority'),
+    (:'tenant_id', :'scope_id', 'severity')
+ON CONFLICT DO NOTHING;
+
+-- ---------------------------------------------------------------------------
 -- No milestone markers.
 --
 -- The predecessor carried three markers for the absence of a milestone
@@ -431,6 +447,10 @@ SELECT d.key, d.type, count(o.pk) AS options
 \echo '--- relation types ---'
 SELECT name, blocks FROM worklist.relation_type
  WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id' ORDER BY rank;
+
+\echo '--- usages ---'
+SELECT name FROM worklist.scope_usage
+ WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id' ORDER BY name;
 
 \echo '--- milestones ---'
 SELECT number, kind, title FROM worklist.milestone

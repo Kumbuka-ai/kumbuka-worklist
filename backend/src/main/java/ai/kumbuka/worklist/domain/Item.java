@@ -35,7 +35,7 @@ import java.util.UUID;
  *
  * The core is what the SERVICE itself reasons about or what the platform's
  * model fixes for every item. Title and description are core because every
- * listing and every reader needs them. Status is core because the four
+ * listing and every reader needs them. Status is core because the
  * predicates hang on it. References are core because their form is
  * validated. The property core of DEC-0037 — {@link #creator},
  * {@link #contributor}, {@link #parentNumber}, {@link #priority},

@@ -39,6 +39,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * <p>Every case works in a scope of its own, declared with the statuses a
  * scope of the bootstrap kind carries: {@code open}; {@code done}, closed and
  * successful; {@code dropped} and {@code obsolete}, closed and not successful.
+ * Like the bootstrap scope it declares that it uses {@code priority} and
+ * {@code severity}; a scope that does not is {@code StatusPredicatesIT}'s.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -62,6 +64,10 @@ class PropertyCoreIT {
         vocabulary.declareStatus(scope, "dropped", 3, false, false, true, false);
         vocabulary.declareStatus(scope, "obsolete", 4, false, false, true, false);
         vocabulary.declareRelationType(scope, "carries", false, 1);
+        // Since S3 a scope carries priority and severity only where it
+        // declares it uses them (DEC-0037 C5); the bootstrap scope does.
+        vocabulary.declareUsage(scope, ScopeUsage.Property.PRIORITY);
+        vocabulary.declareUsage(scope, ScopeUsage.Property.SEVERITY);
     }
 
     // ====================================================================
