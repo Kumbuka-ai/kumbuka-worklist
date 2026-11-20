@@ -132,10 +132,37 @@ public class ItemService {
     // Reading.
     // ------------------------------------------------------------------
 
+    /**
+     * How much of the fulfilment ledger a read answers under
+     * {@link Field#FULFILMENT}.
+     */
+    public enum Ledger {
+        /** Per criterion and instance the latest entry: what every answer carries. */
+        LATEST,
+        /** Every entry, in booking order: the option of {@code read}. */
+        ALL
+    }
+
     /** One item, as the canonical field map. */
     @Transactional
     public Map<String, Object> read(UUID scopeId, UUID itemId) {
         return project(require(scopeId, itemId));
+    }
+
+    /**
+     * One item, as the canonical field map, with the fulfilment ledger as
+     * the option asks: the latest entry per criterion and instance, or the
+     * whole ledger in booking order.
+     */
+    @Transactional
+    public Map<String, Object> read(UUID scopeId, UUID itemId, Ledger ledger) {
+        Item item = require(scopeId, itemId);
+        Map<String, Object> fields = project(item);
+        if (ledger == Ledger.ALL) {
+            fields.put(Field.FULFILMENT.canonicalName(),
+                fulfilmentOf(item, slugOf(item.scopeId), Ledger.ALL));
+        }
+        return fields;
     }
 
     /**
@@ -339,7 +366,7 @@ public class ItemService {
         item.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
         Map<String, Object> current = project(item);
-        refuseUnsettableChanges(current, given);
+        refuseUnsettableChanges(current, withoutEchoedLedger(item, given));
 
         Map<Field, Object> settable = new EnumMap<>(Field.class);
         given.forEach((field, value) -> {
@@ -656,6 +683,29 @@ public class ItemService {
                 WorklistException.Reason.FIELD_NOT_SETTABLE,
                 refused);
         }
+    }
+
+    /**
+     * The given fields without a fulfilment ledger that is the whole ledger
+     * as the option of {@code read} answers it.
+     *
+     * <p>A read answers the ledger in one of two forms, and a read answer
+     * sent back is accepted in either. The latest form is compared like every
+     * read-only field, against the projection; the whole ledger is the other
+     * form of the same value and is taken here. Any other value is left in,
+     * and refused as a read-only field carrying a different value.
+     */
+    private Map<Field, Object> withoutEchoedLedger(Item item, Map<Field, Object> given) {
+        if (!given.containsKey(Field.FULFILMENT)
+                || !ItemFields.unchangedAsText(
+                    fulfilmentOf(item, slugOf(item.scopeId), Ledger.ALL),
+                    given.get(Field.FULFILMENT))) {
+            return given;
+        }
+        Map<Field, Object> rest = new EnumMap<>(Field.class);
+        rest.putAll(given);
+        rest.remove(Field.FULFILMENT);
+        return rest;
     }
 
     /**
@@ -1381,6 +1431,14 @@ public class ItemService {
         return changed;
     }
 
+    /**
+     * The complete address of a stored item, {@code worklist://<scope>/item/<n>},
+     * as its read answers it: what a booking names the item's criteria under.
+     */
+    String addressOf(Item item) {
+        return addressOf(item, slugOf(item.scopeId));
+    }
+
     /** The complete address of a stored item, which always has one. */
     private static String addressOf(Item item, String scopeSlug) {
         return itemAddressOf(scopeSlug, item.number)
@@ -1652,6 +1710,7 @@ public class ItemService {
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
         fields.put(Field.TAGS.canonicalName(), tagsOf(item));
+        fields.put(Field.FULFILMENT.canonicalName(), fulfilmentOf(item, scopeSlug, Ledger.LATEST));
         fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneNumber);
         fields.put(Field.WORKSTREAM_ID.canonicalName(),
             workstreamTokenOf(item.scopeId, item.workstreamNumber).orElse(null));
@@ -1827,6 +1886,40 @@ public class ItemService {
             entry.put(ItemFields.ADDRESS, ItemFields.criterionAddress(itemAddress, criterion.number));
             entry.put(ItemFields.CRITERION_TEXT, criterion.text);
             answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
+    }
+
+    /**
+     * The fulfilment ledger as an answer carries it: the latest entry per
+     * criterion and instance, or every entry in booking order; an empty list
+     * where nothing is booked, as the item answers its criteria.
+     *
+     * <p>Each entry names its criterion by the complete address the item
+     * answers it under, and carries whether it was booked after the item's
+     * current {@code close_date}: derived here from the two times and stored
+     * nowhere, so an item that closes, reopens and closes again marks its
+     * entries against the date it carries now.
+     */
+    private List<Map<String, Object>> fulfilmentOf(Item item, String scopeSlug, Ledger ledger) {
+        List<ItemFulfilment> booked = items.fulfilmentOf(item);
+        if (booked.isEmpty()) {
+            return List.of();
+        }
+        String itemAddress = addressOf(item, scopeSlug);
+        List<ItemFulfilment> answered = ledger == Ledger.ALL ? booked : ItemFields.latest(booked);
+        List<Map<String, Object>> answer = new ArrayList<>(answered.size());
+        for (ItemFulfilment entry : answered) {
+            Map<String, Object> rendered = new LinkedHashMap<>();
+            rendered.put(ItemFields.LEDGER_CRITERION,
+                ItemFields.criterionAddress(itemAddress, entry.criterionNumber));
+            rendered.put(ItemFields.LEDGER_INSTANCE, entry.instance);
+            rendered.put(ItemFields.LEDGER_STATUS, entry.status);
+            rendered.put(ItemFields.LEDGER_EVIDENCE, entry.evidence);
+            rendered.put(ItemFields.LEDGER_ACTOR, entry.actor);
+            rendered.put(ItemFields.LEDGER_BOOKED_AT, entry.bookedAt);
+            rendered.put(ItemFields.LEDGER_AFTER_CLOSE, ItemFields.afterClose(entry, item.closeDate));
+            answer.add(Collections.unmodifiableMap(rendered));
         }
         return List.copyOf(answer);
     }

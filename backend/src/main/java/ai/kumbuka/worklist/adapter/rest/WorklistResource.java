@@ -13,6 +13,7 @@ import ai.kumbuka.worklist.domain.QueryFilter;
 import ai.kumbuka.worklist.domain.QuerySpec;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.RefusalCode;
+import ai.kumbuka.worklist.surface.SurfaceDeclaration;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.VerbInput;
 import ai.kumbuka.worklist.surface.VerbSurface;
@@ -27,6 +28,7 @@ import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.EntityTag;
@@ -243,13 +245,20 @@ public class WorklistResource {
     // The item binding: read, update, and every item-depth custom method
     // ======================================================================
 
+    /**
+     * GET at item depth: {@code read}, with the option of an item's
+     * fulfilment ledger as the query parameter {@code ?fulfilment=}, read by
+     * the verb surface as the MCP argument is.
+     */
     @GET
     @Path("{selector}/{id}")
     public Response read(@PathParam("scope") String scope,
                          @PathParam("selector") String selector,
-                         @PathParam("id") String id) {
+                         @PathParam("id") String id,
+                         @QueryParam(SurfaceDeclaration.FULFILMENT_ARGUMENT)
+                         @Nullable String fulfilment) {
         calling(READ);
-        return ok(scope, verbs.read(caller.subject(), scope, selector, id));
+        return ok(scope, verbs.read(caller.subject(), scope, selector, id, fulfilment));
     }
 
     /** The field write. PATCH with {@code If-Match}; a stale token is 412. */
@@ -321,6 +330,9 @@ public class WorklistResource {
                 arguments(body, TAG).text(TAG).orElse(null)));
             case TAG_DETACH -> ok(scope, verbs.tagDetach(subject, scope, selector, id,
                 arguments(body, TAG).text(TAG).orElse(null)));
+
+            case BOOK -> ok(scope, verbs.book(subject, scope, selector, id,
+                booking(arguments(body, INSTANCE, ENTRIES)).orElse(null)));
 
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
@@ -496,6 +508,8 @@ public class WorklistResource {
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String TAG = "tag";
+    private static final String INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
+    private static final String ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
 
     /**
      * The arguments of a body under the names the verb declares, checked for
@@ -504,6 +518,16 @@ public class WorklistResource {
      */
     private ArgumentsPayload arguments(@Nullable String body, String... declared) {
         return ArgumentsPayload.declared(json, body, declared);
+    }
+
+    /**
+     * A booking's arguments, checked for their JSON type here; absent where
+     * the body carried none, which the surface refuses by the names of both.
+     */
+    private static Optional<VerbInput.Booking> booking(ArgumentsPayload arguments) {
+        return arguments.isEmpty() ? Optional.empty()
+            : Optional.of(new VerbInput.Booking(arguments.text(INSTANCE).orElse(null),
+                arguments.list(ENTRIES).orElse(null)));
     }
 
     private static Optional<VerbInput.Edge> edge(ArgumentsPayload arguments) {

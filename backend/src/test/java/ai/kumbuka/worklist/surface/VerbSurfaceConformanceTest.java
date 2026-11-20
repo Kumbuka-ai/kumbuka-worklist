@@ -71,12 +71,12 @@ class VerbSurfaceConformanceTest {
     private static final int MINIMUM_ROUTES = 8;
 
     /**
-     * The verb set is twenty-six: the catalogue's twenty-four, after its two
-     * reductions, and the two tag verbs of sprint/210. Five of them left this
-     * scheme's surface with its target cut, so the specification places
-     * twenty-one.
+     * The verb set is twenty-seven: the catalogue's twenty-four, after its two
+     * reductions, the two tag verbs of sprint/210, and {@code book}, the call
+     * of the fulfilment ledger. Five of them left this scheme's surface with
+     * its target cut, so the specification places twenty-two.
      */
-    private static final int PLACED = 21;
+    private static final int PLACED = 22;
 
     /** The five verbs that left the surface: no class of the specification names them. */
     private static final List<String> RETIRED =
@@ -228,8 +228,9 @@ class VerbSurfaceConformanceTest {
 
         assertThat(named)
             .as("the catalogue settles on twenty-four verbs after two reductions, sprint/210 "
-                + "adds the two tag verbs, and of the twenty-six the twenty-one that stay are "
-                + "either carried, refused by name, declared-but-unbuilt, or the platform's")
+                + "adds the two tag verbs, the fulfilment ledger adds book, and of the "
+                + "twenty-seven the twenty-two that stay are either carried, refused by name, "
+                + "declared-but-unbuilt, or the platform's")
             .hasSize(PLACED)
             .doesNotContainAnyElementsOf(RETIRED);
 

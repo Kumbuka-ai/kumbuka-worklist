@@ -65,6 +65,19 @@ final class ItemFields {
     /** The segment of a criterion's address beneath its item (D14). */
     static final String CRITERION = "criterion";
 
+    /** The arguments of {@code book}, as a refusal of it names them. */
+    static final String INSTANCE = "instance";
+    static final String ENTRIES = "entries";
+
+    /** The members of an entry of the fulfilment ledger, booked and answered. */
+    static final String LEDGER_CRITERION = "criterion";
+    static final String LEDGER_STATUS = "status";
+    static final String LEDGER_EVIDENCE = "evidence";
+    static final String LEDGER_INSTANCE = "instance";
+    static final String LEDGER_ACTOR = "actor";
+    static final String LEDGER_BOOKED_AT = "booked_at";
+    static final String LEDGER_AFTER_CLOSE = "after_close";
+
     /** The keys of the predicates every scope answers (TAR-0002 Annex A1). */
     static final String CLOSED = "closed";
     static final String SUCCESSFUL = "successful";
@@ -359,6 +372,158 @@ final class ItemFields {
         return new WorklistException(
             WorklistException.Reason.INVALID_VALUE,
             List.of(Field.CRITERIA.path()));
+    }
+
+    /**
+     * One entry of a booking.
+     *
+     * @param criterion the identifier {@code k} the entry names beneath the item
+     * @param status    one of {@link ItemFulfilment#STATUSES}
+     * @param evidence  the evidence reference, trimmed, never blank
+     */
+    record BookingEntry(long criterion, String status, String evidence) {
+    }
+
+    /**
+     * The entries of a booking, in the caller's order.
+     *
+     * <p>A list of at least one entry, each an object of exactly
+     * {@code criterion}, {@code status} and {@code evidence}. The criterion is
+     * named in the form an item answers its criteria, the complete address
+     * {@code <item address>/criterion/<k>}, or as the number {@code k} alone;
+     * no two entries of one booking name the same one. The status is one of
+     * {@code met}, {@code not_met} and {@code not_applicable}, the platform's
+     * values and no scope's. The evidence reference is checked as a reference
+     * target is: text, not blank, never resolved. Every departure is
+     * {@code INVALID_VALUE} naming {@code entries}, and nothing of the booking
+     * is written. Whether the item ever issued the identifier needs the store
+     * and is asked by the domain.
+     *
+     * @param itemAddress the complete address of the item booked against,
+     *                    {@code worklist://<scope>/item/<n>}
+     */
+    static List<BookingEntry> booking(@Nullable Object raw, String itemAddress) {
+        if (!(raw instanceof Collection<?> given) || given.isEmpty()) {
+            throw bookingRefusal(ENTRIES);
+        }
+        String prefix = itemAddress + "/" + CRITERION + "/";
+        List<BookingEntry> out = new ArrayList<>();
+        for (Object element : given) {
+            BookingEntry entry = bookingEntry(element, prefix);
+            if (out.stream().anyMatch(booked -> booked.criterion() == entry.criterion())) {
+                throw bookingRefusal(ENTRIES);
+            }
+            out.add(entry);
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * One entry of a booking: an object of exactly {@code criterion},
+     * {@code status} and {@code evidence}, each in its form, or the refusal
+     * naming {@code entries}.
+     */
+    private static BookingEntry bookingEntry(Object element, String prefix) {
+        if (!(element instanceof Map<?, ?> entry)
+                || !List.of(LEDGER_CRITERION, LEDGER_STATUS, LEDGER_EVIDENCE)
+                    .containsAll(entry.keySet())) {
+            throw bookingRefusal(ENTRIES);
+        }
+        Object status = entry.get(LEDGER_STATUS);
+        if (!(status instanceof CharSequence)
+                || !ItemFulfilment.STATUSES.contains(status.toString())) {
+            throw bookingRefusal(ENTRIES);
+        }
+        return new BookingEntry(bookedCriterion(entry.get(LEDGER_CRITERION), prefix),
+            status.toString(), reference(ENTRIES, entry.get(LEDGER_EVIDENCE)));
+    }
+
+    /**
+     * A reference a booking names -- an instance address, an evidence
+     * reference -- checked as a reference target is: text, trimmed, not
+     * blank. It is positioned and never followed: the service does not
+     * resolve it and does not know the service it points into.
+     *
+     * @param argument the argument a refusal names
+     */
+    static String reference(String argument, @Nullable Object raw) {
+        if (!(raw instanceof CharSequence given)) {
+            throw bookingRefusal(argument);
+        }
+        String value = given.toString().trim();
+        if (value.isEmpty()) {
+            throw bookingRefusal(argument);
+        }
+        return value;
+    }
+
+    /**
+     * The identifier an entry names: the number {@code k}, from 1, or the
+     * complete address of a criterion of this item, in the spelling an answer
+     * carries.
+     */
+    private static long bookedCriterion(@Nullable Object raw, String prefix) {
+        if (raw instanceof Integer || raw instanceof Long) {
+            long number = ((Number) raw).longValue();
+            if (number < 1) {
+                throw bookingRefusal(ENTRIES);
+            }
+            return number;
+        }
+        if (raw instanceof CharSequence address) {
+            String given = address.toString();
+            if (!given.startsWith(prefix)) {
+                throw bookingRefusal(ENTRIES);
+            }
+            String rest = given.substring(prefix.length());
+            try {
+                long number = Long.parseLong(rest);
+                if (number >= 1 && String.valueOf(number).equals(rest)) {
+                    return number;
+                }
+            } catch (NumberFormatException notANumber) {
+                // Refused below, as every other spelling that names no criterion.
+            }
+        }
+        throw bookingRefusal(ENTRIES);
+    }
+
+    /**
+     * The latest entry per criterion and instance, by criterion and then by
+     * instance.
+     *
+     * <p>Latest by the order the ledger is read in -- booking time, then the
+     * row's surrogate where two share an instant -- so of two entries for one
+     * criterion and instance the later booking holds, and of two booked at
+     * the same instant the one the store took second.
+     *
+     * @param inBookingOrder every entry of one item, in booking order
+     */
+    static List<ItemFulfilment> latest(List<ItemFulfilment> inBookingOrder) {
+        Map<String, ItemFulfilment> latest = new LinkedHashMap<>();
+        for (ItemFulfilment entry : inBookingOrder) {
+            latest.put(entry.criterionNumber + "\n" + entry.instance, entry);
+        }
+        List<ItemFulfilment> out = new ArrayList<>(latest.values());
+        out.sort(Comparator.<ItemFulfilment>comparingLong(entry -> entry.criterionNumber)
+            .thenComparing(entry -> entry.instance));
+        return List.copyOf(out);
+    }
+
+    /**
+     * Whether an entry was booked after the item closed: derived from the two
+     * times at the read and stored nowhere. An item without a
+     * {@code close_date} marks no entry.
+     *
+     * @param closeDate the item's current {@code close_date}; absent where it
+     *                  carries none
+     */
+    static boolean afterClose(ItemFulfilment entry, java.time.@Nullable Instant closeDate) {
+        return closeDate != null && entry.bookedAt.isAfter(closeDate);
+    }
+
+    private static WorklistException bookingRefusal(String argument) {
+        return new WorklistException(WorklistException.Reason.INVALID_VALUE, List.of(argument));
     }
 
     /**

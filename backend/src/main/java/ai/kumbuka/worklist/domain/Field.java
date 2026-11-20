@@ -270,6 +270,29 @@ public enum Field {
      */
     TAGS("tags", Set.of(ITEM), Set.of()),
 
+    /**
+     * The item's fulfilment ledger as a read answers it: per criterion and
+     * instance the latest entry, ordered by criterion and instance, each with
+     * {@code criterion} (the criterion's complete address), {@code instance},
+     * {@code status} (one of {@code met}, {@code not_met},
+     * {@code not_applicable}), {@code evidence}, {@code actor},
+     * {@code booked_at} and {@code after_close}; an empty list where nothing
+     * is booked. A read with the option for the whole ledger answers every
+     * entry in booking order instead.
+     *
+     * <p>{@code after_close} is derived at the read from the entry's
+     * {@code booked_at} and the item's current {@code close_date}, and stored
+     * nowhere: true exactly where the item carries a {@code close_date} and
+     * the entry was booked after it.
+     *
+     * <p>Read-only: the ledger stands beside the item and is not its content.
+     * It is written by {@code book} alone, append only, and booking moves
+     * neither the item's change time nor its conflict token. A read answer
+     * sent back with its ledger unchanged is accepted, as every read-only
+     * field is, in either of the two forms a read answers.
+     */
+    FULFILMENT("fulfilment", Set.of(ITEM), Set.of()),
+
     // --- the goal axis ----------------------------------------------------
 
     /**

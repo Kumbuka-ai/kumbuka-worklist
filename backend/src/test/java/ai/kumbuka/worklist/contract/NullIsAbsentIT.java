@@ -109,7 +109,7 @@ class NullIsAbsentIT {
         // two spellings meet the same state: each is refused, or is a read.
         Map<String, Map<String, Object>> calls = new LinkedHashMap<>();
         calls.put("create", args("scope", SCOPE, "selector", Selector.ITEM, "fields", Map.of()));
-        calls.put("read", args("address", item));
+        calls.put("read", args("address", item, "fulfilment", "latest"));
         calls.put("update", args("address", item, "conflict_token", "stale",
             "fields", Map.of("title", "x")));
         calls.put("query", args("scope", SCOPE, "selector", Selector.ITEM,
@@ -129,6 +129,10 @@ class NullIsAbsentIT {
         // A token the scope does not declare: refused, so the store stays as it is.
         calls.put("tag_attach", args("address", item, "tag", "no-such-tag"));
         calls.put("tag_detach", args("address", item, "tag", "no-such-tag"));
+        // An identifier the item never issued: refused, so the ledger stays as it is.
+        calls.put("book", args("address", item, "instance", "https://instances.example/run/1",
+            "entries", List.of(Map.of("criterion", 9999, "status", "met",
+                "evidence", "a report"))));
 
         SoftAssertions soft = new SoftAssertions();
         List<String> tools = toolsList().getList("result.tools.name", String.class);
@@ -333,6 +337,9 @@ class NullIsAbsentIT {
             "type", "blocks"));
         bodies.put(itemPath + "/1:tag_attach", args("tag", "no-such-tag"));
         bodies.put(itemPath + "/1:tag_detach", args("tag", "no-such-tag"));
+        bodies.put(itemPath + "/1:book", args("instance", "https://instances.example/run/1",
+            "entries", List.of(Map.of("criterion", 9999, "status", "met",
+                "evidence", "a report"))));
         bodies.put("/api/" + SCOPE + "/iteration/1:close", args("produced", "a release"));
 
         SoftAssertions soft = new SoftAssertions();

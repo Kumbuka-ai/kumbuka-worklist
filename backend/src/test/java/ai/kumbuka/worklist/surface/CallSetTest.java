@@ -28,13 +28,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * routes.
  *
  * <p>The calls, per kind of object, as the target cut fixes them: an item is
- * created, read, updated, queried, related and unrelated, validated, and
- * tagged and untagged, and its status moves through {@code update} alone; an
- * iteration is created, read, updated, queried, closed and advanced; a
- * milestone is created, read, updated, queried and closed; a membership is
- * planned, unplanned, read and updated; a workstream is read and queried.
- * Their union is the thirteen below, written here and never read from the
- * service. {@code accept}, {@code withdraw}, {@code claim}, {@code release}
+ * created, read, updated, queried, related and unrelated, validated, tagged
+ * and untagged, and booked against in its fulfilment ledger, and its status
+ * moves through {@code update} alone; an iteration is created, read, updated,
+ * queried, closed and advanced; a milestone is created, read, updated, queried
+ * and closed; a membership is planned, unplanned, read and updated; a
+ * workstream is read and queried. Their union is the fourteen below, written
+ * here and never read from the service. {@code accept}, {@code withdraw}, {@code claim}, {@code release}
  * and {@code claim_next} are not among them.
  */
 class CallSetTest {
@@ -42,7 +42,7 @@ class CallSetTest {
     /** The verbs of the target cut, by their REST names. */
     static final List<String> VERBS = List.of(
         "create", "read", "update", "query", "relate", "unrelate", "validate",
-        "tag_attach", "tag_detach", "close", "advance", "plan", "unplan");
+        "tag_attach", "tag_detach", "book", "close", "advance", "plan", "unplan");
 
     /** The same, as the assistant surface names them: {@code worklist_<verb>}. */
     static final List<String> TOOLS = VERBS.stream().map(verb -> "worklist_" + verb).toList();

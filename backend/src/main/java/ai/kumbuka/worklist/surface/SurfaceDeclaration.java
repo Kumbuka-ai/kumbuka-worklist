@@ -56,6 +56,19 @@ public final class SurfaceDeclaration {
     /** The member at the top of an answer that names the calls open on the object (C6.1). */
     private static final String NEXT_MEMBER = "next";
 
+    /** The arguments of {@code book}: the reporting instance and its entries. */
+    public static final String BOOK_INSTANCE = "instance";
+    public static final String BOOK_ENTRIES = "entries";
+
+    /**
+     * The option of {@code read} on an item, and its two values: the latest
+     * entry per criterion and instance, which every answer carries, or the
+     * whole fulfilment ledger in booking order.
+     */
+    public static final String FULFILMENT_ARGUMENT = "fulfilment";
+    public static final String FULFILMENT_LATEST = "latest";
+    public static final String FULFILMENT_ALL = "all";
+
     private SurfaceDeclaration() {
     }
 
@@ -67,7 +80,8 @@ public final class SurfaceDeclaration {
     public enum ArgumentType {
         STRING("string"),
         INTEGER("integer"),
-        OBJECT("object");
+        OBJECT("object"),
+        ARRAY("array");
 
         private final String json;
 
@@ -252,6 +266,18 @@ public final class SurfaceDeclaration {
     /** A tag, by its token in the scope's vocabulary. */
     private static final Argument TAG =
         required("tag", ArgumentType.STRING, ArgumentDescriptions::tag);
+    /** The address of the instance a booking reports for, checked for form only. */
+    private static final Argument INSTANCE =
+        required(BOOK_INSTANCE, ArgumentType.STRING, ArgumentDescriptions::instance);
+    /** The entries of a booking, one per criterion. */
+    private static final Argument ENTRIES =
+        required(BOOK_ENTRIES, ArgumentType.ARRAY, ArgumentDescriptions::entries);
+    /** How much of an item's fulfilment ledger a read answers. */
+    private static final Argument FULFILMENT =
+        chosen(FULFILMENT_ARGUMENT, FULFILMENT_LATEST,
+            List.of(new Value(FULFILMENT_LATEST, ValueDescriptions::fulfilmentLatest),
+                new Value(FULFILMENT_ALL, ValueDescriptions::fulfilmentAll)),
+            ArgumentDescriptions::fulfilment);
     /** The key of a create (C10.4); a header on REST, an argument on MCP. */
     private static final Argument IDEMPOTENCY_KEY =
         optional("idempotency_key", ArgumentType.STRING, null,
@@ -318,7 +344,7 @@ public final class SurfaceDeclaration {
                 Selector.MILESTONE), FIELDS, IDEMPOTENCY_KEY),
         verb("read", ToolDescriptions::read, EffectClass.ITEM_READ, Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.ITERATION_ABSENT)),
-            ADDRESS),
+            ADDRESS, FULFILMENT),
         verb("update", ToolDescriptions::update, EffectClass.FIELD_WRITE, Answer.OBJECT,
             reasons(WRITE, TOKENED, FIELD_WRITE, codes(RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TOKEN, FIELDS),
@@ -393,7 +419,14 @@ public final class SurfaceDeclaration {
         verb("tag_detach", ToolDescriptions::tagDetach, EffectClass.ITEM_TRANSITION,
             Answer.OBJECT,
             reasons(WRITE, codes(RefusalCode.TAG_ITEM_ONLY, RefusalCode.VALUE_UNDECLARED)),
-            ADDRESS, TAG));
+            ADDRESS, TAG),
+        // The fulfilment ledger. A write on an addressed item that presents no
+        // conflict token, as the tags: the ledger stands beside the item, and
+        // a booking moves neither the item's timestamp nor its token. The
+        // answer is the item, its ledger included.
+        verb("book", ToolDescriptions::book, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE)),
+            ADDRESS, INSTANCE, ENTRIES));
 
     /**
      * The verbs of the worklist scheme this service refuses by name rather

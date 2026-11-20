@@ -22,9 +22,10 @@
 #   depth     item | membership | collection | none
 #   repeat    the declared repetition behaviour
 #
-# TWENTY-ONE OF THE TWENTY-SIX VERBS ARE HERE, in one of four classes: the
-# catalogue's twenty-four and the two tag verbs of sprint/210 (tag_attach,
-# tag_detach), which worklist, dispatch and memory carry alike, less the five
+# TWENTY-TWO OF THE TWENTY-SEVEN VERBS ARE HERE, in one of four classes: the
+# catalogue's twenty-four, the two tag verbs of sprint/210 (tag_attach,
+# tag_detach), which worklist, dispatch and memory carry alike, and book, the
+# call of an item's fulfilment ledger, less the five
 # that left this scheme's surface with its target cut: accept, withdraw,
 # claim, release and claim_next. They are decided too -- by their absence: no
 # route, no tool and no declared call names them, and an item's state changes
@@ -33,7 +34,7 @@
 # impossible.
 #
 # ---------------------------------------------------------------------------
-# CARRIED -- the thirteen this scheme has and this service has built
+# CARRIED -- the fourteen this scheme has and this service has built
 # ---------------------------------------------------------------------------
 # Probed END TO END against a running service and a running database: each is
 # called and must be answered by the surface rather than by the framework's
@@ -62,6 +63,11 @@ carried	validate	POST	/api/{scope}/{selector}:validate	collection	none
 # view carries tags.
 carried	tag_attach	POST	/api/{scope}/{selector}/{id}:tag_attach	item	idempotent
 carried	tag_detach	POST	/api/{scope}/{selector}/{id}:tag_detach	item	idempotent
+# The fulfilment ledger. A write beside the item that presents no conflict
+# token; every booking is a new entry, the latest per criterion and instance
+# holds, and nothing in the ledger is changed or removed. Only the item view
+# carries a ledger.
+carried	book	POST	/api/{scope}/{selector}/{id}:book	item	append-only
 
 # ---------------------------------------------------------------------------
 # UNCARRIED -- the seven the capability declaration does not give this scheme

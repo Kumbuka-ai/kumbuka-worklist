@@ -136,7 +136,10 @@ public final class DeclarationSpecification {
                 "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
                 "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "SETTING_ABSENT",
                 "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED"))),
-        new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS),
+        // fulfilment: the latest entry per criterion and instance, or the
+        // whole ledger in booking order.
+        new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS,
+                new Arg("fulfilment", "string", false, "latest", List.of("latest", "all"))),
             reasons(List.of("SELECTOR_UNDECLARED", "ITERATION_ABSENT"))),
         new Verb("worklist_update", "FIELD_WRITE", "OBJECT",
             List.of(ADDRESS, TOKEN, FIELDS),
@@ -185,7 +188,12 @@ public final class DeclarationSpecification {
         new Verb("worklist_tag_attach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
             reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED", "TAG_WITHDRAWN"))),
         new Verb("worklist_tag_detach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
-            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED"))));
+            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED"))),
+        // The fulfilment ledger: a write beside the item that presents no
+        // conflict token, as the tags; the entries are a list.
+        new Verb("worklist_book", "ITEM_TRANSITION", "OBJECT",
+            List.of(ADDRESS, Arg.req("instance", "string"), Arg.req("entries", "array")),
+            reasons(WRITE, List.of("VERB_UNCARRIED", "INVALID_VALUE"))));
 
     @SafeVarargs
     private static List<String> reasons(List<String>... groups) {

@@ -110,6 +110,23 @@ public record ArgumentsPayload(Map<String, Object> values) {
     }
 
     /**
+     * An argument that takes a list, where it arrived; its elements are the
+     * verb's to read.
+     *
+     * @throws SurfaceException {@code ARGUMENT_INVALID} for a value of another type
+     */
+    public Optional<List<?>> list(String name) {
+        Object value = values.get(name);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (!(value instanceof List<?> elements)) {
+            throw SurfaceException.invalid(name);
+        }
+        return Optional.of(elements);
+    }
+
+    /**
      * An argument that takes a whole number, where it arrived.
      *
      * @throws SurfaceException {@code ARGUMENT_INVALID} for a value of another type

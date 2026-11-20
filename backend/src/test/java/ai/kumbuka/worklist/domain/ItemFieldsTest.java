@@ -654,4 +654,149 @@ class ItemFieldsTest {
         return criterion;
     }
 
+    // ------------------------------------------------------------------
+    // The fulfilment ledger: the entries of a booking, and what a read
+    // answers. The three statuses are written here from the order, never
+    // read from the class under test.
+    // ------------------------------------------------------------------
+
+    @Test
+    void the_ledger_is_a_read_only_field_of_an_item_and_of_nothing_else() {
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "fulfilment")).isPresent();
+        assertThat(Field.settableNames(Addressed.ITEM))
+            .as("the ledger stands beside the item and is written by book alone")
+            .doesNotContain("fulfilment");
+        assertThat(Field.byCanonicalName(Addressed.ITERATION, "fulfilment")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.MILESTONE, "fulfilment")).isEmpty();
+    }
+
+    @Test
+    void a_booking_names_its_criteria_by_address_or_by_number_with_one_of_three_statuses() {
+        List<ItemFields.BookingEntry> entries = ItemFields.booking(List.of(
+            Map.of("criterion", "worklist://probe/item/7/criterion/1", "status", "met",
+                "evidence", " a report "),
+            Map.of("criterion", 2, "status", "not_met", "evidence", "a log"),
+            Map.of("criterion", 3L, "status", "not_applicable", "evidence", "a note")),
+            ITEM_ADDRESS);
+
+        assertThat(entries).containsExactly(
+            new ItemFields.BookingEntry(1, "met", "a report"),
+            new ItemFields.BookingEntry(2, "not_met", "a log"),
+            new ItemFields.BookingEntry(3, "not_applicable", "a note"));
+    }
+
+    /**
+     * Every entry outside the form refuses the whole booking, naming
+     * {@code entries}: an empty list, a criterion named twice, a status
+     * outside the three, an evidence reference that is empty or absent, a
+     * member the entry does not have, and a criterion that is no identifier
+     * of this item.
+     */
+    @Test
+    void a_booking_outside_its_form_is_refused_and_names_the_entries() {
+        List<Object> outside = List.of(
+            List.of(),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", "a"),
+                Map.of("criterion", "worklist://probe/item/7/criterion/1", "status", "met",
+                    "evidence", "b")),
+            List.of(Map.of("criterion", 1, "status", "done", "evidence", "a")),
+            List.of(Map.of("criterion", 1, "status", "MET", "evidence", "a")),
+            List.of(Map.of("criterion", 1, "evidence", "a")),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", "  ")),
+            List.of(Map.of("criterion", 1, "status", "met")),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", 7)),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", "a", "actor", "me")),
+            List.of(Map.of("criterion", 0, "status", "met", "evidence", "a")),
+            List.of(Map.of("criterion", "1", "status", "met", "evidence", "a")),
+            List.of(Map.of("criterion", "worklist://probe/item/8/criterion/1", "status", "met",
+                "evidence", "a")),
+            List.of(Map.of("criterion", "worklist://probe/item/7/criterion/01", "status", "met",
+                "evidence", "a")),
+            List.of(Map.of("status", "met", "evidence", "a")),
+            List.of("a bare string"),
+            "no list at all");
+
+        for (Object value : outside) {
+            Throwable thrown = catchThrowable(() -> ItemFields.booking(value, ITEM_ADDRESS));
+            assertThat(thrown).as("%s is outside the form of a booking", value)
+                .isInstanceOf(WorklistException.class);
+            WorklistException refusal = (WorklistException) thrown;
+            assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("entries");
+        }
+        assertThat(((WorklistException) catchThrowable(() ->
+                ItemFields.booking(null, ITEM_ADDRESS))).offenders())
+            .as("and an absent list as well")
+            .containsExactly("entries");
+    }
+
+    /** An instance address is checked as a reference target is: text, not blank. */
+    @Test
+    void an_instance_address_is_text_that_is_not_blank_and_is_never_resolved() {
+        assertThat(ItemFields.reference("instance", " https://instances.example/run/12 "))
+            .isEqualTo("https://instances.example/run/12");
+        assertThat(ItemFields.reference("instance", "anything a caller positions"))
+            .as("the form is checked and the address is never followed")
+            .isEqualTo("anything a caller positions");
+
+        for (Object malformed : java.util.Arrays.asList("", "   ", 12, null)) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.reference("instance", malformed));
+            assertThat(refusal.reason()).as("'%s'", malformed)
+                .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("instance");
+        }
+    }
+
+    /**
+     * Per criterion and instance the latest entry holds: the later booking,
+     * and of two of the same instant the one the store numbered higher.
+     */
+    @Test
+    void the_latest_entry_per_criterion_and_instance_holds() {
+        Instant t1 = Instant.parse("2026-11-20T10:00:00Z");
+        Instant t2 = Instant.parse("2026-11-20T11:00:00Z");
+        ItemFulfilment first = entry(1, 1, "instance-a", "not_met", t1);
+        ItemFulfilment other = entry(2, 2, "instance-a", "met", t1);
+        ItemFulfilment elsewhere = entry(3, 1, "instance-b", "met", t1);
+        ItemFulfilment second = entry(4, 1, "instance-a", "met", t2);
+        ItemFulfilment sameInstantLower = entry(5, 2, "instance-a", "not_met", t2);
+        ItemFulfilment sameInstantHigher = entry(6, 2, "instance-a", "not_applicable", t2);
+
+        assertThat(ItemFields.latest(List.of(first, other, elsewhere, second, sameInstantLower,
+                sameInstantHigher)))
+            .as("ordered by criterion and instance, each the latest of its pair")
+            .containsExactly(second, elsewhere, sameInstantHigher);
+        assertThat(ItemFields.latest(List.of())).isEmpty();
+    }
+
+    /** The mark is derived from the two times and false without a close date. */
+    @Test
+    void an_entry_is_marked_after_close_exactly_when_booked_after_the_close_date() {
+        Instant closed = Instant.parse("2026-11-20T12:00:00Z");
+        ItemFulfilment before = entry(1, 1, "i", "met", closed.minusSeconds(1));
+        ItemFulfilment at = entry(2, 1, "i", "met", closed);
+        ItemFulfilment after = entry(3, 1, "i", "met", closed.plusNanos(1_000));
+
+        assertThat(ItemFields.afterClose(before, closed)).isFalse();
+        assertThat(ItemFields.afterClose(at, closed)).as("at the instant is not after").isFalse();
+        assertThat(ItemFields.afterClose(after, closed)).isTrue();
+        assertThat(ItemFields.afterClose(after, null))
+            .as("an item without a close date marks no entry")
+            .isFalse();
+    }
+
+    private static ItemFulfilment entry(long pk, long criterion, String instance, String status,
+                                        Instant bookedAt) {
+        ItemFulfilment entry = new ItemFulfilment();
+        entry.pk = pk;
+        entry.criterionNumber = criterion;
+        entry.instance = instance;
+        entry.status = status;
+        entry.evidence = "evidence " + pk;
+        entry.actor = "subject";
+        entry.bookedAt = bookedAt;
+        return entry;
+    }
+
 }
