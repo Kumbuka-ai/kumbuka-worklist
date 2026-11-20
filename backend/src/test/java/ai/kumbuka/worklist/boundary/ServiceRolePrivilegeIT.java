@@ -152,6 +152,10 @@ class ServiceRolePrivilegeIT {
         // What a scope declares it uses, from V28: the same SELECT/INSERT/UPDATE,
         // and no DELETE -- no verb takes a usage back.
         "scope_usage",
+        // The acceptance criteria of an item, from V29: the same
+        // SELECT/INSERT/UPDATE, and no DELETE -- a criterion is withdrawn and
+        // keeps its number.
+        "item_criterion",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);

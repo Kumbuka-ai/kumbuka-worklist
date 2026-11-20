@@ -180,6 +180,26 @@ public enum Field {
     DESCRIPTION("description", Set.of(ITEM, ITERATION), Set.of(ITEM, ITERATION)),
 
     /**
+     * The acceptance criteria of an item (REA-0011 S12, D14), as a list of
+     * entries carrying the criterion's {@code address}
+     * {@code worklist://<scope>/item/<n>/criterion/<k>} and its {@code text},
+     * and nothing else; answered by identifier, living criteria only, and an
+     * empty list where there are none.
+     *
+     * <p>Written as a whole, in the same entry form. An entry without an
+     * address is a new criterion, and the service gives it the next
+     * identifier the item never issued; an entry with an address names a
+     * living criterion of this item and sets its text; a living criterion the
+     * list leaves out is withdrawn, and its identifier stays spent. A caller
+     * never chooses an identifier. Criteria that stand as prose in a
+     * description stay there.
+     *
+     * <p>As writable as the description until the field classes per phase
+     * arrive with a later step (REA-0011 S10), which freezes them at submit.
+     */
+    CRITERIA("criteria", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
      * On an item, the identity of a status the SCOPE declared. On a
      * milestone, one of three values the platform fixes.
      *

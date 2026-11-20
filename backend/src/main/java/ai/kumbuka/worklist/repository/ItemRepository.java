@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Item;
+import ai.kumbuka.worklist.domain.ItemCriterion;
 import ai.kumbuka.worklist.domain.ItemReference;
 import ai.kumbuka.worklist.domain.ItemRelation;
 import ai.kumbuka.worklist.domain.PageRequest;
@@ -269,6 +270,37 @@ public class ItemRepository {
             .getResultList();
     }
 
+    /**
+     * Every acceptance criterion of an item, asserted and withdrawn alike, by
+     * number. The allocation of the next number reads this, because a number
+     * a withdrawn criterion holds is spent.
+     */
+    @Transactional
+    public List<ItemCriterion> criteriaOf(Item item) {
+        return em.createQuery(
+                "SELECT c FROM ItemCriterion c WHERE c.scopeId = :" + P_SCOPE
+                    + " AND c.itemNumber = :" + P_ITEM + " ORDER BY c.number",
+                ItemCriterion.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .getResultList();
+    }
+
+    /** The asserted criteria only, by number: what an item answers. */
+    @Transactional
+    public List<ItemCriterion> assertedCriteria(Item item) {
+        return em.createQuery(
+                "SELECT c FROM ItemCriterion c "
+                    + "WHERE c.scopeId = :" + P_SCOPE
+                    + " AND c.itemNumber = :" + P_ITEM
+                    + " AND c.status = :" + P_STATUS + " ORDER BY c.number",
+                ItemCriterion.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .setParameter(P_STATUS, ItemCriterion.ASSERTED)
+            .getResultList();
+    }
+
     // ------------------------------------------------------------------
     // Writing
     // ------------------------------------------------------------------
@@ -307,6 +339,18 @@ public class ItemRepository {
         reference.createdAt = now();
         reference.updatedAt = reference.createdAt;
         em.persist(reference);
+    }
+
+    /**
+     * Inserts an acceptance criterion. Flushed by the caller, once, after the
+     * list. As for a reference, nothing removes one: a criterion that leaves
+     * the list is withdrawn and keeps its number.
+     */
+    @Transactional
+    public void insertCriterion(ItemCriterion criterion) {
+        criterion.createdAt = now();
+        criterion.updatedAt = criterion.createdAt;
+        em.persist(criterion);
     }
 
     /** Flushes pending changes for the same reason {@link #insert} does. */

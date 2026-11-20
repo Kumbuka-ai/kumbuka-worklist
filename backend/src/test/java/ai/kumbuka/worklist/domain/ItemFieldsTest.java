@@ -570,4 +570,88 @@ class ItemFieldsTest {
         assertThat(new ItemRelation.Key()).isNotEqualTo(key);
     }
 
+    // ------------------------------------------------------------------
+    // The acceptance criteria (REA-0011 S12, D14).
+    // ------------------------------------------------------------------
+
+    /** The item the criteria below are written to, as its complete address. */
+    private static final String ITEM_ADDRESS = "worklist://probe/item/7";
+
+    @Test
+    void criteria_are_a_settable_field_of_an_item_and_of_nothing_else() {
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "criteria")).isPresent();
+        assertThat(Field.settableNames(Addressed.ITEM)).contains("criteria");
+        assertThat(Field.byCanonicalName(Addressed.ITERATION, "criteria")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.MILESTONE, "criteria")).isEmpty();
+    }
+
+    @Test
+    void a_criterion_entry_names_its_identifier_by_its_address_or_is_new() {
+        List<ItemFields.CriterionEntry> entries = ItemFields.criteria(List.of(
+            Map.of("address", "worklist://probe/item/7/criterion/3", "text", "  kept  "),
+            Map.of("text", "a new one")), ITEM_ADDRESS);
+
+        assertThat(entries).containsExactly(
+            new ItemFields.CriterionEntry(3L, "kept"),
+            new ItemFields.CriterionEntry(null, "a new one"));
+    }
+
+    @Test
+    void a_criterion_entry_outside_its_form_is_refused_and_names_the_field() {
+        List<Object> outside = List.of(
+            List.of(Map.of("text", " ")),
+            List.of(Map.of("address", "worklist://probe/item/7/criterion/1")),
+            List.of(Map.of("text", "with a status", "status", "met")),
+            List.of(Map.of("text", "of another item",
+                "address", "worklist://probe/item/8/criterion/1")),
+            List.of(Map.of("text", "of another scope",
+                "address", "worklist://elsewhere/item/7/criterion/1")),
+            List.of(Map.of("text", "zero", "address", "worklist://probe/item/7/criterion/0")),
+            List.of(Map.of("text", "padded", "address", "worklist://probe/item/7/criterion/01")),
+            List.of(Map.of("text", "word", "address", "worklist://probe/item/7/criterion/one")),
+            List.of(Map.of("text", "a", "address", "worklist://probe/item/7/criterion/2"),
+                Map.of("text", "b", "address", "worklist://probe/item/7/criterion/2")),
+            List.of("a bare string"),
+            "no list at all");
+
+        for (Object value : outside) {
+            Throwable thrown = catchThrowable(() -> ItemFields.criteria(value, ITEM_ADDRESS));
+            assertThat(thrown).as("%s is outside the entry form", value)
+                .isInstanceOf(WorklistException.class);
+            WorklistException refusal = (WorklistException) thrown;
+            assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.criteria");
+        }
+    }
+
+    /**
+     * The next identifier counts withdrawn criteria (D14: never reissued).
+     * RED PROBE: an allocation over the living criteria alone answers 2 here.
+     */
+    @Test
+    void the_next_identifier_follows_the_highest_ever_issued_withdrawn_ones_counted() {
+        assertThat(ItemFields.nextCriterionNumber(List.of()))
+            .as("the first criterion of an item is 1").isEqualTo(1L);
+        assertThat(ItemFields.nextCriterionNumber(List.of(
+                criterion(1, ItemCriterion.ASSERTED),
+                criterion(2, ItemCriterion.WITHDRAWN),
+                criterion(3, ItemCriterion.WITHDRAWN))))
+            .as("2 and 3 were withdrawn and stay spent, so the next is 4")
+            .isEqualTo(4L);
+    }
+
+    @Test
+    void a_criterion_address_lies_beneath_its_item() {
+        assertThat(ItemFields.criterionAddress(ITEM_ADDRESS, 12))
+            .isEqualTo("worklist://probe/item/7/criterion/12");
+    }
+
+    private static ItemCriterion criterion(long number, String status) {
+        ItemCriterion criterion = new ItemCriterion();
+        criterion.number = number;
+        criterion.status = status;
+        criterion.text = "criterion " + number;
+        return criterion;
+    }
+
 }

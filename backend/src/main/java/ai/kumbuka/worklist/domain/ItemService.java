@@ -711,6 +711,10 @@ public class ItemService {
                 item.description = description;
                 return true;
             }
+            case CRITERIA -> {
+                // A member sent as null is absent (C7.4): the criteria stay.
+                return value != null && applyCriteria(item, value);
+            }
             case STATUS -> {
                 return applyStatus(item, held, field, value);
             }
@@ -1254,6 +1258,136 @@ public class ItemService {
     }
 
     /**
+     * Set the acceptance criteria to exactly the given entries (REA-0011 S12,
+     * D14).
+     *
+     * <p><strong>Every identifier an entry names is checked before anything
+     * is written.</strong> It must name a living criterion of this item; one
+     * the item never issued, and one that was withdrawn, is
+     * {@code INVALID_VALUE} naming the field, and the write stops there.
+     *
+     * <p>Then, in the caller's order: an entry with an identifier sets that
+     * criterion's text where it differs; an entry without one is a new
+     * criterion and gets the next identifier, one after the highest the item
+     * ever issued, withdrawn criteria counted, so no identifier is issued
+     * twice. A living criterion the list leaves out is withdrawn, keeps its
+     * identifier and its text, and is no longer answered. The order of the
+     * list decides nothing but the order new identifiers are given in: an
+     * item answers its criteria by identifier.
+     *
+     * <p>Two writers on one item meet at the item's lock and conflict token
+     * before they reach this method, so the next identifier is read and
+     * issued by one of them at a time; the unique index of V29 over every
+     * criterion of the item is the second line.
+     *
+     * <p>A read answer sent back as it came names every living criterion with
+     * its text and so changes nothing, which is what keeps the item's
+     * timestamp and conflict token where they are.
+     */
+    private boolean applyCriteria(Item item, Object value) {
+        List<ItemFields.CriterionEntry> wanted =
+            ItemFields.criteria(value, addressOf(item, slugOf(item.scopeId)));
+        List<ItemCriterion> every = items.criteriaOf(item);
+        Map<Long, ItemCriterion> living = livingByNumber(every);
+        refuseUnknownCriteria(wanted, living);
+
+        java.time.Instant now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        long next = ItemFields.nextCriterionNumber(every);
+        java.util.Set<Long> kept = new java.util.HashSet<>();
+        boolean changed = false;
+        for (ItemFields.CriterionEntry entry : wanted) {
+            Long named = entry.number();
+            if (named == null) {
+                insertCriterion(item, next++, entry.text());
+                changed = true;
+            } else {
+                kept.add(named);
+                changed |= setCriterionText(living, named, entry.text(), now);
+            }
+        }
+        changed |= withdrawLeftOut(living.values(), kept, now);
+
+        if (changed) {
+            items.flush();
+        }
+        return changed;
+    }
+
+    /** The asserted criteria among these, keyed by their identifier. */
+    private static Map<Long, ItemCriterion> livingByNumber(List<ItemCriterion> every) {
+        Map<Long, ItemCriterion> living = new LinkedHashMap<>();
+        for (ItemCriterion criterion : every) {
+            if (ItemCriterion.ASSERTED.equals(criterion.status)) {
+                living.put(criterion.number, criterion);
+            }
+        }
+        return living;
+    }
+
+    /**
+     * Refuses an entry naming an identifier that is not among the living
+     * criteria -- one the item never issued, or one it withdrew -- before
+     * anything is written.
+     */
+    private static void refuseUnknownCriteria(List<ItemFields.CriterionEntry> wanted,
+            Map<Long, ItemCriterion> living) {
+        for (ItemFields.CriterionEntry entry : wanted) {
+            if (entry.number() != null && !living.containsKey(entry.number())) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(Field.CRITERIA.path()));
+            }
+        }
+    }
+
+    /** A new criterion of the item under the identifier given. */
+    private void insertCriterion(Item item, long number, String text) {
+        ItemCriterion criterion = new ItemCriterion();
+        criterion.scopeId = item.scopeId;
+        criterion.itemNumber = item.number;
+        criterion.number = number;
+        criterion.text = text;
+        items.insertCriterion(criterion);
+    }
+
+    /**
+     * Sets the text of a living criterion where it differs, and reports
+     * whether it did. The identifier was checked by
+     * {@link #refuseUnknownCriteria}.
+     */
+    private static boolean setCriterionText(Map<Long, ItemCriterion> living, Long number,
+            String text, java.time.Instant now) {
+        ItemCriterion criterion = Optional.ofNullable(living.get(number))
+            .orElseThrow(() -> new IllegalStateException("a named criterion was checked"));
+        if (criterion.text.equals(text)) {
+            return false;
+        }
+        criterion.text = text;
+        criterion.updatedAt = now;
+        return true;
+    }
+
+    /** Withdraws every living criterion the list left out, and reports whether any. */
+    private static boolean withdrawLeftOut(java.util.Collection<ItemCriterion> living,
+            java.util.Set<Long> kept, java.time.Instant now) {
+        boolean changed = false;
+        for (ItemCriterion criterion : living) {
+            if (!kept.contains(criterion.number)) {
+                criterion.status = ItemCriterion.WITHDRAWN;
+                criterion.updatedAt = now;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /** The complete address of a stored item, which always has one. */
+    private static String addressOf(Item item, String scopeSlug) {
+        return itemAddressOf(scopeSlug, item.number)
+            .orElseThrow(() -> new IllegalStateException("a stored item has an address"));
+    }
+
+    /**
      * Set the relations to exactly the given set.
      *
      * <p>An edge that leaves the set is WITHDRAWN, never deleted — this
@@ -1510,6 +1644,7 @@ public class ItemService {
         fields.put(Field.NUMBER.canonicalName(), item.number);
         fields.put(Field.TITLE.canonicalName(), item.title);
         fields.put(Field.DESCRIPTION.canonicalName(), item.description);
+        fields.put(Field.CRITERIA.canonicalName(), assertedCriteria(item, scopeSlug));
         fields.put(Field.STATUS.canonicalName(), status.map(s -> s.name).orElse(null));
         fields.put(Field.PREDICATES.canonicalName(),
             status.map(s -> predicatesOf(s, used)).orElse(null));
@@ -1668,6 +1803,29 @@ public class ItemService {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put(ItemFields.LABEL, reference.label);
             entry.put(ItemFields.TARGET, reference.target);
+            answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
+    }
+
+    /**
+     * The living acceptance criteria, by identifier, each as its complete
+     * address and its text: the entry form a write takes back, so a read
+     * answer sent back as it came compares equal. A withdrawn criterion is
+     * not answered; an item without criteria answers an empty list, as it
+     * answers its references.
+     */
+    private List<Map<String, Object>> assertedCriteria(Item item, String scopeSlug) {
+        List<ItemCriterion> asserted = items.assertedCriteria(item);
+        if (asserted.isEmpty()) {
+            return List.of();
+        }
+        String itemAddress = addressOf(item, scopeSlug);
+        List<Map<String, Object>> answer = new ArrayList<>(asserted.size());
+        for (ItemCriterion criterion : asserted) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put(ItemFields.ADDRESS, ItemFields.criterionAddress(itemAddress, criterion.number));
+            entry.put(ItemFields.CRITERION_TEXT, criterion.text);
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);

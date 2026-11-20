@@ -58,6 +58,13 @@ final class ItemFields {
     /** The key of a relation entry's other end, as its identity. */
     static final String ITEM = "item";
 
+    /** The key of a criterion entry's own address, which carries its identifier. */
+    static final String ADDRESS = "address";
+    /** The key of a criterion entry's text. */
+    static final String CRITERION_TEXT = "text";
+    /** The segment of a criterion's address beneath its item (D14). */
+    static final String CRITERION = "criterion";
+
     /** The keys of the predicates every scope answers (TAR-0002 Annex A1). */
     static final String CLOSED = "closed";
     static final String SUCCESSFUL = "successful";
@@ -247,6 +254,111 @@ final class ItemFields {
             out.add(Collections.unmodifiableMap(normalised));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * One entry of the criteria a write gives.
+     *
+     * @param number the identifier the entry names; absent for a new
+     *               criterion, which the service gives the next identifier
+     * @param text   what the criterion says, trimmed, never blank
+     */
+    record CriterionEntry(@Nullable Long number, String text) {
+    }
+
+    /**
+     * The criteria a write gives, as entries in the caller's order.
+     *
+     * <p>An entry is the form a read answers: {@code address} and
+     * {@code text}, and no other member, because a criterion carries its text
+     * and nothing else (D14). The text is required and is not blank. The
+     * address is optional; where it is given it is the complete address of a
+     * criterion of THIS item, {@code <item address>/criterion/<k>} with
+     * {@code k} a positive number spelled as the service spells it, and no
+     * two entries name the same one. Every departure is
+     * {@code INVALID_VALUE} naming the field. Whether the item carries a
+     * living criterion of that number needs the store and is asked by the
+     * domain.
+     *
+     * @param itemAddress the complete address of the item being written,
+     *                    {@code worklist://<scope>/item/<n>}
+     */
+    static List<CriterionEntry> criteria(@Nullable Object raw, String itemAddress) {
+        String prefix = itemAddress + "/" + CRITERION + "/";
+        List<CriterionEntry> out = new ArrayList<>();
+        List<Long> named = new ArrayList<>();
+        for (Object element : elements(Field.CRITERIA, raw)) {
+            Map<?, ?> entry = entry(Field.CRITERIA, element);
+            for (Object key : entry.keySet()) {
+                if (!ADDRESS.equals(key) && !CRITERION_TEXT.equals(key)) {
+                    throw criteriaRefusal();
+                }
+            }
+            String text = text(Field.CRITERIA, entry.get(CRITERION_TEXT)).orElseThrow(ItemFields::criteriaRefusal);
+            Long number = null;
+            Object address = entry.get(ADDRESS);
+            if (address != null) {
+                number = criterionNumber(address, prefix);
+                if (named.contains(number)) {
+                    throw criteriaRefusal();
+                }
+                named.add(number);
+            }
+            out.add(new CriterionEntry(number, text));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The identifier a criterion address names beneath the given item, or a
+     * refusal: the address must be the item's own, followed by the number in
+     * the spelling an answer carries (no sign, no leading zero).
+     */
+    private static long criterionNumber(Object address, String prefix) {
+        if (!(address instanceof CharSequence)) {
+            throw criteriaRefusal();
+        }
+        String given = address.toString();
+        if (!given.startsWith(prefix)) {
+            throw criteriaRefusal();
+        }
+        String rest = given.substring(prefix.length());
+        long number;
+        try {
+            number = Long.parseLong(rest);
+        } catch (NumberFormatException notANumber) {
+            throw criteriaRefusal();
+        }
+        if (number < 1 || !String.valueOf(number).equals(rest)) {
+            throw criteriaRefusal();
+        }
+        return number;
+    }
+
+    /**
+     * The identifier the next new criterion of an item gets: one after the
+     * highest the item ever issued, withdrawn criteria counted, so that no
+     * identifier is issued twice (D14). The first is 1.
+     *
+     * @param every every criterion the item holds, asserted and withdrawn
+     */
+    static long nextCriterionNumber(Collection<ItemCriterion> every) {
+        long highest = 0;
+        for (ItemCriterion criterion : every) {
+            highest = Math.max(highest, criterion.number);
+        }
+        return highest + 1;
+    }
+
+    /** The complete address of criterion {@code k} beneath an item's address (D14). */
+    static String criterionAddress(String itemAddress, long number) {
+        return itemAddress + "/" + CRITERION + "/" + number;
+    }
+
+    private static WorklistException criteriaRefusal() {
+        return new WorklistException(
+            WorklistException.Reason.INVALID_VALUE,
+            List.of(Field.CRITERIA.path()));
     }
 
     /**
