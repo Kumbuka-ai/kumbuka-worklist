@@ -408,31 +408,34 @@ final class ItemFields {
         }
         String prefix = itemAddress + "/" + CRITERION + "/";
         List<BookingEntry> out = new ArrayList<>();
-        List<Long> named = new ArrayList<>();
         for (Object element : given) {
-            if (!(element instanceof Map<?, ?> entry)) {
+            BookingEntry entry = bookingEntry(element, prefix);
+            if (out.stream().anyMatch(booked -> booked.criterion() == entry.criterion())) {
                 throw bookingRefusal(ENTRIES);
             }
-            for (Object key : entry.keySet()) {
-                if (!LEDGER_CRITERION.equals(key) && !LEDGER_STATUS.equals(key)
-                        && !LEDGER_EVIDENCE.equals(key)) {
-                    throw bookingRefusal(ENTRIES);
-                }
-            }
-            long criterion = bookedCriterion(entry.get(LEDGER_CRITERION), prefix);
-            if (named.contains(criterion)) {
-                throw bookingRefusal(ENTRIES);
-            }
-            named.add(criterion);
-            Object status = entry.get(LEDGER_STATUS);
-            if (!(status instanceof CharSequence)
-                    || !ItemFulfilment.STATUSES.contains(status.toString())) {
-                throw bookingRefusal(ENTRIES);
-            }
-            out.add(new BookingEntry(criterion, status.toString(),
-                reference(ENTRIES, entry.get(LEDGER_EVIDENCE))));
+            out.add(entry);
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * One entry of a booking: an object of exactly {@code criterion},
+     * {@code status} and {@code evidence}, each in its form, or the refusal
+     * naming {@code entries}.
+     */
+    private static BookingEntry bookingEntry(Object element, String prefix) {
+        if (!(element instanceof Map<?, ?> entry)
+                || !List.of(LEDGER_CRITERION, LEDGER_STATUS, LEDGER_EVIDENCE)
+                    .containsAll(entry.keySet())) {
+            throw bookingRefusal(ENTRIES);
+        }
+        Object status = entry.get(LEDGER_STATUS);
+        if (!(status instanceof CharSequence)
+                || !ItemFulfilment.STATUSES.contains(status.toString())) {
+            throw bookingRefusal(ENTRIES);
+        }
+        return new BookingEntry(bookedCriterion(entry.get(LEDGER_CRITERION), prefix),
+            status.toString(), reference(ENTRIES, entry.get(LEDGER_EVIDENCE)));
     }
 
     /**
