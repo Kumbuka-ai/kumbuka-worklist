@@ -1,3 +1,9 @@
+-- Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+-- SPDX-License-Identifier: AGPL-3.0-only
+-- This file is part of Kumbuka and is licensed under the GNU Affero
+-- General Public License v3.0 only. See the LICENSE file in the
+-- repository root for the full licence text.
+
 -- reset-scope.sql
 --
 -- Setzt einen kompletten Scope im worklist-Schema zurueck. Eine Transaktion,
@@ -36,9 +42,8 @@ SELECT set_config('app.tenant_id',      :'tenant_id', true);
 -- Fuer den DO-Block am Ende (psql ersetzt Variablen NICHT innerhalb $$).
 SELECT set_config('kw_reset.scope_id',  :'scope_id',  true);
 
--- claim -> item.
-DELETE FROM worklist.claim
- WHERE tenant_id = :'tenant_id' AND scope_id = :'scope_id';
+-- worklist.claim (die Lease) ist seit V31 aus dem Schema entfernt und wird
+-- hier nicht mehr geraeumt.
 
 -- iteration_membership -> iteration + item.
 DELETE FROM worklist.iteration_membership

@@ -1,3 +1,11 @@
+<!--
+Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+SPDX-License-Identifier: AGPL-3.0-only
+This file is part of Kumbuka and is licensed under the GNU Affero
+General Public License v3.0 only. See the LICENSE file in the
+repository root for the full licence text.
+-->
+
 # Steuerungskorpus-Import (Sprint 177.5 → 178.2)
 
 Ueberfuehrung des Bestands der Vorgaenger-Worklist in den Worklist-Dienst.
@@ -341,7 +349,7 @@ Aenderungen dieses Sprints:
      Straenge-Saat.
 4. **Reset** (`reset-scope.sql`, neu)
    - Loescht in einer Transaktion alles scope-gebundene aus V4 bis V13
-     (item_relation, item_reference, iteration_membership, claim,
+     (item_relation, item_reference, iteration_membership,
      view_preference, attribute_option, scope_setting, item, milestone,
      iteration, number_space, attribute_definition, workstream,
      selector, item_status, relation_type). Selbstbestaetigung am Ende

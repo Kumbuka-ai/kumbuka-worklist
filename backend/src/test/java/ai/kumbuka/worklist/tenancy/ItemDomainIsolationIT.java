@@ -98,8 +98,10 @@ class ItemDomainIsolationIT {
         "milestone", "iteration", "iteration_membership",
         // The fourth view, ratified 2026-09-08.
         "workstream",
-        // The lease, and what the scope decides.
-        "claim", "scope_setting", "view_preference");
+        // What the scope decides. The lease's table `claim` is dropped by
+        // V31; its absence is asserted by SchemaConstraintIT and
+        // ServiceRolePrivilegeIT.
+        "scope_setting", "view_preference");
 
     private static final UUID SCOPE = UUID.fromString(SubstrateDatabaseResource.SCOPE_ID);
 
@@ -410,7 +412,6 @@ class ItemDomainIsolationIT {
         UUID iteration = insertIteration(c, tenant);
         insertMembership(c, tenant, iteration, from);
 
-        insertClaim(c, tenant, from);
         insertScopeSetting(c, tenant, iteration);
         insertViewPreference(c, tenant);
     }
@@ -617,20 +618,6 @@ class ItemDomainIsolationIT {
             st.setObject(2, SCOPE);
             st.setObject(3, iteration);
             st.setObject(4, item);
-            st.executeUpdate();
-        }
-    }
-
-    private void insertClaim(Connection c, UUID tenant, UUID item) throws SQLException {
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.claim
-                    (tenant_id, scope_id, item_number, receipt, actor, expires_at)
-                VALUES (?, ?, (SELECT number FROM worklist.item WHERE id = ?),
-                        'a receipt', 'an actor', now() + interval '1 hour')
-                """)) {
-            st.setObject(1, tenant);
-            st.setObject(2, SCOPE);
-            st.setObject(3, item);
             st.executeUpdate();
         }
     }

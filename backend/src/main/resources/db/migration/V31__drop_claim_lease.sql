@@ -1,0 +1,51 @@
+-- Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+-- SPDX-License-Identifier: AGPL-3.0-only
+-- This file is part of Kumbuka and is licensed under the GNU Affero
+-- General Public License v3.0 only. See the LICENSE file in the
+-- repository root for the full licence text.
+
+-- ===========================================================================
+-- V31: the lease leaves the store. `worklist.claim` is dropped.
+--
+-- The second release of REA-0011 step S7, the contract half of an
+-- expand/contract pair. The first release (worklist 0.13.0) took the lease
+-- off the surface: no call takes or answers one, and no answer carries a
+-- holder or a receipt. This one removes the table that held them, with the
+-- holder's receipt (`receipt`), the actor (`actor`), `granted_at` and
+-- `expires_at`.
+--
+-- The receipts and holders still stored are discarded. They have no
+-- successor in TAR-0002, and the first release made them unread before they
+-- are discarded here. This is irreversible, and accepted as such.
+--
+-- WHAT GOES WITH THE TABLE
+--
+-- As the table stands after V4, V18, V19 and V20: the columns tenant_id,
+-- scope_id, item_number, receipt, actor, granted_at, expires_at, created_at,
+-- updated_at; the primary key `pk_claim` (tenant_id, scope_id, item_number)
+-- of V20; the checks `ck_claim_receipt`, `ck_claim_actor`,
+-- `ck_claim_duration` of V4; the key `fk_claim_item_number` onto `item` of
+-- V19; the index `idx_claim_scope` of V4; row-level security with FORCE and
+-- the policy `claim_tenant_isolation` of V4; and the grant of SELECT, INSERT
+-- and UPDATE to kumbuka_worklist of V4. Each of these belongs to the table
+-- and is dropped with it. The sync trigger of V18 and its function went in
+-- V20; the uuid key `fk_claim_item` went with `item_id` in V20.
+--
+-- NOTHING OUTSIDE THE TABLE HANGS ON IT, and there is no CASCADE: no key of
+-- another table points at `claim`, and no view, function or trigger names
+-- it. Were anything to depend on it after all, this statement fails and the
+-- migration with it, rather than taking that dependant along unseen.
+--
+-- No other table is changed and nothing is filled.
+--
+-- N-1 COMPATIBLE AS HELD BY THE AUTHOR
+--
+-- The image before this one, wave-1 at 0580f675ff0ce177dcd0092081632c133195e33c,
+-- neither reads nor writes the table: a search of its main sources
+-- (backend/src/main/java) for `worklist.claim`, for the table's constraint,
+-- index and policy names and for a SQL statement or entity mapping on
+-- `claim` finds nothing, and no repository, entity or native statement there
+-- names it. It runs unchanged against the schema this migration leaves.
+-- ===========================================================================
+
+DROP TABLE worklist.claim;

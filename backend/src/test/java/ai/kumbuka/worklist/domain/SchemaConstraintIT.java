@@ -421,48 +421,59 @@ class SchemaConstraintIT {
     }
 
     // ==================================================================
-    // The claim.
+    // The lease's store, gone.
     // ==================================================================
 
     /**
-     * A lease has a positive duration.
+     * The lease's table and everything that belonged to it are absent.
      *
-     * <p>One of three predecessor defects that fall out of the claim being a
-     * row under the transaction: a claim with a zero duration reported success
-     * for a lease that was inert the moment it was granted. That is a
-     * statement about one row, so it is a check constraint.
+     * <p>This case once asserted that the table refused a lease without a
+     * positive duration. The lease left the surface first and its store left
+     * after it, by V31; what the schema holds now is that no relation named
+     * {@code worklist.claim} exists, and that none of the table's constraints,
+     * its index or its policy were left behind under their names.
+     *
+     * <p>Read from the catalog, as the superuser that sees every relation:
+     * {@code to_regclass} answers NULL for a name no relation carries, which a
+     * refused access would not tell apart from a missing grant.
      */
     @Test
-    void a_claim_has_a_positive_duration() throws SQLException {
-        try (Connection c = Db.asService()) {
-            Db.bindTenant(c, tenant);
-            UUID item = insertItem(c, "claim target");
-            c.commit();
+    void the_lease_table_and_its_constraints_index_and_policy_are_gone() throws SQLException {
+        try (Connection c = Db.asAdmin()) {
+            assertThat(catalogText(c, "SELECT to_regclass('worklist.item')::text"))
+                .as("the probe must read a relation that does exist, or a NULL below would "
+                    + "say nothing")
+                .isEqualTo("worklist.item");
 
-            Db.bindTenant(c, tenant);
-            assertThatThrownBy(() -> insertClaim(c, item, "0 seconds"))
-                .as("RED STATE, observed: a lease that expires the moment it is granted "
-                    + "must be refused. Reporting success for it is worse than refusing, "
-                    + "because the caller believes it holds something")
-                .isInstanceOf(SQLException.class)
-                .hasMessageContaining("ck_claim_duration");
-            c.rollback();
+            assertThat(catalogText(c, "SELECT to_regclass('worklist.claim')::text"))
+                .as("worklist.claim is dropped by V31 and no relation carries the name")
+                .isNull();
 
-            Db.bindTenant(c, tenant);
-            assertThatThrownBy(() -> insertClaim(c, item, "-1 hour"))
-                .as("RED STATE, observed: and a negative one, which is the same fact "
-                    + "spelled more obviously")
-                .isInstanceOf(SQLException.class)
-                .hasMessageContaining("ck_claim_duration");
-            c.rollback();
+            assertThat(catalogText(c, """
+                    SELECT string_agg(con.conname, ', ' ORDER BY con.conname)
+                    FROM pg_constraint con
+                    JOIN pg_namespace n ON n.oid = con.connamespace
+                    WHERE n.nspname = 'worklist'
+                      AND con.conname IN ('pk_claim', 'ck_claim_receipt', 'ck_claim_actor',
+                                          'ck_claim_duration', 'fk_claim_item',
+                                          'fk_claim_item_number')
+                    """))
+                .as("no constraint of the lease's table stands anywhere in the schema")
+                .isNull();
 
-            Db.bindTenant(c, tenant);
-            insertClaim(c, item, "1 hour");
-            c.commit();
+            assertThat(catalogText(c, """
+                    SELECT string_agg(indexname, ', ' ORDER BY indexname) FROM pg_indexes
+                    WHERE schemaname = 'worklist' AND indexname = 'idx_claim_scope'
+                    """))
+                .as("and no index of it")
+                .isNull();
 
-            assertThat(count(c, "claim"))
-                .as("and a lease with a duration is granted")
-                .isEqualTo(1);
+            assertThat(catalogText(c, """
+                    SELECT string_agg(policyname, ', ' ORDER BY policyname) FROM pg_policies
+                    WHERE schemaname = 'worklist' AND policyname = 'claim_tenant_isolation'
+                    """))
+                .as("and no policy of it")
+                .isNull();
             c.commit();
         }
     }
@@ -1076,27 +1087,11 @@ class SchemaConstraintIT {
         }
     }
 
-    /**
-     * A claim whose expiry is the given interval after the grant.
-     *
-     * <p>The interval is sent as text and added in SQL rather than computed
-     * here, so that the two timestamps come from the same clock. Computed in
-     * Java they would come from a different one, and a "zero" duration could
-     * land on either side of the constraint depending on clock skew — which
-     * would make this probe flake rather than fail.
-     */
-    private void insertClaim(Connection c, UUID item, String duration) throws SQLException {
-        try (var st = c.prepareStatement("""
-                INSERT INTO worklist.claim
-                    (tenant_id, scope_id, item_number, receipt, actor, granted_at, expires_at)
-                VALUES (?, ?, (SELECT number FROM worklist.item WHERE id = ?),
-                        'a receipt', 'an actor', now(), now() + ?::interval)
-                """)) {
-            st.setObject(1, tenant);
-            st.setObject(2, SCOPE);
-            st.setObject(3, item);
-            st.setString(4, duration);
-            st.executeUpdate();
+    /** The one text a catalog query answers, NULL included. */
+    private static String catalogText(Connection c, String sql) throws SQLException {
+        try (var st = c.prepareStatement(sql); ResultSet rs = st.executeQuery()) {
+            rs.next();
+            return rs.getString(1);
         }
     }
 
