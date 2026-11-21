@@ -480,9 +480,10 @@ class StatusPredicatesIT {
             .containsEntry("title", "from the image before")
             .containsEntry("description", "as it was")
             .containsEntry("status", "from-before")
-            .as("an item the image before inserts takes the column's default phase")
-            .containsEntry("phase", "open")
             .containsEntry("number", number);
+        assertThat(read.get("phase"))
+            .as("an item the image before inserts takes the column's default phase")
+            .isEqualTo("open");
         assertThat(predicates(read))
             .isEqualTo(Map.of("closed", false, "actionable", true, "in_progress", false));
     }

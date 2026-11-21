@@ -19,6 +19,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestIdentityAssociation;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -137,12 +138,7 @@ class OpenCallsIT {
         String a = address(drafted);
         check(offences, "item draft, as created", drafted, at.draft(a));
         check(offences, "item draft, read", at.read(a), at.draft(a));
-        for (String call : at.draft(a)) {
-            if (!isTransition(call)) {
-                check(offences, "item draft after " + verbOf(call), at.execute(call),
-                    at.draft(a));
-            }
-        }
+        carryOutAllButTransitions(at, at.draft(a), offences, "item draft", at.draft(a));
         assertThat(Mcp.reason(Mcp.call("worklist_book", at.booking(a))))
             .as("a draft is named no book, and a booking of it is refused by its state")
             .isEqualTo("TRANSITION_REFUSED");
@@ -201,25 +197,16 @@ class OpenCallsIT {
         // is refused: plan is named exactly where plan is accepted.
         check(offences, "item closed, never planned", at.read(d), at.closedItem(d));
         check(offences, "item draft, never planned", at.read(e), at.draft(e));
-        for (String unplannable : List.of(d, e)) {
-            Response refused = Mcp.call("worklist_plan", Map.of(
-                "address", i1 + "/" + number(unplannable), "conflict_token", at.token(i1)));
-            assertThat(refused.jsonPath().getBoolean("result.isError"))
-                .as("a plan of %s is refused: %s", unplannable, refused.asString())
-                .isTrue();
-            assertThat(refused.jsonPath().getString("result.structuredContent.reason"))
-                .as("a draft and a closed item enter no iteration (TAR-0002 B9)")
-                .isEqualTo("ITEM_UNPLANNABLE");
-        }
+        assertThat(planRefusals(at, i1, List.of(d, e)))
+            .as("a draft and a closed item enter no iteration (TAR-0002 B9)")
+            .containsExactly("ITEM_UNPLANNABLE", "ITEM_UNPLANNABLE");
 
         // Every call the plannable item names is carried out, in this order:
         // relate before unrelate, so that the edge unrelate takes stands. The
         // transition is carried out last, further below.
-        for (String call : at.item(a, false, i1 + "/" + number(a), i2 + "/" + number(a))) {
-            if (!isTransition(call)) {
-                at.execute(call);
-            }
-        }
+        carryOutAllButTransitions(at,
+            at.item(a, false, i1 + "/" + number(a), i2 + "/" + number(a)), offences,
+            "item, planning", null);
         check(offences, "item, planned into both", at.read(a), at.item(a, false));
 
         // ---- a membership of an open iteration -----------------------------
@@ -266,12 +253,8 @@ class OpenCallsIT {
         check(offences, "item open, typed: start is named", at.read(a), at.item(a, true));
         check(offences, "item in progress, as started", at.execute("worklist_start " + a),
             at.inProgress(a));
-        for (String call : at.inProgress(a)) {
-            if (!isTransition(call)) {
-                check(offences, "item in progress after " + verbOf(call), at.execute(call),
-                    at.inProgress(a));
-            }
-        }
+        carryOutAllButTransitions(at, at.inProgress(a), offences, "item in progress",
+            at.inProgress(a));
         check(offences, "item open, as returned", at.execute("worklist_return " + a),
             at.item(a, true));
         at.execute("worklist_start " + a);
@@ -680,6 +663,34 @@ class OpenCallsIT {
     /** Whether a named call moves the item's phase, and so is carried out on its own. */
     private static boolean isTransition(String call) {
         return TRANSITIONS.contains(verbOf(call));
+    }
+
+    /**
+     * Carries out every named call but the transitions, in their order, and
+     * checks the calls each answer names.
+     *
+     * @param expected the calls every answer names; absent where the answers
+     *                 are not checked, because the calls carried out move the
+     *                 memberships an answer names
+     */
+    private static void carryOutAllButTransitions(Scope at, List<String> calls,
+                                                  List<String> offences, String where,
+                                                  @Nullable List<String> expected) {
+        calls.stream().filter(call -> !isTransition(call)).forEach(call -> {
+            Map<String, Object> answer = at.execute(call);
+            if (expected != null) {
+                check(offences, where + " after " + verbOf(call), answer, expected);
+            }
+        });
+    }
+
+    /** The reason each plan of these items into the iteration is refused with. */
+    private static List<String> planRefusals(Scope at, String iteration, List<String> items) {
+        return items.stream()
+            .map(item -> Mcp.reason(Mcp.call("worklist_plan", Map.of(
+                "address", iteration + "/" + number(item),
+                "conflict_token", at.token(iteration)))))
+            .toList();
     }
 
     private static Map<String, Object> entry(List<Map<String, Object>> page, String address) {

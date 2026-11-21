@@ -278,7 +278,8 @@ class FulfilmentSurfaceIT {
         created.then().statusCode(201);
         long draft = created.jsonPath().getLong("fields.number");
         assertThat(created.jsonPath().getList("next.call", String.class))
-            .as("a draft is named no book")
+            .as("a draft is named its calls, and no book among them")
+            .isNotEmpty()
             .doesNotContain("book " + address(draft));
 
         Response refused = bookOverRest(draft, Map.of("instance", INSTANCE, "entries",

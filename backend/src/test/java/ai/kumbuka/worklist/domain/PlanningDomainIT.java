@@ -431,7 +431,10 @@ class PlanningDomainIT {
             .as("a draft is refused with the code a closed item is refused with")
             .isEqualTo(WorklistException.Reason.ITEM_UNPLANNABLE);
         assertThat(draftRefusal.offenders()).containsExactly("address");
-        assertThat(memberships.query(scope)).doesNotContain(draft);
+        assertThat(memberships.query(scope))
+            .as("the items planned before stay planned, and the draft is none of them")
+            .isNotEmpty()
+            .doesNotContain(draft);
     }
 
     // ==================================================================
