@@ -55,7 +55,7 @@ import java.util.UUID;
  *
  * <h2>The phase is a column, the status a reference</h2>
  *
- * {@link #phase} is the item's place in its lifecycle ({@link Phase}), held
+ * {@link #phase()} is the item's place in its lifecycle ({@link Phase}), held
  * here and written by the transitions alone (REA-0011 D11): a status write
  * never moves it, so a change to a scope's vocabulary moves no item between
  * phases. The predicates {@code closed} and {@code in_progress} are a
@@ -154,7 +154,7 @@ public class Item extends AggregateRoot {
      * inserts without it (N-1); this image writes it on every insert.
      */
     @Column(name = "phase", nullable = false)
-    public String phase = Phase.OPEN.token();
+    public String phaseToken = Phase.OPEN.token();
 
     /**
      * The declared status. Mandatory: an item always has one, a draft
@@ -293,13 +293,13 @@ public class Item extends AggregateRoot {
      *         refuses, which no row can carry
      */
     public Phase phase() {
-        return Phase.byToken(phase).orElseThrow(() -> new IllegalStateException(
+        return Phase.byToken(phaseToken).orElseThrow(() -> new IllegalStateException(
             "an item carries a phase the store admits no row with"));
     }
 
     /** Moves the item into a phase: the act of a transition, and of nothing else. */
     void enter(Phase next) {
-        phase = next.token();
+        phaseToken = next.token();
     }
 
     /**

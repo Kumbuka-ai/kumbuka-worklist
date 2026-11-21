@@ -255,6 +255,9 @@ class ItemPhaseIT {
                 List.of(Map.of("criterion", 1, "status", "met", "evidence", "a report")),
                 ItemLifecycle.CALLER),
             "book on a draft (Annex A1)");
+        assertThat((List<?>) items.read(scope, item).get("fulfilment"))
+            .as("and nothing was booked")
+            .isEmpty();
     }
 
     // ====================================================================
@@ -363,6 +366,7 @@ class ItemPhaseIT {
     void close_is_refused_on_a_draft() {
         UUID item = ItemLifecycle.draft(items, scope, Map.of("title", "a draft"));
         assertByState(() -> ItemLifecycle.close(items, scope, item, null), "close on a draft");
+        assertThat(items.read(scope, item).get("phase")).isEqualTo("draft");
     }
 
     @Test

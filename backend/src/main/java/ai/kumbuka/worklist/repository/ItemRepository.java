@@ -139,7 +139,7 @@ public class ItemRepository {
                 case BY_STATUS -> "i.statusPk = :" + param;
                 case BY_MILESTONE -> "i.milestoneNumber = :" + param;
                 case BY_WORKSTREAM -> "i.workstreamNumber = :" + param;
-                case BY_PHASE -> "i.phase = :" + param;
+                case BY_PHASE -> "i.phaseToken = :" + param;
                 case BY_CREATED_BEFORE -> "i.createdAt < :" + param;
                 case BY_TAG -> "i.number IN (SELECT t.itemNumber FROM ItemTag t "
                     + "WHERE t.scopeId = i.scopeId AND t.tagId = :" + param + ")";
