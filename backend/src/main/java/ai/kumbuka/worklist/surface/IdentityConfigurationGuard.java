@@ -25,12 +25,13 @@ import java.util.Optional;
  *
  * Quarkus resolves a service application's principal through
  * {@code upn -> preferred_username -> sub} unless it is pinned. In this
- * service the principal is the subject of every actor: it is recorded as the
- * author of a write and as the holder of a claim, and it is what a receipt is
- * bound to. An unpinned principal makes those an email address on one
- * deployment and a subject on the next, and a holder who stops being
- * recognised as the holder. Both fail quietly: the write succeeds, and the
- * next call of the same caller is refused as somebody else's.
+ * service the principal is the subject of every actor: it is bound for the
+ * scope directory, whose rows decide which scopes the caller may enter and
+ * write, and it is recorded as who attached a tag. An unpinned principal makes
+ * the same caller an email address on one deployment and a subject on the
+ * next. Both fail quietly: the tag is attached under another name, and a
+ * caller whose identifier no longer matches the directory finds its scopes
+ * unresolvable, as if they did not exist.
  *
  * <p>The dispatch and memory services and the core carry the same guard for
  * the same reason, under the same name.
@@ -89,10 +90,11 @@ public class IdentityConfigurationGuard {
             throw refused(PlatformLog.StartProblem.PRINCIPAL_CLAIM_NOT_SUBJECT,
                 new IllegalStateException(
                     "'" + PRINCIPAL_CLAIM_KEY + "' is '" + claim + "' and must be '"
-                    + EXPECTED_PRINCIPAL_CLAIM + "'. The principal is the author of every "
-                    + "write of this service and the holder of every claim; resolved from any "
-                    + "other claim it becomes an identifier that can change, and a holder "
-                    + "that changes is refused its own claim."));
+                    + EXPECTED_PRINCIPAL_CLAIM + "'. The principal is the subject the scope "
+                    + "directory decides access for and the one a tag records as having "
+                    + "attached it; resolved from any other claim it becomes an identifier "
+                    + "that can change, and the same caller is recorded under another name and "
+                    + "loses the scopes it may enter."));
         }
 
         Optional<String> audience = config.getOptionalValue(AUDIENCE_KEY, String.class);

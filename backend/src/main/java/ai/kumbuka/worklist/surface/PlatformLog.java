@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Item;
+import ai.kumbuka.worklist.domain.ItemFulfilment;
 import ai.kumbuka.worklist.domain.ItemTag;
 import ai.kumbuka.worklist.domain.Iteration;
 import ai.kumbuka.worklist.domain.IterationMembership;
@@ -99,6 +100,10 @@ public final class PlatformLog {
 
     static void tagDetached(TechnicalAddress entry, ScopeId scope) {
         LOG.infof("tag_detach on %s in scope %s", entry, scope);
+    }
+
+    static void booked(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("book on %s in scope %s", entry, scope);
     }
 
     // ======================================================================
@@ -202,6 +207,10 @@ public final class PlatformLog {
 
     static void tagAbsent(ScopeId scope) {
         LOG.debugf("tag absent from the item in scope %s; nothing written", scope);
+    }
+
+    static void fulfilmentBooked(TechnicalAddress entry, Count entries, ScopeId scope) {
+        LOG.debugf("%s ledger entr(y/ies) booked on item %s in scope %s", entries, entry, scope);
     }
 
     // ======================================================================
@@ -352,6 +361,14 @@ public final class PlatformLog {
         /** A tag assignment, by the item it is on; the tag itself is the platform's. */
         static TechnicalAddress of(ItemTag assignment) {
             return new TechnicalAddress(String.valueOf(assignment.itemNumber));
+        }
+
+        /**
+         * A ledger entry, by the item it is booked on; the instance, the
+         * evidence and the actor are values of the caller and stay out.
+         */
+        static TechnicalAddress of(ItemFulfilment entry) {
+            return new TechnicalAddress(String.valueOf(entry.itemNumber));
         }
 
         static TechnicalAddress of(IterationMembership membership) {

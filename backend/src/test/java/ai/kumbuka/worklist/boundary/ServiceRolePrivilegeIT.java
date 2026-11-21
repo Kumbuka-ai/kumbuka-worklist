@@ -73,16 +73,20 @@ class ServiceRolePrivilegeIT {
     private static final Set<String> PERMITTED = Set.of("SELECT", "INSERT", "UPDATE");
 
     /**
-     * The tables whose verbs genuinely delete, each with exactly what it
-     * grants instead of {@link #PERMITTED}.
+     * The tables that grant other than {@link #PERMITTED}, each with exactly
+     * what it grants instead.
      *
-     * <p>One, from V26: {@code tag_detach} removes an assignment, which has no
+     * <p>From V26: {@code tag_detach} removes an assignment, which has no
      * status to fall back to (V2: "the day a verb genuinely deletes is the day
-     * the grant is added with that verb"). Named table by table, so DELETE on
-     * any other table is still a defect.
+     * the grant is added with that verb"). From V30: the fulfilment ledger is
+     * append-only, so it grants SELECT and INSERT and neither UPDATE nor
+     * DELETE -- nothing in it is ever changed or removed. Named table by
+     * table, so DELETE on any other table is still a defect, and UPDATE on the
+     * ledger is one.
      */
     private static final Map<String, Set<String>> PERMITTED_HERE = Map.of(
-        "item_tag", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"));
+        "item_tag", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"),
+        "item_fulfilment", Set.of("SELECT", "INSERT"));
 
     /**
      * Everything {@code has_table_privilege} can be asked about a table.
@@ -141,17 +145,40 @@ class ServiceRolePrivilegeIT {
         // The fourth view, ratified 2026-09-08. Its table carries the same
         // SELECT/INSERT/UPDATE the schema hands out to every other one.
         "workstream",
-        // The lease, and what the scope decides.
-        "claim", "scope_setting", "view_preference",
+        // What the scope decides. The lease's table `claim` of V4 is gone
+        // since V31 (RETIRED_TABLES).
+        "scope_setting", "view_preference",
         // The ledger of spent idempotency keys (C10.4), from V25: the same
         // SELECT/INSERT/UPDATE, and no DELETE -- an expired key is written over.
         "idempotency_key",
         // The tags an item carries, from V26: the one table with DELETE, for
         // tag_detach (PERMITTED_HERE).
         "item_tag",
+        // What a scope declares it uses, from V28: the same SELECT/INSERT/UPDATE,
+        // and no DELETE -- no verb takes a usage back.
+        "scope_usage",
+        // The acceptance criteria of an item, from V29: the same
+        // SELECT/INSERT/UPDATE, and no DELETE -- a criterion is withdrawn and
+        // keeps its number.
+        "item_criterion",
+        // The fulfilment ledger of an item, from V30: SELECT and INSERT and
+        // nothing else (PERMITTED_HERE) -- append-only by grant.
+        "item_fulfilment",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);
+
+    /**
+     * Tables this schema once had and must not have again, each by name.
+     *
+     * <p>{@code claim}, the lease of V4, dropped by V31: the lease left the
+     * surface in the release before, and its store left after it. A table of
+     * that name coming back is a relation with grants nobody decided, and a
+     * holder store nothing on the surface reads. The catalog-derived check of
+     * {@link #the_schema_holds_exactly_the_relations_that_were_declared} would
+     * see it as an extra table; this list says which absence is meant.
+     */
+    private static final Set<String> RETIRED_TABLES = Set.of("claim");
 
     private static String schema() {
         return ConfigProvider.getConfig().getValue("quarkus.flyway.default-schema", String.class);
@@ -306,6 +333,35 @@ class ServiceRolePrivilegeIT {
             .allSatisfy(table -> assertThat(EXPECTED_TABLES).contains(table));
     }
 
+    /**
+     * A retired table is absent, and the runtime role holds nothing on it.
+     *
+     * <p>Read from the catalog twice: as a base table of the schema, and
+     * through {@code to_regclass}, which answers NULL for a name no relation
+     * of any kind carries -- so a view or a sequence left under the name is
+     * reported too. Asked as the superuser, which sees every relation.
+     */
+    @Test
+    void the_retired_lease_table_is_absent_and_holds_no_grant() throws SQLException {
+        List<String> tables;
+        List<String> present;
+        try (Connection c = admin()) {
+            tables = tablesIn(c, schema());
+            present = retiredPresent(c);
+        }
+
+        assertThat(tables)
+            .as("the probe must have read the schema's tables")
+            .contains(HISTORY_TABLE);
+        assertThat(tables)
+            .as("a retired table of schema %s is back as a base table, and with it a grant "
+                + "to the runtime role nobody decided", schema())
+            .doesNotContainAnyElementsOf(RETIRED_TABLES);
+        assertThat(present)
+            .as("a relation of any kind under a retired table's name is back")
+            .isEmpty();
+    }
+
     // ------------------------------------------------------------------
     // The red states, observed on every build.
     // ------------------------------------------------------------------
@@ -374,6 +430,68 @@ class ServiceRolePrivilegeIT {
 
             assertThat(privilegeDefects(c, tablesIn(c, schema())))
                 .as("and closed again")
+                .isEmpty();
+        }
+    }
+
+    /**
+     * The ledger's own red state: UPDATE on the append-only table is a defect.
+     *
+     * <p>A separate case because the ledger is checked against a set narrower
+     * than every other domain table's, and a detection that read the general
+     * set for it would accept exactly the grant that lets an entry be changed.
+     */
+    @Test
+    void the_check_reports_update_on_the_append_only_ledger() throws SQLException {
+        String table = schema() + ".item_fulfilment";
+        try (Connection c = admin()) {
+            try {
+                exec(c, "GRANT UPDATE ON " + table + " TO " + role());
+
+                assertThat(privilegeDefects(c, tablesIn(c, schema())))
+                    .as("RED STATE, observed: UPDATE on the fulfilment ledger must be reported. "
+                        + "The ledger is append-only by grant, and an entry the runtime role "
+                        + "could change is a record nobody can rely on")
+                    .anySatisfy(defect -> assertThat(defect)
+                        .contains("item_fulfilment")
+                        .contains("UPDATE"));
+            } finally {
+                exec(c, "REVOKE UPDATE ON " + table + " FROM " + role());
+            }
+
+            assertThat(privilegeDefects(c, tablesIn(c, schema())))
+                .as("and gone again")
+                .isEmpty();
+        }
+    }
+
+    /**
+     * The retired table's own red state: a relation under its name is back
+     * for the length of one assertion, and the check must name it.
+     *
+     * <p>Planted as the superuser with one column, which is all
+     * {@code to_regclass} needs to see it, and dropped again in the same case.
+     */
+    @Test
+    void the_check_reports_a_retired_table_that_is_back() throws SQLException {
+        String table = schema() + ".claim";
+        try (Connection c = admin()) {
+            try {
+                exec(c, "CREATE TABLE " + table + " (planted INT)");
+
+                assertThat(retiredPresent(c))
+                    .as("RED STATE, observed: a table under the lease's retired name must be "
+                        + "reported, by its name")
+                    .containsExactly(table);
+                assertThat(tablesIn(c, schema()))
+                    .as("RED STATE, observed: and it is seen as a base table of the schema")
+                    .contains("claim");
+            } finally {
+                exec(c, "DROP TABLE IF EXISTS " + table);
+            }
+
+            assertThat(retiredPresent(c))
+                .as("and gone again, so the red state was that table and nothing else")
                 .isEmpty();
         }
     }
@@ -462,6 +580,28 @@ class ServiceRolePrivilegeIT {
             st.setString(1, role());
             st.setString(2, schema() + "." + table);
             st.setString(3, privilege);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getBoolean(1);
+            }
+        }
+    }
+
+    /** The qualified names of the retired tables a relation carries again. */
+    private static List<String> retiredPresent(Connection c) throws SQLException {
+        List<String> present = new ArrayList<>();
+        for (String retired : RETIRED_TABLES) {
+            if (relationExists(c, schema() + "." + retired)) {
+                present.add(schema() + "." + retired);
+            }
+        }
+        return present;
+    }
+
+    /** Whether any relation carries the qualified name, from {@code to_regclass}. */
+    private static boolean relationExists(Connection c, String qualified) throws SQLException {
+        try (var st = c.prepareStatement("SELECT to_regclass(?) IS NOT NULL")) {
+            st.setString(1, qualified);
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
                 return rs.getBoolean(1);

@@ -91,7 +91,14 @@ class BootstrapScopeScriptIT {
         assertThat(declared.get("attributes"))
             .as("each declared attribute with the number of its options")
             .containsExactly("cluster:8", "type:5", "priority:3", "size:3", "component:0");
-        assertThat(declared.get("relation_types")).containsExactly("depends_on");
+        assertThat(declared.get("relation_types"))
+            .as("each relation type with its target status: duplicate_of closes into "
+                + "obsolete (REA-0011 D18), depends_on names none")
+            .containsExactly("depends_on:-", "duplicate_of:obsolete");
+        assertThat(declared.get("usages"))
+            .as("the scope uses priority and severity and none of the optional predicates "
+                + "(DEC-0037 C5, REA-0011 S3)")
+            .containsExactly("priority", "severity");
         assertThat(declared.get("workstreams")).containsExactly("1:default:true");
         assertThat(declared.get("counters"))
             .as("the counters the script opens, by view, with their mark and the selector "
@@ -100,13 +107,29 @@ class BootstrapScopeScriptIT {
             .containsExactly("item:0:item", "iteration:0:iteration", "milestone:0:milestone",
                 "workstream:1:workstream");
 
-        Map<String, Object> item = items.create(scope, Map.of(
+        Map<String, Object> item = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "the first item of a bootstrapped scope",
             Field.STATUS.canonicalName(), "open")).answer();
         assertThat(item.get(Field.NUMBER.canonicalName()))
             .as("the service, under its own role, allocates from the item counter "
                 + "the script opened")
             .isEqualTo(1L);
+
+        Map<String, Object> valued = items.create(scope, "probe-subject", Map.of(
+            Field.TITLE.canonicalName(), "an item with priority and severity",
+            Field.STATUS.canonicalName(), "open",
+            Field.PRIORITY.canonicalName(), "high",
+            Field.SEVERITY.canonicalName(), "major")).answer();
+        assertThat(valued)
+            .as("the scope keeps the two properties it had before the usage existed")
+            .containsEntry(Field.PRIORITY.canonicalName(), "high")
+            .containsEntry(Field.SEVERITY.canonicalName(), "major");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> predicates =
+            (Map<String, Object>) valued.get(Field.PREDICATES.canonicalName());
+        assertThat(predicates)
+            .as("and its items answer none of the optional predicates")
+            .doesNotContainKeys("reviewed", "approved", "verified");
     }
 
     @Test
@@ -179,8 +202,15 @@ class BootstrapScopeScriptIT {
                  ORDER BY d.rank, o.rank
                 """));
             rows.put("relation_types", column(c, scope, """
-                SELECT name FROM worklist.relation_type
-                 WHERE tenant_id = ?::uuid AND scope_id = ?::uuid ORDER BY rank
+                SELECT t.name || ':' || coalesce(s.name, '-')
+                  FROM worklist.relation_type t
+                  LEFT JOIN worklist.item_status s
+                         ON s.tenant_id = t.tenant_id AND s.pk = t.target_status_pk
+                 WHERE t.tenant_id = ?::uuid AND t.scope_id = ?::uuid ORDER BY t.rank
+                """));
+            rows.put("usages", column(c, scope, """
+                SELECT name FROM worklist.scope_usage
+                 WHERE tenant_id = ?::uuid AND scope_id = ?::uuid ORDER BY name
                 """));
             rows.put("workstreams", column(c, scope, """
                 SELECT number || ':' || token || ':' || is_default FROM worklist.workstream

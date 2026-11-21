@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of Kumbuka and is licensed under the GNU Affero
+ * General Public License v3.0 only. See the LICENSE file in the
+ * repository root for the full licence text.
+ */
 package ai.kumbuka.worklist.domain;
 
 import jakarta.persistence.Column;
@@ -5,7 +12,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 /**
- * One status value a scope declared, and the four predicates it maps onto.
+ * One status value a scope declared, and the predicates it maps onto.
  *
  * <p>The predecessor fixes its status vocabulary in a check constraint over
  * five literals, so a scope that works differently has to be released for.
@@ -13,7 +20,9 @@ import jakarta.persistence.Table;
  * a display name, a rank and an optional description, and what an item stores
  * is the identity.
  *
- * <h2>The four predicates are the whole of the platform's guarantee</h2>
+ * <h2>The predicates are the whole of the platform's guarantee</h2>
+ *
+ * Four of them every scope answers (TAR-0002 Annex A1):
  *
  * <ul>
  *   <li>{@link #closed} — is the item finished, is there nothing further to
@@ -24,7 +33,17 @@ import jakarta.persistence.Table;
  *       up?</li>
  * </ul>
  *
- * <p>The set is deliberately small: a predicate is an obligation every scope
+ * <p>Three more only a scope that declares it uses them answers
+ * ({@link ScopeUsage}, DEC-0037 C5):
+ *
+ * <ul>
+ *   <li>{@link #reviewed} — is it valid and not a duplicate?</li>
+ *   <li>{@link #approved} — is it approved to be worked?</li>
+ *   <li>{@link #verified} — has the outcome of the business incident been
+ *       confirmed? It confirms the incident and not the work.</li>
+ * </ul>
+ *
+ * <p>The set is deliberately small: a predicate is an obligation a scope
  * must be able to answer. {@code successful} is the one that is not obvious
  * and it is load-bearing — finished is not achieved, and without the
  * distinction a blocking relation pointing at an ABANDONED item would
@@ -39,12 +58,23 @@ import jakarta.persistence.Table;
  * would be a second truth that drifts, which is what a literal set in a check
  * constraint was.
  *
- * <p>Two coherence rules travel with these four, and only one of them is
- * expressible here. That {@code closed} and {@code inProgress} exclude each
- * other is a statement about a row and is a check constraint. That a scope
- * declares at least one actionable and at least one closed status is a
- * statement about a SET of rows; it is enforced at declaration time in the
- * domain, and that is a piece of work of its own.
+ * <h2>The consistency rules, and where each is held</h2>
+ *
+ * <ul>
+ *   <li>{@code closed} and {@code inProgress} exclude each other: a statement
+ *       about a row, held by the check constraint of V4 and refused at
+ *       declaration by {@link VocabularyRegistry#declareStatus}.</li>
+ *   <li>{@code verified} requires {@code closed} and {@code successful}:
+ *       refused at declaration by {@link VocabularyRegistry#declareStatus}.</li>
+ *   <li>In a scope that uses {@code reviewed} or {@code approved}, an
+ *       {@code actionable} status is also {@code reviewed} and
+ *       {@code approved}: a statement across this table and
+ *       {@link ScopeUsage}, refused at declaration of a status and at
+ *       declaration of the usage alike, by {@link VocabularyRegistry}.</li>
+ * </ul>
+ *
+ * <p>That a scope declares at least one actionable and at least one closed
+ * status is a statement about a SET of rows, and no check holds it today.
  */
 @Entity
 @Table(name = "item_status", schema = "worklist")
@@ -65,11 +95,47 @@ public class ItemStatus extends DeclaredValue {
     /**
      * Achieved rather than abandoned.
      *
-     * <p>Meaningful only where {@link #closed} holds, and deliberately not
-     * constrained to be false elsewhere: a scope that records the eventual
-     * outcome on a non-terminal value is not wrong, the platform simply does
-     * not read the field there.
+     * <p>Answered only where {@link #closed} holds. A status that declares it
+     * without {@code closed} is accepted — a scope that records the eventual
+     * outcome on a non-terminal value is not wrong — and an item in that
+     * status answers no value for it (TAR-0002 B3).
      */
     @Column(name = "successful", nullable = false)
     public boolean successful;
+
+    /**
+     * Valid and not a duplicate. Answered only by an item of a scope that
+     * uses it; false on every status declared before V28.
+     */
+    @Column(name = "reviewed", nullable = false)
+    public boolean reviewed;
+
+    /**
+     * Approved to be worked. Answered only by an item of a scope that uses
+     * it; false on every status declared before V28.
+     */
+    @Column(name = "approved", nullable = false)
+    public boolean approved;
+
+    /**
+     * The outcome of the business incident is confirmed. Requires
+     * {@link #closed} and {@link #successful}. Answered only by an item of a
+     * scope that uses it; false on every status declared before V28.
+     */
+    @Column(name = "verified", nullable = false)
+    public boolean verified;
+
+    /**
+     * Whether these predicates contradict each other, by the three rules
+     * above.
+     *
+     * @param reviewOrApprovalUsed whether the scope uses {@code reviewed} or
+     *                             {@code approved}, which is what makes the
+     *                             third rule apply
+     */
+    boolean contradicts(boolean reviewOrApprovalUsed) {
+        return (closed && inProgress)
+            || (verified && !(closed && successful))
+            || (reviewOrApprovalUsed && actionable && !(reviewed && approved));
+    }
 }

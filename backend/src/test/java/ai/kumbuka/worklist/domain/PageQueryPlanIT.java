@@ -318,18 +318,14 @@ class PageQueryPlanIT {
     /** A scope with every view declared and one object of each, numbered 1 or more. */
     private UUID aScopeWithOneOfEach() {
         UUID id = UUID.randomUUID();
-        settings.create(id, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(id, Map.of());
         for (String view : Selector.VIEWS) {
             selectors.open(id, view);
         }
         vocabulary.declareStatus(id, "open", 1, true, false, false, false);
         workstreams.requireDefault(id);
         workstreams.declare(id, "probe", "the template of the probe's workstreams");
-        items.create(id, Map.of("title", "probe", "status", "open"));
+        items.create(id, "probe-subject", Map.of("title", "probe", "status", "open"));
         milestones.create(id, Map.of("title", "probe"));
         iterations.create(id, Map.of("title", "probe", "motto", "m", "description", "d"));
         return id;

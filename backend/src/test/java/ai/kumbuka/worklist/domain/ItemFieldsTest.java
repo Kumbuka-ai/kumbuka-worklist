@@ -62,19 +62,21 @@ class ItemFieldsTest {
     void the_settable_names_are_the_ones_a_caller_may_change() {
         assertThat(Field.settableNames(Addressed.ITEM))
             .contains("title", "description", "status", "milestone", "attributes",
-                "references", "relations")
+                "references", "relations", "contributor", "parent", "priority", "severity")
             .doesNotContain("id", "number", "selector", "created_at",
-                "conflict_token", "tags");
+                "conflict_token", "tags", "creator", "close_date");
     }
 
     /**
      * A scope's own attributes are not fields, and that is the change the
      * whole declaration mechanism rests on.
      *
-     * <p>{@code cluster}, {@code type}, {@code priority} and {@code size} were
-     * four entries in this enum, so a fifth axis was a code change. They
-     * travel inside {@code attributes} now, under the key they were declared
-     * with, and a sixth of them is a row.
+     * <p>{@code cluster}, {@code type} and {@code size} were entries in this
+     * enum, so a further axis was a code change. They travel inside
+     * {@code attributes} now, under the key they were declared with, and a
+     * further one of them is a row. {@code priority} is a field again since the
+     * property core (DEC-0037 C3), with the standard's value set; a scope's
+     * own attribute of that key stays inside {@code attributes}.
      */
     @Test
     void a_declared_attribute_is_not_a_field_of_its_own() {
@@ -269,6 +271,93 @@ class ItemFieldsTest {
     }
 
     // ------------------------------------------------------------------
+    // The property core (DEC-0037 C3, TAR-0002 Annex A2).
+    // ------------------------------------------------------------------
+
+    /**
+     * {@code priority} takes the four values of the standard and nothing else;
+     * the empty absence clears it. The set is written here from the node, not
+     * read from the class under test.
+     */
+    @Test
+    void priority_takes_the_four_values_of_the_standard_and_refuses_any_other() {
+        for (String value : List.of("high", "medium", "low", "unassigned")) {
+            assertThat(ItemFields.oneOf(Field.PRIORITY, ItemFields.PRIORITIES, value))
+                .contains(value);
+        }
+        assertThat(ItemFields.oneOf(Field.PRIORITY, ItemFields.PRIORITIES, " ")).isEmpty();
+
+        for (String outside : List.of("P1", "urgent", "High", "blocker")) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.oneOf(Field.PRIORITY, ItemFields.PRIORITIES, outside));
+            assertThat(refusal.reason())
+                .as("'%s' lies outside the value set of priority", outside)
+                .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.priority");
+        }
+    }
+
+    /** {@code severity} takes the six values of the standard and nothing else. */
+    @Test
+    void severity_takes_the_six_values_of_the_standard_and_refuses_any_other() {
+        for (String value : List.of("blocker", "critical", "major", "normal", "minor",
+                "unassigned")) {
+            assertThat(ItemFields.oneOf(Field.SEVERITY, ItemFields.SEVERITIES, value))
+                .contains(value);
+        }
+
+        for (String outside : List.of("high", "trivial", "Major")) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.oneOf(Field.SEVERITY, ItemFields.SEVERITIES, outside));
+            assertThat(refusal.reason())
+                .as("'%s' lies outside the value set of severity", outside)
+                .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.severity");
+        }
+    }
+
+    /**
+     * The contributors keep the caller's order, drop a repeat and refuse an
+     * entry that is no identity.
+     */
+    @Test
+    void contributors_keep_their_order_and_refuse_an_entry_that_is_no_identity() {
+        assertThat(ItemFields.contributors(List.of("agent-b", " person-a ", "agent-b")))
+            .containsExactly("agent-b", "person-a");
+        assertThat(ItemFields.contributors(null)).isEmpty();
+        assertThat(ItemFields.contributors(List.of())).isEmpty();
+
+        for (Object malformed : List.<Object>of(List.of("  "), List.of(7), "person-a",
+                List.of("x".repeat(256)))) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.contributors(malformed));
+            assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.contributor");
+        }
+
+        List<String> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            many.add("identity-" + i);
+        }
+        assertThat(((WorklistException) catchThrowable(() -> ItemFields.contributors(many)))
+            .reason())
+            .as("fifty contributors at most")
+            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+    }
+
+    /** {@code creator} and {@code close_date} are the service's; the caller sets the rest. */
+    @Test
+    void creator_and_close_date_are_carried_and_read_only() {
+        for (String name : List.of("creator", "close_date")) {
+            assertThat(Field.byCanonicalName(Addressed.ITEM, name)).isPresent();
+            assertThat(Field.byCanonicalName(Addressed.ITEM, name).orElseThrow()
+                .settableOn(Addressed.ITEM))
+                .as("%s is set by the service (TAR-0002 B4)", name)
+                .isFalse();
+        }
+    }
+
+    // ------------------------------------------------------------------
     // The comparison the read-only fields are checked with.
     // ------------------------------------------------------------------
 
@@ -286,6 +375,33 @@ class ItemFieldsTest {
         assertThat(ItemFields.unchangedAsText(null, null)).isTrue();
         assertThat(ItemFields.unchangedAsText(id, UUID.randomUUID().toString())).isFalse();
         assertThat(ItemFields.unchangedAsText(null, "something")).isFalse();
+    }
+
+    /**
+     * The predicates are an object of the read answer, set by the service
+     * from the status: read-only, and an echo with its members in another
+     * order is still the value held (REA-0011 S3).
+     */
+    @Test
+    void the_predicates_are_read_only_and_compare_as_an_object() {
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "predicates"))
+            .contains(Field.PREDICATES);
+        assertThat(Field.PREDICATES.settableOn(Addressed.ITEM))
+            .as("a predicate holds because the status declares it (REA-0011 D1)")
+            .isFalse();
+
+        Map<String, Object> held = new java.util.LinkedHashMap<>();
+        held.put("closed", false);
+        held.put("actionable", true);
+        held.put("in_progress", false);
+        Map<String, Object> reordered = new java.util.LinkedHashMap<>();
+        reordered.put("in_progress", false);
+        reordered.put("closed", false);
+        reordered.put("actionable", true);
+
+        assertThat(ItemFields.unchangedAsText(held, reordered)).isTrue();
+        assertThat(ItemFields.unchangedAsText(held, Map.of("closed", true, "actionable", true,
+            "in_progress", false))).isFalse();
     }
 
     // ------------------------------------------------------------------
@@ -452,6 +568,235 @@ class ItemFieldsTest {
             .isNotEqualTo("not a key");
         assertThat(key).isEqualTo(key);
         assertThat(new ItemRelation.Key()).isNotEqualTo(key);
+    }
+
+    // ------------------------------------------------------------------
+    // The acceptance criteria (REA-0011 S12, D14).
+    // ------------------------------------------------------------------
+
+    /** The item the criteria below are written to, as its complete address. */
+    private static final String ITEM_ADDRESS = "worklist://probe/item/7";
+
+    @Test
+    void criteria_are_a_settable_field_of_an_item_and_of_nothing_else() {
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "criteria")).isPresent();
+        assertThat(Field.settableNames(Addressed.ITEM)).contains("criteria");
+        assertThat(Field.byCanonicalName(Addressed.ITERATION, "criteria")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.MILESTONE, "criteria")).isEmpty();
+    }
+
+    @Test
+    void a_criterion_entry_names_its_identifier_by_its_address_or_is_new() {
+        List<ItemFields.CriterionEntry> entries = ItemFields.criteria(List.of(
+            Map.of("address", "worklist://probe/item/7/criterion/3", "text", "  kept  "),
+            Map.of("text", "a new one")), ITEM_ADDRESS);
+
+        assertThat(entries).containsExactly(
+            new ItemFields.CriterionEntry(3L, "kept"),
+            new ItemFields.CriterionEntry(null, "a new one"));
+    }
+
+    @Test
+    void a_criterion_entry_outside_its_form_is_refused_and_names_the_field() {
+        List<Object> outside = List.of(
+            List.of(Map.of("text", " ")),
+            List.of(Map.of("address", "worklist://probe/item/7/criterion/1")),
+            List.of(Map.of("text", "with a status", "status", "met")),
+            List.of(Map.of("text", "of another item",
+                "address", "worklist://probe/item/8/criterion/1")),
+            List.of(Map.of("text", "of another scope",
+                "address", "worklist://elsewhere/item/7/criterion/1")),
+            List.of(Map.of("text", "zero", "address", "worklist://probe/item/7/criterion/0")),
+            List.of(Map.of("text", "padded", "address", "worklist://probe/item/7/criterion/01")),
+            List.of(Map.of("text", "word", "address", "worklist://probe/item/7/criterion/one")),
+            List.of(Map.of("text", "a", "address", "worklist://probe/item/7/criterion/2"),
+                Map.of("text", "b", "address", "worklist://probe/item/7/criterion/2")),
+            List.of("a bare string"),
+            "no list at all");
+
+        for (Object value : outside) {
+            Throwable thrown = catchThrowable(() -> ItemFields.criteria(value, ITEM_ADDRESS));
+            assertThat(thrown).as("%s is outside the entry form", value)
+                .isInstanceOf(WorklistException.class);
+            WorklistException refusal = (WorklistException) thrown;
+            assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("fields.criteria");
+        }
+    }
+
+    /**
+     * The next identifier counts withdrawn criteria (D14: never reissued).
+     * RED PROBE: an allocation over the living criteria alone answers 2 here.
+     */
+    @Test
+    void the_next_identifier_follows_the_highest_ever_issued_withdrawn_ones_counted() {
+        assertThat(ItemFields.nextCriterionNumber(List.of()))
+            .as("the first criterion of an item is 1").isEqualTo(1L);
+        assertThat(ItemFields.nextCriterionNumber(List.of(
+                criterion(1, ItemCriterion.ASSERTED),
+                criterion(2, ItemCriterion.WITHDRAWN),
+                criterion(3, ItemCriterion.WITHDRAWN))))
+            .as("2 and 3 were withdrawn and stay spent, so the next is 4")
+            .isEqualTo(4L);
+    }
+
+    @Test
+    void a_criterion_address_lies_beneath_its_item() {
+        assertThat(ItemFields.criterionAddress(ITEM_ADDRESS, 12))
+            .isEqualTo("worklist://probe/item/7/criterion/12");
+    }
+
+    private static ItemCriterion criterion(long number, String status) {
+        ItemCriterion criterion = new ItemCriterion();
+        criterion.number = number;
+        criterion.status = status;
+        criterion.text = "criterion " + number;
+        return criterion;
+    }
+
+    // ------------------------------------------------------------------
+    // The fulfilment ledger: the entries of a booking, and what a read
+    // answers. The three statuses are written here from the order, never
+    // read from the class under test.
+    // ------------------------------------------------------------------
+
+    @Test
+    void the_ledger_is_a_read_only_field_of_an_item_and_of_nothing_else() {
+        assertThat(Field.byCanonicalName(Addressed.ITEM, "fulfilment")).isPresent();
+        assertThat(Field.settableNames(Addressed.ITEM))
+            .as("the ledger stands beside the item and is written by book alone")
+            .doesNotContain("fulfilment");
+        assertThat(Field.byCanonicalName(Addressed.ITERATION, "fulfilment")).isEmpty();
+        assertThat(Field.byCanonicalName(Addressed.MILESTONE, "fulfilment")).isEmpty();
+    }
+
+    @Test
+    void a_booking_names_its_criteria_by_address_or_by_number_with_one_of_three_statuses() {
+        List<ItemFields.BookingEntry> entries = ItemFields.booking(List.of(
+            Map.of("criterion", "worklist://probe/item/7/criterion/1", "status", "met",
+                "evidence", " a report "),
+            Map.of("criterion", 2, "status", "not_met", "evidence", "a log"),
+            Map.of("criterion", 3L, "status", "not_applicable", "evidence", "a note")),
+            ITEM_ADDRESS);
+
+        assertThat(entries).containsExactly(
+            new ItemFields.BookingEntry(1, "met", "a report"),
+            new ItemFields.BookingEntry(2, "not_met", "a log"),
+            new ItemFields.BookingEntry(3, "not_applicable", "a note"));
+    }
+
+    /**
+     * Every entry outside the form refuses the whole booking, naming
+     * {@code entries}: an empty list, a criterion named twice, a status
+     * outside the three, an evidence reference that is empty or absent, a
+     * member the entry does not have, and a criterion that is no identifier
+     * of this item.
+     */
+    @Test
+    void a_booking_outside_its_form_is_refused_and_names_the_entries() {
+        List<Object> outside = List.of(
+            List.of(),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", "a"),
+                Map.of("criterion", "worklist://probe/item/7/criterion/1", "status", "met",
+                    "evidence", "b")),
+            List.of(Map.of("criterion", 1, "status", "done", "evidence", "a")),
+            List.of(Map.of("criterion", 1, "status", "MET", "evidence", "a")),
+            List.of(Map.of("criterion", 1, "evidence", "a")),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", "  ")),
+            List.of(Map.of("criterion", 1, "status", "met")),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", 7)),
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", "a", "actor", "me")),
+            List.of(Map.of("criterion", 0, "status", "met", "evidence", "a")),
+            List.of(Map.of("criterion", "1", "status", "met", "evidence", "a")),
+            List.of(Map.of("criterion", "worklist://probe/item/8/criterion/1", "status", "met",
+                "evidence", "a")),
+            List.of(Map.of("criterion", "worklist://probe/item/7/criterion/01", "status", "met",
+                "evidence", "a")),
+            List.of(Map.of("status", "met", "evidence", "a")),
+            List.of("a bare string"),
+            "no list at all");
+
+        for (Object value : outside) {
+            Throwable thrown = catchThrowable(() -> ItemFields.booking(value, ITEM_ADDRESS));
+            assertThat(thrown).as("%s is outside the form of a booking", value)
+                .isInstanceOf(WorklistException.class);
+            WorklistException refusal = (WorklistException) thrown;
+            assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("entries");
+        }
+        assertThat(((WorklistException) catchThrowable(() ->
+                ItemFields.booking(null, ITEM_ADDRESS))).offenders())
+            .as("and an absent list as well")
+            .containsExactly("entries");
+    }
+
+    /** An instance address is checked as a reference target is: text, not blank. */
+    @Test
+    void an_instance_address_is_text_that_is_not_blank_and_is_never_resolved() {
+        assertThat(ItemFields.reference("instance", " https://instances.example/run/12 "))
+            .isEqualTo("https://instances.example/run/12");
+        assertThat(ItemFields.reference("instance", "anything a caller positions"))
+            .as("the form is checked and the address is never followed")
+            .isEqualTo("anything a caller positions");
+
+        for (Object malformed : java.util.Arrays.asList("", "   ", 12, null)) {
+            WorklistException refusal = (WorklistException) catchThrowable(() ->
+                ItemFields.reference("instance", malformed));
+            assertThat(refusal.reason()).as("'%s'", malformed)
+                .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+            assertThat(refusal.offenders()).containsExactly("instance");
+        }
+    }
+
+    /**
+     * Per criterion and instance the latest entry holds: the later booking,
+     * and of two of the same instant the one the store numbered higher.
+     */
+    @Test
+    void the_latest_entry_per_criterion_and_instance_holds() {
+        Instant t1 = Instant.parse("2026-11-20T10:00:00Z");
+        Instant t2 = Instant.parse("2026-11-20T11:00:00Z");
+        ItemFulfilment first = entry(1, 1, "instance-a", "not_met", t1);
+        ItemFulfilment other = entry(2, 2, "instance-a", "met", t1);
+        ItemFulfilment elsewhere = entry(3, 1, "instance-b", "met", t1);
+        ItemFulfilment second = entry(4, 1, "instance-a", "met", t2);
+        ItemFulfilment sameInstantLower = entry(5, 2, "instance-a", "not_met", t2);
+        ItemFulfilment sameInstantHigher = entry(6, 2, "instance-a", "not_applicable", t2);
+
+        assertThat(ItemFields.latest(List.of(first, other, elsewhere, second, sameInstantLower,
+                sameInstantHigher)))
+            .as("ordered by criterion and instance, each the latest of its pair")
+            .containsExactly(second, elsewhere, sameInstantHigher);
+        assertThat(ItemFields.latest(List.of())).isEmpty();
+    }
+
+    /** The mark is derived from the two times and false without a close date. */
+    @Test
+    void an_entry_is_marked_after_close_exactly_when_booked_after_the_close_date() {
+        Instant closed = Instant.parse("2026-11-20T12:00:00Z");
+        ItemFulfilment before = entry(1, 1, "i", "met", closed.minusSeconds(1));
+        ItemFulfilment at = entry(2, 1, "i", "met", closed);
+        ItemFulfilment after = entry(3, 1, "i", "met", closed.plusNanos(1_000));
+
+        assertThat(ItemFields.afterClose(before, closed)).isFalse();
+        assertThat(ItemFields.afterClose(at, closed)).as("at the instant is not after").isFalse();
+        assertThat(ItemFields.afterClose(after, closed)).isTrue();
+        assertThat(ItemFields.afterClose(after, null))
+            .as("an item without a close date marks no entry")
+            .isFalse();
+    }
+
+    private static ItemFulfilment entry(long pk, long criterion, String instance, String status,
+                                        Instant bookedAt) {
+        ItemFulfilment entry = new ItemFulfilment();
+        entry.pk = pk;
+        entry.criterionNumber = criterion;
+        entry.instance = instance;
+        entry.status = status;
+        entry.evidence = "evidence " + pk;
+        entry.actor = "subject";
+        entry.bookedAt = bookedAt;
+        return entry;
     }
 
 }

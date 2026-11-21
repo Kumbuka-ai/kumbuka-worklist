@@ -67,9 +67,6 @@ class SurfaceCoverageIT {
 
     private static final UUID SCOPE_ID = UUID.fromString(SubstrateDatabaseResource.SCOPE_ID);
 
-    /** Roomy, so that a shared scope's earlier probes cannot exhaust the limit. */
-    private static final int GENEROUS = 1_000;
-
     /** The forms this run reached, as {@code METHOD path}. */
     private final Set<String> reached = new LinkedHashSet<>();
 
@@ -147,11 +144,11 @@ class SurfaceCoverageIT {
 
         // ---- plan, which is the membership coming into being -------------
         //
-        // The item has to carry a milestone on the product path. Assignment
-        // is `item.update` against `milestone` — the item verb runs the
-        // existence check — and the fixture below writes it over JDBC so the
-        // planning coverage does not run the same check that the item
-        // probes cover.
+        // The item is pointed at the milestone before it is planned; planning
+        // itself sets no condition on the milestone. Assignment is `item.update`
+        // against `milestone` — the item verb runs the existence check — and
+        // the fixture below writes it over JDBC so the planning coverage does
+        // not run the same check that the item probes cover.
         pointAtMilestone(itemAddress, milestoneNumber);
 
         iterationToken = call("POST", membership(iterationNumber, itemNumber), iterationToken,
@@ -248,6 +245,17 @@ class SurfaceCoverageIT {
             Map.of("tag", "no-such-tag"))
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
+
+        // ---- book, at item depth -------------------------------------------
+        //
+        // Reached, refused by the domain: the identifier names no criterion
+        // the item ever issued. The semantics sit in FulfilmentLedgerIT. It
+        // presents no token, and refused it writes nothing.
+        call("POST", item(Selector.ITEM, itemNumber) + ":book", null,
+            Map.of("instance", "https://instances.example/run/1", "entries", List.of(
+                Map.of("criterion", 9999, "status", "met", "evidence", "a report"))))
+            .statusCode(422)
+            .body("reason", org.hamcrest.Matchers.is("INVALID_VALUE"));
 
         // ---- the seven the scheme does not carry --------------------------
         for (String verb : List.of("send", "append", "abandon", "block", "resume", "consume")) {
@@ -447,29 +455,22 @@ class SurfaceCoverageIT {
     // =======================================================================
 
     /**
-     * The scope's settings row, with limits roomy enough for a shared scope.
+     * The scope's settings row, written by the act that opens the scope.
      *
      * <p>Written through the service rather than the surface, because the
      * surface does not carry it: {@code scope_setting} has no view and is not
      * addressed. That is the ratified design and not a gap in this probe — but
      * it does mean a scope cannot be opened over the machine surface at all,
-     * which is reported.
+     * which is reported. The opening names no number, so a scope a probe
+     * before this one opened has nothing to change.
      */
     private void openTheScope() {
-        Map<String, Object> limits = Map.of(
-            "max_planned_iterations", GENEROUS,
-            "warn_planned_iterations", GENEROUS,
-            "max_memberships_per_iteration", GENEROUS,
-            "warn_memberships_per_iteration", GENEROUS);
         try {
-            settings.create(SCOPE_ID, limits);
+            settings.create(SCOPE_ID, Map.of());
         } catch (WorklistException alreadyOpen) {
             if (alreadyOpen.reason() != WorklistException.Reason.SETTING_PRESENT) {
                 throw alreadyOpen;
             }
-            Map<String, Object> raise = new java.util.HashMap<>(limits);
-            raise.put("conflict_token", settingToken());
-            settings.update(SCOPE_ID, raise);
         }
     }
 

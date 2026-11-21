@@ -57,4 +57,7 @@ public interface ToolDescriptions {
 
     @Message
     String validate();
+
+    @Message
+    String book();
 }

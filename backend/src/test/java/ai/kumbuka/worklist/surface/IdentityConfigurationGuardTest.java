@@ -30,9 +30,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * C15.2 -- the acting identity is the token's subject, and the audience is
  * checked; the service does not start otherwise.
  *
- * <p>The principal is the author of every write and the holder of every
- * claim, so an unpinned principal does not merely record the wrong name: a
- * holder whose principal changes is refused its own claim.
+ * <p>The principal is what the scope directory decides access for and what a
+ * tag records as having attached it, so an unpinned principal does not merely
+ * record the wrong name: a caller whose principal changes loses the scopes it
+ * may enter.
  *
  * <h2>Why the shipped file is read as well</h2>
  *
@@ -101,7 +102,7 @@ class IdentityConfigurationGuardTest {
                 + "subject refuses the start, and says why")
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining(PRINCIPAL_CLAIM_KEY)
-            .hasMessageContaining("refused its own claim");
+            .hasMessageContaining("loses the scopes it may enter");
     }
 
     @Test

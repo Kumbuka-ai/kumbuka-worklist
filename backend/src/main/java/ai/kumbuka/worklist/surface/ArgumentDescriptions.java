@@ -78,4 +78,13 @@ public interface ArgumentDescriptions {
 
     @Message
     String tag();
+
+    @Message
+    String instance();
+
+    @Message
+    String entries();
+
+    @Message
+    String fulfilment();
 }

@@ -12,9 +12,12 @@ import ai.kumbuka.worklist.tenancy.TenantBound;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.jspecify.annotations.Nullable;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -32,8 +35,17 @@ import java.util.UUID;
  * description, and every one of them is WITHDRAWN rather than deleted. Those
  * rules are the same for all four, which is why they live in one class: three
  * tables exist only because the platform properties differ — a status carries
- * the four predicates, a relation type carries whether it blocks, an option
+ * the predicates, a relation type carries whether it blocks, an option
  * carries neither and belongs to a definition.
+ *
+ * <h2>What a scope uses</h2>
+ *
+ * Beside the vocabularies, a scope declares which optional predicates
+ * ({@code reviewed}, {@code approved}, {@code verified}) and which of
+ * {@code priority} and {@code severity} it uses ({@link ScopeUsage}). The
+ * consistency rules over one status are checked here, at declaration of a
+ * status and at declaration of a usage, and a declaration that breaks one
+ * writes nothing.
  *
  * <h2>The rank is the order of the vocabulary and never the alphabetical one</h2>
  *
@@ -65,6 +77,10 @@ public class VocabularyRegistry {
      * calls these methods writes one.
      */
 
+    /** The two usages under which an actionable status is also reviewed and approved. */
+    private static final Set<ScopeUsage.Property> REVIEW_OR_APPROVAL =
+        EnumSet.of(ScopeUsage.Property.REVIEWED, ScopeUsage.Property.APPROVED);
+
     @Inject VocabularyRepository vocabulary;
 
     // ------------------------------------------------------------------
@@ -72,17 +88,49 @@ public class VocabularyRegistry {
     // ------------------------------------------------------------------
 
     /**
-     * Declare a status value and the four predicates it maps onto.
-     *
-     * <p>The predicates are the whole of the meaning the platform guarantees
-     * about a status, and they are mandatory for that reason: a status that
-     * answered none of them would be a word this service cannot reason with.
+     * Declare a status value and the four predicates every scope answers,
+     * with {@code reviewed}, {@code approved} and {@code verified} false.
      */
     @Transactional
     public ItemStatus declareStatus(UUID scopeId, String name, int rank,
             boolean actionable, boolean inProgress, boolean closed, boolean successful) {
+        return declareStatus(scopeId, name, rank,
+            actionable, inProgress, closed, successful, false, false, false);
+    }
+
+    /**
+     * Declare a status value and the seven predicates it maps onto.
+     *
+     * <p>The predicates are the whole of the meaning the platform guarantees
+     * about a status, and they are mandatory for that reason: a status that
+     * answered none of them would be a word this service cannot reason with.
+     *
+     * <p>A status whose predicates contradict each other is refused with
+     * {@code INVALID_VALUE} before anything is written (TAR-0002 B3):
+     * {@code closed} together with {@code inProgress}; {@code verified}
+     * without {@code closed} and {@code successful}; and, in a scope that uses
+     * {@code reviewed} or {@code approved}, {@code actionable} without both
+     * {@code reviewed} and {@code approved}. {@code successful} without
+     * {@code closed} is accepted; an item answers it only where {@code closed}
+     * holds.
+     */
+    @Transactional
+    public ItemStatus declareStatus(UUID scopeId, String name, int rank,
+            boolean actionable, boolean inProgress, boolean closed, boolean successful,
+            boolean reviewed, boolean approved, boolean verified) {
         requireName(name);
-        if (closed && inProgress) {
+        ItemStatus status = new ItemStatus();
+        status.scopeId = scopeId;
+        status.name = name.trim();
+        status.rank = rank;
+        status.actionable = actionable;
+        status.inProgress = inProgress;
+        status.closed = closed;
+        status.successful = successful;
+        status.reviewed = reviewed;
+        status.approved = approved;
+        status.verified = verified;
+        if (status.contradicts(usesReviewOrApproval(scopeId))) {
             throw new WorklistException(
                 WorklistException.Reason.INVALID_VALUE,
                 List.of());
@@ -93,22 +141,66 @@ public class VocabularyRegistry {
         // side of the retry line the first success fell on. Sprint 180.4 also
         // makes the name the wire form for the write path, and a duplicate
         // declaration would produce two rows the lookup cannot distinguish.
-        ItemStatus existing = vocabulary.statusByName(scopeId, name.trim()).orElse(null);
+        ItemStatus existing = vocabulary.statusByName(scopeId, status.name).orElse(null);
         if (existing != null) {
             return existing;
         }
 
-        ItemStatus status = new ItemStatus();
-        status.scopeId = scopeId;
-        status.name = name.trim();
-        status.rank = rank;
-        status.actionable = actionable;
-        status.inProgress = inProgress;
-        status.closed = closed;
-        status.successful = successful;
         vocabulary.insert(status);
-
         return status;
+    }
+
+    // ------------------------------------------------------------------
+    // What a scope uses
+    // ------------------------------------------------------------------
+
+    /**
+     * Declare that a scope uses an optional predicate or property
+     * (DEC-0037 C5).
+     *
+     * <p>Idempotent, like every declaration here: a second declaration of the
+     * same usage answers the row that stands. Declaring {@code reviewed} or
+     * {@code approved} is refused with {@code INVALID_VALUE}, before anything
+     * is written, where a status of the scope -- withdrawn ones included,
+     * since items may still carry them -- would contradict the rules with the
+     * usage in place ({@link ItemStatus#contradicts}): above all one that is
+     * {@code actionable} without being both {@code reviewed} and
+     * {@code approved}. The scope would otherwise hold such a status from the
+     * moment of the declaration (TAR-0002 B3).
+     */
+    @Transactional
+    public ScopeUsage declareUsage(UUID scopeId, ScopeUsage.Property property) {
+        if (REVIEW_OR_APPROVAL.contains(property)
+                && vocabulary.statusesIn(scopeId).stream()
+                    .anyMatch(status -> status.contradicts(true))) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of());
+        }
+
+        ScopeUsage existing = vocabulary.usage(scopeId, property.token()).orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+
+        ScopeUsage usage = new ScopeUsage();
+        usage.scopeId = scopeId;
+        usage.name = property.token();
+        return vocabulary.insert(usage);
+    }
+
+    /** Everything a scope declared it uses; empty where it declared nothing. */
+    @Transactional
+    public Set<ScopeUsage.Property> usages(UUID scopeId) {
+        Set<ScopeUsage.Property> used = EnumSet.noneOf(ScopeUsage.Property.class);
+        for (String name : vocabulary.usagesIn(scopeId)) {
+            ScopeUsage.Property.byToken(name).ifPresent(used::add);
+        }
+        return used;
+    }
+
+    private boolean usesReviewOrApproval(UUID scopeId) {
+        return usages(scopeId).stream().anyMatch(REVIEW_OR_APPROVAL::contains);
     }
 
     /** Every status a scope declared, by rank then name. */
@@ -340,7 +432,39 @@ public class VocabularyRegistry {
     @Transactional
     public RelationType declareRelationType(UUID scopeId, String name, boolean blocks,
             int rank) {
+        return declareRelationType(scopeId, name, blocks, rank, null);
+    }
+
+    /**
+     * Declare a relation type with the target status of the duplicate
+     * relation (REA-0011 D18).
+     *
+     * <p>Only the type named {@link RelationType#DUPLICATE_OF} takes a target
+     * status, and the status is named by the name it is declared under in
+     * the same scope. Whether it is closed and not successful, and still
+     * declared, is asked at {@code relate}, where it decides; a target that
+     * fails it there refuses the relation rather than this declaration.
+     *
+     * @param targetStatus the name of the target status; absent where the
+     *                     type names none
+     */
+    @Transactional
+    public RelationType declareRelationType(UUID scopeId, String name, boolean blocks,
+            int rank, @Nullable String targetStatus) {
         requireName(name);
+        Long targetStatusPk = null;
+        if (targetStatus != null) {
+            if (!RelationType.DUPLICATE_OF.equals(name.trim())) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of());
+            }
+            targetStatusPk = vocabulary.statusByName(scopeId, targetStatus)
+                .orElseThrow(() -> new WorklistException(
+                    WorklistException.Reason.VALUE_UNDECLARED,
+                    List.of()))
+                .pk;
+        }
 
         // Idempotent for the same reason declareStatus is: the name is the
         // wire form of a relation entry, and a second row under the same name
@@ -355,6 +479,7 @@ public class VocabularyRegistry {
         type.name = name.trim();
         type.blocks = blocks;
         type.rank = rank;
+        type.targetStatusPk = targetStatusPk;
         vocabulary.insert(type);
 
         return type;

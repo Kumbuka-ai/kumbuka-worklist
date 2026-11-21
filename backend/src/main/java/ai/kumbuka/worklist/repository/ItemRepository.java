@@ -8,6 +8,8 @@
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Item;
+import ai.kumbuka.worklist.domain.ItemCriterion;
+import ai.kumbuka.worklist.domain.ItemFulfilment;
 import ai.kumbuka.worklist.domain.ItemReference;
 import ai.kumbuka.worklist.domain.ItemRelation;
 import ai.kumbuka.worklist.domain.PageRequest;
@@ -269,6 +271,53 @@ public class ItemRepository {
             .getResultList();
     }
 
+    /**
+     * Every acceptance criterion of an item, asserted and withdrawn alike, by
+     * number. The allocation of the next number reads this, because a number
+     * a withdrawn criterion holds is spent.
+     */
+    @Transactional
+    public List<ItemCriterion> criteriaOf(Item item) {
+        return em.createQuery(
+                "SELECT c FROM ItemCriterion c WHERE c.scopeId = :" + P_SCOPE
+                    + " AND c.itemNumber = :" + P_ITEM + " ORDER BY c.number",
+                ItemCriterion.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .getResultList();
+    }
+
+    /** The asserted criteria only, by number: what an item answers. */
+    @Transactional
+    public List<ItemCriterion> assertedCriteria(Item item) {
+        return em.createQuery(
+                "SELECT c FROM ItemCriterion c "
+                    + "WHERE c.scopeId = :" + P_SCOPE
+                    + " AND c.itemNumber = :" + P_ITEM
+                    + " AND c.status = :" + P_STATUS + " ORDER BY c.number",
+                ItemCriterion.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .setParameter(P_STATUS, ItemCriterion.ASSERTED)
+            .getResultList();
+    }
+
+    /**
+     * The fulfilment ledger of an item, every entry, in booking order: by
+     * the time of the booking, and by the row's surrogate where two share an
+     * instant.
+     */
+    @Transactional
+    public List<ItemFulfilment> fulfilmentOf(Item item) {
+        return em.createQuery(
+                "SELECT f FROM ItemFulfilment f WHERE f.scopeId = :" + P_SCOPE
+                    + " AND f.itemNumber = :" + P_ITEM + " ORDER BY f.bookedAt, f.pk",
+                ItemFulfilment.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .getResultList();
+    }
+
     // ------------------------------------------------------------------
     // Writing
     // ------------------------------------------------------------------
@@ -307,6 +356,30 @@ public class ItemRepository {
         reference.createdAt = now();
         reference.updatedAt = reference.createdAt;
         em.persist(reference);
+    }
+
+    /**
+     * Inserts an acceptance criterion. Flushed by the caller, once, after the
+     * list. As for a reference, nothing removes one: a criterion that leaves
+     * the list is withdrawn and keeps its number.
+     */
+    @Transactional
+    public void insertCriterion(ItemCriterion criterion) {
+        criterion.createdAt = now();
+        criterion.updatedAt = criterion.createdAt;
+        em.persist(criterion);
+    }
+
+    /**
+     * Inserts the entries of one booking, in their order, and flushes, so a
+     * constraint the table holds is reported at the call site. There is no
+     * counterpart that changes or removes an entry, and there cannot be: V30
+     * grants SELECT and INSERT on the ledger and nothing else.
+     */
+    @Transactional
+    public void insertFulfilment(List<ItemFulfilment> entries) {
+        entries.forEach(em::persist);
+        em.flush();
     }
 
     /** Flushes pending changes for the same reason {@link #insert} does. */

@@ -45,4 +45,10 @@ public interface ValueDescriptions {
 
     @Message
     String directionDesc();
+
+    @Message
+    String fulfilmentLatest();
+
+    @Message
+    String fulfilmentAll();
 }

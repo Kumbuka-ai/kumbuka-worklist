@@ -147,6 +147,7 @@ class MarkerProbeIT {
         minimal.put("validate", Map.of("scope", SCOPE, "selector", Selector.ITEM));
         minimal.put("tag_attach", Map.of("address", item));
         minimal.put("tag_detach", Map.of("address", item));
+        minimal.put("book", Map.of("address", item));
         minimal.forEach((tool, args) -> {
             Map<String, Object> with = new LinkedHashMap<>(args);
             with.put(MARKER, MARKER);
@@ -217,6 +218,19 @@ class MarkerProbeIT {
                 "fields", Map.of("status", MARKER))));
         absent(soft, "attach a marked tag", mcpRaw("tag_attach",
             Map.of("address", item, "tag", MARKER)));
+        absent(soft, "book a marked criterion", mcpRaw("book",
+            Map.of("address", item, "instance", "https://instances.example/run/1",
+                "entries", List.of(Map.of("criterion", MARKER, "status", "met",
+                    "evidence", "a report")))));
+        absent(soft, "book a marked status", mcpRaw("book",
+            Map.of("address", item, "instance", "https://instances.example/run/1",
+                "entries", List.of(Map.of("criterion", 1, "status", MARKER,
+                    "evidence", "a report")))));
+        absent(soft, "book a marked entry member", mcpRaw("book",
+            Map.of("address", item, "instance", "https://instances.example/run/1",
+                "entries", List.of(Map.of(MARKER, MARKER)))));
+        absent(soft, "read with a marked ledger option", mcpRaw("read",
+            Map.of("address", item, "fulfilment", MARKER)));
         absent(soft, "relate to a marked item", mcpRaw("relate",
             Map.of("address", item, "conflict_token", tokenOf(item),
                 "to_item", MARKER, "type", RELATION)));
@@ -255,6 +269,12 @@ class MarkerProbeIT {
         absent(soft, "an item verb", post(itemPath + "/1:" + MARKER, Map.of()));
         absent(soft, "a body argument", post(itemPath + "/1:tag_attach", Map.of(MARKER, MARKER)));
         absent(soft, "a tag", post(itemPath + "/1:tag_attach", Map.of("tag", MARKER)));
+        absent(soft, "a booking argument", post(itemPath + "/1:book", Map.of(MARKER, MARKER)));
+        absent(soft, "a booked status", post(itemPath + "/1:book", Map.of(
+            "instance", "https://instances.example/run/1", "entries", List.of(Map.of(
+                "criterion", 1, "status", MARKER, "evidence", "a report")))));
+        absent(soft, "a ledger option", given().queryParam("fulfilment", MARKER)
+            .when().get(itemPath + "/1").then().extract().asString());
         absent(soft, "an edge", post(itemPath + "/1:relate", Map.of("to_item", MARKER,
             "type", MARKER)));
         staleAbsent(soft, "a stale token", given().contentType(ContentType.JSON)
@@ -280,12 +300,17 @@ class MarkerProbeIT {
     // Notices
     // ======================================================================
 
+    /**
+     * A planning answer carries no notice: the platform constants of planning
+     * surface only as a refusal (TAR-0002 B11), so the warning that a planning
+     * write once carried is gone. The notice that remains, {@code validate}'s
+     * finding of a blocking cycle, is provoked instead, over items whose
+     * titles carry the caller's marker and a relation type that carries the
+     * tenant's, and its message repeats neither.
+     */
     @Test
-    void a_planning_notice_repeats_nothing_the_caller_or_the_tenant_wrote() {
-        // The scope warns at one membership: planning the second item provokes
-        // the notice. The item's own title carries the marker, and the
-        // notice must not.
-        Map<String, Object> created = items.create(SCOPE_ID,
+    void a_notice_repeats_nothing_the_caller_or_the_tenant_wrote() {
+        Map<String, Object> created = items.create(SCOPE_ID, "probe-subject",
             Map.of("title", MARKER, "status", OPEN, "milestone", 1)).answer();
         Object number = created.get("number");
         String iteration = address(Selector.ITERATION, 1);
@@ -294,16 +319,44 @@ class MarkerProbeIT {
                 "address", "worklist://" + SCOPE + "/iteration/1/" + number,
                 "conflict_token", tokenOf(iteration))))
             .when().post("/mcp").then().statusCode(200).extract();
-
-        List<String> warnings = planned.jsonPath()
-            .getList("result.structuredContent.fields.warnings", String.class);
         SoftAssertions soft = new SoftAssertions();
-        soft.assertThat(warnings).as("the notice is provoked").isNotEmpty();
-        for (String warning : warnings) {
-            soft.assertThat(warning).doesNotContainIgnoringCase(MARKER)
-                .doesNotContainIgnoringCase(TENANT);
+        soft.assertThat(planned.jsonPath().getBoolean("result.isError"))
+            .as("the plan is admitted").isFalse();
+        soft.assertThat(planned.jsonPath()
+                .getList("result.structuredContent.fields.warnings", String.class))
+            .as("and a planning answer carries no notice").isEmpty();
+
+        // a blocks b over the tenant's blocking relation type, and b blocks a.
+        UUID a = (UUID) created.get("id");
+        Map<String, Object> other = items.create(SCOPE_ID, "probe-subject",
+            Map.of("title", MARKER + " too", "status", OPEN)).answer();
+        UUID b = (UUID) other.get("id");
+        String addressOfA = address(Selector.ITEM, number);
+        String addressOfB = address(Selector.ITEM, other.get("number"));
+        items.relate(SCOPE_ID, a, addressOfB, RELATION, itemToken(a));
+        items.relate(SCOPE_ID, b, addressOfA, RELATION, itemToken(b));
+        try {
+            ExtractableResponse<Response> validated = given().contentType(ContentType.JSON)
+                .body(rpcCall("validate", Map.of("scope", SCOPE, "selector", Selector.ITEM)))
+                .when().post("/mcp").then().statusCode(200).extract();
+            List<String> messages = validated.jsonPath()
+                .getList("result.structuredContent.fields.findings.message", String.class);
+            soft.assertThat(messages).as("the notice of a blocking cycle is provoked")
+                .isNotEmpty();
+            for (String message : messages) {
+                soft.assertThat(message).doesNotContainIgnoringCase(MARKER)
+                    .doesNotContainIgnoringCase(TENANT);
+            }
+        } finally {
+            // The scope is shared by every case of this class: the ring goes.
+            items.unrelate(SCOPE_ID, a, addressOfB, RELATION, itemToken(a));
+            items.unrelate(SCOPE_ID, b, addressOfA, RELATION, itemToken(b));
         }
         soft.assertAll();
+    }
+
+    private String itemToken(UUID item) {
+        return (String) items.read(SCOPE_ID, item).get("conflict_token");
     }
 
     // ======================================================================
@@ -400,11 +453,7 @@ class MarkerProbeIT {
 
     private void stage() {
         SurfaceFixture.publishScope(SCOPE, SCOPE_ID, "project", false);
-        settings.create(SCOPE_ID, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 1));
+        settings.create(SCOPE_ID, Map.of());
         for (String view : Selector.VIEWS) {
             selectors.open(SCOPE_ID, view);
         }
@@ -421,7 +470,7 @@ class MarkerProbeIT {
             Map.of("title", "goal", "kind", "milestone")).answer();
         List<Object> numbers = new ArrayList<>();
         for (int i = 0; i < 2; i++) {
-            numbers.add(items.create(SCOPE_ID, Map.of("title", "marked " + i, "status", OPEN,
+            numbers.add(items.create(SCOPE_ID, "probe-subject", Map.of("title", "marked " + i, "status", OPEN,
                 "milestone", milestone.get("number"))).answer().get("number"));
         }
         iterations.create(SCOPE_ID, Map.of("title", "first", "motto", "m", "description", "d"));

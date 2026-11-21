@@ -1050,11 +1050,7 @@ class QueryNarrowingIT {
 
     private Staged stage() {
         SurfaceFixture.publishScope(SCOPE, SCOPE_ID, "project", false);
-        settings.create(SCOPE_ID, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(SCOPE_ID, Map.of());
         for (String view : Selector.VIEWS) {
             selectors.open(SCOPE_ID, view);
         }
@@ -1104,16 +1100,12 @@ class QueryNarrowingIT {
     /** Two items in the second scope, enough for one page and a cursor. */
     private void stageOtherScope() {
         SurfaceFixture.publishScope(OTHER_SCOPE, OTHER_SCOPE_ID, "project", false);
-        settings.create(OTHER_SCOPE_ID, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(OTHER_SCOPE_ID, Map.of());
         selectors.open(OTHER_SCOPE_ID, Selector.ITEM);
         vocabulary.declareStatus(OTHER_SCOPE_ID, OPEN, 1, true, false, false, false);
         workstreams.requireDefault(OTHER_SCOPE_ID);
         for (int i = 0; i < 2; i++) {
-            items.create(OTHER_SCOPE_ID, Map.of("title", "elsewhere " + i, "status", OPEN));
+            items.create(OTHER_SCOPE_ID, "probe-subject", Map.of("title", "elsewhere " + i, "status", OPEN));
         }
     }
 
@@ -1136,16 +1128,12 @@ class QueryNarrowingIT {
             if (!selectors.inScope(SCOPE_IN_B).isEmpty()) {
                 return;
             }
-            settings.create(SCOPE_IN_B, Map.of(
-                "max_planned_iterations", 10,
-                "warn_planned_iterations", 9,
-                "max_memberships_per_iteration", 10,
-                "warn_memberships_per_iteration", 9));
+            settings.create(SCOPE_IN_B, Map.of());
             selectors.open(SCOPE_IN_B, Selector.ITEM);
             vocabulary.declareStatus(SCOPE_IN_B, OPEN, 1, true, false, false, false);
             workstreams.requireDefault(SCOPE_IN_B);
             for (int i = 0; i < 2; i++) {
-                items.create(SCOPE_IN_B, Map.of("title", "in tenant B " + i, "status", OPEN));
+                items.create(SCOPE_IN_B, "probe-subject", Map.of("title", "in tenant B " + i, "status", OPEN));
             }
         }
     }
@@ -1157,7 +1145,7 @@ class QueryNarrowingIT {
         if (workstream != null) {
             fields.put("workstream", workstream);
         }
-        Map<String, Object> created = items.create(SCOPE_ID, fields).answer();
+        Map<String, Object> created = items.create(SCOPE_ID, "probe-subject", fields).answer();
         if (milestone != null) {
             items.update(SCOPE_ID, (UUID) created.get("id"), Map.of(
                 "milestone", milestone, "conflict_token", created.get("conflict_token")));

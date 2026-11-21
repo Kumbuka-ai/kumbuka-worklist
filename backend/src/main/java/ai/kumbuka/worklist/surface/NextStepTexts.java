@@ -53,4 +53,7 @@ public interface NextStepTexts {
 
     @Message
     String tagDetach();
+
+    @Message
+    String book();
 }

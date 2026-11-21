@@ -18,7 +18,6 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -72,17 +71,6 @@ public class Milestone extends AggregateRoot {
 
     /** Every value {@link #kind} admits, in the order V4's check constraint lists them. */
     public static final List<String> KINDS = List.of(GOAL, NOT_ASSESSED, OFF_PATH, NO_VISION);
-
-    /**
-     * The kinds that are ON the product path.
-     *
-     * <p>{@link #OFF_PATH} is the one that is not, by its own name.
-     * {@link #NOT_ASSESSED} is not on it either, and that is a reading rather
-     * than a restatement: "not yet assessed" is the absence of the judgement,
-     * and treating an unmade judgement as a positive one is how an item nobody
-     * has looked at reaches an iteration.
-     */
-    public static final Set<String> ON_THE_PRODUCT_PATH = Set.of(GOAL, NO_VISION);
 
     /** Declared, and not yet the one being worked towards. */
     public static final String PLANNED = "planned";
@@ -144,11 +132,6 @@ public class Milestone extends AggregateRoot {
 
     @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
-
-    /** Whether this milestone lets an item be planned at all. */
-    public boolean onTheProductPath() {
-        return ON_THE_PRODUCT_PATH.contains(kind);
-    }
 
     /**
      * Whether this milestone still takes a write: planned or active. A closed

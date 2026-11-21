@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,10 +40,14 @@ import java.util.UUID;
  * {@code validate} below. Every one of them is the platform's own word for the
  * act, spelled identically.
  *
- * <p>An item's state moves through {@code update} alone: a status the scope
- * declared as closed is reached by updating into it, and a closed item stays
- * writable. The intake gate {@code accept} and the withdrawal
- * {@code withdraw} left this scheme's surface with its target cut.
+ * <p>An item's state moves through {@code update}, and through one relation:
+ * a status the scope declared as closed is reached by updating into it, a
+ * closed item stays writable, and {@code relate} with the type
+ * {@code duplicate_of} closes the item into the target status that type
+ * declares (REA-0011 D18). Moving into a closed status sets
+ * {@code close_date}, and leaving one clears it. The intake gate
+ * {@code accept} and the withdrawal {@code withdraw} left this scheme's
+ * surface with its target cut.
  *
  * <p><strong>Identity is deliberate, and a shared name is not a collision.</strong>
  * These names exist in sibling services too, and that is the mechanism rather
@@ -66,7 +71,7 @@ import java.util.UUID;
  * <h2>The status is a declared value and this class knows none of them</h2>
  *
  * {@link Field#STATUS} carries the IDENTITY of a status the scope declared,
- * and the four predicates hang off that declaration rather than off a list in
+ * and the predicates hang off that declaration rather than off a list in
  * this file. That is the change this class exists on the far side of: the
  * shape it replaces carried five literals in a check constraint and a
  * matching list in Java, which is exactly the construction that makes a
@@ -127,10 +132,37 @@ public class ItemService {
     // Reading.
     // ------------------------------------------------------------------
 
+    /**
+     * How much of the fulfilment ledger a read answers under
+     * {@link Field#FULFILMENT}.
+     */
+    public enum Ledger {
+        /** Per criterion and instance the latest entry: what every answer carries. */
+        LATEST,
+        /** Every entry, in booking order: the option of {@code read}. */
+        ALL
+    }
+
     /** One item, as the canonical field map. */
     @Transactional
     public Map<String, Object> read(UUID scopeId, UUID itemId) {
         return project(require(scopeId, itemId));
+    }
+
+    /**
+     * One item, as the canonical field map, with the fulfilment ledger as
+     * the option asks: the latest entry per criterion and instance, or the
+     * whole ledger in booking order.
+     */
+    @Transactional
+    public Map<String, Object> read(UUID scopeId, UUID itemId, Ledger ledger) {
+        Item item = require(scopeId, itemId);
+        Map<String, Object> fields = project(item);
+        if (ledger == Ledger.ALL) {
+            fields.put(Field.FULFILMENT.canonicalName(),
+                fulfilmentOf(item, slugOf(item.scopeId), Ledger.ALL));
+        }
+        return fields;
     }
 
     /**
@@ -230,9 +262,17 @@ public class ItemService {
      * scope's counter inside this transaction. The head is the view, it is
      * known at creation, and an item that existed without an address would be
      * an item no verb could address.
+     *
+     * <p><strong>The creator is the caller, and the caller cannot say
+     * so.</strong> The surface hands in the subject it derived from the token,
+     * as it does for {@code tag_attach}; a {@code creator} in the fields is a
+     * field of the service and refused like any other.
+     *
+     * @param creator the calling subject, stored as the item's creator
      */
     @Transactional
-    public Written<Map<String, Object>, Item> create(UUID scopeId, Map<String, ?> arguments) {
+    public Written<Map<String, Object>, Item> create(UUID scopeId, String creator,
+            Map<String, ?> arguments) {
         Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
 
         List<String> notSettable = given.keySet().stream()
@@ -278,6 +318,7 @@ public class ItemService {
         item.statusPk = initialStatus.pk;
         item.number = number;
         item.workstreamNumber = workstream.number;
+        item.creator = creator;
         items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
@@ -289,7 +330,7 @@ public class ItemService {
         rest.remove(Field.TITLE);
         rest.remove(Field.STATUS);
         rest.remove(Field.WORKSTREAM_ID);
-        if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest)) {
+        if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest, true)) {
             items.flush();
         }
 
@@ -297,9 +338,12 @@ public class ItemService {
     }
 
     /**
-     * Change what is known about an item, its status included: the one way
-     * an item's state moves, into a closed status the scope declared as much
-     * as into any other, and a closed item takes the next write like any.
+     * Change what is known about an item, its status included: into a closed
+     * status the scope declared as much as into any other, and a closed item
+     * takes the next write like any. Moving from a status that is not closed
+     * into one that is sets {@code close_date}; moving out of a closed status
+     * clears it, because an open item has no close date (until S9, where an
+     * item still leaves a closed status this way).
      *
      * <p><strong>A write that changes nothing writes nothing.</strong> Not a
      * timestamp, not a rotated token, not a statement. The comparison below
@@ -322,7 +366,7 @@ public class ItemService {
         item.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
 
         Map<String, Object> current = project(item);
-        refuseUnsettableChanges(current, given);
+        refuseUnsettableChanges(current, withoutEchoedLedger(item, given));
 
         Map<Field, Object> settable = new EnumMap<>(Field.class);
         given.forEach((field, value) -> {
@@ -331,7 +375,7 @@ public class ItemService {
             }
         });
 
-        boolean changed = applyEffectiveChanges(item, current, settable);
+        boolean changed = applyEffectiveChanges(item, current, settable, false);
         if (!changed) {
             // The whole point. No statement is issued, so the modification
             // date and the token stay where they are, and the change trail
@@ -363,6 +407,15 @@ public class ItemService {
      * that had to present two tokens for one edge would be asked to prove that
      * nothing had moved on either item, which is a different rule from "this
      * change lands on top of the state I read".
+     *
+     * <p><strong>{@code duplicate_of} closes the item that carries it</strong>
+     * (TAR-0002 B5, REA-0011 D18): in the same write the source item moves
+     * into the target status the scope declared on that type and its
+     * {@code close_date} is set. Closing is open only where the item is not
+     * closed and the target status is declared, not withdrawn, of this scope,
+     * closed and not successful; otherwise the call is refused with
+     * {@code TRANSITION_REFUSED} before anything is written, so no edge is
+     * made and the token stays.
      */
     @Transactional
     public Written<Map<String, Object>, RelationWrite> relate(UUID scopeId, UUID itemId,
@@ -377,9 +430,21 @@ public class ItemService {
                 List.of(TO_ITEM));
         }
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName, TYPE);
+        Optional<ItemStatus> closing = type.isDuplicateOf()
+            ? Optional.of(closingStatus(item, type))
+            : Optional.empty();
 
         ItemRelation edge = findEdge(item, target.number, type.pk).orElse(null);
-        boolean changed;
+        boolean edgeChanged = edge == null || !ItemRelation.ASSERTED.equals(edge.status);
+        if (!edgeChanged && closing.isEmpty()) {
+            return Written.unchanged(project(item));
+        }
+
+        item.stamp(clock.instant());
+        closing.ifPresent(status -> {
+            item.statusPk = status.pk;
+            item.closeDate = item.changedAt;
+        });
         if (edge == null) {
             edge = new ItemRelation();
             edge.scopeId = scopeId;
@@ -387,20 +452,40 @@ public class ItemService {
             edge.toItemNumber = target.number;
             edge.relationTypePk = type.pk;
             items.insertEdge(edge);
-            changed = true;
-        } else if (!ItemRelation.ASSERTED.equals(edge.status)) {
+        } else if (edgeChanged) {
             edge.status = ItemRelation.ASSERTED;
-            changed = true;
-        } else {
-            changed = false;
         }
-
-        if (!changed) {
-            return Written.unchanged(project(item));
-        }
-        item.stamp(clock.instant());
         items.flushAndRefresh(item);
         return new Written<>(project(item), new RelationWrite(item, target));
+    }
+
+    /**
+     * The status a {@code duplicate_of} edge closes this item into, or the
+     * refusal by state where closing is not open: the item is closed already,
+     * or the type names no target status that is declared, not withdrawn, of
+     * the item's scope, closed and not successful (REA-0011 D18).
+     */
+    private ItemStatus closingStatus(Item item, RelationType type) {
+        if (closed(item.statusPk)) {
+            throw transitionRefused();
+        }
+        return Optional.ofNullable(type.targetStatusPk)
+            .flatMap(vocabulary::statusByPk)
+            .filter(status -> status.scopeId.equals(item.scopeId))
+            .filter(status -> DeclaredValue.DECLARED.equals(status.status))
+            .filter(status -> status.closed && !status.successful)
+            .orElseThrow(ItemService::transitionRefused);
+    }
+
+    /** Whether the status of that surrogate is a closed one. */
+    private boolean closed(@Nullable Long statusPk) {
+        return statusPk != null
+            && vocabulary.statusByPk(statusPk).map(status -> status.closed).orElse(false);
+    }
+
+    /** A refusal by the item's state; the surface adds the state and the open calls. */
+    private static WorklistException transitionRefused() {
+        return new WorklistException(WorklistException.Reason.TRANSITION_REFUSED, List.of());
     }
 
     /**
@@ -415,6 +500,9 @@ public class ItemService {
      * already-withdrawn one answers the same way — from a caller's side those
      * are one state, and the refusal names the triple so the caller knows
      * which of the three parts they got wrong.
+     *
+     * <p>Withdrawing a {@code duplicate_of} edge reopens nothing: the item
+     * stays in the status the edge closed it into (REA-0011 D18).
      */
     @Transactional
     public Written<Map<String, Object>, RelationWrite> unrelate(UUID scopeId, UUID itemId,
@@ -598,6 +686,29 @@ public class ItemService {
     }
 
     /**
+     * The given fields without a fulfilment ledger that is the whole ledger
+     * as the option of {@code read} answers it.
+     *
+     * <p>A read answers the ledger in one of two forms, and a read answer
+     * sent back is accepted in either. The latest form is compared like every
+     * read-only field, against the projection; the whole ledger is the other
+     * form of the same value and is taken here. Any other value is left in,
+     * and refused as a read-only field carrying a different value.
+     */
+    private Map<Field, Object> withoutEchoedLedger(Item item, Map<Field, Object> given) {
+        if (!given.containsKey(Field.FULFILMENT)
+                || !ItemFields.unchangedAsText(
+                    fulfilmentOf(item, slugOf(item.scopeId), Ledger.ALL),
+                    given.get(Field.FULFILMENT))) {
+            return given;
+        }
+        Map<Field, Object> rest = new EnumMap<>(Field.class);
+        rest.putAll(given);
+        rest.remove(Field.FULFILMENT);
+        return rest;
+    }
+
+    /**
      * Apply the settable fields that actually differ, and report whether any
      * did.
      *
@@ -612,12 +723,15 @@ public class ItemService {
      * a query lets the persistence context flush the changed item first; an
      * item changed and not yet stamped is refused at that flush. So a caller
      * of this method does not stamp again.
+     *
+     * @param creating whether the item is being created, which decides how a
+     *                 {@code duplicate_of} edge in the relations is refused
      */
     private boolean applyEffectiveChanges(Item item, Map<String, Object> current,
-            Map<Field, Object> settable) {
+            Map<Field, Object> settable, boolean creating) {
         boolean changed = false;
         for (Map.Entry<Field, Object> entry : settable.entrySet()) {
-            if (applyOne(item, current, entry.getKey(), entry.getValue()) && !changed) {
+            if (applyOne(item, current, entry.getKey(), entry.getValue(), creating) && !changed) {
                 item.stamp(clock.instant());
                 changed = true;
             }
@@ -626,7 +740,7 @@ public class ItemService {
     }
 
     private boolean applyOne(Item item, Map<String, Object> current, Field field,
-            @Nullable Object value) {
+            @Nullable Object value, boolean creating) {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
@@ -647,6 +761,10 @@ public class ItemService {
                 item.description = description;
                 return true;
             }
+            case CRITERIA -> {
+                // A member sent as null is absent (C7.4): the criteria stay.
+                return value != null && applyCriteria(item, value);
+            }
             case STATUS -> {
                 return applyStatus(item, held, field, value);
             }
@@ -663,10 +781,100 @@ public class ItemService {
                 return applyReferences(item, ItemFields.references(value));
             }
             case RELATIONS -> {
-                return applyRelations(item, ItemFields.relations(value));
+                return applyRelations(item, ItemFields.relations(value), creating);
+            }
+            case CONTRIBUTOR -> {
+                List<String> contributors = ItemFields.contributors(value);
+                if (Objects.equals(held, contributors)) {
+                    return false;
+                }
+                item.contributor = contributors.isEmpty() ? null : contributors;
+                return true;
+            }
+            case PARENT -> {
+                return applyParent(item, held, field, value);
+            }
+            case PRIORITY -> {
+                String priority = ItemFields.oneOf(field, ItemFields.PRIORITIES, value).orElse(null);
+                refuseUnused(item, ScopeUsage.Property.PRIORITY, field, priority);
+                if (Objects.equals(held, priority)) {
+                    return false;
+                }
+                item.priority = priority;
+                return true;
+            }
+            case SEVERITY -> {
+                String severity = ItemFields.oneOf(field, ItemFields.SEVERITIES, value).orElse(null);
+                refuseUnused(item, ScopeUsage.Property.SEVERITY, field, severity);
+                if (Objects.equals(held, severity)) {
+                    return false;
+                }
+                item.severity = severity;
+                return true;
             }
             default -> throw new IllegalStateException(
                 field.canonicalName() + " is settable and has no application");
+        }
+    }
+
+    /**
+     * Refuses a value for a property the item's scope does not use
+     * (DEC-0037 C5): such an item carries none, so a write that gives it one
+     * is {@code INVALID_VALUE} naming the field. The empty value passes, and
+     * so does a read answer sent back, which names no value there; neither
+     * changes a value the column holds from before the usage was declared.
+     */
+    private void refuseUnused(Item item, ScopeUsage.Property property, Field field,
+            @Nullable String value) {
+        if (value != null && !vocabulary.usages(item.scopeId).contains(property)) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(field.path()));
+        }
+    }
+
+    /**
+     * The parent: the item this item is part of, named by its address as
+     * {@code relate} names the other end, and an empty string clears it.
+     *
+     * <p>An address of another scope is refused as an item this scope does
+     * not hold. The item itself, and an item whose own chain of parents
+     * reaches this item, are refused as {@code INVALID_VALUE} naming the
+     * field: either would make the chain a cycle.
+     */
+    private boolean applyParent(Item item, @Nullable Object held, Field field,
+            @Nullable Object value) {
+        Optional<String> wanted = ItemFields.text(field, value);
+        if (ItemFields.unchangedAsText(held, wanted.orElse(null))) {
+            return false;
+        }
+        if (wanted.isEmpty()) {
+            item.parentNumber = null;
+            return true;
+        }
+        Item parent = resolveItemAddress(item.scopeId, wanted.get(), field.path());
+        refuseParentCycle(item, parent, field);
+        item.parentNumber = parent.number;
+        return true;
+    }
+
+    /**
+     * Walks the chain up from the would-be parent and refuses where it reaches
+     * the item. The chain in the store is free of cycles, because every write
+     * of a parent passed this walk; the set of numbers seen ends the walk
+     * anyway, so a chain planted around the domain cannot hold it forever.
+     */
+    private void refuseParentCycle(Item item, Item parent, Field field) {
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        Optional<Item> at = Optional.of(parent);
+        while (at.isPresent() && seen.add(at.get().number)) {
+            if (at.get().number.equals(item.number)) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(field.path()));
+            }
+            Long up = at.get().parentNumber;
+            at = up == null ? Optional.empty() : items.byAddress(item.scopeId, up);
         }
     }
 
@@ -837,6 +1045,11 @@ public class ItemService {
      * <p>The value travels as the string the reader saw — the display name
      * the scope declared the status under. A uuid on the wire is a form
      * refusal, and an unknown name is refused as an undeclared value.
+     *
+     * <p>The close date follows the predicate {@code closed} of the two
+     * statuses: set at the move from a status that is not closed into one
+     * that is, cleared at the move out of a closed one, and left as it is
+     * between two closed statuses or two open ones.
      */
     private boolean applyStatus(Item item, @Nullable Object held, Field field,
             @Nullable Object value) {
@@ -851,7 +1064,13 @@ public class ItemService {
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
                 List.of(field.path())));
+        boolean wasClosed = closed(item.statusPk);
         item.statusPk = status.pk;
+        if (!wasClosed && status.closed) {
+            item.closeDate = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        } else if (wasClosed && !status.closed) {
+            item.closeDate = null;
+        }
         return true;
     }
 
@@ -1089,6 +1308,144 @@ public class ItemService {
     }
 
     /**
+     * Set the acceptance criteria to exactly the given entries (REA-0011 S12,
+     * D14).
+     *
+     * <p><strong>Every identifier an entry names is checked before anything
+     * is written.</strong> It must name a living criterion of this item; one
+     * the item never issued, and one that was withdrawn, is
+     * {@code INVALID_VALUE} naming the field, and the write stops there.
+     *
+     * <p>Then, in the caller's order: an entry with an identifier sets that
+     * criterion's text where it differs; an entry without one is a new
+     * criterion and gets the next identifier, one after the highest the item
+     * ever issued, withdrawn criteria counted, so no identifier is issued
+     * twice. A living criterion the list leaves out is withdrawn, keeps its
+     * identifier and its text, and is no longer answered. The order of the
+     * list decides nothing but the order new identifiers are given in: an
+     * item answers its criteria by identifier.
+     *
+     * <p>Two writers on one item meet at the item's lock and conflict token
+     * before they reach this method, so the next identifier is read and
+     * issued by one of them at a time; the unique index of V29 over every
+     * criterion of the item is the second line.
+     *
+     * <p>A read answer sent back as it came names every living criterion with
+     * its text and so changes nothing, which is what keeps the item's
+     * timestamp and conflict token where they are.
+     */
+    private boolean applyCriteria(Item item, Object value) {
+        List<ItemFields.CriterionEntry> wanted =
+            ItemFields.criteria(value, addressOf(item, slugOf(item.scopeId)));
+        List<ItemCriterion> every = items.criteriaOf(item);
+        Map<Long, ItemCriterion> living = livingByNumber(every);
+        refuseUnknownCriteria(wanted, living);
+
+        java.time.Instant now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        long next = ItemFields.nextCriterionNumber(every);
+        java.util.Set<Long> kept = new java.util.HashSet<>();
+        boolean changed = false;
+        for (ItemFields.CriterionEntry entry : wanted) {
+            Long named = entry.number();
+            if (named == null) {
+                insertCriterion(item, next++, entry.text());
+                changed = true;
+            } else {
+                kept.add(named);
+                changed |= setCriterionText(living, named, entry.text(), now);
+            }
+        }
+        changed |= withdrawLeftOut(living.values(), kept, now);
+
+        if (changed) {
+            items.flush();
+        }
+        return changed;
+    }
+
+    /** The asserted criteria among these, keyed by their identifier. */
+    private static Map<Long, ItemCriterion> livingByNumber(List<ItemCriterion> every) {
+        Map<Long, ItemCriterion> living = new LinkedHashMap<>();
+        for (ItemCriterion criterion : every) {
+            if (ItemCriterion.ASSERTED.equals(criterion.status)) {
+                living.put(criterion.number, criterion);
+            }
+        }
+        return living;
+    }
+
+    /**
+     * Refuses an entry naming an identifier that is not among the living
+     * criteria -- one the item never issued, or one it withdrew -- before
+     * anything is written.
+     */
+    private static void refuseUnknownCriteria(List<ItemFields.CriterionEntry> wanted,
+            Map<Long, ItemCriterion> living) {
+        for (ItemFields.CriterionEntry entry : wanted) {
+            if (entry.number() != null && !living.containsKey(entry.number())) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(Field.CRITERIA.path()));
+            }
+        }
+    }
+
+    /** A new criterion of the item under the identifier given. */
+    private void insertCriterion(Item item, long number, String text) {
+        ItemCriterion criterion = new ItemCriterion();
+        criterion.scopeId = item.scopeId;
+        criterion.itemNumber = item.number;
+        criterion.number = number;
+        criterion.text = text;
+        items.insertCriterion(criterion);
+    }
+
+    /**
+     * Sets the text of a living criterion where it differs, and reports
+     * whether it did. The identifier was checked by
+     * {@link #refuseUnknownCriteria}.
+     */
+    private static boolean setCriterionText(Map<Long, ItemCriterion> living, Long number,
+            String text, java.time.Instant now) {
+        ItemCriterion criterion = Optional.ofNullable(living.get(number))
+            .orElseThrow(() -> new IllegalStateException("a named criterion was checked"));
+        if (criterion.text.equals(text)) {
+            return false;
+        }
+        criterion.text = text;
+        criterion.updatedAt = now;
+        return true;
+    }
+
+    /** Withdraws every living criterion the list left out, and reports whether any. */
+    private static boolean withdrawLeftOut(java.util.Collection<ItemCriterion> living,
+            java.util.Set<Long> kept, java.time.Instant now) {
+        boolean changed = false;
+        for (ItemCriterion criterion : living) {
+            if (!kept.contains(criterion.number)) {
+                criterion.status = ItemCriterion.WITHDRAWN;
+                criterion.updatedAt = now;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * The complete address of a stored item, {@code worklist://<scope>/item/<n>},
+     * as its read answers it: what a booking names the item's criteria under.
+     */
+    String addressOf(Item item) {
+        return addressOf(item, slugOf(item.scopeId));
+    }
+
+    /** The complete address of a stored item, which always has one. */
+    private static String addressOf(Item item, String scopeSlug) {
+        return itemAddressOf(scopeSlug, item.number)
+            .orElseThrow(() -> new IllegalStateException("a stored item has an address"));
+    }
+
+    /**
      * Set the relations to exactly the given set.
      *
      * <p>An edge that leaves the set is WITHDRAWN, never deleted — this
@@ -1104,9 +1461,23 @@ public class ItemService {
      * relations still can be written: no constraint expresses acyclicity,
      * the walk that finds one is a domain check with a red probe of its own,
      * and it is not built here.
+     *
+     * <p><strong>A {@code duplicate_of} edge is set and withdrawn by
+     * {@code relate} and {@code unrelate} alone</strong> (REA-0011 D18):
+     * setting it closes the item, and a whole-set write is an ordinary write
+     * that performs no transition. A set that adds or removes such an edge is
+     * refused before anything is written -- by state on an update, whose
+     * refusal names the open calls, and as a value outside what the field
+     * admits on a create, which has no object yet. An edge that stands and
+     * comes back unchanged with a read answer changes nothing and is
+     * accepted, so a read answer may go back as it came.
+     *
+     * @param creating whether the item is being created
      */
-    private boolean applyRelations(Item item, List<Map<String, Object>> wanted) {
+    private boolean applyRelations(Item item, List<Map<String, Object>> wanted,
+            boolean creating) {
         List<ResolvedEdge> resolved = new ArrayList<>(wanted.size());
+        java.util.Set<Long> duplicateTypes = new java.util.HashSet<>();
         for (Map<String, Object> entry : wanted) {
             String typeName = (String) entry.get(ItemFields.TYPE);
             String itemAddress = (String) entry.get(ItemFields.ITEM);
@@ -1117,10 +1488,14 @@ public class ItemService {
                     WorklistException.Reason.INVALID_VALUE,
                     List.of(Field.RELATIONS.path()));
             }
+            if (type.isDuplicateOf()) {
+                duplicateTypes.add(type.pk);
+            }
             resolved.add(new ResolvedEdge(type.pk, target.number));
         }
 
         List<ItemRelation> edges = items.edgesOf(item);
+        refuseDuplicateMoves(edges, resolved, duplicateTypes, creating);
         boolean changed = false;
 
         List<ResolvedEdge> present = new ArrayList<>();
@@ -1152,6 +1527,46 @@ public class ItemService {
             items.flush();
         }
         return changed;
+    }
+
+    /**
+     * Refuses a relation set that would assert or withdraw a
+     * {@code duplicate_of} edge, comparing the wanted set with the edges the
+     * item holds; an asserted edge wanted again is no move.
+     *
+     * @param duplicateTypes the surrogates of the wanted entries' types that
+     *                       are {@code duplicate_of}
+     */
+    private void refuseDuplicateMoves(List<ItemRelation> edges, List<ResolvedEdge> resolved,
+            java.util.Set<Long> duplicateTypes, boolean creating) {
+        List<ResolvedEdge> asserted = new ArrayList<>();
+        boolean moved = false;
+        for (ItemRelation edge : edges) {
+            if (!ItemRelation.ASSERTED.equals(edge.status)) {
+                continue;
+            }
+            ResolvedEdge key = new ResolvedEdge(edge.relationTypePk, edge.toItemNumber);
+            asserted.add(key);
+            boolean duplicate = vocabulary.relationTypeByPk(edge.relationTypePk)
+                .map(RelationType::isDuplicateOf).orElse(false);
+            if (duplicate && !resolved.contains(key)) {
+                moved = true;
+            }
+        }
+        for (ResolvedEdge entry : resolved) {
+            if (duplicateTypes.contains(entry.typePk()) && !asserted.contains(entry)) {
+                moved = true;
+            }
+        }
+        if (!moved) {
+            return;
+        }
+        if (creating) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(Field.RELATIONS.path()));
+        }
+        throw transitionRefused();
     }
 
     /** One resolved edge, keyed for set membership. */
@@ -1278,6 +1693,8 @@ public class ItemService {
      */
     private Map<String, Object> project(Item item) {
         String scopeSlug = slugOf(item.scopeId);
+        Set<ScopeUsage.Property> used = vocabulary.usages(item.scopeId);
+        Optional<ItemStatus> status = vocabulary.statusByPk(item.statusPk);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.ID.canonicalName(), item.id);
         fields.put(Field.SCOPE.canonicalName(), scopeSlug);
@@ -1285,14 +1702,33 @@ public class ItemService {
         fields.put(Field.NUMBER.canonicalName(), item.number);
         fields.put(Field.TITLE.canonicalName(), item.title);
         fields.put(Field.DESCRIPTION.canonicalName(), item.description);
-        fields.put(Field.STATUS.canonicalName(), statusNameOf(item.statusPk).orElse(null));
+        fields.put(Field.CRITERIA.canonicalName(), assertedCriteria(item, scopeSlug));
+        fields.put(Field.STATUS.canonicalName(), status.map(s -> s.name).orElse(null));
+        fields.put(Field.PREDICATES.canonicalName(),
+            status.map(s -> predicatesOf(s, used)).orElse(null));
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
         fields.put(Field.TAGS.canonicalName(), tagsOf(item));
+        fields.put(Field.FULFILMENT.canonicalName(), fulfilmentOf(item, scopeSlug, Ledger.LATEST));
         fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneNumber);
         fields.put(Field.WORKSTREAM_ID.canonicalName(),
             workstreamTokenOf(item.scopeId, item.workstreamNumber).orElse(null));
+        // The property core. A value an item does not carry is answered
+        // absent, so an item from before the core arrived reads as it did; the
+        // contributors are a list, and empty where there are none, as the tags.
+        // Priority and severity are answered only in a scope that uses them
+        // (DEC-0037 C5); a value the column holds elsewhere stays unanswered.
+        fields.put(Field.CREATOR.canonicalName(), item.creator);
+        fields.put(Field.CONTRIBUTOR.canonicalName(),
+            item.contributor == null ? List.of() : List.copyOf(item.contributor));
+        fields.put(Field.PARENT.canonicalName(),
+            itemAddressOf(scopeSlug, item.parentNumber).orElse(null));
+        fields.put(Field.PRIORITY.canonicalName(),
+            used.contains(ScopeUsage.Property.PRIORITY) ? item.priority : null);
+        fields.put(Field.SEVERITY.canonicalName(),
+            used.contains(ScopeUsage.Property.SEVERITY) ? item.severity : null);
+        fields.put(Field.CLOSE_DATE.canonicalName(), item.closeDate);
         fields.put(Field.CREATED_AT.canonicalName(), item.createdAt);
         fields.put(Field.CHANGED_AT.canonicalName(), item.changedAt);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(), item.conflictToken().orElse(null));
@@ -1319,12 +1755,35 @@ public class ItemService {
         }
     }
 
-    /** The display name of a declared status, if it has one. */
-    private Optional<String> statusNameOf(@Nullable Long statusPk) {
-        if (statusPk == null) {
-            return Optional.empty();
+    /**
+     * The predicates an item in this status answers, in the order of
+     * TAR-0002 Annex A1 (TAR-0002 B3, DEC-0037 C5).
+     *
+     * <p>{@code closed}, {@code actionable} and {@code in_progress} always;
+     * {@code successful} only where {@code closed} holds; {@code reviewed},
+     * {@code approved} and {@code verified} only where the scope uses them.
+     * One the item does not answer is left out of the object rather than
+     * answered false: false would say the scope asked and the answer is no.
+     */
+    static Map<String, Object> predicatesOf(ItemStatus status,
+            Set<ScopeUsage.Property> used) {
+        Map<String, Object> predicates = new LinkedHashMap<>();
+        predicates.put(ItemFields.CLOSED, status.closed);
+        if (status.closed) {
+            predicates.put(ItemFields.SUCCESSFUL, status.successful);
         }
-        return vocabulary.statusByPk(statusPk).map(status -> status.name);
+        predicates.put(ItemFields.ACTIONABLE, status.actionable);
+        predicates.put(ItemFields.IN_PROGRESS, status.inProgress);
+        if (used.contains(ScopeUsage.Property.REVIEWED)) {
+            predicates.put(ScopeUsage.Property.REVIEWED.token(), status.reviewed);
+        }
+        if (used.contains(ScopeUsage.Property.APPROVED)) {
+            predicates.put(ScopeUsage.Property.APPROVED.token(), status.approved);
+        }
+        if (used.contains(ScopeUsage.Property.VERIFIED)) {
+            predicates.put(ScopeUsage.Property.VERIFIED.token(), status.verified);
+        }
+        return Collections.unmodifiableMap(predicates);
     }
 
     /** The token of a workstream in a scope, if it has one. */
@@ -1404,6 +1863,63 @@ public class ItemService {
             entry.put(ItemFields.LABEL, reference.label);
             entry.put(ItemFields.TARGET, reference.target);
             answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
+    }
+
+    /**
+     * The living acceptance criteria, by identifier, each as its complete
+     * address and its text: the entry form a write takes back, so a read
+     * answer sent back as it came compares equal. A withdrawn criterion is
+     * not answered; an item without criteria answers an empty list, as it
+     * answers its references.
+     */
+    private List<Map<String, Object>> assertedCriteria(Item item, String scopeSlug) {
+        List<ItemCriterion> asserted = items.assertedCriteria(item);
+        if (asserted.isEmpty()) {
+            return List.of();
+        }
+        String itemAddress = addressOf(item, scopeSlug);
+        List<Map<String, Object>> answer = new ArrayList<>(asserted.size());
+        for (ItemCriterion criterion : asserted) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put(ItemFields.ADDRESS, ItemFields.criterionAddress(itemAddress, criterion.number));
+            entry.put(ItemFields.CRITERION_TEXT, criterion.text);
+            answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
+    }
+
+    /**
+     * The fulfilment ledger as an answer carries it: the latest entry per
+     * criterion and instance, or every entry in booking order; an empty list
+     * where nothing is booked, as the item answers its criteria.
+     *
+     * <p>Each entry names its criterion by the complete address the item
+     * answers it under, and carries whether it was booked after the item's
+     * current {@code close_date}: derived here from the two times and stored
+     * nowhere, so an item that closes, reopens and closes again marks its
+     * entries against the date it carries now.
+     */
+    private List<Map<String, Object>> fulfilmentOf(Item item, String scopeSlug, Ledger ledger) {
+        List<ItemFulfilment> booked = items.fulfilmentOf(item);
+        if (booked.isEmpty()) {
+            return List.of();
+        }
+        String itemAddress = addressOf(item, scopeSlug);
+        List<ItemFulfilment> answered = ledger == Ledger.ALL ? booked : ItemFields.latest(booked);
+        List<Map<String, Object>> answer = new ArrayList<>(answered.size());
+        for (ItemFulfilment entry : answered) {
+            Map<String, Object> rendered = new LinkedHashMap<>();
+            rendered.put(ItemFields.LEDGER_CRITERION,
+                ItemFields.criterionAddress(itemAddress, entry.criterionNumber));
+            rendered.put(ItemFields.LEDGER_INSTANCE, entry.instance);
+            rendered.put(ItemFields.LEDGER_STATUS, entry.status);
+            rendered.put(ItemFields.LEDGER_EVIDENCE, entry.evidence);
+            rendered.put(ItemFields.LEDGER_ACTOR, entry.actor);
+            rendered.put(ItemFields.LEDGER_BOOKED_AT, entry.bookedAt);
+            rendered.put(ItemFields.LEDGER_AFTER_CLOSE, ItemFields.afterClose(entry, item.closeDate));
+            answer.add(Collections.unmodifiableMap(rendered));
         }
         return List.copyOf(answer);
     }

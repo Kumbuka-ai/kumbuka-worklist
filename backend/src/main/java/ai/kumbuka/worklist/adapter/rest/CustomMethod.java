@@ -105,6 +105,13 @@ public enum CustomMethod {
     TAG_ATTACH("tag_attach", Depth.ITEM, Kind.CARRIED),
     TAG_DETACH("tag_detach", Depth.ITEM, Kind.CARRIED),
 
+    // ---- Carried, at item depth: the fulfilment ledger -------------------
+    //
+    // A write beside the item that presents no conflict token, as the tags:
+    // a custom method on the item URI. Only the item view answers to it.
+
+    BOOK("book", Depth.ITEM, Kind.CARRIED),
+
     // ---- Carried, at collection depth -----------------------------------
     //
     // {@code validate} was declared at item depth in the previous revision of

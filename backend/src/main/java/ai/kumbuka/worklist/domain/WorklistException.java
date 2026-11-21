@@ -294,22 +294,21 @@ public class WorklistException extends RuntimeException {
         ITERATION_ABSENT,
 
         /**
-         * The item may not enter an iteration: it is not actionable, or it
-         * carries no milestone, or its milestone is off the product path.
+         * The item may not enter an iteration: its status answers
+         * {@code closed} (TAR-0002 B9).
          *
-         * <p>All three cases carry the same offender, {@code address}; the
-         * refusal does not say which of them it found, although the remedy for
-         * each is different. The contract has no member that would carry the
+         * <p>The offender is {@code address}; the refusal does not name the
+         * status it found. The contract has no member that would carry the
          * value.
          */
         ITEM_UNPLANNABLE,
 
         /**
-         * The scope has no settings row, so its cardinality limits and its
-         * allocation counters do not exist yet.
+         * The scope has no settings row: it was never opened in this service,
+         * the act that writes the row together with the scope's views.
          *
-         * <p>Not created on first use: V4 leaves the four cardinality columns
-         * without defaults so that no layer can quietly pick them.
+         * <p>Not created by a read: a read never writes. Raised only by the
+         * calls that read or write the row itself.
          */
         SETTING_ABSENT,
 
@@ -325,10 +324,10 @@ public class WorklistException extends RuntimeException {
         IDEMPOTENCY_KEY_REUSED,
 
         /**
-         * A cardinality limit the scope set for itself would be exceeded.
-         *
-         * <p>The refusal carries the limit, so that a caller can tell a
-         * setting they may raise from a platform ceiling they may not.
+         * A platform constant of planning would be exceeded: the open
+         * iterations of a scope, or the memberships of an iteration
+         * (REA-0011 D9). The code of its own that D8 gives reaching a
+         * platform constant, and raised for nothing else.
          */
         CARDINALITY_EXCEEDED,
 

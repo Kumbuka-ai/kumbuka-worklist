@@ -65,15 +65,15 @@ class ReferenceKeyIT {
     void a_reference_by_number_resolves_to_the_item_of_its_scope() throws SQLException {
         try (Connection c = service()) {
             UUID item = item(c, 7);
-            execute(c, "INSERT INTO worklist.claim (tenant_id, scope_id, item_number, receipt, "
-                + "actor, expires_at) VALUES (?, ?, 7, 'r', 'a', now() + interval '1 hour')",
+            execute(c, "INSERT INTO worklist.item_reference (tenant_id, scope_id, item_number, "
+                + "ordinal, target, status) VALUES (?, ?, 7, 0, 'docs/a.md', 'asserted')",
                 TENANT, scope);
             c.commit();
 
-            assertThat(uuidOf(c, "SELECT i.id FROM worklist.claim cl JOIN worklist.item i "
-                    + "ON i.tenant_id = cl.tenant_id AND i.scope_id = cl.scope_id "
-                    + "AND i.number = cl.item_number WHERE cl.scope_id = ?", scope))
-                .as("the claim holds number 7, and (tenant, scope, number) names one item")
+            assertThat(uuidOf(c, "SELECT i.id FROM worklist.item_reference r JOIN worklist.item i "
+                    + "ON i.tenant_id = r.tenant_id AND i.scope_id = r.scope_id "
+                    + "AND i.number = r.item_number WHERE r.scope_id = ?", scope))
+                .as("the reference holds number 7, and (tenant, scope, number) names one item")
                 .isEqualTo(item);
         }
     }
@@ -84,8 +84,8 @@ class ReferenceKeyIT {
             item(c, 1);
             c.commit();
             SQLException refused = catchThrowableOfType(SQLException.class, () -> execute(c,
-                "INSERT INTO worklist.claim (tenant_id, scope_id, item_number, receipt, actor, "
-                    + "expires_at) VALUES (?, ?, 99, 'r', 'a', now() + interval '1 hour')",
+                "INSERT INTO worklist.item_reference (tenant_id, scope_id, item_number, ordinal, "
+                    + "target, status) VALUES (?, ?, 99, 0, 'docs/a.md', 'asserted')",
                 TENANT, scope));
             c.rollback();
             assertThat((Throwable) refused)
@@ -93,7 +93,7 @@ class ReferenceKeyIT {
                     + "reference the store used to accept as a uuid")
                 .isNotNull();
             assertThat(refused.getSQLState()).isEqualTo(FOREIGN_KEY_VIOLATION);
-            assertThat(refused.getMessage()).contains("fk_claim_item_number");
+            assertThat(refused.getMessage()).contains("fk_item_reference_item_number");
         }
     }
 
@@ -110,8 +110,8 @@ class ReferenceKeyIT {
             c.commit();
 
             SQLException refused = catchThrowableOfType(SQLException.class, () -> execute(c,
-                "INSERT INTO worklist.claim (tenant_id, scope_id, item_number, receipt, actor, "
-                    + "expires_at) VALUES (?, ?, 2, 'r', 'a', now() + interval '1 hour')",
+                "INSERT INTO worklist.item_reference (tenant_id, scope_id, item_number, ordinal, "
+                    + "target, status) VALUES (?, ?, 2, 0, 'docs/a.md', 'asserted')",
                 TENANT, scope));
             c.rollback();
             assertThat((Throwable) refused)

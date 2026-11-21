@@ -62,9 +62,7 @@ class AttributeColumnRoundTripIT {
     @BeforeEach
     void aScopeWithEveryStoredType() {
         scope = UUID.randomUUID();
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10, "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
         openName = vocabulary.declareStatus(scope, "open", 1, true, false, false, false).name;
         vocabulary.declareAttribute(scope, "note", "Note", "text", 1, false);
         vocabulary.declareAttribute(scope, "count", "Count", "number", 2, false);
@@ -146,7 +144,7 @@ class AttributeColumnRoundTripIT {
     // -----------------------------------------------------------------------
 
     private UUID created() {
-        Map<String, Object> answer = items.create(scope, Map.of(
+        Map<String, Object> answer = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "attribute round trip",
             Field.STATUS.canonicalName(), openName)).answer();
         return UUID.fromString(String.valueOf(answer.get(Field.ID.canonicalName())));

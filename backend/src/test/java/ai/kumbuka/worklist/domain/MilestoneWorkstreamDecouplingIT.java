@@ -80,9 +80,7 @@ class MilestoneWorkstreamDecouplingIT {
     void aScopeOfItsOwn() {
         scope = UUID.randomUUID();
         openStatus = vocabulary.declareStatus(scope, "open", 1, true, false, false, false).pk;
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10, "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
         selectors.open(scope, Selector.ITEM);
         selectors.open(scope, Selector.MILESTONE);
     }
@@ -151,7 +149,7 @@ class MilestoneWorkstreamDecouplingIT {
     // ==================================================================
 
     private UUID createItem(String title, UUID workstreamId) {
-        return (UUID) items.create(scope, Map.of(
+        return (UUID) items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(),

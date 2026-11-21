@@ -28,6 +28,7 @@ import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.PlatformLog;
 import ai.kumbuka.worklist.surface.ProtocolMessages;
+import ai.kumbuka.worklist.surface.SurfaceDeclaration;
 import ai.kumbuka.worklist.surface.SurfaceException;
 import ai.kumbuka.worklist.surface.UnexpectedFailures;
 import ai.kumbuka.worklist.surface.VerbInput;
@@ -128,6 +129,13 @@ public class McpAdapter {
 
     /** The token a tag verb attaches or detaches. */
     private static final String ARG_TAG = "tag";
+
+    /** The reporting instance and the entries of a booking. */
+    private static final String ARG_INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
+    private static final String ARG_ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
+
+    /** How much of an item's fulfilment ledger a read answers. */
+    private static final String ARG_FULFILMENT = SurfaceDeclaration.FULFILMENT_ARGUMENT;
 
     /** The query's filter and paging, as arguments rather than address parts. */
     private static final String ARG_FILTER = QueryFilter.FILTER_ARGUMENT;
@@ -371,6 +379,9 @@ public class McpAdapter {
             case "tag_attach" -> tagAttach(in);
             case "tag_detach" -> tagDetach(in);
 
+            // The fulfilment ledger, addressed at an item.
+            case "book" -> book(in);
+
             // Not in tools/list, and still answered by name.
             case "send", "append", "digest", "abandon", "block", "resume", "consume" ->
                 refused(in, verb, false);
@@ -387,12 +398,19 @@ public class McpAdapter {
     }
 
     private ObjectPayload read(Map<String, Object> in) {
+        Optional<String> fulfilment = text(in, ARG_FULFILMENT);
         Address at = address(in);
         String member = at.member();
+        if (member != null && fulfilment.isPresent()
+                && !SurfaceDeclaration.FULFILMENT_LATEST.equals(fulfilment.get())) {
+            // A membership carries no ledger: a form fault, decided before the scope.
+            throw SurfaceException.invalid(ARG_FULFILMENT);
+        }
         return dressed(at.scope(), member != null
             ? verbs.readMembership(caller.subject(), at.scope(), at.view(), at.head(),
                 member)
-            : verbs.read(caller.subject(), at.scope(), at.view(), at.head()));
+            : verbs.read(caller.subject(), at.scope(), at.view(), at.head(),
+                fulfilment.orElse(null)));
     }
 
     private Object update(Map<String, Object> in) {
@@ -480,6 +498,19 @@ public class McpAdapter {
         Address at = address(in);
         return dressed(at.scope(), verbs.tagDetach(caller.subject(), at.scope(), at.view(),
             at.head(), required(in, ARG_TAG)));
+    }
+
+    /**
+     * A booking. The instance and the entries are checked here for their
+     * JSON type alone, a form fault decided before the scope (C1.3); an empty
+     * instance or list is handed on and refused by the domain with the field
+     * it concerns. A missing one is refused by the surface after the scope.
+     */
+    private Object book(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.book(caller.subject(), at.scope(), at.view(),
+            at.head(), new VerbInput.Booking(text(in, ARG_INSTANCE).orElse(null),
+                list(in, ARG_ENTRIES).orElse(null))));
     }
 
     /**
@@ -606,6 +637,21 @@ public class McpAdapter {
             throw SurfaceException.invalid(name);
         }
         return Optional.of(text.toString());
+    }
+
+    /**
+     * An optional list argument; absent where the call left it out. A value
+     * of another JSON type is a form fault, decided before the scope (C1.3).
+     */
+    private static Optional<List<?>> list(Map<String, Object> in, String name) {
+        Object value = in.get(name);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (!(value instanceof List<?> elements)) {
+            throw SurfaceException.invalid(name);
+        }
+        return Optional.of(elements);
     }
 
     private static Optional<String> optional(Map<String, Object> in, String name) {

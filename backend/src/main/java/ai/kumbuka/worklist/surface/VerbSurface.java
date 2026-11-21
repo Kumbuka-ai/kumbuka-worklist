@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.AddressRegistry;
 import ai.kumbuka.worklist.domain.Field;
+import ai.kumbuka.worklist.domain.FulfilmentService;
 import ai.kumbuka.worklist.domain.IdempotencyService;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
@@ -146,6 +147,7 @@ public class VerbSurface {
     @Inject MembershipService memberships;
     @Inject OpenCallService openCalls;
     @Inject TagService tags;
+    @Inject FulfilmentService fulfilment;
     @Inject IdempotencyService idempotency;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
@@ -204,7 +206,7 @@ public class VerbSurface {
         }
 
         Map<String, Object> created = switch (in.view()) {
-            case Selector.ITEM -> logged(items.create(in.scopeId(), fields),
+            case Selector.ITEM -> logged(items.create(in.scopeId(), subject, fields),
                 PlatformLog.TechnicalAddress::of, address -> {
                     PlatformLog.itemCreated(address, in.scope());
                     PlatformLog.created(address, in.scope());
@@ -318,17 +320,56 @@ public class VerbSurface {
 
     @Transactional
     public Result read(String subject, String rawScope, String rawView, String rawId) {
+        return read(subject, rawScope, rawView, rawId, null);
+    }
+
+    /**
+     * Reads one object, an item with as much of its fulfilment ledger as the
+     * option asks.
+     *
+     * <p>The option is checked for form before the scope is resolved (C1.3):
+     * one of its two declared values. {@code all} answers the whole ledger
+     * of an item in booking order; on another view, which carries no ledger,
+     * it is refused as a value outside the form of the call.
+     *
+     * @param rawFulfilment the option as it arrived; absent where the call
+     *                      named none, and then the latest entry per
+     *                      criterion and instance is answered
+     */
+    @Transactional
+    public Result read(String subject, String rawScope, String rawView, String rawId,
+                       @Nullable String rawFulfilment) {
+        ItemService.Ledger ledger = ledger(rawFulfilment);
         Entry in = entry(subject, rawScope, rawView, Access.READ);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
+        if (ledger == ItemService.Ledger.ALL && !Selector.ITEM.equals(in.view())) {
+            throw SurfaceException.invalid(SurfaceDeclaration.FULFILMENT_ARGUMENT);
+        }
         UUID id = resolve(in, target);
 
         return opened(in, at(target, switch (in.view()) {
-            case Selector.ITEM -> items.read(in.scopeId(), id);
+            case Selector.ITEM -> items.read(in.scopeId(), id, ledger);
             case Selector.ITERATION -> iterations.read(in.scopeId(), id);
             case Selector.MILESTONE -> milestones.read(in.scopeId(), id);
             case Selector.WORKSTREAM -> workstreams.read(in.scopeId(), id);
             default -> throw unreachableView(in.view());
         }));
+    }
+
+    /**
+     * The option of {@code read} as the domain takes it, or the refusal of a
+     * value outside its declared two. A form fault, decided before the scope.
+     *
+     * @param raw the option as it arrived; absent where the call named none
+     */
+    private static ItemService.Ledger ledger(@Nullable String raw) {
+        if (raw == null || SurfaceDeclaration.FULFILMENT_LATEST.equals(raw)) {
+            return ItemService.Ledger.LATEST;
+        }
+        if (SurfaceDeclaration.FULFILMENT_ALL.equals(raw)) {
+            return ItemService.Ledger.ALL;
+        }
+        throw SurfaceException.invalid(SurfaceDeclaration.FULFILMENT_ARGUMENT);
     }
 
     /**
@@ -723,6 +764,57 @@ public class VerbSurface {
     }
 
     // ======================================================================
+    // The fulfilment ledger
+    // ======================================================================
+
+    /**
+     * Book what one instance reported against the acceptance criteria of an
+     * item.
+     *
+     * <p>A write, so the scope is resolved for writing and a subject without
+     * the write right meets {@code SCOPE_READ_ONLY}; every subject with it
+     * may book, on an item in any status, a closed one included. No conflict
+     * token: the ledger stands beside the item, and the item's token and
+     * timestamp stay as they are. The actor of every entry is the subject
+     * this surface derived from the token. Only an item carries a ledger; an
+     * address of another view is refused as a verb that view does not carry.
+     *
+     * <p>The instance and the entries are handed to the domain as they
+     * arrived; what they say is checked there, in one act, before anything is
+     * written.
+     *
+     * @param body the arguments the transport carried; absent where it
+     *             carried none, which this surface refuses as ARGUMENT_MISSING
+     */
+    @Transactional
+    public Result book(String subject, String rawScope, String rawView, String rawId,
+                       VerbInput.@Nullable Booking body) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, BOOK);
+        UUID id = resolve(in, target);
+
+        VerbInput.Booking booking = required(body, INSTANCE, ENTRIES);
+        if (booking.instance() == null && booking.entries() == null) {
+            throw SurfaceException.missing(INSTANCE, ENTRIES);
+        }
+        if (booking.instance() == null) {
+            throw SurfaceException.missing(INSTANCE);
+        }
+        if (booking.entries() == null) {
+            throw SurfaceException.missing(ENTRIES);
+        }
+
+        return opened(in, at(target, loggedAs(fulfilment.book(in.scopeId(), id,
+                booking.instance(), booking.entries(), subject),
+            entries -> {
+                PlatformLog.TechnicalAddress address =
+                    PlatformLog.TechnicalAddress.of(entries.get(0));
+                PlatformLog.fulfilmentBooked(address, PlatformLog.Count.of(entries), in.scope());
+                PlatformLog.booked(address, in.scope());
+            }, () -> { })));
+    }
+
+    // ======================================================================
     // The validation check
     // ======================================================================
 
@@ -921,6 +1013,7 @@ public class VerbSurface {
             case UNRELATE -> NextStepTexts::unrelate;
             case TAG_ATTACH -> NextStepTexts::tagAttach;
             case TAG_DETACH -> NextStepTexts::tagDetach;
+            case BOOK -> NextStepTexts::book;
         };
         return new NextStep(verb, call.view(), at, does);
     }
@@ -1116,6 +1209,9 @@ public class VerbSurface {
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String TAG = "tag";
+    private static final String BOOK = "book";
+    private static final String INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
+    private static final String ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
     private static final String CLOSE = "close";
     private static final String READ = "read";
     private static final String CREATE = "create";

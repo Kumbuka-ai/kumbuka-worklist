@@ -216,7 +216,7 @@ class TenantBindingEdgeCaseIT {
             // is addressed under has to exist first — and a selector is
             // tenant-scoped like the vocabulary above it.
             selectors.open(scope, ai.kumbuka.worklist.domain.Selector.ITEM);
-            var created = items.create(scope,
+            var created = items.create(scope, "probe-subject",
                 java.util.Map.of("title", "count-probe", "status", status)).answer();
             assertThat(created.get("title")).isEqualTo("count-probe");
 

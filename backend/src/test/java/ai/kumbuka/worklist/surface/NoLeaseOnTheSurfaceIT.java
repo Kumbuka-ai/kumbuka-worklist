@@ -40,8 +40,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>The lease's members are {@link AnswerChecks#LEASE_MEMBERS}; the five
  * calls that left the surface and the lease's four codes are written here.
- * The store keeps its lease columns until the release after this one; what
- * is probed is that nothing reaches a caller from them.
+ * The store no longer holds a lease either: V31 dropped its table, and
+ * {@code SchemaConstraintIT} and {@code ServiceRolePrivilegeIT} assert its
+ * absence from the catalog. What is probed here is the surface: that nothing
+ * of a lease reaches a caller.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -51,7 +53,6 @@ class NoLeaseOnTheSurfaceIT {
     private static final UUID SCOPE_ID = UUID.fromString("10a5e000-0000-4000-8000-000000000001");
     private static final String OPEN = "nl-open";
     private static final String DONE = "nl-done";
-    private static final int GENEROUS = 1_000;
 
     /** The calls that left the surface with the target cut. */
     private static final List<String> RETIRED = List.of("accept", "withdraw", "claim",
@@ -84,10 +85,7 @@ class NoLeaseOnTheSurfaceIT {
             vocabulary.declareStatus(SCOPE_ID, DONE, 2, false, false, true, true);
             workstreams.requireDefault(SCOPE_ID);
             try {
-                settings.create(SCOPE_ID, Map.of(
-                    "max_planned_iterations", GENEROUS, "warn_planned_iterations", GENEROUS,
-                    "max_memberships_per_iteration", GENEROUS,
-                    "warn_memberships_per_iteration", GENEROUS));
+                settings.create(SCOPE_ID, Map.of());
             } catch (WorklistException alreadyThere) {
                 assertThat(alreadyThere.reason())
                     .isEqualTo(WorklistException.Reason.SETTING_PRESENT);

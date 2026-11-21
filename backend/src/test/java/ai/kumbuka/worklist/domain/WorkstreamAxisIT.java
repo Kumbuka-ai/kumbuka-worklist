@@ -63,9 +63,7 @@ class WorkstreamAxisIT {
     void aScopeOfItsOwn() {
         scope = UUID.randomUUID();
         openStatus = vocabulary.declareStatus(scope, "open", 1, true, false, false, false).pk;
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10, "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
     }
 
     // ==================================================================
@@ -144,7 +142,7 @@ class WorkstreamAxisIT {
     void rename_is_refused_once_an_item_points_at_the_workstream() {
         Workstream ws = workstreams.declare(scope, "beta", "beta description");
         selectors.open(scope, Selector.ITEM);
-        items.create(scope, Map.of(
+        items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "an item in beta",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(), ws.token));
@@ -177,7 +175,7 @@ class WorkstreamAxisIT {
         // A withdrawn workstream cannot take new items — refuseWithdrawn
         // fires through ItemService.resolveWorkstream.
         selectors.open(scope, Selector.ITEM);
-        WorklistException refusal = refusalFrom(() -> items.create(scope, Map.of(
+        WorklistException refusal = refusalFrom(() -> items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "an item under a withdrawn ws",
             Field.STATUS.canonicalName(), vocabulary.requireStatus(scope, openStatus).name,
             Field.WORKSTREAM_ID.canonicalName(), withdrawn.token)));

@@ -134,9 +134,12 @@ public final class DeclarationSpecification {
                 Arg.opt("idempotency_key", "string", null)),
             reasons(WRITE, List.of("SELECTOR_DECLARED_NOT_WRITTEN", "FIELD_RETRACTED",
                 "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
-                "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "SETTING_ABSENT",
+                "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING",
                 "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED"))),
-        new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS),
+        // fulfilment: the latest entry per criterion and instance, or the
+        // whole ledger in booking order.
+        new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS,
+                new Arg("fulfilment", "string", false, "latest", List.of("latest", "all"))),
             reasons(List.of("SELECTOR_UNDECLARED", "ITERATION_ABSENT"))),
         new Verb("worklist_update", "FIELD_WRITE", "OBJECT",
             List.of(ADDRESS, TOKEN, FIELDS),
@@ -164,13 +167,15 @@ public final class DeclarationSpecification {
         new Verb("worklist_plan", "GRAPH_ADD_OR_REMOVE", "OBJECT_CREATED",
             List.of(ADDRESS, TOKEN),
             reasons(WRITE, TOKENED, List.of("MEMBERSHIP_PRESENT", "TRANSITION_REFUSED",
-                "ITEM_UNPLANNABLE", "SETTING_ABSENT", "CARDINALITY_EXCEEDED"))),
+                "ITEM_UNPLANNABLE", "CARDINALITY_EXCEEDED"))),
         new Verb("worklist_unplan", "GRAPH_ADD_OR_REMOVE", "OBJECT", List.of(ADDRESS, TOKEN),
             reasons(WRITE, TOKENED, List.of("TRANSITION_REFUSED"))),
+        // TRANSITION_REFUSED: duplicate_of closes the item and is open only
+        // where closing is (REA-0011 D18).
         new Verb("worklist_relate", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
-                "VALUE_UNDECLARED"))),
+                "VALUE_UNDECLARED", "TRANSITION_REFUSED"))),
         new Verb("worklist_unrelate", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
@@ -183,7 +188,12 @@ public final class DeclarationSpecification {
         new Verb("worklist_tag_attach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
             reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED", "TAG_WITHDRAWN"))),
         new Verb("worklist_tag_detach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
-            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED"))));
+            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED"))),
+        // The fulfilment ledger: a write beside the item that presents no
+        // conflict token, as the tags; the entries are a list.
+        new Verb("worklist_book", "ITEM_TRANSITION", "OBJECT",
+            List.of(ADDRESS, Arg.req("instance", "string"), Arg.req("entries", "array")),
+            reasons(WRITE, List.of("VERB_UNCARRIED", "INVALID_VALUE"))));
 
     @SafeVarargs
     private static List<String> reasons(List<String>... groups) {

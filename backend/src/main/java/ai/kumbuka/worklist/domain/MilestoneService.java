@@ -44,8 +44,8 @@ import java.util.function.Consumer;
  * {@link Field#MILESTONE_ID}. A verb here would be the surface's, and the
  * verb catalogue's mapping table for this scheme names none — {@code update}
  * carries iteration order and membership status on the planning side, and
- * nothing else. The precondition in {@link MembershipService#plan} — that an
- * item carries a milestone on the product path — is met by the item verb.
+ * nothing else. Planning reads no milestone: {@link MembershipService#plan}
+ * admits an item whatever its milestone.
  *
  * <h2>At most one active, and setting one demotes the other</h2>
  *
@@ -225,7 +225,6 @@ public class MilestoneService extends PlanningService {
      * counter is where its next number belongs.
      */
     private long allocateNumber(UUID scopeId) {
-        requireSetting(scopeId);
         return selectors.allocate(scopeId, Selector.MILESTONE);
     }
 

@@ -180,15 +180,49 @@ public enum Field {
     DESCRIPTION("description", Set.of(ITEM, ITERATION), Set.of(ITEM, ITERATION)),
 
     /**
+     * The acceptance criteria of an item (REA-0011 S12, D14), as a list of
+     * entries carrying the criterion's {@code address}
+     * {@code worklist://<scope>/item/<n>/criterion/<k>} and its {@code text},
+     * and nothing else; answered by identifier, living criteria only, and an
+     * empty list where there are none.
+     *
+     * <p>Written as a whole, in the same entry form. An entry without an
+     * address is a new criterion, and the service gives it the next
+     * identifier the item never issued; an entry with an address names a
+     * living criterion of this item and sets its text; a living criterion the
+     * list leaves out is withdrawn, and its identifier stays spent. A caller
+     * never chooses an identifier. Criteria that stand as prose in a
+     * description stay there.
+     *
+     * <p>As writable as the description until the field classes per phase
+     * arrive with a later step (REA-0011 S10), which freezes them at submit.
+     */
+    CRITERIA("criteria", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
      * On an item, the identity of a status the SCOPE declared. On a
      * milestone, one of three values the platform fixes.
      *
      * <p>The asymmetry is the concept's rather than an oversight. An item's
-     * status is a scope's way of describing its own work and the four
-     * predicates hang off it; a milestone is planned, active or closed, and
+     * status is a scope's way of describing its own work and the
+     * predicates hang off it ({@link #PREDICATES}); a milestone is planned, active or closed, and
      * those three are the platform's planning mechanism.
      */
     STATUS("status", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
+
+    /**
+     * The predicates an item answers from its status (TAR-0002 B3, Annex
+     * A1), as one object: {@code closed}, {@code actionable} and
+     * {@code in_progress} always; {@code successful} only where
+     * {@code closed} holds; {@code reviewed}, {@code approved} and
+     * {@code verified} only where the item's scope uses them. A predicate the
+     * item does not answer is absent from the object, never false.
+     *
+     * <p>Read-only: a predicate holds because the status declares it, and the
+     * status changes through {@code update} (REA-0011 D1). A read answer sent
+     * back with it unchanged is accepted, as every read-only field is.
+     */
+    PREDICATES("predicates", Set.of(ITEM), Set.of()),
 
     /**
      * The declared attributes, as a map from a definition's stable key to its
@@ -236,6 +270,29 @@ public enum Field {
      */
     TAGS("tags", Set.of(ITEM), Set.of()),
 
+    /**
+     * The item's fulfilment ledger as a read answers it: per criterion and
+     * instance the latest entry, ordered by criterion and instance, each with
+     * {@code criterion} (the criterion's complete address), {@code instance},
+     * {@code status} (one of {@code met}, {@code not_met},
+     * {@code not_applicable}), {@code evidence}, {@code actor},
+     * {@code booked_at} and {@code after_close}; an empty list where nothing
+     * is booked. A read with the option for the whole ledger answers every
+     * entry in booking order instead.
+     *
+     * <p>{@code after_close} is derived at the read from the entry's
+     * {@code booked_at} and the item's current {@code close_date}, and stored
+     * nowhere: true exactly where the item carries a {@code close_date} and
+     * the entry was booked after it.
+     *
+     * <p>Read-only: the ledger stands beside the item and is not its content.
+     * It is written by {@code book} alone, append only, and booking moves
+     * neither the item's change time nor its conflict token. A read answer
+     * sent back with its ledger unchanged is accepted, as every read-only
+     * field is, in either of the two forms a read answers.
+     */
+    FULFILMENT("fulfilment", Set.of(ITEM), Set.of()),
+
     // --- the goal axis ----------------------------------------------------
 
     /**
@@ -274,6 +331,49 @@ public enum Field {
      * a selector token. A uuid here is a form refusal.
      */
     WORKSTREAM_ID("workstream", Set.of(ITEM), Set.of(ITEM)),
+
+    // --- the item's property core (DEC-0037 C3, TAR-0002 Annex A2) -------
+
+    /**
+     * The identity that created the item. Read-only: the service writes the
+     * calling subject at the create (TAR-0002 B4), and a caller who names one
+     * is refused as for any field of the service.
+     */
+    CREATOR("creator", Set.of(ITEM), Set.of()),
+
+    /**
+     * The identities of the platform responsible for the work the item needs,
+     * as a list of text in the caller's order; any number.
+     */
+    CONTRIBUTOR("contributor", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * The item this item is part of, as its address
+     * {@code worklist://<scope>/item/<number>}: at most one, in the same
+     * scope, the chain free of cycles.
+     */
+    PARENT("parent", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * One of {@code high}, {@code medium}, {@code low}, {@code unassigned}.
+     * Carried only by an item of a scope that uses it (DEC-0037 C5); in any
+     * other scope the answer names none, a value is refused, and a value
+     * stored before stays in the column.
+     */
+    PRIORITY("priority", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * One of {@code blocker}, {@code critical}, {@code major}, {@code normal},
+     * {@code minor}, {@code unassigned}. Carried only by an item of a scope
+     * that uses it, as {@link #PRIORITY}.
+     */
+    SEVERITY("severity", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * When the item closed. Read-only: the service writes it when the item
+     * moves into a closed status, and clears it when the item leaves one.
+     */
+    CLOSE_DATE("close_date", Set.of(ITEM), Set.of()),
 
     /**
      * Whether a milestone is a goal or one of the three positions on the axis
@@ -363,20 +463,6 @@ public enum Field {
      */
     CURRENT_ITERATION("current_iteration", Set.of(SETTING), Set.of()),
 
-    /** The hard limit on iterations open at once. Refuses. */
-    MAX_PLANNED_ITERATIONS("max_planned_iterations", Set.of(SETTING), Set.of(SETTING)),
-
-    /** The advisory threshold below that limit. Warns and admits. */
-    WARN_PLANNED_ITERATIONS("warn_planned_iterations", Set.of(SETTING), Set.of(SETTING)),
-
-    /** The hard limit on memberships of one iteration. Refuses. */
-    MAX_MEMBERSHIPS_PER_ITERATION("max_memberships_per_iteration",
-        Set.of(SETTING), Set.of(SETTING)),
-
-    /** The advisory threshold below that limit. Warns and admits. */
-    WARN_MEMBERSHIPS_PER_ITERATION("warn_memberships_per_iteration",
-        Set.of(SETTING), Set.of(SETTING)),
-
     /** The declared default column set of a reader's first view. */
     DEFAULT_COLUMNS("default_columns", Set.of(SETTING), Set.of(SETTING)),
 
@@ -389,8 +475,10 @@ public enum Field {
     CHANGED_AT("changed_at", Set.of(ITEM), Set.of()),
 
     /**
-     * What a write admitted and wants noticed: the cardinality thresholds a
-     * scope set for itself, reached but not exceeded.
+     * What a write admitted and wants noticed. No planning write produces a
+     * warning today: the platform constants of planning surface only as a
+     * refusal (TAR-0002 B11), so the list is empty on every answer that
+     * carries it.
      *
      * <p>Always present and usually empty, rather than present only when
      * there is something to say. A key that appears and disappears is a key

@@ -45,9 +45,9 @@ declaration at `GET /api/declaration`, `GET /api/whoami` and the health
 endpoint.
 
 The lease (`claim`, `claim_next`, `release`) has left the surface: no answer
-carries a holder or a receipt. Its table stays in the schema until the
-release after this one removes it, so that the image before this one still
-runs against this schema.
+carries a holder or a receipt. Its table `claim` left the schema one release
+later (V31): the image before that step no longer read or wrote it, so it
+runs against the schema without the table.
 
 ## How isolation is built
 
