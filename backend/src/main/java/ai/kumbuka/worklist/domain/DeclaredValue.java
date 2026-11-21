@@ -60,8 +60,8 @@ import java.time.Instant;
  *
  * {@link #status} is the declaration's own lifecycle and not the value the row
  * defines. A value that was written onto items has to stay resolvable, or
- * those items become unreadable in their own history — and nothing in this
- * schema holds a DELETE privilege in any case.
+ * those items become unreadable in their own history — and no table of a
+ * declared value holds a DELETE privilege in any case.
  */
 @MappedSuperclass
 public abstract class DeclaredValue extends TenantScoped {

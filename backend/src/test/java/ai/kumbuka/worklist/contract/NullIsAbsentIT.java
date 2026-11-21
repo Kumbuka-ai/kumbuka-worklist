@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.contract;
 
+import ai.kumbuka.worklist.domain.ItemLifecycle;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.ScopeSettingService;
@@ -117,6 +118,13 @@ class NullIsAbsentIT {
             "sort", "id", "direction", "asc"));
         calls.put("close", args("address", iteration, "conflict_token", "stale",
             "produced", "a release"));
+        // The transitions of an item (REA-0011 D1), each with a stale token:
+        // refused, so the item stays in its phase.
+        calls.put("submit", args("address", item, "conflict_token", "stale"));
+        calls.put("discard", args("address", item, "conflict_token", "stale"));
+        calls.put("start", args("address", item, "conflict_token", "stale", "status", "open"));
+        calls.put("return", args("address", item, "conflict_token", "stale",
+            "reason", "back to the pool", "status", "open"));
         calls.put("advance", args("scope", SCOPE, "selector", Selector.ITERATION,
             "conflict_token", "stale"));
         calls.put("plan", args("address", membership, "conflict_token", "stale"));
@@ -341,6 +349,10 @@ class NullIsAbsentIT {
             "entries", List.of(Map.of("criterion", 9999, "status", "met",
                 "evidence", "a report"))));
         bodies.put("/api/" + SCOPE + "/iteration/1:close", args("produced", "a release"));
+        // The transitions of an item, without If-Match: refused, so nothing moves.
+        bodies.put(itemPath + "/1:close", args("reason", "done with it", "status", "done"));
+        bodies.put(itemPath + "/1:start", args("status", "open"));
+        bodies.put(itemPath + "/1:return", args("reason", "back to the pool", "status", "open"));
 
         SoftAssertions soft = new SoftAssertions();
         bodies.forEach((path, body) -> {
@@ -453,8 +465,10 @@ class NullIsAbsentIT {
         vocabulary.declareAttribute(SCOPE_ID, "note", "Note", "text", 1, false);
         vocabulary.declareAttribute(SCOPE_ID, "size", "Size", "text", 2, false);
         workstreams.requireDefault(SCOPE_ID);
+        // Open items, so that a booking on them meets the ledger and not the
+        // phase draft, which takes none (REA-0011 Annex A1).
         for (int i = 0; i < 2; i++) {
-            items.create(SCOPE_ID, "probe-subject", Map.of("title", "null probe " + i, "status", "open"));
+            ItemLifecycle.open(items, SCOPE_ID, Map.of("title", "null probe " + i, "status", "open"));
         }
         iterations.create(SCOPE_ID, Map.of("title", "first", "motto", "m", "description", "d"));
     }

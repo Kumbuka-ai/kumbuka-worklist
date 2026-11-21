@@ -110,9 +110,10 @@ import java.util.regex.Pattern;
  * act exists and runs on the selector-declaration surface, not here. {@code read}
  * and {@code query} on the same view do act — a workstream is addressable like
  * any other declared view — and every other verb refuses on the existing view
- * checks (item-only for the graph and tag verbs, iteration-only for
- * {@code advance}, iteration-and-milestone for {@code close}, iteration-only
- * for the membership addresses).
+ * checks (item-only for the graph and tag verbs and for {@code submit},
+ * {@code discard}, {@code start} and {@code return}, iteration-only for
+ * {@code advance}, iteration, milestone and item for {@code close},
+ * iteration-only for the membership addresses).
  */
 @ApplicationScoped
 @TenantBound
@@ -191,12 +192,35 @@ public class VerbSurface {
     @Transactional
     public Result create(String subject, String rawScope, String rawView,
                          VerbInput.@Nullable Fields body, @Nullable String idempotencyKey) {
+        return create(subject, rawScope, rawView, body, idempotencyKey, false);
+    }
+
+    /**
+     * {@link #create(String, String, String, VerbInput.Fields, String)}, and
+     * on the item view a draft that is submitted in the same act (REA-0011
+     * D12): the REST surface's alone, which the MCP adapter never passes. On
+     * another view it is a value the call does not take.
+     *
+     * <p>A key repeated with the same fields and another {@code submit} is
+     * another call, and is refused as a spent key.
+     *
+     * @param submit whether the created draft is submitted in the same act
+     */
+    @Transactional
+    public Result create(String subject, String rawScope, String rawView,
+                         VerbInput.@Nullable Fields body, @Nullable String idempotencyKey,
+                         boolean submit) {
         Optional<String> key = idempotencyKey(idempotencyKey);
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         refuseWriteOnDeclaredView(in.view(), CREATE);
+        if (submit && !Selector.ITEM.equals(in.view())) {
+            throw SurfaceException.invalid(SurfaceDeclaration.SUBMIT_ARGUMENT);
+        }
         addresses.requireView(in.scopeId(), in.view());
         Map<String, Object> fields = required(body, FIELDS).values();
-        String digest = CanonicalJson.version(Map.of(SELECTOR, in.view(), FIELDS, fields));
+        String digest = CanonicalJson.version(submit
+            ? Map.of(SELECTOR, in.view(), FIELDS, fields, SurfaceDeclaration.SUBMIT_ARGUMENT, true)
+            : Map.of(SELECTOR, in.view(), FIELDS, fields));
 
         Optional<Long> first = key.flatMap(given ->
             idempotency.firstAnswer(in.scopeId(), given, CREATE, digest));
@@ -206,10 +230,13 @@ public class VerbSurface {
         }
 
         Map<String, Object> created = switch (in.view()) {
-            case Selector.ITEM -> logged(items.create(in.scopeId(), subject, fields),
+            case Selector.ITEM -> logged(items.create(in.scopeId(), subject, fields, submit),
                 PlatformLog.TechnicalAddress::of, address -> {
                     PlatformLog.itemCreated(address, in.scope());
                     PlatformLog.created(address, in.scope());
+                    if (submit) {
+                        PlatformLog.submitted(address, in.scope());
+                    }
                 });
             case Selector.ITERATION -> logged(iterations.create(in.scopeId(), fields),
                 PlatformLog.TechnicalAddress::of, address -> {
@@ -427,12 +454,11 @@ public class VerbSurface {
     // ======================================================================
 
     /**
-     * Closes an iteration or a milestone.
+     * Closes an iteration, a milestone or an item.
      *
-     * <p>One verb over two views, chosen by the address. It is never addressed at
-     * an item: an item's terminality is a declared status reached through
-     * {@code update}, and the asymmetry against the sibling scheme is a decision
-     * — an item is mutable for its whole life, an exchange freezes.
+     * <p>One verb over three views, chosen by the address. On an item it is
+     * the transition into the phase closed (REA-0011 D1), from the phase open
+     * or in progress; a workstream is declared and never closed here.
      *
      * @param conflictToken the token the transport carried; absent where it carried
      *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
@@ -440,29 +466,56 @@ public class VerbSurface {
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
                         @Nullable String conflictToken) {
-        return close(subject, rawScope, rawView, rawId, conflictToken, null);
+        return close(subject, rawScope, rawView, rawId, conflictToken, null, null, null);
     }
 
     /**
      * Same close, with a produced-name for the iteration path.
      *
-     * <p>The naming is mandatory on an iteration (ratified 2026-09-08),
-     * refused on the milestone path — a milestone's close does not carry
-     * one, and slipping it through here would let a caller supply an
-     * argument on an act that has no place for it. Adapters read the
-     * body for {@code produced} and pass it here; the surface refuses a
-     * non-null value on the milestone path.
-     *
-     * @param produced the produced-name; absent where the caller sent none
+     * @param produced      the produced-name; absent where the caller sent none
      * @param conflictToken the token the transport carried; absent where it carried
      *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
      */
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
                         @Nullable String conflictToken, @Nullable String produced) {
+        return close(subject, rawScope, rawView, rawId, conflictToken, produced, null, null);
+    }
+
+    /**
+     * Same close, with every argument a close takes.
+     *
+     * <p>The naming of what was produced is mandatory on an iteration
+     * (ratified 2026-09-08) and is taken on the iteration path alone; the
+     * reason and the status are taken on the item path alone, where the
+     * reason is mandatory for an item leaving the phase in progress. Each
+     * of them on a path that has no place for it is a value the call does
+     * not take there, and is refused naming it.
+     *
+     * @param produced      the produced-name; absent where the caller sent none
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param reason        why an item closes; absent where the caller sent none
+     * @param status        the status an item closes into; absent where the
+     *                      caller named none
+     */
+    @Transactional
+    public Result close(String subject, String rawScope, String rawView, String rawId,
+                        @Nullable String conflictToken, @Nullable String produced,
+                        @Nullable String reason, @Nullable String status) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         requireWritable(target);
+        boolean item = Selector.ITEM.equals(in.view());
+        if (item && produced != null) {
+            throw SurfaceException.invalid(PRODUCED);
+        }
+        if (!item && reason != null) {
+            throw SurfaceException.invalid(SurfaceDeclaration.REASON_ARGUMENT);
+        }
+        if (!item && status != null) {
+            throw SurfaceException.invalid(SurfaceDeclaration.STATUS_ARGUMENT);
+        }
         UUID id = resolve(in, target);
         String token = requireToken(conflictToken);
 
@@ -480,12 +533,111 @@ public class VerbSurface {
                     PlatformLog.milestoneClosed(in.scope());
                     PlatformLog.closed(address, in.scope());
                 }, () -> PlatformLog.milestoneUnchanged(in.scope()));
-            case Selector.ITEM -> throw SurfaceException.of(
-                RefusalCode.VERB_UNCARRIED, CLOSE);
+            case Selector.ITEM -> logged(items.close(in.scopeId(), id, token, reason,
+                    optionalLabel(SurfaceDeclaration.STATUS_ARGUMENT, status)),
+                PlatformLog.TechnicalAddress::of, address -> PlatformLog.closed(address, in.scope()));
             case Selector.WORKSTREAM -> throw SurfaceException.of(
                 RefusalCode.VERB_UNCARRIED, CLOSE);
             default -> throw unreachableView(in.view());
         }));
+    }
+
+    // ======================================================================
+    // The transitions of an item (REA-0011 D1)
+    // ======================================================================
+
+    /**
+     * Submits a draft: it moves to the phase open.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     */
+    @Transactional
+    public Result submit(String subject, String rawScope, String rawView, String rawId,
+                         @Nullable String conflictToken) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, SUBMIT);
+        UUID id = resolve(in, target);
+
+        return opened(in, at(target, logged(items.submit(in.scopeId(), id,
+                requireToken(conflictToken)),
+            PlatformLog.TechnicalAddress::of, address -> PlatformLog.submitted(address, in.scope()))));
+    }
+
+    /**
+     * Discards a draft: it is deleted. The answer is the draft as it stood,
+     * at the address that now names nothing, and names no call: there is no
+     * object left to call on.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     */
+    @Transactional
+    public Result discard(String subject, String rawScope, String rawView, String rawId,
+                          @Nullable String conflictToken) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, DISCARD);
+        UUID id = resolve(in, target);
+
+        return at(target, logged(items.discard(in.scopeId(), id, requireToken(conflictToken)),
+            PlatformLog.TechnicalAddress::of, address -> PlatformLog.discarded(address, in.scope())));
+    }
+
+    /**
+     * Starts an open item: it moves to the phase in progress.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param status        the status the item enters; absent where the caller
+     *                      named none
+     */
+    @Transactional
+    public Result start(String subject, String rawScope, String rawView, String rawId,
+                        @Nullable String conflictToken, @Nullable String status) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, START);
+        UUID id = resolve(in, target);
+
+        return opened(in, at(target, logged(items.start(in.scopeId(), id,
+                requireToken(conflictToken),
+                optionalLabel(SurfaceDeclaration.STATUS_ARGUMENT, status)),
+            PlatformLog.TechnicalAddress::of, address -> PlatformLog.started(address, in.scope()))));
+    }
+
+    /**
+     * Returns an item in progress to the phase open, with its mandatory
+     * reason. Spelled {@code return_}: the verb's name is a keyword of Java.
+     *
+     * @param conflictToken the token the transport carried; absent where it carried
+     *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
+     * @param reason        the reason the transport carried; absent where it
+     *                      carried none, which this surface refuses as
+     *                      ARGUMENT_MISSING
+     * @param status        the status the item enters; absent where the caller
+     *                      named none
+     */
+    @Transactional
+    public Result return_(String subject, String rawScope, String rawView, String rawId,
+                          @Nullable String conflictToken, @Nullable String reason,
+                          @Nullable String status) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, RETURN);
+        UUID id = resolve(in, target);
+        String token = requireToken(conflictToken);
+        String why = requireText(SurfaceDeclaration.REASON_ARGUMENT, reason);
+
+        return opened(in, at(target, logged(items.return_(in.scopeId(), id, token, why,
+                optionalLabel(SurfaceDeclaration.STATUS_ARGUMENT, status)),
+            PlatformLog.TechnicalAddress::of, address -> PlatformLog.returned(address, in.scope()))));
+    }
+
+    /**
+     * An optional text argument that names a declared value, refused by its
+     * declared name where it is empty or carries the platform's identity;
+     * absent where the call left it out.
+     */
+    private static @Nullable String optionalLabel(String name, @Nullable String raw) {
+        return raw == null ? null : requireLabel(name, raw);
     }
 
     /**
@@ -773,7 +925,8 @@ public class VerbSurface {
      *
      * <p>A write, so the scope is resolved for writing and a subject without
      * the write right meets {@code SCOPE_READ_ONLY}; every subject with it
-     * may book, on an item in any status, a closed one included. No conflict
+     * may book, on an item that is open, in progress or closed, and a draft
+     * is refused by state. No conflict
      * token: the ledger stands beside the item, and the item's token and
      * timestamp stay as they are. The actor of every entry is the subject
      * this surface derived from the token. Only an item carries a ledger; an
@@ -1004,7 +1157,8 @@ public class VerbSurface {
         Function<NextStepTexts, String> does = switch (call.verb()) {
             case READ -> NextStepTexts::read;
             case UPDATE -> NextStepTexts::update;
-            case CLOSE -> NextStepTexts::close;
+            case CLOSE -> Selector.ITEM.equals(call.view()) ? NextStepTexts::closeItem
+                : NextStepTexts::close;
             case ADVANCE -> NextStepTexts::advance;
             case PLAN -> call.member() == null ? NextStepTexts::planIteration
                 : NextStepTexts::planItem;
@@ -1014,6 +1168,10 @@ public class VerbSurface {
             case TAG_ATTACH -> NextStepTexts::tagAttach;
             case TAG_DETACH -> NextStepTexts::tagDetach;
             case BOOK -> NextStepTexts::book;
+            case SUBMIT -> NextStepTexts::submit;
+            case DISCARD -> NextStepTexts::discard;
+            case START -> NextStepTexts::start;
+            case RETURN -> NextStepTexts::returnItem;
         };
         return new NextStep(verb, call.view(), at, does);
     }
@@ -1213,6 +1371,11 @@ public class VerbSurface {
     private static final String INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
     private static final String ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
     private static final String CLOSE = "close";
+    private static final String SUBMIT = "submit";
+    private static final String DISCARD = "discard";
+    private static final String START = "start";
+    private static final String RETURN = "return";
+    private static final String PRODUCED = "produced";
     private static final String READ = "read";
     private static final String CREATE = "create";
     private static final String SELECTOR = "selector";

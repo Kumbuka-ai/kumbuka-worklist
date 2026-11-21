@@ -41,8 +41,9 @@ import java.time.Instant;
  * allocated in a transaction that rolled back, or skipped by a mark that was
  * carried forward during an import.
  *
- * <p>Nothing in this schema deletes, so a row cannot vanish and take its
- * number back into circulation. That closes one way of losing the difference
+ * <p>A row that vanishes -- a draft {@code discard} deletes -- takes its
+ * number nowhere: the mark is never moved back, so the number stays spent
+ * (TAR-0002 B1). That closes one way of losing the difference
  * and not the other, and the other is enough: a burnt number handed out twice
  * means two items answer to one address, and every reference to that address
  * silently becomes ambiguous. So the mark is a row, moved forward in the same

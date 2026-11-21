@@ -88,6 +88,11 @@ class BootstrapScopeScriptIT {
             .containsExactly("item", "iteration", "milestone", "workstream");
         assertThat(declared.get("statuses"))
             .containsExactly("new", "open", "done", "dropped", "obsolete");
+        assertThat(declared.get("status_phases"))
+            .as("every status the script declares is bound to one phase, by the projection "
+                + "TAR-0002 B3 fixes, and none to draft (REA-0011 S9)")
+            .containsExactly("new:open", "open:open", "done:closed", "dropped:closed",
+                "obsolete:closed");
         assertThat(declared.get("attributes"))
             .as("each declared attribute with the number of its options")
             .containsExactly("cluster:8", "type:5", "priority:3", "size:3", "component:0");
@@ -114,6 +119,11 @@ class BootstrapScopeScriptIT {
             .as("the service, under its own role, allocates from the item counter "
                 + "the script opened")
             .isEqualTo(1L);
+        assertThat(item)
+            .as("a create makes a draft, in the status of the phase open it named "
+                + "(REA-0011 D12)")
+            .containsEntry("phase", "draft")
+            .containsEntry(Field.STATUS.canonicalName(), "open");
 
         Map<String, Object> valued = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "an item with priority and severity",
@@ -183,6 +193,10 @@ class BootstrapScopeScriptIT {
                 """));
             rows.put("statuses", column(c, scope, """
                 SELECT name FROM worklist.item_status
+                 WHERE tenant_id = ?::uuid AND scope_id = ?::uuid ORDER BY rank
+                """));
+            rows.put("status_phases", column(c, scope, """
+                SELECT name || ':' || phase FROM worklist.item_status
                  WHERE tenant_id = ?::uuid AND scope_id = ?::uuid ORDER BY rank
                 """));
             rows.put("attributes", column(c, scope, """

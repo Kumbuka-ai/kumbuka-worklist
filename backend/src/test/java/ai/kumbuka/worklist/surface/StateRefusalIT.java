@@ -56,6 +56,7 @@ class StateRefusalIT {
     private static final String SCOPE = "state-refusals";
     private static final UUID SCOPE_ID = UUID.fromString("5ea7e000-0000-4000-8000-000000000001");
     private static final String OPEN = "sr-open";
+    private static final String DONE = "sr-done";
 
     private static boolean staged;
 
@@ -75,6 +76,7 @@ class StateRefusalIT {
                 selectors.open(SCOPE_ID, view);
             }
             vocabulary.declareStatus(SCOPE_ID, OPEN, 1, true, false, false, false);
+            vocabulary.declareStatus(SCOPE_ID, DONE, 2, false, false, true, true);
             workstreams.requireDefault(SCOPE_ID);
             try {
                 settings.create(SCOPE_ID, Map.of());
@@ -89,7 +91,7 @@ class StateRefusalIT {
     @Test
     void a_write_to_a_closed_iteration_names_its_state_and_its_one_open_call() {
         String path = address(create(Selector.MILESTONE, Map.of("title", "the path")));
-        String item = address(create(Selector.ITEM, Map.of("title", "worked",
+        String item = address(Submitted.createOverMcp(SCOPE, Map.of("title", "worked",
             "status", OPEN, "milestone", number(path))));
         String iteration = address(create(Selector.ITERATION, Map.of("title", "done with",
             "motto", "done", "description", "closed before the probe")));
@@ -100,7 +102,7 @@ class StateRefusalIT {
             "conflict_token", token(iteration), "fields", Map.of("membership_status", "done"))));
         Mcp.answer(Mcp.call("worklist_close", Map.of("address", iteration,
             "conflict_token", token(iteration), "produced", "a record")));
-        String other = address(create(Selector.ITEM, Map.of("title", "too late",
+        String other = address(Submitted.createOverMcp(SCOPE, Map.of("title", "too late",
             "status", OPEN, "milestone", number(path))));
 
         List<String> offences = new ArrayList<>();
@@ -176,10 +178,45 @@ class StateRefusalIT {
             .as("and read stays open").containsKey("fields");
     }
 
+    /**
+     * A closed item takes no write, and its one open call is {@code read}
+     * (REA-0011 D6, D8): the refusal names the phase {@code closed}. A draft
+     * refuses a status of the phase closed, and names its own phase and the
+     * calls open on a draft.
+     */
+    @Test
+    void a_write_to_a_closed_item_and_a_status_of_another_phase_are_refused_by_state() {
+        String item = address(Submitted.createOverMcp(SCOPE, Map.of("title", "finished",
+            "status", OPEN)));
+        Mcp.answer(Mcp.call("worklist_close", Map.of("address", item,
+            "conflict_token", token(item), "status", DONE)));
+
+        List<String> offences = new ArrayList<>();
+        offences.addAll(AnswerChecks.stateRefusalOffences("update of a closed item",
+            Mcp.refusal(Mcp.call("worklist_update", Map.of("address", item,
+                "conflict_token", token(item), "fields", Map.of("title", "again")))),
+            "TRANSITION_REFUSED", "closed", List.of("worklist_read " + item), List.of()));
+
+        String draft = address(create(Selector.ITEM, Map.of("title", "a draft",
+            "status", OPEN)));
+        offences.addAll(AnswerChecks.stateRefusalOffences("a closed status on a draft",
+            Mcp.refusal(Mcp.call("worklist_update", Map.of("address", draft,
+                "conflict_token", token(draft), "fields", Map.of("status", DONE)))),
+            "TRANSITION_REFUSED", "draft", List.of("worklist_read " + draft,
+                "worklist_update " + draft, "worklist_relate " + draft,
+                "worklist_unrelate " + draft, "worklist_tag_attach " + draft,
+                "worklist_tag_detach " + draft, "worklist_submit " + draft,
+                "worklist_discard " + draft), List.of()));
+
+        assertThat(offences)
+            .as("a refusal by state on an item names its phase and the calls open in it")
+            .isEmpty();
+    }
+
     @Test
     void closing_an_iteration_with_live_memberships_names_them_as_children() {
         String path = address(create(Selector.MILESTONE, Map.of("title", "the path")));
-        String item = address(create(Selector.ITEM, Map.of("title", "still open",
+        String item = address(Submitted.createOverMcp(SCOPE, Map.of("title", "still open",
             "status", OPEN, "milestone", number(path))));
         String iteration = address(create(Selector.ITERATION, Map.of("title", "busy",
             "motto", "busy", "description", "holds a live membership")));

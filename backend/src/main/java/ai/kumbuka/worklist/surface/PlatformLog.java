@@ -106,6 +106,22 @@ public final class PlatformLog {
         LOG.infof("book on %s in scope %s", entry, scope);
     }
 
+    static void submitted(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("submit %s in scope %s", entry, scope);
+    }
+
+    static void discarded(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("discard %s in scope %s", entry, scope);
+    }
+
+    static void started(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("start %s in scope %s", entry, scope);
+    }
+
+    static void returned(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("return %s in scope %s", entry, scope);
+    }
+
     // ======================================================================
     // What a write did, at DEBUG: the lines the domain services wrote before
     // they stopped logging, the demotion of the active milestone and both

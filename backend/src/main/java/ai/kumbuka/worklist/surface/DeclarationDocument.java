@@ -293,10 +293,14 @@ public final class DeclarationDocument {
         return declared;
     }
 
-    /** A fallback as a value of the argument's own type: a number or text; a list takes none. */
+    /**
+     * A fallback as a value of the argument's own type: a number, a truth
+     * value or text; a list takes none.
+     */
     private static Object typed(SurfaceDeclaration.ArgumentType type, String fallback) {
         return switch (type) {
             case INTEGER -> Long.parseLong(fallback);
+            case BOOLEAN -> Boolean.parseBoolean(fallback);
             case STRING -> fallback;
             case OBJECT, ARRAY -> throw new IllegalStateException(
                 "an object or array argument declares no fallback: " + fallback);

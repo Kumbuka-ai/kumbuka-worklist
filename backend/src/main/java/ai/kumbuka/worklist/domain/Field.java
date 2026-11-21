@@ -211,16 +211,28 @@ public enum Field {
     STATUS("status", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
 
     /**
-     * The predicates an item answers from its status (TAR-0002 B3, Annex
-     * A1), as one object: {@code closed}, {@code actionable} and
-     * {@code in_progress} always; {@code successful} only where
-     * {@code closed} holds; {@code reviewed}, {@code approved} and
-     * {@code verified} only where the item's scope uses them. A predicate the
-     * item does not answer is absent from the object, never false.
+     * The phase of an item, one of {@link Phase#TOKENS} (REA-0011 D11).
      *
-     * <p>Read-only: a predicate holds because the status declares it, and the
-     * status changes through {@code update} (REA-0011 D1). A read answer sent
-     * back with it unchanged is accepted, as every read-only field is.
+     * <p>Read-only: a phase moves through a transition alone -- {@code submit},
+     * {@code start}, {@code return}, {@code close} -- and never through
+     * {@code update}. A read answer sent back with it unchanged is accepted,
+     * as every read-only field is.
+     */
+    PHASE("phase", Set.of(ITEM), Set.of()),
+
+    /**
+     * The predicates an item answers (TAR-0002 B3, Annex A1), as one object:
+     * {@code closed}, {@code actionable} and {@code in_progress} always;
+     * {@code successful} only where {@code closed} holds; {@code reviewed},
+     * {@code approved} and {@code verified} only where the item's scope uses
+     * them. A predicate the item does not answer is absent from the object,
+     * never false.
+     *
+     * <p>Read-only: {@code closed} and {@code in_progress} are a projection
+     * of the item's {@link #PHASE}, which a transition moves, and the others
+     * hold because the status declares them, and the status changes through
+     * {@code update} (REA-0011 D1). A read answer sent back with it unchanged
+     * is accepted, as every read-only field is.
      */
     PREDICATES("predicates", Set.of(ITEM), Set.of()),
 
@@ -371,7 +383,7 @@ public enum Field {
 
     /**
      * When the item closed. Read-only: the service writes it when the item
-     * moves into a closed status, and clears it when the item leaves one.
+     * enters the phase closed, and nothing reopens a closed item.
      */
     CLOSE_DATE("close_date", Set.of(ITEM), Set.of()),
 

@@ -107,6 +107,12 @@ class McpProjectionIT {
         assertThat(list.getString(query + "selector.type"))
             .as("the path reaches the view argument, so its open set below is read, not missed")
             .isEqualTo("string");
+        assertThat(list.getMap("result.tools.find { it.name == 'worklist_create' }"
+                + ".inputSchema.properties"))
+            .as("the assistant surface creates and submits in two acts (TAR-0002 B12): the "
+                + "create tool carries no submit")
+            .containsKey("fields")
+            .doesNotContainKey("submit");
         for (String tool : list.getList("result.tools.name", String.class)) {
             assertThat(list.<Object>get("result.tools.find { it.name == '" + tool
                     + "' }.inputSchema.properties.selector.enum"))
@@ -152,10 +158,18 @@ class McpProjectionIT {
             .declareStatus(SCOPE_ID, "mcp-chain-open", 3, true, false, false, false).name;
         String closed = vocabulary
             .declareStatus(SCOPE_ID, "mcp-chain-done", 4, false, false, true, true).name;
+        String running = vocabulary
+            .declareStatus(SCOPE_ID, "mcp-chain-running", 5, false, true, false, false).name;
+        vocabulary.declareAttribute(SCOPE_ID, "type", "Type", "text", 1, false);
         openTheScope();
 
+        // create makes a draft (REA-0011 D12); submit is a second act on MCP.
         String item = created(Selector.ITEM, Map.of("title", "an mcp chain", "status", status));
-        String itemToken = tokenOf(item);
+        String itemToken = call("submit", Map.of("address", item,
+                "conflict_token", tokenOf(item)))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.phase", is("open"))
+            .extract().path("result.structuredContent.fields.conflict_token");
 
         itemToken = call("update", Map.of("address", item, "conflict_token", itemToken,
             "fields", Map.of("title", "an mcp chain, renamed")))
@@ -207,11 +221,38 @@ class McpProjectionIT {
         call("close", Map.of("address", milestone, "conflict_token", tokenOf(milestone)))
             .body("result.structuredContent.fields.status", is("closed"));
 
-        // The item closes through update, the one way its state moves.
-        call("update", Map.of("address", item, "conflict_token", itemToken,
-            "fields", Map.of("status", closed)))
+        // The item's phase moves through the transitions (REA-0011 D1): it
+        // takes a type, starts, returns with a reason, and closes.
+        itemToken = call("update", Map.of("address", item, "conflict_token", itemToken,
+            "fields", Map.of("attributes", Map.of("type", "task"))))
             .body("result.isError", is(false))
-            .body("result.structuredContent.fields.status", is("mcp-chain-done"));
+            .extract().path("result.structuredContent.fields.conflict_token");
+        itemToken = call("start", Map.of("address", item, "conflict_token", itemToken,
+                "status", running))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.phase", is("in_progress"))
+            .body("result.structuredContent.fields.status", is("mcp-chain-running"))
+            .extract().path("result.structuredContent.fields.conflict_token");
+        itemToken = call("return", Map.of("address", item, "conflict_token", itemToken,
+                "reason", "back to the pool", "status", status))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.phase", is("open"))
+            .extract().path("result.structuredContent.fields.conflict_token");
+        call("close", Map.of("address", item, "conflict_token", itemToken,
+                "status", closed))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.phase", is("closed"))
+            .body("result.structuredContent.fields.status", is("mcp-chain-done"))
+            .body("result.structuredContent.fields.close_date",
+                org.hamcrest.Matchers.notNullValue());
+
+        // A draft is discarded: deleted, and its address names nothing.
+        String draft = created(Selector.ITEM, Map.of("title", "an mcp draft", "status", status));
+        call("discard", Map.of("address", draft, "conflict_token", tokenOf(draft)))
+            .body("result.isError", is(false));
+        call("read", Map.of("address", draft))
+            .body("result.isError", is(true))
+            .body("result.structuredContent.reason", is("NOT_FOUND"));
     }
 
     /**

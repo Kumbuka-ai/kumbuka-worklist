@@ -40,10 +40,10 @@ import java.time.Instant;
  * and dense over the living entries, so it is reissued as the list grows
  * back. A criterion's number is an identity and is never reissued.
  *
- * <p><strong>Withdrawal rather than deletion</strong>, as everywhere in this
- * schema: nothing holds a DELETE privilege, so a criterion that leaves the
- * list is marked withdrawn, keeps its number and its text, and is no longer
- * answered.
+ * <p><strong>Withdrawal rather than deletion</strong>: a criterion that leaves
+ * the list is marked withdrawn, keeps its number and its text, and is no
+ * longer answered. The rows go only with the draft they belong to, when
+ * {@code discard} deletes it (V33).
  *
  * <p>Criteria are as writable as the description until the field classes per
  * phase arrive with a later step (REA-0011 S10, Annex A2); freezing them at

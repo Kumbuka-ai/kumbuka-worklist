@@ -92,8 +92,8 @@ class PlanningRefusalIT {
         UUID iteration = (UUID) iterations.create(rowless, Map.of(
             "title", "rowless", "motto", "rowless",
             "description", "a scope whose settings were never written")).answer().get("id");
-        UUID item = (UUID) items.create(rowless, "probe-subject", Map.of(
-            "title", "planned without settings", "status", status)).answer().get("id");
+        UUID item = ItemLifecycle.open(items, rowless, Map.of(
+            "title", "planned without settings", "status", status));
         String iterationToken = (String) iterations.read(rowless, iteration)
             .get("conflict_token");
         memberships.plan(rowless, iteration, item, iterationToken);
@@ -572,8 +572,8 @@ class PlanningRefusalIT {
         // The item view, declared before anything is created under it: the
         // address is allocated at creation now. Declaring is idempotent.
         selectors.open(scope, Selector.ITEM);
-        UUID item = (UUID) items.create(scope, "probe-subject", Map.of(
-            "title", title, "status", vocabulary.requireStatus(scope, openStatus).name)).answer().get("id");
+        UUID item = ItemLifecycle.open(items, scope, Map.of(
+            "title", title, "status", vocabulary.requireStatus(scope, openStatus).name));
         UUID milestone = (UUID) milestones.create(scope, Map.of(
             "title", "a goal for " + title, "vision", "the north star")).answer().get("id");
         return PlanningFixture.pointAtMilestone(item, milestone);

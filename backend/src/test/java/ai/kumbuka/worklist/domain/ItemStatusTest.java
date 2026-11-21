@@ -17,8 +17,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The consistency rules over one status, and the predicates an item answers
- * from it, without a database (TAR-0002 B3 and Annex A1, DEC-0037 C5).
+ * The consistency rules over one status, the phase it is bound to, and the
+ * predicates an item answers from its phase and its status, without a
+ * database (TAR-0002 B2, B3 and Annex A1, DEC-0037 C5).
  *
  * <p>The expectations are written here from those nodes: which combination
  * contradicts, and which predicate is answered where. The database paths that
@@ -66,27 +67,59 @@ class ItemStatusTest {
 
     @Test
     void an_item_answers_closed_actionable_and_in_progress_always_and_successful_where_closed() {
-        Map<String, Object> open = ItemService.predicatesOf(
+        Map<String, Object> open = ItemService.predicatesOf(Phase.OPEN,
             status("actionable", "successful"), EnumSet.noneOf(ScopeUsage.Property.class));
         assertThat(open)
-            .as("an open status answers successful by no value, even where it declares it")
+            .as("an open item answers successful by no value, even where its status declares it")
             .isEqualTo(ordered("closed", false, "actionable", true, "in_progress", false));
 
-        Map<String, Object> done = ItemService.predicatesOf(
+        Map<String, Object> done = ItemService.predicatesOf(Phase.CLOSED,
             status("closed", "successful"), EnumSet.noneOf(ScopeUsage.Property.class));
         assertThat(done).isEqualTo(
             ordered("closed", true, "successful", true, "actionable", false, "in_progress", false));
+    }
+
+    /**
+     * TAR-0002 B3: {@code closed} holds exactly in the phase closed and
+     * {@code in_progress} exactly in the phase in_progress, whatever the
+     * status declares; the others stay on the status word.
+     */
+    @Test
+    void closed_and_in_progress_are_a_projection_of_the_phase() {
+        ItemStatus inProgress = status("in_progress", "actionable");
+        assertThat(ItemService.predicatesOf(Phase.OPEN, inProgress,
+                EnumSet.noneOf(ScopeUsage.Property.class)))
+            .as("an item placed in open by S9 whose status answers in_progress answers by its phase")
+            .isEqualTo(ordered("closed", false, "actionable", true, "in_progress", false));
+        assertThat(ItemService.predicatesOf(Phase.IN_PROGRESS, inProgress,
+                EnumSet.noneOf(ScopeUsage.Property.class)))
+            .isEqualTo(ordered("closed", false, "actionable", true, "in_progress", true));
+        assertThat(ItemService.predicatesOf(Phase.DRAFT, status("actionable"),
+                EnumSet.noneOf(ScopeUsage.Property.class)))
+            .as("a draft is neither closed nor in progress")
+            .isEqualTo(ordered("closed", false, "actionable", true, "in_progress", false));
+    }
+
+    /** TAR-0002 B2, B3: each status is bound to one phase, and none to draft. */
+    @Test
+    void every_status_is_bound_to_one_phase_and_none_to_draft() {
+        assertThat(status("closed", "successful").phase()).isEqualTo(Phase.CLOSED);
+        assertThat(status("closed").phase()).isEqualTo(Phase.CLOSED);
+        assertThat(status("in_progress").phase()).isEqualTo(Phase.IN_PROGRESS);
+        assertThat(status("actionable").phase()).isEqualTo(Phase.OPEN);
+        assertThat(status().phase()).isEqualTo(Phase.OPEN);
     }
 
     @Test
     void the_optional_predicates_are_answered_only_where_the_scope_uses_them() {
         ItemStatus status = status("closed", "successful", "reviewed", "verified");
 
-        assertThat(ItemService.predicatesOf(status, EnumSet.noneOf(ScopeUsage.Property.class)))
+        assertThat(ItemService.predicatesOf(Phase.CLOSED, status,
+                EnumSet.noneOf(ScopeUsage.Property.class)))
             .as("a scope that uses none: no value, not false")
             .doesNotContainKeys("reviewed", "approved", "verified");
 
-        Map<String, Object> used = ItemService.predicatesOf(status,
+        Map<String, Object> used = ItemService.predicatesOf(Phase.CLOSED, status,
             EnumSet.of(ScopeUsage.Property.REVIEWED, ScopeUsage.Property.APPROVED,
                 ScopeUsage.Property.VERIFIED));
         assertThat(used)
@@ -94,7 +127,8 @@ class ItemStatusTest {
             .containsEntry("approved", false)
             .containsEntry("verified", true);
 
-        assertThat(ItemService.predicatesOf(status, EnumSet.of(ScopeUsage.Property.APPROVED)))
+        assertThat(ItemService.predicatesOf(Phase.CLOSED, status,
+                EnumSet.of(ScopeUsage.Property.APPROVED)))
             .as("each one only where it is used")
             .containsEntry("approved", false)
             .doesNotContainKeys("reviewed", "verified");
@@ -102,7 +136,7 @@ class ItemStatusTest {
 
     @Test
     void priority_and_severity_are_no_predicates() {
-        assertThat(ItemService.predicatesOf(status("actionable"),
+        assertThat(ItemService.predicatesOf(Phase.OPEN, status("actionable"),
                 EnumSet.of(ScopeUsage.Property.PRIORITY, ScopeUsage.Property.SEVERITY)))
             .isEqualTo(ordered("closed", false, "actionable", true, "in_progress", false));
     }

@@ -67,6 +67,10 @@ public class ItemRepository {
     public static final String BY_WORKSTREAM = "workstream_number";
     /** The items carrying one tag, by the platform's identity of the tag. */
     public static final String BY_TAG = "tag_id";
+    /** The items in one phase, by its token. */
+    public static final String BY_PHASE = "phase";
+    /** The items created strictly before an instant. */
+    public static final String BY_CREATED_BEFORE = "created_before";
 
     @Inject EntityManager em;
     @Inject Clock clock;
@@ -110,11 +114,12 @@ public class ItemRepository {
      *
      * <p><strong>Enumerated columns only</strong>, each an equality on a key the
      * domain resolved from the caller's name, number or token:
-     * {@link #BY_STATUS}, {@link #BY_MILESTONE}, {@link #BY_WORKSTREAM}, and
-     * {@link #BY_TAG}, which asks whether an assignment of that tag stands for
-     * the item. A key not among them is a defect of the caller above and fails
-     * loudly rather than being dropped, because a dropped filter answers the
-     * whole set. The filters combine by AND.
+     * {@link #BY_STATUS}, {@link #BY_MILESTONE}, {@link #BY_WORKSTREAM},
+     * {@link #BY_PHASE}, {@link #BY_TAG}, which asks whether an assignment of
+     * that tag stands for the item, and {@link #BY_CREATED_BEFORE}, a bound
+     * on the creation instant. A key not among them is a defect of the caller
+     * above and fails loudly rather than being dropped, because a dropped
+     * filter answers the whole set. The filters combine by AND.
      *
      * <p>The continuation, the order and the bound are {@link KeysetClause}'s:
      * the page starts strictly after the position the cursor carries, whether
@@ -134,6 +139,8 @@ public class ItemRepository {
                 case BY_STATUS -> "i.statusPk = :" + param;
                 case BY_MILESTONE -> "i.milestoneNumber = :" + param;
                 case BY_WORKSTREAM -> "i.workstreamNumber = :" + param;
+                case BY_PHASE -> "i.phase = :" + param;
+                case BY_CREATED_BEFORE -> "i.createdAt < :" + param;
                 case BY_TAG -> "i.number IN (SELECT t.itemNumber FROM ItemTag t "
                     + "WHERE t.scopeId = i.scopeId AND t.tagId = :" + param + ")";
                 default -> throw new IllegalArgumentException(
@@ -204,6 +211,37 @@ public class ItemRepository {
             .setParameter("number", number)
             .getResultStream()
             .findFirst();
+    }
+
+    /** The ids of the items of the scope whose parent this item is. */
+    @Transactional
+    public List<UUID> childrenOf(Item item) {
+        return em.createQuery(
+                "SELECT i.id FROM Item i WHERE i.scopeId = :scope AND i.parentNumber = :item "
+                    + "ORDER BY i.number", UUID.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .getResultList();
+    }
+
+    /**
+     * The ids of the other items of the scope with an asserted relation to
+     * this one: the items whose read answer names it.
+     */
+    @Transactional
+    public List<UUID> sourcesOf(Item item) {
+        return em.createQuery(
+                "SELECT DISTINCT i.id, i.number FROM Item i, ItemRelation r "
+                    + "WHERE i.scopeId = :" + P_SCOPE + " AND r.scopeId = i.scopeId"
+                    + " AND r.fromItemNumber = i.number AND r.toItemNumber = :" + P_ITEM
+                    + " AND r.status = :" + P_STATUS + " AND i.number <> :" + P_ITEM
+                    + " ORDER BY i.number", Object[].class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .setParameter(P_STATUS, ItemRelation.ASSERTED)
+            .getResultStream()
+            .map(row -> (UUID) row[0])
+            .toList();
     }
 
     /** Every relation out of an item, asserted and withdrawn alike. */
@@ -346,10 +384,10 @@ public class ItemRepository {
     /**
      * Inserts a reference entry. Flushed by the caller, once, after the list.
      *
-     * <p>There is no counterpart that removes one, and there cannot be: this
-     * schema grants DELETE nowhere. A list that shrinks is rewritten in place
-     * and its tail is carried by the entries that remain — see
-     * {@code ItemService} on why the ordinal is dense.
+     * <p>No write removes one: a list that shrinks is rewritten in place and
+     * its tail is withdrawn — see {@code ItemService} on why the ordinal is
+     * dense. The rows go only with the draft they belong to, in
+     * {@link #delete}.
      */
     @Transactional
     public void insertReference(ItemReference reference) {
@@ -379,6 +417,36 @@ public class ItemRepository {
     @Transactional
     public void insertFulfilment(List<ItemFulfilment> entries) {
         entries.forEach(em::persist);
+        em.flush();
+    }
+
+    /**
+     * Deletes an item and what stands beside it: its relations in both
+     * directions, withdrawn ones included, its references and its criteria,
+     * and, by the cascade of V26, its tags. The one delete of this schema
+     * beside a tag's, granted by V33 for {@code discard}, which deletes a
+     * draft; a draft is never planned and never booked, so nothing else
+     * refers to it. Flushed, so a constraint is reported at the call site.
+     */
+    @Transactional
+    public void delete(Item item) {
+        em.flush();
+        em.createQuery("DELETE FROM ItemRelation r WHERE r.scopeId = :" + P_SCOPE
+                + " AND (r.fromItemNumber = :" + P_ITEM + " OR r.toItemNumber = :" + P_ITEM + ")")
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .executeUpdate();
+        em.createQuery("DELETE FROM ItemReference r WHERE r.scopeId = :" + P_SCOPE
+                + " AND r.itemNumber = :" + P_ITEM)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .executeUpdate();
+        em.createQuery("DELETE FROM ItemCriterion c WHERE c.scopeId = :" + P_SCOPE
+                + " AND c.itemNumber = :" + P_ITEM)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .executeUpdate();
+        em.remove(item);
         em.flush();
     }
 

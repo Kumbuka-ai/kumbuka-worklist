@@ -19,6 +19,7 @@ import jakarta.transaction.Transactional;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -35,19 +36,33 @@ import java.util.UUID;
  *
  * <h2>The verbs</h2>
  *
- * {@code create} a call-in, {@code update} what is known about it,
- * {@code read} one, {@code query} a scope, and the graph verbs and
- * {@code validate} below. Every one of them is the platform's own word for the
- * act, spelled identically.
+ * {@code create} a draft, {@code update} what is known about it,
+ * {@code read} one, {@code query} a scope, the graph verbs and
+ * {@code validate} below, and the five transitions of the lifecycle. Every
+ * one of them is the platform's own word for the act, spelled identically;
+ * {@code return} is a keyword of Java and is spelled {@code return_} here.
  *
- * <p>An item's state moves through {@code update}, and through one relation:
- * a status the scope declared as closed is reached by updating into it, a
- * closed item stays writable, and {@code relate} with the type
- * {@code duplicate_of} closes the item into the target status that type
- * declares (REA-0011 D18). Moving into a closed status sets
- * {@code close_date}, and leaving one clears it. The intake gate
- * {@code accept} and the withdrawal {@code withdraw} left this scheme's
- * surface with its target cut.
+ * <h2>The phase moves through the transitions alone</h2>
+ *
+ * An item is in one of four {@link Phase phases} (REA-0011 D11, TAR-0002
+ * B20), held in a column of its own. {@code create} makes a draft
+ * (REA-0011 D12); {@code submit} moves it to open, {@code start} to in
+ * progress, {@code return} back to open, {@code close} to closed, and
+ * {@code discard} deletes a draft (REA-0011 D1). A status word changes within
+ * a phase through {@code update}, and a status of another phase is refused by
+ * state; {@code relate} with the type {@code duplicate_of} closes an open
+ * item into the target status that type declares (REA-0011 D18). Entering
+ * the phase closed sets {@code close_date}. Nothing reopens a closed item,
+ * and a closed item takes no write but a booking.
+ *
+ * <p>Each condition a transition is refused on is one function, which the
+ * open calls of an item read too ({@link #submittable}, {@link #startable},
+ * {@link #firstOf}): a call an answer names is a call its object takes.
+ *
+ * <p>Every transition is open to every caller with the write right of the
+ * scope (REA-0011 section 4); the reason {@code return} and {@code close}
+ * require is checked and stored nowhere, since this step builds no audit
+ * register.
  *
  * <p><strong>Identity is deliberate, and a shared name is not a collision.</strong>
  * These names exist in sibling services too, and that is the mechanism rather
@@ -62,11 +77,11 @@ import java.util.UUID;
  * service-private name is silent otherwise — it breaks nothing, compiles,
  * and is only noticed by the next reader who assumes the shared meaning.
  *
- * <p>There is no seventh that deletes. What the predecessor's {@code delete}
- * did — remove the row entirely — survives as a terminal status the scope
- * declared, and the consequence is that a number handed out is never handed
- * back. That makes the high-water mark a high-water mark BY CONSTRUCTION
- * rather than by a rule somebody has to keep.
+ * <p>One verb deletes, and only a draft: {@code discard}. Everything past a
+ * draft ends in the phase closed and stays, and even a discarded draft's
+ * number is never handed back (TAR-0002 B1): the high-water mark is a
+ * high-water mark BY CONSTRUCTION rather than by a rule somebody has to
+ * keep.
  *
  * <h2>The status is a declared value and this class knows none of them</h2>
  *
@@ -77,10 +92,11 @@ import java.util.UUID;
  * matching list in Java, which is exactly the construction that makes a
  * second vocabulary impossible.
  *
- * <p><strong>The transition rules are not here.</strong> An item may not
- * enter an iteration while it is not actionable: that rule is expressed over
- * the PREDICATES and sits with the planning verbs. Writing it against the
- * estate's status names would be the predecessor's mistake in a new file.
+ * <p><strong>The rules are written over phases and predicates, never over
+ * status names.</strong> {@code start} asks whether the status answers
+ * {@code actionable}; the planning verbs ask the phase. Writing either
+ * against the estate's status names would be the predecessor's mistake in a
+ * new file.
  *
  * <h2>One naming, in both directions</h2>
  *
@@ -115,6 +131,18 @@ public class ItemService {
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String RELATIONS = Field.RELATIONS.path();
+
+    /** The argument a transition names the status of its target phase under. */
+    public static final String STATUS_ARGUMENT = "status";
+
+    /** The argument {@code return} and {@code close} take the reason under. */
+    public static final String REASON_ARGUMENT = "reason";
+
+    /**
+     * The key of the declared attribute an item's type is stored under. A
+     * scope that declares no attribute of this key holds no typed item.
+     */
+    static final String TYPE_KEY = "type";
 
 
     @Inject ItemRepository items;
@@ -176,6 +204,12 @@ public class ItemService {
      * {@code VALUE_UNDECLARED} naming the filter, and not answered as an empty
      * set: an empty answer cannot be told from a typo.
      *
+     * <p>The phase and the age need no vocabulary (REA-0011 D12): the phase
+     * is one of the platform's four, and {@code older_than_days} keeps the
+     * items created more than that many days before now, by the service's
+     * clock, so that a phase {@code draft} with an age lists the drafts left
+     * standing.
+     *
      * <p>The page continues after the position the cursor carries, by the
      * sort and not by whether the item there still passes the filter, so a
      * walk over pages is neither broken nor repeated by an item whose status
@@ -186,6 +220,11 @@ public class ItemService {
         Map<String, Object> filter = new LinkedHashMap<>();
         request.value(QueryFilter.ITEM_STATUS).ifPresent(name ->
             filter.put(ItemRepository.BY_STATUS, statusFilter(scopeId, (String) name)));
+        request.value(QueryFilter.ITEM_PHASE).ifPresent(token ->
+            filter.put(ItemRepository.BY_PHASE, token));
+        request.value(QueryFilter.ITEM_OLDER_THAN_DAYS).ifPresent(days ->
+            filter.put(ItemRepository.BY_CREATED_BEFORE,
+                clock.instant().minus(((Number) days).longValue(), ChronoUnit.DAYS)));
         request.value(QueryFilter.ITEM_MILESTONE).ifPresent(number ->
             filter.put(ItemRepository.BY_MILESTONE, milestoneFilter(scopeId, (Long) number)));
         request.value(QueryFilter.ITEM_WORKSTREAM).ifPresent(token ->
@@ -243,19 +282,39 @@ public class ItemService {
     // ------------------------------------------------------------------
 
     /**
-     * Create an item: record that something has been called in.
+     * Create a draft: record that something has been called in.
+     *
+     * @see #create(UUID, String, Map, boolean)
+     */
+    @Transactional
+    public Written<Map<String, Object>, Item> create(UUID scopeId, String creator,
+            Map<String, ?> arguments) {
+        return create(scopeId, creator, arguments, false);
+    }
+
+    /**
+     * Create an item: a draft (REA-0011 D12), or with {@code submit} a draft
+     * that is submitted in the same act.
      *
      * <p>The tenant is not a parameter. It comes from the bound tenant
      * context, which is also what the policy checks the incoming row against
      * — an item whose tenant a caller could name would be an item a caller
      * could plant across the boundary.
      *
-     * <p><strong>A title and a status are both required, and the second is
-     * new.</strong> A status is a declared value now, so there is no default
-     * to fall back on: a scope declares its vocabulary before it holds an
-     * item, exactly as it declares a selector before an address can be
-     * allocated. Inventing a status here would be this service deciding what
-     * a scope's list means.
+     * <p><strong>A title is required, and the status falls back.</strong> A
+     * draft carries a status of the phase open, since no status is bound to
+     * the phase draft and the column is mandatory: the status the call names,
+     * where it is one of that phase, and otherwise the first status of that
+     * phase the scope declares, by rank. A status the scope does not declare
+     * is refused; a scope that declares no status of the phase open holds no
+     * item. So the image before this one reads a draft as an ordinary open
+     * item (REA-0011 S9, rollback).
+     *
+     * <p><strong>Submitting in the same act runs the guard of
+     * {@link #submit}</strong> on the item as it is built, before it is
+     * stored: the fields that guard reads are set there, and the rest of the
+     * fields are applied by the path an update takes, which none of them
+     * changes. A draft that fails it is refused, and nothing is stored.
      *
      * <p><strong>A created item carries its address from the insert.</strong>
      * The selector is the view {@code item} and the number is drawn from the
@@ -269,10 +328,12 @@ public class ItemService {
      * field of the service and refused like any other.
      *
      * @param creator the calling subject, stored as the item's creator
+     * @param submit  whether the draft is submitted in the same act, which
+     *                the REST surface alone offers
      */
     @Transactional
     public Written<Map<String, Object>, Item> create(UUID scopeId, String creator,
-            Map<String, ?> arguments) {
+            Map<String, ?> arguments, boolean submit) {
         Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
 
         List<String> notSettable = given.keySet().stream()
@@ -301,7 +362,7 @@ public class ItemService {
         // it back cleanly if a later check refuses.
         long number = selectors.allocate(scopeId, Selector.ITEM);
 
-        ItemStatus initialStatus = resolveStatus(scopeId, given.get(Field.STATUS));
+        ItemStatus initialStatus = draftStatus(scopeId, given.get(Field.STATUS));
 
         // The workstream is mandatory — ratified 2026-09-08. If the caller
         // named one, use it (existence, refusal on withdrawn); if not, fall
@@ -319,6 +380,13 @@ public class ItemService {
         item.number = number;
         item.workstreamNumber = workstream.number;
         item.creator = creator;
+        item.enter(Phase.DRAFT);
+        if (submit) {
+            if (!submittable(item)) {
+                throw transitionRefused();
+            }
+            item.enter(Phase.OPEN);
+        }
         items.insert(item);
 
         // Everything else the caller supplied goes through the same path an
@@ -338,12 +406,16 @@ public class ItemService {
     }
 
     /**
-     * Change what is known about an item, its status included: into a closed
-     * status the scope declared as much as into any other, and a closed item
-     * takes the next write like any. Moving from a status that is not closed
-     * into one that is sets {@code close_date}; moving out of a closed status
-     * clears it, because an open item has no close date (until S9, where an
-     * item still leaves a closed status this way).
+     * Change what is known about an item in the phases draft, open and in
+     * progress, its status within the phase included (REA-0011 D1, D11).
+     *
+     * <p>A status of another phase than the item's is refused with
+     * {@code TRANSITION_REFUSED}, before anything is written: the phase moves
+     * through a transition, and the refusal names the calls open on the
+     * item. A draft takes a status of the phase open, the phase its status
+     * belongs to. A closed item takes no update at all. Every other field is
+     * taken in each of the three phases as it was before the phases arrived;
+     * the field classes per phase come with a later step (REA-0011 S10).
      *
      * <p><strong>A write that changes nothing writes nothing.</strong> Not a
      * timestamp, not a rotated token, not a statement. The comparison below
@@ -364,6 +436,7 @@ public class ItemService {
         Item item = requireLocked(scopeId, itemId);
 
         item.requireCurrentToken(given.get(Field.CONFLICT_TOKEN));
+        refuseClosed(item);
 
         Map<String, Object> current = project(item);
         refuseUnsettableChanges(current, withoutEchoedLedger(item, given));
@@ -409,19 +482,24 @@ public class ItemService {
      * change lands on top of the state I read".
      *
      * <p><strong>{@code duplicate_of} closes the item that carries it</strong>
-     * (TAR-0002 B5, REA-0011 D18): in the same write the source item moves
-     * into the target status the scope declared on that type and its
-     * {@code close_date} is set. Closing is open only where the item is not
-     * closed and the target status is declared, not withdrawn, of this scope,
-     * closed and not successful; otherwise the call is refused with
-     * {@code TRANSITION_REFUSED} before anything is written, so no edge is
-     * made and the token stays.
+     * (TAR-0002 B5, REA-0011 D18): in the same write the source item enters
+     * the phase closed, moves into the target status the scope declared on
+     * that type, and its {@code close_date} is set. Closing is open only where
+     * the item is in the phase open and the target status is declared, not
+     * withdrawn, of this scope, closed and not successful; otherwise the call
+     * is refused with {@code TRANSITION_REFUSED} before anything is written,
+     * so no edge is made and the token stays. An item in progress leaves its
+     * phase through {@code close}, which takes the reason that requires, and
+     * a draft through {@code submit} first.
+     *
+     * <p>A closed item takes no relation; the call is refused by state.
      */
     @Transactional
     public Written<Map<String, Object>, RelationWrite> relate(UUID scopeId, UUID itemId,
             String toItemAddress, String relationTypeName, String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
+        refuseClosed(item);
 
         Item target = resolveItemAddress(scopeId, toItemAddress, TO_ITEM);
         if (item.id.equals(target.id)) {
@@ -442,6 +520,7 @@ public class ItemService {
 
         item.stamp(clock.instant());
         closing.ifPresent(status -> {
+            item.enter(Phase.CLOSED);
             item.statusPk = status.pk;
             item.closeDate = item.changedAt;
         });
@@ -461,12 +540,13 @@ public class ItemService {
 
     /**
      * The status a {@code duplicate_of} edge closes this item into, or the
-     * refusal by state where closing is not open: the item is closed already,
-     * or the type names no target status that is declared, not withdrawn, of
-     * the item's scope, closed and not successful (REA-0011 D18).
+     * refusal by state where closing is not open: the item is in another
+     * phase than open, or the type names no target status that is declared,
+     * not withdrawn, of the item's scope, closed and not successful
+     * (REA-0011 D18).
      */
     private ItemStatus closingStatus(Item item, RelationType type) {
-        if (closed(item.statusPk)) {
+        if (item.phase() != Phase.OPEN) {
             throw transitionRefused();
         }
         return Optional.ofNullable(type.targetStatusPk)
@@ -477,38 +557,43 @@ public class ItemService {
             .orElseThrow(ItemService::transitionRefused);
     }
 
-    /** Whether the status of that surrogate is a closed one. */
-    private boolean closed(@Nullable Long statusPk) {
-        return statusPk != null
-            && vocabulary.statusByPk(statusPk).map(status -> status.closed).orElse(false);
+    /** A refusal by the item's state; the surface adds the state and the open calls. */
+    static WorklistException transitionRefused() {
+        return new WorklistException(WorklistException.Reason.TRANSITION_REFUSED, List.of());
     }
 
-    /** A refusal by the item's state; the surface adds the state and the open calls. */
-    private static WorklistException transitionRefused() {
-        return new WorklistException(WorklistException.Reason.TRANSITION_REFUSED, List.of());
+    /**
+     * Refuses a write to a closed item (REA-0011 D6): it is final, and its
+     * one open call is {@code read}. A booking is the one write a closed item
+     * takes, and it does not come here.
+     */
+    static void refuseClosed(Item item) {
+        if (item.phase() == Phase.CLOSED) {
+            throw transitionRefused();
+        }
     }
 
     /**
      * Withdraw one edge from this item to another, of a declared type.
      *
      * <p>Withdrawal, not deletion: the row remains and its status moves. That
-     * matches {@link #applyRelations} and every other write in this schema; a
-     * deleted edge would be a delete-in-a-store-that-grants-no-delete, and one
-     * exception would cost the whole of it.
+     * matches {@link #applyRelations}; an edge is deleted only with a draft
+     * {@link #discard} deletes.
      *
      * <p>An unknown edge answers {@code RELATION_UNKNOWN}, and an
      * already-withdrawn one answers the same way — from a caller's side those
      * are one state, and the refusal names the triple so the caller knows
      * which of the three parts they got wrong.
      *
-     * <p>Withdrawing a {@code duplicate_of} edge reopens nothing: the item
-     * stays in the status the edge closed it into (REA-0011 D18).
+     * <p>A closed item takes no write, so the edge of a {@code duplicate_of}
+     * that closed it stays, and nothing reopens the item (REA-0011 D18).
      */
     @Transactional
     public Written<Map<String, Object>, RelationWrite> unrelate(UUID scopeId, UUID itemId,
             String toItemAddress, String relationTypeName, String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
+        refuseClosed(item);
 
         Item target = resolveItemAddress(scopeId, toItemAddress, TO_ITEM);
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName, TYPE);
@@ -533,6 +618,259 @@ public class ItemService {
             }
         }
         return Optional.empty();
+    }
+
+    // ------------------------------------------------------------------
+    // The transitions (REA-0011 D1, TAR-0002 B20).
+    // ------------------------------------------------------------------
+
+    /**
+     * Submit a draft: it moves to the phase open and keeps its status, which
+     * belongs to that phase already.
+     *
+     * <p>Refused by state on an item in any other phase, and on a draft
+     * {@link #submittable} says no to: one without a title or without a body
+     * of work, which is its workstream (TAR-0002 B20).
+     */
+    @Transactional
+    public Written<Map<String, Object>, Item> submit(UUID scopeId, UUID itemId,
+            String conflictToken) {
+        Item item = requireLocked(scopeId, itemId);
+        item.requireCurrentToken(conflictToken);
+        if (item.phase() != Phase.DRAFT || !submittable(item)) {
+            throw transitionRefused();
+        }
+        item.enter(Phase.OPEN);
+        item.stamp(clock.instant());
+        items.flushAndRefresh(item);
+        return new Written<>(project(item), item);
+    }
+
+    /**
+     * Discard a draft: it is deleted, with what stands beside it, and its
+     * number stays spent (REA-0011 D12, TAR-0002 B1).
+     *
+     * <p>Its references, criteria, tags and relations go with it, the
+     * relations of other items that point at it included; an item whose
+     * parent it was keeps no parent. Each such item moves its change time and
+     * its token, since its read answer changes, and is locked for that, as
+     * every write here locks what it writes. Refused by state on an item in
+     * any other phase than draft.
+     *
+     * @return the draft as it stood before it was deleted; the answer names
+     *         no call, since nothing stands at the address any more
+     */
+    @Transactional
+    public Written<Map<String, Object>, Item> discard(UUID scopeId, UUID itemId,
+            String conflictToken) {
+        Item item = requireLocked(scopeId, itemId);
+        item.requireCurrentToken(conflictToken);
+        if (item.phase() != Phase.DRAFT) {
+            throw transitionRefused();
+        }
+        Map<String, Object> last = project(item);
+        last.remove(Field.CONFLICT_TOKEN.canonicalName());
+
+        // Each item that points at the draft is locked once: a second locking
+        // read of one item would refresh it and drop the change made to it.
+        java.time.Instant now = clock.instant();
+        java.util.Set<UUID> children = new java.util.LinkedHashSet<>(items.childrenOf(item));
+        java.util.Set<UUID> pointing = new java.util.LinkedHashSet<>(children);
+        pointing.addAll(items.sourcesOf(item));
+        for (UUID id : pointing) {
+            items.lockById(id).ifPresent(other -> {
+                if (children.contains(id)) {
+                    other.parentNumber = null;
+                }
+                other.stamp(now);
+            });
+        }
+        items.delete(item);
+        return new Written<>(last, item);
+    }
+
+    /**
+     * Start an open item: it moves to the phase in progress (TAR-0002 B18).
+     *
+     * <p>Refused by state where the item is in another phase, where
+     * {@link #startable} says no -- its status does not answer
+     * {@code actionable}, or it carries no type -- and where the scope
+     * declares no status of the phase in progress. The item takes the status
+     * the call names ({@link #targetStatus}).
+     *
+     * @param statusName the status the call names; absent where it names none
+     */
+    @Transactional
+    public Written<Map<String, Object>, Item> start(UUID scopeId, UUID itemId,
+            String conflictToken, @Nullable String statusName) {
+        Item item = requireLocked(scopeId, itemId);
+        item.requireCurrentToken(conflictToken);
+        if (item.phase() != Phase.OPEN
+                || !startable(vocabulary.requireStatus(scopeId, item.statusPk), typed(item))) {
+            throw transitionRefused();
+        }
+        return move(item, Phase.IN_PROGRESS, targetStatus(scopeId, Phase.IN_PROGRESS, statusName));
+    }
+
+    /**
+     * Return an item in progress to the phase open (TAR-0002 B19). The
+     * reason is mandatory, and the surface refuses a call without one before
+     * this is entered. Refused by state on an item in another phase.
+     *
+     * <p>Spelled {@code return_}: the verb's name is a keyword of Java.
+     *
+     * @param reason     why the work stops, checked and stored nowhere
+     * @param statusName the status the call names; absent where it names none
+     */
+    @Transactional
+    public Written<Map<String, Object>, Item> return_(UUID scopeId, UUID itemId,
+            String conflictToken, String reason, @Nullable String statusName) {
+        Item item = requireLocked(scopeId, itemId);
+        item.requireCurrentToken(conflictToken);
+        if (item.phase() != Phase.IN_PROGRESS) {
+            throw transitionRefused();
+        }
+        requireReason(reason);
+        return move(item, Phase.OPEN, targetStatus(scopeId, Phase.OPEN, statusName));
+    }
+
+    /**
+     * Close an open item or one in progress: it moves to the phase closed for
+     * good, and its {@code close_date} is set (TAR-0002 B19). A reason is
+     * mandatory where the item leaves the phase in progress, and is refused as
+     * missing there; from the phase open it is optional. Refused by state on
+     * a draft and on a closed item, and where the scope declares no status of
+     * the phase closed.
+     *
+     * @param reason     why the item closes; absent where the call names none
+     * @param statusName the status the call names; absent where it names none
+     */
+    @Transactional
+    public Written<Map<String, Object>, Item> close(UUID scopeId, UUID itemId,
+            String conflictToken, @Nullable String reason, @Nullable String statusName) {
+        Item item = requireLocked(scopeId, itemId);
+        item.requireCurrentToken(conflictToken);
+        Phase phase = item.phase();
+        if (phase != Phase.OPEN && phase != Phase.IN_PROGRESS) {
+            throw transitionRefused();
+        }
+        if (phase == Phase.IN_PROGRESS) {
+            requireReason(reason);
+        }
+        return move(item, Phase.CLOSED, targetStatus(scopeId, Phase.CLOSED, statusName));
+    }
+
+    /**
+     * Refuses a transition out of the phase in progress without a reason
+     * (TAR-0002 B19), naming {@code reason}.
+     *
+     * @param reason the reason the call gave; absent where it gave none
+     */
+    private static void requireReason(@Nullable String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new WorklistException(WorklistException.Reason.ARGUMENT_MISSING,
+                List.of(REASON_ARGUMENT));
+        }
+    }
+
+    /**
+     * Moves an item into a phase and a status of it, in one write: the
+     * change time and the token move, and entering the phase closed sets the
+     * close date to that instant.
+     */
+    private Written<Map<String, Object>, Item> move(Item item, Phase phase, ItemStatus status) {
+        item.enter(phase);
+        item.statusPk = status.pk;
+        item.stamp(clock.instant());
+        if (phase == Phase.CLOSED) {
+            item.closeDate = item.changedAt;
+        }
+        items.flushAndRefresh(item);
+        return new Written<>(project(item), item);
+    }
+
+    /**
+     * The status a transition sets on entering a phase: the one the call
+     * names, where it belongs to that phase, and otherwise the first status
+     * of that phase the scope declares, by rank. A named status the scope
+     * does not declare is refused as undeclared, one of another phase as a
+     * value the call does not take, both naming {@code status}. A scope with
+     * no status of the phase refuses the transition by state, and the open
+     * calls of its items do not name it.
+     *
+     * @param statusName the status the call names; absent where it names none
+     */
+    private ItemStatus targetStatus(UUID scopeId, Phase phase, @Nullable String statusName) {
+        if (statusName != null) {
+            ItemFields.refuseUuidShape(STATUS_ARGUMENT, statusName);
+            ItemStatus named = vocabulary.statusByName(scopeId, statusName)
+                .orElseThrow(() -> new WorklistException(
+                    WorklistException.Reason.VALUE_UNDECLARED, List.of(STATUS_ARGUMENT)));
+            if (named.phase() != phase) {
+                throw new WorklistException(WorklistException.Reason.INVALID_VALUE,
+                    List.of(STATUS_ARGUMENT));
+            }
+            return named;
+        }
+        return firstOf(vocabulary.statuses(scopeId), phase).orElseThrow(ItemService::transitionRefused);
+    }
+
+    /**
+     * Whether a draft may be submitted: it carries a title and a body of
+     * work, its workstream (TAR-0002 B20). One decision for {@link #submit},
+     * for a create that submits, and for the open calls of the item.
+     */
+    static boolean submittable(Item item) {
+        return item.title != null && !item.title.isBlank() && item.workstreamNumber != null;
+    }
+
+    /**
+     * Whether an open item may be started: its status answers
+     * {@code actionable} and the item carries a type (TAR-0002 B18). One
+     * decision for {@link #start} and for the open calls of the item.
+     *
+     * @param typed whether the item carries a type ({@link #typed})
+     */
+    static boolean startable(ItemStatus status, boolean typed) {
+        return status.actionable && typed;
+    }
+
+    /** Whether an item carries a type: a value under its scope's attribute {@code type}. */
+    boolean typed(Item item) {
+        return typed(item, vocabulary.attributeByKey(item.scopeId, TYPE_KEY));
+    }
+
+    /**
+     * Whether an item carries a value under the declaration of its type. A
+     * scope that declares no attribute {@code type} holds no typed item.
+     *
+     * @param type the scope's declaration of the attribute {@code type}, if
+     *             it has one
+     */
+    static boolean typed(Item item, Optional<AttributeDefinition> type) {
+        if (type.isEmpty()) {
+            return false;
+        }
+        Object value = item.attributes.get(String.valueOf(type.get().pk));
+        if (value instanceof CharSequence text) {
+            return !text.toString().isBlank();
+        }
+        if (value instanceof java.util.Collection<?> many) {
+            return !many.isEmpty();
+        }
+        return value != null;
+    }
+
+    /**
+     * The first status of a phase among the statuses of a scope, in the
+     * order the scope declared them (by rank, then name), withdrawn ones
+     * left out; absent where the scope declares none of that phase.
+     */
+    static Optional<ItemStatus> firstOf(List<ItemStatus> statuses, Phase phase) {
+        return statuses.stream()
+            .filter(status -> DeclaredValue.DECLARED.equals(status.status))
+            .filter(status -> status.phase() == phase)
+            .findFirst();
     }
 
     /**
@@ -1046,10 +1384,11 @@ public class ItemService {
      * the scope declared the status under. A uuid on the wire is a form
      * refusal, and an unknown name is refused as an undeclared value.
      *
-     * <p>The close date follows the predicate {@code closed} of the two
-     * statuses: set at the move from a status that is not closed into one
-     * that is, cleared at the move out of a closed one, and left as it is
-     * between two closed statuses or two open ones.
+     * <p>The status belongs to the phase the item's phase binds it to
+     * ({@link Phase#statusPhase()}); one of another phase is refused by
+     * state, since the phase moves through a transition alone (REA-0011 D11).
+     * A status write never touches the close date: within one phase nothing
+     * closes.
      */
     private boolean applyStatus(Item item, @Nullable Object held, Field field,
             @Nullable Object value) {
@@ -1064,29 +1403,40 @@ public class ItemService {
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
                 List.of(field.path())));
-        boolean wasClosed = closed(item.statusPk);
-        item.statusPk = status.pk;
-        if (!wasClosed && status.closed) {
-            item.closeDate = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        } else if (wasClosed && !status.closed) {
-            item.closeDate = null;
+        if (status.phase() != item.phase().statusPhase()) {
+            throw transitionRefused();
         }
+        item.statusPk = status.pk;
         return true;
     }
 
     /**
-     * Resolve a status name at item-create time.
+     * The status a draft is created with: the one the call names, where it
+     * belongs to the phase open, and otherwise the first status of that phase
+     * the scope declares, by rank.
      *
-     * <p>A UUID is a typed refusal. An empty value is refused with the given
-     * message so the caller sees the field-level error rather than a
-     * confusing shape hint.
+     * <p>A uuid is a typed refusal, and so is a value that is no text or
+     * empty text, as for any field. A name the scope does not declare is
+     * refused as undeclared, and so is the field where the scope declares no
+     * status of the phase open at all.
+     *
+     * @param value the status the call names; absent where it names none
      */
-    private ItemStatus resolveStatus(UUID scopeId, @Nullable Object value) {
-        String name = ItemFields.text(Field.STATUS, value).orElseThrow(() -> new WorklistException(
-            WorklistException.Reason.INVALID_VALUE,
-            List.of(Field.STATUS.path())));
-        ItemFields.refuseUuidShape(Field.STATUS.path(), name);
-        return vocabulary.statusByName(scopeId, name)
+    private ItemStatus draftStatus(UUID scopeId, @Nullable Object value) {
+        if (value != null) {
+            String name = ItemFields.text(Field.STATUS, value).orElseThrow(() ->
+                new WorklistException(WorklistException.Reason.INVALID_VALUE,
+                    List.of(Field.STATUS.path())));
+            ItemFields.refuseUuidShape(Field.STATUS.path(), name);
+            ItemStatus named = vocabulary.statusByName(scopeId, name)
+                .orElseThrow(() -> new WorklistException(
+                    WorklistException.Reason.VALUE_UNDECLARED,
+                    List.of(Field.STATUS.path())));
+            if (named.phase() == Phase.OPEN) {
+                return named;
+            }
+        }
+        return firstOf(vocabulary.statuses(scopeId), Phase.OPEN)
             .orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.VALUE_UNDECLARED,
                 List.of(Field.STATUS.path())));
@@ -1448,10 +1798,10 @@ public class ItemService {
     /**
      * Set the relations to exactly the given set.
      *
-     * <p>An edge that leaves the set is WITHDRAWN, never deleted — this
-     * schema grants DELETE on nothing, and one exception would cost the whole
-     * of that. An edge that re-enters a set it had left is asserted again on
-     * the row that was already there.
+     * <p>An edge that leaves the set is WITHDRAWN, never deleted: an edge is
+     * deleted only with a draft {@link #discard} deletes. An edge that
+     * re-enters a set it had left is asserted again on the row that was
+     * already there.
      *
      * <p>Entries arrive with the type as a display name and the item as its
      * canonical address; both are resolved here against the scope. A
@@ -1703,9 +2053,10 @@ public class ItemService {
         fields.put(Field.TITLE.canonicalName(), item.title);
         fields.put(Field.DESCRIPTION.canonicalName(), item.description);
         fields.put(Field.CRITERIA.canonicalName(), assertedCriteria(item, scopeSlug));
+        fields.put(Field.PHASE.canonicalName(), item.phase().token());
         fields.put(Field.STATUS.canonicalName(), status.map(s -> s.name).orElse(null));
         fields.put(Field.PREDICATES.canonicalName(),
-            status.map(s -> predicatesOf(s, used)).orElse(null));
+            status.map(s -> predicatesOf(item.phase(), s, used)).orElse(null));
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
@@ -1756,24 +2107,29 @@ public class ItemService {
     }
 
     /**
-     * The predicates an item in this status answers, in the order of
-     * TAR-0002 Annex A1 (TAR-0002 B3, DEC-0037 C5).
+     * The predicates an item in this phase and this status answers, in the
+     * order of TAR-0002 Annex A1 (TAR-0002 B3, DEC-0037 C5).
      *
      * <p>{@code closed}, {@code actionable} and {@code in_progress} always;
      * {@code successful} only where {@code closed} holds; {@code reviewed},
      * {@code approved} and {@code verified} only where the scope uses them.
-     * One the item does not answer is left out of the object rather than
-     * answered false: false would say the scope asked and the answer is no.
+     * {@code closed} and {@code in_progress} are a projection of the item's
+     * phase -- {@code closed} holds exactly in the phase closed,
+     * {@code in_progress} exactly in the phase in progress -- and the others
+     * are declared on the status word. One the item does not answer is left
+     * out of the object rather than answered false: false would say the scope
+     * asked and the answer is no.
      */
-    static Map<String, Object> predicatesOf(ItemStatus status,
+    static Map<String, Object> predicatesOf(Phase phase, ItemStatus status,
             Set<ScopeUsage.Property> used) {
+        boolean closed = phase == Phase.CLOSED;
         Map<String, Object> predicates = new LinkedHashMap<>();
-        predicates.put(ItemFields.CLOSED, status.closed);
-        if (status.closed) {
+        predicates.put(ItemFields.CLOSED, closed);
+        if (closed) {
             predicates.put(ItemFields.SUCCESSFUL, status.successful);
         }
         predicates.put(ItemFields.ACTIONABLE, status.actionable);
-        predicates.put(ItemFields.IN_PROGRESS, status.inProgress);
+        predicates.put(ItemFields.IN_PROGRESS, phase == Phase.IN_PROGRESS);
         if (used.contains(ScopeUsage.Property.REVIEWED)) {
             predicates.put(ScopeUsage.Property.REVIEWED.token(), status.reviewed);
         }
@@ -1898,8 +2254,8 @@ public class ItemService {
      * <p>Each entry names its criterion by the complete address the item
      * answers it under, and carries whether it was booked after the item's
      * current {@code close_date}: derived here from the two times and stored
-     * nowhere, so an item that closes, reopens and closes again marks its
-     * entries against the date it carries now.
+     * nowhere, so the entries are marked against the date the item carries
+     * now.
      */
     private List<Map<String, Object>> fulfilmentOf(Item item, String scopeSlug, Ledger ledger) {
         List<ItemFulfilment> booked = items.fulfilmentOf(item);

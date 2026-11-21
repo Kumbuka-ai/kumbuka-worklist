@@ -52,9 +52,9 @@ import java.time.Instant;
  * exempt. A withdrawn row keeps whatever ordinal it had and is never consulted
  * for order.
  *
- * <p><strong>Withdrawal rather than deletion</strong>, as everywhere in this
- * schema: nothing holds a DELETE privilege, so a list that gets shorter marks
- * its tail withdrawn and leaves it standing.
+ * <p><strong>Withdrawal rather than deletion</strong>: a list that gets
+ * shorter marks its tail withdrawn and leaves it standing. The rows go only
+ * with the draft they belong to, when {@code discard} deletes it (V33).
  */
 @Entity
 @Table(name = "item_reference", schema = "worklist")
