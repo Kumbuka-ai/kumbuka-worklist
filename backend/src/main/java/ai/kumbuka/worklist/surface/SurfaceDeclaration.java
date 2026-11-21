@@ -430,8 +430,9 @@ public final class SurfaceDeclaration {
             REASON_CLOSE, STATUS),
         // The transitions of an item (REA-0011 D1): each presents the item's
         // conflict token, and each is refused by state where the item's phase
-        // does not open it.
-        verb("submit", ToolDescriptions::submit, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+        // does not open it. The argument that submits on a REST create
+        // carries the name of this transition, so the two share one constant.
+        verb(SUBMIT_ARGUMENT, ToolDescriptions::submit, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
                 RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TOKEN),
