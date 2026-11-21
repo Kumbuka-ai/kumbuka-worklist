@@ -296,17 +296,26 @@ class ItemDomainIsolationIT {
     }
 
     /**
-     * And the runtime role cannot DELETE anything at all, on any of them.
+     * The relations of this domain a draft's {@code discard} deletes from
+     * (V33): its references and its relations. Every other relation listed in
+     * {@link #DOMAIN_TABLES} grants no DELETE.
+     */
+    private static final List<String> DELETED_WITH_A_DRAFT =
+        List.of("item_reference", "item_relation");
+
+    /**
+     * The runtime role cannot DELETE from any relation of this domain but the
+     * two a discarded draft takes with it.
      *
      * <p>A different mechanism from everything above and it is worth its own
      * case: row-level security decides which rows a statement sees, and this
      * decides whether the statement may be issued. "No verb deletes" is held
-     * by the GRANTS, so it holds against raw SQL that never passes a policy —
-     * and TRUNCATE, which is the one that bypasses every policy there is,
-     * falls under the same absence.
+     * by the GRANTS for every relation no verb deletes from, so it holds
+     * against raw SQL that never passes a policy — and TRUNCATE, which is the
+     * one that bypasses every policy there is, falls under the same absence.
      */
     @Test
-    void the_runtime_role_may_not_delete_from_any_relation_of_this_domain()
+    void the_runtime_role_may_not_delete_from_a_relation_no_verb_deletes_from()
             throws SQLException {
         try (Connection c = Db.asService()) {
             Db.bindTenant(c, tenantA);
@@ -314,13 +323,47 @@ class ItemDomainIsolationIT {
             c.commit();
 
             for (String table : DOMAIN_TABLES) {
+                if (DELETED_WITH_A_DRAFT.contains(table)) {
+                    continue;
+                }
                 assertThatThrownBy(() -> Db.exec(c, "DELETE FROM worklist." + table))
                     .as("RED STATE, observed: a DELETE against worklist.%s must be "
                         + "refused for want of a privilege. Withdrawal is a status "
-                        + "everywhere in this schema, and one granted DELETE would cost "
-                        + "the whole of that guarantee", table)
+                        + "there, and one granted DELETE would cost the whole of that "
+                        + "guarantee", table)
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("permission denied");
+                c.rollback();
+            }
+        }
+    }
+
+    /**
+     * Where DELETE is granted for {@code discard}, the policy still bounds it:
+     * a session bound to one tenant deletes that tenant's rows and none of
+     * another's. The grant decides whether the statement may be issued, the
+     * policy which rows it sees, and the second holds for DELETE as for every
+     * other statement.
+     */
+    @Test
+    void a_delete_the_runtime_role_may_issue_reaches_no_row_of_another_tenant()
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            plantOneOfEach(c, tenantA);
+            plantOneOfEach(c, tenantB);
+            c.commit();
+
+            for (String table : DELETED_WITH_A_DRAFT) {
+                Db.bindTenant(c, tenantA);
+                Db.exec(c, "DELETE FROM worklist." + table);
+                assertThat(count(c, table))
+                    .as("the session bound to tenant A deleted its own rows of %s", table)
+                    .isZero();
+
+                Db.bindTenant(c, tenantB);
+                assertThat(count(c, table))
+                    .as("and tenant B's row of %s stands: the policy bounds the delete", table)
+                    .isEqualTo(1);
                 c.rollback();
             }
         }
