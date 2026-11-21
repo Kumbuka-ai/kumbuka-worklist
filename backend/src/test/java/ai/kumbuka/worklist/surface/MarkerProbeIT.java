@@ -300,11 +300,16 @@ class MarkerProbeIT {
     // Notices
     // ======================================================================
 
+    /**
+     * A planning answer carries no notice: the platform constants of planning
+     * surface only as a refusal (TAR-0002 B11), so the warning that a planning
+     * write once carried is gone. The notice that remains, {@code validate}'s
+     * finding of a blocking cycle, is provoked instead, over items whose
+     * titles carry the caller's marker and a relation type that carries the
+     * tenant's, and its message repeats neither.
+     */
     @Test
-    void a_planning_notice_repeats_nothing_the_caller_or_the_tenant_wrote() {
-        // The scope warns at one membership: planning the second item provokes
-        // the notice. The item's own title carries the marker, and the
-        // notice must not.
+    void a_notice_repeats_nothing_the_caller_or_the_tenant_wrote() {
         Map<String, Object> created = items.create(SCOPE_ID, "probe-subject",
             Map.of("title", MARKER, "status", OPEN, "milestone", 1)).answer();
         Object number = created.get("number");
@@ -314,16 +319,44 @@ class MarkerProbeIT {
                 "address", "worklist://" + SCOPE + "/iteration/1/" + number,
                 "conflict_token", tokenOf(iteration))))
             .when().post("/mcp").then().statusCode(200).extract();
-
-        List<String> warnings = planned.jsonPath()
-            .getList("result.structuredContent.fields.warnings", String.class);
         SoftAssertions soft = new SoftAssertions();
-        soft.assertThat(warnings).as("the notice is provoked").isNotEmpty();
-        for (String warning : warnings) {
-            soft.assertThat(warning).doesNotContainIgnoringCase(MARKER)
-                .doesNotContainIgnoringCase(TENANT);
+        soft.assertThat(planned.jsonPath().getBoolean("result.isError"))
+            .as("the plan is admitted").isFalse();
+        soft.assertThat(planned.jsonPath()
+                .getList("result.structuredContent.fields.warnings", String.class))
+            .as("and a planning answer carries no notice").isEmpty();
+
+        // a blocks b over the tenant's blocking relation type, and b blocks a.
+        UUID a = (UUID) created.get("id");
+        Map<String, Object> other = items.create(SCOPE_ID, "probe-subject",
+            Map.of("title", MARKER + " too", "status", OPEN)).answer();
+        UUID b = (UUID) other.get("id");
+        String addressOfA = address(Selector.ITEM, number);
+        String addressOfB = address(Selector.ITEM, other.get("number"));
+        items.relate(SCOPE_ID, a, addressOfB, RELATION, itemToken(a));
+        items.relate(SCOPE_ID, b, addressOfA, RELATION, itemToken(b));
+        try {
+            ExtractableResponse<Response> validated = given().contentType(ContentType.JSON)
+                .body(rpcCall("validate", Map.of("scope", SCOPE, "selector", Selector.ITEM)))
+                .when().post("/mcp").then().statusCode(200).extract();
+            List<String> messages = validated.jsonPath()
+                .getList("result.structuredContent.fields.findings.message", String.class);
+            soft.assertThat(messages).as("the notice of a blocking cycle is provoked")
+                .isNotEmpty();
+            for (String message : messages) {
+                soft.assertThat(message).doesNotContainIgnoringCase(MARKER)
+                    .doesNotContainIgnoringCase(TENANT);
+            }
+        } finally {
+            // The scope is shared by every case of this class: the ring goes.
+            items.unrelate(SCOPE_ID, a, addressOfB, RELATION, itemToken(a));
+            items.unrelate(SCOPE_ID, b, addressOfA, RELATION, itemToken(b));
         }
         soft.assertAll();
+    }
+
+    private String itemToken(UUID item) {
+        return (String) items.read(SCOPE_ID, item).get("conflict_token");
     }
 
     // ======================================================================
@@ -420,11 +453,7 @@ class MarkerProbeIT {
 
     private void stage() {
         SurfaceFixture.publishScope(SCOPE, SCOPE_ID, "project", false);
-        settings.create(SCOPE_ID, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 1));
+        settings.create(SCOPE_ID, Map.of());
         for (String view : Selector.VIEWS) {
             selectors.open(SCOPE_ID, view);
         }

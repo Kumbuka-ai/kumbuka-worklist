@@ -226,11 +226,8 @@ class NoUuidLabelsAtSurfaceIT {
     }
 
     private void openTheScope() {
-        Map<String, Object> limits = Map.of(
-            "max_planned_iterations", 1_000, "warn_planned_iterations", 1_000,
-            "max_memberships_per_iteration", 1_000, "warn_memberships_per_iteration", 1_000);
         try {
-            settings.create(SCOPE_ID, limits);
+            settings.create(SCOPE_ID, Map.of());
         } catch (ai.kumbuka.worklist.domain.WorklistException alreadyOpen) {
             if (alreadyOpen.reason()
                     != ai.kumbuka.worklist.domain.WorklistException.Reason.SETTING_PRESENT) {

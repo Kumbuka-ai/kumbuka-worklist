@@ -29,18 +29,16 @@ import java.util.UUID;
  * {@code update} it. There is no {@code query}: one row per scope is not
  * something a scope-addressed call enumerates.
  *
- * <h2>Why the four cardinality numbers are mandatory at creation</h2>
+ * <h2>Opening a scope asks for nothing</h2>
  *
- * V4 gives them no defaults, deliberately: "a number written at this line
- * would be a platform constant wearing a setting's clothes". So this verb
- * cannot fall back on one either, and a scope names its four numbers when it
- * is opened. The alternative — inventing four here — would move the platform
- * constant one layer up and hide it better.
- *
- * <p>The relation between a warning and its limit is NOT constrained, and
- * that is V4's decision restated rather than a gap: "well below" is a
- * judgement, and a scope that wants its warning at the limit is making a
- * choice rather than a mistake.
+ * The settings exist from the moment the scope exists in this service
+ * (TAR-0002 B11): {@code create} is the act that opens the scope, and it
+ * writes the row with an empty pointer and an empty default column set
+ * unless the caller names one; no number is asked for. The settings carry no
+ * cardinality numbers; planning is bounded by the platform constants of
+ * REA-0011 D9. A write that
+ * names one of the four retired numbers is refused like a write naming any
+ * other field the settings do not carry.
  *
  * <h2>The current iteration pointer is read here and written by {@code advance}</h2>
  *
@@ -83,7 +81,10 @@ public class ScopeSettingService extends PlanningService {
      *
      * <p>Once. A second call is a typed refusal rather than an overwrite:
      * there is one row per scope, and an overwrite would silently replace the
-     * limits a scope is already working under.
+     * pointer and the column set a scope is already working with.
+     *
+     * <p>Nothing is required. The row is written with an empty pointer and
+     * an empty default column set, unless the caller names a column set.
      */
     @Transactional
     public Map<String, Object> create(UUID scopeId, Map<String, ?> arguments) {
@@ -99,19 +100,8 @@ public class ScopeSettingService extends PlanningService {
         ScopeSetting setting = new ScopeSetting();
         setting.scopeKey = scopeId;
         setting.scopeId = scopeId;
-        setting.maxPlannedIterations = mandatory(Field.MAX_PLANNED_ITERATIONS, given);
-        setting.warnPlannedIterations = mandatory(Field.WARN_PLANNED_ITERATIONS, given);
-        setting.maxMembershipsPerIteration =
-            mandatory(Field.MAX_MEMBERSHIPS_PER_ITERATION, given);
-        setting.warnMembershipsPerIteration =
-            mandatory(Field.WARN_MEMBERSHIPS_PER_ITERATION, given);
-
-        Map<Field, Object> rest = settableOnly(Addressed.SETTING, given);
-        rest.remove(Field.MAX_PLANNED_ITERATIONS);
-        rest.remove(Field.WARN_PLANNED_ITERATIONS);
-        rest.remove(Field.MAX_MEMBERSHIPS_PER_ITERATION);
-        rest.remove(Field.WARN_MEMBERSHIPS_PER_ITERATION);
-        applyEffectiveChanges(setting, projectOf(setting, List.of()), rest);
+        applyEffectiveChanges(setting, projectOf(setting, List.of()),
+            settableOnly(Addressed.SETTING, given));
 
         planning.insert(setting);
         planning.flushAndRefresh(setting);
@@ -136,7 +126,7 @@ public class ScopeSettingService extends PlanningService {
      *
      * <p><strong>A write that changes nothing writes nothing</strong> — the
      * same rule as everywhere else in this domain, and the reason a caller
-     * can read the settings, change one number and send the whole answer
+     * can read the settings, change the column set and send the whole answer
      * back.
      */
     @Transactional
@@ -161,15 +151,6 @@ public class ScopeSettingService extends PlanningService {
     // The mechanisms the verbs above are made of.
     // ------------------------------------------------------------------
 
-    /** One of the four numbers V4 leaves without a default, refused by name when absent. */
-    private static int mandatory(Field field, Map<Field, Object> given) {
-        return whole(field, given.get(field))
-            .filter(value -> value > 0)
-            .orElseThrow(() -> new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(field.path())));
-    }
-
     private boolean applyEffectiveChanges(ScopeSetting setting, Map<String, Object> current,
             Map<Field, Object> settable) {
         boolean changed = false;
@@ -183,23 +164,6 @@ public class ScopeSettingService extends PlanningService {
             Object value) {
         Object held = current.get(field.canonicalName());
         switch (field) {
-            case MAX_PLANNED_ITERATIONS -> {
-                int limit = positive(field, value);
-                return moved(held, limit, () -> setting.maxPlannedIterations = limit);
-            }
-            case WARN_PLANNED_ITERATIONS -> {
-                int threshold = positive(field, value);
-                return moved(held, threshold, () -> setting.warnPlannedIterations = threshold);
-            }
-            case MAX_MEMBERSHIPS_PER_ITERATION -> {
-                int limit = positive(field, value);
-                return moved(held, limit, () -> setting.maxMembershipsPerIteration = limit);
-            }
-            case WARN_MEMBERSHIPS_PER_ITERATION -> {
-                int threshold = positive(field, value);
-                return moved(held, threshold,
-                    () -> setting.warnMembershipsPerIteration = threshold);
-            }
             case DEFAULT_COLUMNS -> {
                 List<String> columns = ItemFields.tokensInOrder(field, value);
                 String[] wanted = columns.toArray(new String[0]);
@@ -209,22 +173,6 @@ public class ScopeSettingService extends PlanningService {
                 field.canonicalName() + " is settable on a scope setting and has no "
                     + "application");
         }
-    }
-
-    /**
-     * A cardinality number, refused where V4's check constraint would refuse
-     * it.
-     *
-     * <p>Here rather than only there, because a constraint violation arrives
-     * at flush, under JTA, outside the typed refusal model. The constraint
-     * stays — it is the mechanism — and this is the message.
-     */
-    private static int positive(Field field, @Nullable Object value) {
-        return whole(field, value)
-            .filter(number -> number > 0)
-            .orElseThrow(() -> new WorklistException(
-                WorklistException.Reason.INVALID_VALUE,
-                List.of(field.path())));
     }
 
     private static boolean moved(@Nullable Object held, @Nullable Object wanted, Runnable write) {
@@ -265,14 +213,6 @@ public class ScopeSettingService extends PlanningService {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put(Field.SCOPE.canonicalName(), setting.scopeId);
         fields.put(Field.CURRENT_ITERATION.canonicalName(), currentIterationId);
-        fields.put(Field.MAX_PLANNED_ITERATIONS.canonicalName(),
-            setting.maxPlannedIterations);
-        fields.put(Field.WARN_PLANNED_ITERATIONS.canonicalName(),
-            setting.warnPlannedIterations);
-        fields.put(Field.MAX_MEMBERSHIPS_PER_ITERATION.canonicalName(),
-            setting.maxMembershipsPerIteration);
-        fields.put(Field.WARN_MEMBERSHIPS_PER_ITERATION.canonicalName(),
-            setting.warnMembershipsPerIteration);
         fields.put(Field.DEFAULT_COLUMNS.canonicalName(),
             List.of(setting.defaultColumns));
         fields.put(Field.CREATED_AT.canonicalName(), setting.createdAt);

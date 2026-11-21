@@ -118,9 +118,9 @@ public class IterationService extends PlanningService {
      * means.
      *
      * <p>The number comes from the scope's own mark and is never given. The
-     * cardinality of OPEN iterations is checked before the write: the hard
-     * limit refuses, and the advisory threshold beside it warns in the answer
-     * and admits. Both numbers are the scope's own.
+     * number of OPEN iterations is checked before the write against the
+     * platform constant {@link #OPEN_ITERATIONS_PER_SCOPE}; a closed iteration
+     * does not count. The scope's settings are not read.
      */
     @Transactional
     public Written<Map<String, Object>, Iteration> create(UUID scopeId,
@@ -128,9 +128,8 @@ public class IterationService extends PlanningService {
         Map<Field, Object> given = Field.resolve(Addressed.ITERATION, arguments);
         refuseUnsettableChanges(Addressed.ITERATION, Map.of(), given);
 
-        ScopeSetting setting = requireSetting(scopeId);
         int openAfterwards = planning.openIterations(scopeId).size() + 1;
-        refuseBeyond(openAfterwards, setting.maxPlannedIterations);
+        refuseBeyond(openAfterwards, OPEN_ITERATIONS_PER_SCOPE);
 
         Iteration iteration = new Iteration();
         iteration.scopeId = scopeId;
@@ -145,8 +144,7 @@ public class IterationService extends PlanningService {
         planning.insert(iteration);
         planning.flushAndRefresh(iteration);
 
-        return new Written<>(project(iteration, warnings(warningAt(openAfterwards,
-            setting.warnPlannedIterations, Notice.PLANNED_ITERATIONS_AT_THRESHOLD))), iteration);
+        return new Written<>(project(iteration, List.of()), iteration);
     }
 
     /**
@@ -232,15 +230,18 @@ public class IterationService extends PlanningService {
         iteration.closedAt = now.truncatedTo(ChronoUnit.MICROS);
         iteration.stamp(now);
 
-        ScopeSetting setting = requireLockedSetting(scopeId);
-        if (Objects.equals(iteration.number, setting.currentIterationNumber)) {
-            // The pointer cannot outlive what it points at: a closed current
-            // iteration is a state where the draw has somewhere to look and
-            // nothing to find, which is the empty answer the concept insists
-            // must mean "plan" rather than "close".
-            setting.currentIterationNumber = null;
-            setting.stamp(clock.instant());
-        }
+        // A scope without a settings row has no pointer to clear, and the
+        // close is not refused for it.
+        planning.lockSettingOf(scopeId)
+            .filter(setting -> Objects.equals(iteration.number, setting.currentIterationNumber))
+            .ifPresent(setting -> {
+                // The pointer cannot outlive what it points at: a closed current
+                // iteration is a state where the draw has somewhere to look and
+                // nothing to find, which is the empty answer the concept insists
+                // must mean "plan" rather than "close".
+                setting.currentIterationNumber = null;
+                setting.stamp(clock.instant());
+            });
 
         planning.flushAndRefresh(iteration);
         return new Written<>(project(iteration, List.of()), iteration);

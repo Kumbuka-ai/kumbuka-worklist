@@ -51,9 +51,7 @@ class AttributeFormsIT {
     @BeforeEach
     void aScopeWithAChoiceAndAMultiChoice() {
         scope = UUID.randomUUID();
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10, "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
         openName = vocabulary.declareStatus(scope, "open", 1, true, false, false, false).name;
         vocabulary.declareAttribute(scope, "size", "Size", "choice", 1, false);
         vocabulary.declareOption(scope, "size", "S", 1);

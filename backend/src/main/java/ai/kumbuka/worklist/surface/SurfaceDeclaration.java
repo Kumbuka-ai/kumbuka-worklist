@@ -338,8 +338,8 @@ public final class SurfaceDeclaration {
 
     private static final List<Verb> VERBS = List.of(
         verb("create", ToolDescriptions::create, EffectClass.CREATE, Answer.OBJECT_CREATED,
-            reasons(WRITE, FIELD_WRITE, codes(RefusalCode.SETTING_ABSENT,
-                RefusalCode.CARDINALITY_EXCEEDED, RefusalCode.IDEMPOTENCY_KEY_REUSED)),
+            reasons(WRITE, FIELD_WRITE, codes(RefusalCode.CARDINALITY_EXCEEDED,
+                RefusalCode.IDEMPOTENCY_KEY_REUSED)),
             SCOPE, selector(ArgumentDescriptions::selectorCreate, Selector.ITEM, Selector.ITERATION,
                 Selector.MILESTONE), FIELDS, IDEMPOTENCY_KEY),
         verb("read", ToolDescriptions::read, EffectClass.ITEM_READ, Answer.OBJECT,
@@ -389,7 +389,7 @@ public final class SurfaceDeclaration {
         verb("plan", ToolDescriptions::plan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT_CREATED,
             reasons(WRITE, TOKENED, codes(RefusalCode.MEMBERSHIP_PRESENT,
                 RefusalCode.TRANSITION_REFUSED, RefusalCode.ITEM_UNPLANNABLE,
-                RefusalCode.SETTING_ABSENT, RefusalCode.CARDINALITY_EXCEEDED)),
+                RefusalCode.CARDINALITY_EXCEEDED)),
             MEMBERSHIP, TOKEN),
         verb("unplan", ToolDescriptions::unplan, EffectClass.GRAPH_ADD_OR_REMOVE, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.TRANSITION_REFUSED)),

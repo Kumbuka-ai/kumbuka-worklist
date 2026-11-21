@@ -147,15 +147,13 @@ public class OpenCallService extends PlanningService {
     @Transactional
     public LongFunction<Open> itemsOf(UUID scopeId) {
         List<Iteration> open = planning.openIterations(scopeId);
-        Optional<ScopeSetting> setting = planning.settingOf(scopeId);
         List<Room> rooms = new ArrayList<>();
         for (Iteration iteration : open) {
             List<IterationMembership> held = planning.membershipsOf(scopeId, iteration.number);
             Set<Long> members = new HashSet<>();
             held.forEach(membership -> members.add(membership.itemNumber));
             rooms.add(new Room(iteration.number, members,
-                setting.map(s -> within(held.size() + 1, s.maxMembershipsPerIteration))
-                    .orElse(false)));
+                within(countedMemberships(held) + 1, MEMBERSHIPS_PER_ITERATION)));
         }
         return new Items(scopeId, List.copyOf(rooms))::open;
     }
@@ -173,8 +171,8 @@ public class OpenCallService extends PlanningService {
         List<Call> calls = new ArrayList<>(List.of(
             at(Verb.READ, Selector.ITERATION, number), at(Verb.UPDATE, Selector.ITERATION, number),
             at(Verb.CLOSE, Selector.ITERATION, number)));
-        int held = planning.membershipsOf(scopeId, number).size();
-        if (setting.map(s -> within(held + 1, s.maxMembershipsPerIteration)).orElse(false)) {
+        int held = countedMemberships(planning.membershipsOf(scopeId, number));
+        if (within(held + 1, MEMBERSHIPS_PER_ITERATION)) {
             calls.add(at(Verb.PLAN, Selector.ITERATION, number));
         }
         if (setting.flatMap(s -> IterationService.promotable(planning.openIterations(scopeId),
@@ -238,15 +236,14 @@ public class OpenCallService extends PlanningService {
     }
 
     /**
-     * The items of one scope against its open iterations, with each status and
-     * milestone read once however many items name it.
+     * The items of one scope against its open iterations, with each status
+     * read once however many items name it.
      */
     private final class Items {
 
         private final UUID scopeId;
         private final List<Room> rooms;
         private final Map<Long, ItemStatus> statuses = new HashMap<>();
-        private final Map<Long, Optional<Milestone>> milestones = new HashMap<>();
 
         Items(UUID scopeId, List<Room> rooms) {
             this.scopeId = scopeId;
@@ -265,23 +262,13 @@ public class OpenCallService extends PlanningService {
                 at(Verb.TAG_ATTACH, Selector.ITEM, number),
                 at(Verb.TAG_DETACH, Selector.ITEM, number),
                 at(Verb.BOOK, Selector.ITEM, number)));
-            if (MembershipService.plannable(status, milestoneOf(item))) {
+            if (MembershipService.plannable(status)) {
                 rooms.stream()
                     .filter(room -> room.admits() && !room.members().contains(number))
                     .forEach(room -> calls.add(new Call(Verb.PLAN, Selector.ITERATION,
                         room.iteration(), number)));
             }
             return new Open(status.name, List.copyOf(calls));
-        }
-
-        /** The item's milestone; absent where it carries none or names none of the scope. */
-        private @Nullable Milestone milestoneOf(Item item) {
-            Long number = item.milestoneNumber;
-            if (number == null) {
-                return null;
-            }
-            return milestones.computeIfAbsent(number,
-                n -> planning.milestoneByNumber(scopeId, n)).orElse(null);
         }
     }
 }

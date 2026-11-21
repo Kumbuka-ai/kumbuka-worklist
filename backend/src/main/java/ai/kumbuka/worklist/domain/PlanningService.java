@@ -13,7 +13,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -53,18 +52,31 @@ import java.util.UUID;
  */
 public abstract class PlanningService {
 
+    /**
+     * The platform constant on open iterations: at most this many per scope,
+     * closed iterations not counted (REA-0011 D9). Not configurable, and not a
+     * setting of the scope; it surfaces only as the refusal
+     * {@code CARDINALITY_EXCEEDED}.
+     */
+    static final int OPEN_ITERATIONS_PER_SCOPE = 100;
+
+    /**
+     * The platform constant on memberships: at most this many per iteration,
+     * a dropped membership not counted (REA-0011 D9). Not configurable either,
+     * and surfacing the same way.
+     */
+    static final int MEMBERSHIPS_PER_ITERATION = 1000;
+
     @Inject PlanningRepository planning;
     @Inject Clock clock;
 
     /**
      * The scope's settings row, or a typed refusal naming what is missing.
      *
-     * <p>Not created here. A settings row invented on first use would carry
-     * cardinality limits this service chose, and V4 leaves those four columns
-     * without defaults precisely so that no layer can quietly pick them: "a
-     * number written at this line would be a platform constant wearing a
-     * setting's clothes". A scope is opened before it plans, exactly as a
-     * selector is declared before an address is allocated.
+     * <p>Not created here: a read never writes. The row is written by the act
+     * that opens the scope in this service ({@link ScopeSettingService#create}
+     * or the bootstrap), together with the scope's views, so a scope that has
+     * its views has its settings.
      */
     protected ScopeSetting requireSetting(UUID scopeId) {
         return requirePresent(planning.settingOf(scopeId).orElse(null));
@@ -222,27 +234,11 @@ public abstract class PlanningService {
     }
 
     /**
-     * The warning a cardinality threshold produces, if it produces one.
+     * A platform constant of planning, as a refusal with a code of its own
+     * (REA-0011 D8).
      *
-     * <p>Both numbers come from the scope's row and neither is written into
-     * this file. A warning admits the write and says so; the limit beside it
-     * refuses. The warning exists so that the limit is met deliberately
-     * rather than discovered at the moment it refuses.
-     */
-    protected static Optional<Notice> warningAt(int reached, int warnAt, Notice notice) {
-        // A fixed notice: the numbers are the scope's settings and travel in
-        // the read of those settings, never in a statement of the platform
-        // (DEC-0043 R18).
-        return reached < warnAt ? Optional.empty() : Optional.of(notice);
-    }
-
-    /**
-     * The hard limit, as a refusal that names both numbers.
-     *
-     * <p>Called before the write, so nothing is stored and then undone. The
-     * limit is the scope's and the refusal says so, because a caller told
-     * only "too many" has no way to tell a platform ceiling from a setting
-     * they may change.
+     * <p>Called before the write, so nothing is stored and then undone. There
+     * is no warning below the constant: it surfaces only as this refusal.
      */
     protected static void refuseBeyond(int reached, int limit) {
         if (within(reached, limit)) {
@@ -254,7 +250,7 @@ public abstract class PlanningService {
     }
 
     /**
-     * Whether a count the write would reach stays within the scope's limit:
+     * Whether a count the write would reach stays within a platform constant:
      * the decision {@link #refuseBeyond} refuses on, and the one the open
      * calls of an iteration name {@code plan} on.
      */
@@ -262,9 +258,15 @@ public abstract class PlanningService {
         return reached <= limit;
     }
 
-    /** The warnings of one write, as the answer carries them. Empty is the normal case. */
-    @SafeVarargs
-    protected static List<Notice> warnings(Optional<Notice>... produced) {
-        return Arrays.stream(produced).flatMap(Optional::stream).toList();
+    /**
+     * The memberships of an iteration that count against
+     * {@link #MEMBERSHIPS_PER_ITERATION}: every one but a dropped one. A
+     * dropped membership is what {@code unplan} leaves behind, since no row is
+     * deleted, and the item it held is no longer in the iteration.
+     */
+    protected static int countedMemberships(List<IterationMembership> held) {
+        return (int) held.stream()
+            .filter(membership -> !IterationMembership.DROPPED.equals(membership.status))
+            .count();
     }
 }

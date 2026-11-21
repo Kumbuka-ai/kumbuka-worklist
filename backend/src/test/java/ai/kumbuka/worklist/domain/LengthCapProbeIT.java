@@ -63,9 +63,7 @@ class LengthCapProbeIT {
         scope = UUID.randomUUID();
         selectors.open(scope, Selector.MILESTONE);
         selectors.open(scope, Selector.ITERATION);
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10, "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
     }
 
     // ==================================================================

@@ -318,11 +318,7 @@ class PageQueryPlanIT {
     /** A scope with every view declared and one object of each, numbered 1 or more. */
     private UUID aScopeWithOneOfEach() {
         UUID id = UUID.randomUUID();
-        settings.create(id, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(id, Map.of());
         for (String view : Selector.VIEWS) {
             selectors.open(id, view);
         }

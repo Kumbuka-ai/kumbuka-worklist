@@ -72,11 +72,7 @@ class UnstampedWriteIT {
         selectors.open(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
             true, false, false, false).name;
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
     }
 
     // -----------------------------------------------------------------------
@@ -149,12 +145,12 @@ class UnstampedWriteIT {
 
         refusedAtTheFlush(() -> {
             settings.read(scope);
-            em.find(ScopeSetting.class, scope).warnPlannedIterations = 8;
+            em.find(ScopeSetting.class, scope).defaultColumns = new String[] {"title"};
         });
 
         Map<String, Object> after = settings.read(scope);
-        assertThat(after.get(Field.WARN_PLANNED_ITERATIONS.canonicalName()))
-            .as("nothing of it is stored").isEqualTo(9);
+        assertThat(after.get(Field.DEFAULT_COLUMNS.canonicalName()))
+            .as("nothing of it is stored").isEqualTo(List.of());
         assertThat(tokenOf(after)).isEqualTo(tokenOf(created));
     }
 
@@ -241,29 +237,32 @@ class UnstampedWriteIT {
 
     @Test
     void a_scope_setting_written_through_its_verbs_passes_the_flush() {
-        Field warn = Field.WARN_PLANNED_ITERATIONS;
+        Field columns = Field.DEFAULT_COLUMNS;
         Map<String, Object> created = settings.read(scope);
 
         Map<String, Object> changed = settings.update(scope, Map.of(
-            warn.canonicalName(), 8,
+            columns.canonicalName(), List.of("title"),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created)));
-        assertThat(changed.get(warn.canonicalName())).as("an update through the verb is stamped")
-            .isEqualTo(8);
+        assertThat(changed.get(columns.canonicalName()))
+            .as("an update through the verb is stamped")
+            .isEqualTo(List.of("title"));
         assertThat(tokenOf(changed)).isNotEqualTo(tokenOf(created));
 
         Map<String, Object> same = settings.update(scope, Map.of(
-            warn.canonicalName(), 8,
+            columns.canonicalName(), List.of("title"),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(changed)));
         assertThat(tokenOf(same))
             .as("a write that changes nothing flushes nothing and keeps its token")
             .isEqualTo(tokenOf(changed));
 
         Map<String, Object> again = settings.update(scope, Map.of(
-            warn.canonicalName(), 7,
+            columns.canonicalName(), List.of("title", "status"),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(same)));
-        assertThat(again.get(warn.canonicalName()))
-            .as("and the stamp of one write does not stand in for the next").isEqualTo(7);
-        assertThat(settings.read(scope).get(warn.canonicalName())).isEqualTo(7);
+        assertThat(again.get(columns.canonicalName()))
+            .as("and the stamp of one write does not stand in for the next")
+            .isEqualTo(List.of("title", "status"));
+        assertThat(settings.read(scope).get(columns.canonicalName()))
+            .isEqualTo(List.of("title", "status"));
     }
 
     // -----------------------------------------------------------------------

@@ -21,6 +21,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -77,11 +78,7 @@ class ConflictTokenIT {
         selectors.open(scope, Selector.ITEM);
         openStatus = vocabulary.declareStatus(scope, "open", 1,
             true, false, false, false).name;
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
         clock.set(T);
     }
 
@@ -199,17 +196,17 @@ class ConflictTokenIT {
 
     @Test
     void a_scope_setting_takes_its_token_the_same_way() throws SQLException {
-        Field warn = Field.WARN_PLANNED_ITERATIONS;
+        Field columns = Field.DEFAULT_COLUMNS;
         Map<String, Object> created = settings.read(scope);
 
         Map<String, Object> once = settings.update(scope, Map.of(
-            warn.canonicalName(), 8,
+            columns.canonicalName(), List.of("title"),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(created)));
         Map<String, Object> twice = settings.update(scope, Map.of(
-            warn.canonicalName(), 7,
+            columns.canonicalName(), List.of("title", "status"),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(once)));
         Map<String, Object> same = settings.update(scope, Map.of(
-            warn.canonicalName(), 7,
+            columns.canonicalName(), List.of("title", "status"),
             Field.CONFLICT_TOKEN.canonicalName(), tokenOf(twice)));
 
         assertThat(tokenOf(once))
