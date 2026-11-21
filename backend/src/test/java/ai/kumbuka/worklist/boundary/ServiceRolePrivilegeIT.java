@@ -145,8 +145,9 @@ class ServiceRolePrivilegeIT {
         // The fourth view, ratified 2026-09-08. Its table carries the same
         // SELECT/INSERT/UPDATE the schema hands out to every other one.
         "workstream",
-        // The lease, and what the scope decides.
-        "claim", "scope_setting", "view_preference",
+        // What the scope decides. The lease's table `claim` of V4 is gone
+        // since V31 (RETIRED_TABLES).
+        "scope_setting", "view_preference",
         // The ledger of spent idempotency keys (C10.4), from V25: the same
         // SELECT/INSERT/UPDATE, and no DELETE -- an expired key is written over.
         "idempotency_key",
@@ -166,6 +167,18 @@ class ServiceRolePrivilegeIT {
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);
+
+    /**
+     * Tables this schema once had and must not have again, each by name.
+     *
+     * <p>{@code claim}, the lease of V4, dropped by V31: the lease left the
+     * surface in the release before, and its store left after it. A table of
+     * that name coming back is a relation with grants nobody decided, and a
+     * holder store nothing on the surface reads. The catalog-derived check of
+     * {@link #the_schema_holds_exactly_the_relations_that_were_declared} would
+     * see it as an extra table; this list says which absence is meant.
+     */
+    private static final Set<String> RETIRED_TABLES = Set.of("claim");
 
     private static String schema() {
         return ConfigProvider.getConfig().getValue("quarkus.flyway.default-schema", String.class);
@@ -318,6 +331,39 @@ class ServiceRolePrivilegeIT {
                 + "is a relation whose entitlement nobody decided, so an extra table is a "
                 + "finding rather than a detail")
             .allSatisfy(table -> assertThat(EXPECTED_TABLES).contains(table));
+    }
+
+    /**
+     * A retired table is absent, and the runtime role holds nothing on it.
+     *
+     * <p>Read from the catalog twice: as a base table of the schema, and
+     * through {@code to_regclass}, which answers NULL for a name no relation
+     * of any kind carries -- so a view or a sequence left under the name is
+     * reported too. Asked as the superuser, which sees every relation.
+     */
+    @Test
+    void the_retired_lease_table_is_absent_and_holds_no_grant() throws SQLException {
+        List<String> tables;
+        List<String> present = new ArrayList<>();
+        try (Connection c = admin()) {
+            tables = tablesIn(c, schema());
+            for (String retired : RETIRED_TABLES) {
+                if (relationExists(c, schema() + "." + retired)) {
+                    present.add(schema() + "." + retired);
+                }
+            }
+        }
+
+        assertThat(tables)
+            .as("the probe must have read the schema's tables")
+            .contains(HISTORY_TABLE);
+        assertThat(tables)
+            .as("a retired table of schema %s is back as a base table, and with it a grant "
+                + "to the runtime role nobody decided", schema())
+            .doesNotContainAnyElementsOf(RETIRED_TABLES);
+        assertThat(present)
+            .as("a relation of any kind under a retired table's name is back")
+            .isEmpty();
     }
 
     // ------------------------------------------------------------------
@@ -507,6 +553,17 @@ class ServiceRolePrivilegeIT {
             st.setString(1, role());
             st.setString(2, schema() + "." + table);
             st.setString(3, privilege);
+            try (ResultSet rs = st.executeQuery()) {
+                rs.next();
+                return rs.getBoolean(1);
+            }
+        }
+    }
+
+    /** Whether any relation carries the qualified name, from {@code to_regclass}. */
+    private static boolean relationExists(Connection c, String qualified) throws SQLException {
+        try (var st = c.prepareStatement("SELECT to_regclass(?) IS NOT NULL")) {
+            st.setString(1, qualified);
             try (ResultSet rs = st.executeQuery()) {
                 rs.next();
                 return rs.getBoolean(1);

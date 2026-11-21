@@ -40,8 +40,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>The lease's members are {@link AnswerChecks#LEASE_MEMBERS}; the five
  * calls that left the surface and the lease's four codes are written here.
- * The store keeps its lease columns until the release after this one; what
- * is probed is that nothing reaches a caller from them.
+ * The store no longer holds a lease either: V31 dropped its table, and
+ * {@code SchemaConstraintIT} and {@code ServiceRolePrivilegeIT} assert its
+ * absence from the catalog. What is probed here is the surface: that nothing
+ * of a lease reaches a caller.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
