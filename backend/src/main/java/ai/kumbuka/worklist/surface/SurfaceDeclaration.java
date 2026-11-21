@@ -144,34 +144,31 @@ public final class SurfaceDeclaration {
      *                     where it has none (C5.4)
      * @param maximum      the greatest number an integer argument takes, absent
      *                     where it has none (C5.4)
-     * @param assistant    whether the assistant surface carries the argument:
-     *                     the tool list declares it and the MCP adapter takes
-     *                     it. One argument is the REST surface's alone,
-     *                     {@link #SUBMIT_ARGUMENT}; the MCP adapter refuses it
-     *                     as an argument the tool does not declare
      */
     public record Argument(ArgumentName name, ArgumentType type, boolean required,
                            @Nullable String defaultValue, List<Value> values,
                            boolean openInTools, @Nullable Integer minimum,
                            @Nullable Integer maximum,
-                           Function<ArgumentDescriptions, String> description,
-                           boolean assistant) {
-
-        /** An argument both surfaces carry. */
-        public Argument(ArgumentName name, ArgumentType type, boolean required,
-                        @Nullable String defaultValue, List<Value> values,
-                        boolean openInTools, @Nullable Integer minimum,
-                        @Nullable Integer maximum,
-                        Function<ArgumentDescriptions, String> description) {
-            this(name, type, required, defaultValue, values, openInTools, minimum, maximum,
-                description, true);
-        }
+                           Function<ArgumentDescriptions, String> description) {
 
         /** Where the argument travels; the top level for every argument here. */
         public Placement placement() {
             return Placement.TOP;
         }
+
+        /**
+         * Whether the assistant surface carries the argument: the tool list
+         * declares it and the MCP adapter takes it. One argument is the REST
+         * surface's alone, {@link #SUBMIT_ARGUMENT}; the MCP adapter refuses it
+         * as an argument the tool does not declare (TAR-0002 B12).
+         */
+        public boolean assistant() {
+            return !REST_ONLY.contains(name.name());
+        }
     }
+
+    /** The arguments the REST surface alone carries. */
+    private static final Set<String> REST_ONLY = Set.of(SUBMIT_ARGUMENT);
 
     /**
      * The closed set of effect classes, named exactly as the router's verb
@@ -322,8 +319,7 @@ public final class SurfaceDeclaration {
      * in two acts (TAR-0002 B12).
      */
     private static final Argument SUBMIT =
-        new Argument(name(SUBMIT_ARGUMENT), ArgumentType.BOOLEAN, false, "false", List.of(),
-            false, null, null, ArgumentDescriptions::submit, false);
+        optional(SUBMIT_ARGUMENT, ArgumentType.BOOLEAN, "false", ArgumentDescriptions::submit);
     /** The status a transition sets in the phase it enters, by name. */
     private static final Argument STATUS =
         optional(STATUS_ARGUMENT, ArgumentType.STRING, null, ArgumentDescriptions::status);

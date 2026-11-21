@@ -109,7 +109,7 @@ class ItemTransitionRulesTest {
 
     @Test
     void the_four_phases_travel_under_their_tokens() {
-        assertThat(Phase.TOKENS).containsExactly("draft", "open", "in_progress", "closed");
+        assertThat(Phase.tokens()).containsExactly("draft", "open", "in_progress", "closed");
         assertThat(Phase.byToken("in_progress")).contains(Phase.IN_PROGRESS);
         assertThat(Phase.byToken("planned")).isEmpty();
     }

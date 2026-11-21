@@ -44,14 +44,15 @@ public enum Phase {
     /** Final: the item takes no write any more, and nothing reopens it. */
     CLOSED("closed");
 
-    /** The tokens of the four phases, in lifecycle order. */
-    public static final List<String> TOKENS =
-        Arrays.stream(values()).map(Phase::token).toList();
-
     private final String token;
 
     Phase(String token) {
         this.token = token;
+    }
+
+    /** The tokens of the four phases, in lifecycle order. */
+    public static List<String> tokens() {
+        return Arrays.stream(values()).map(Phase::token).toList();
     }
 
     /** The phase as it travels: in a read answer, a filter and the column. */

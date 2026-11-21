@@ -466,7 +466,7 @@ public class VerbSurface {
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
                         @Nullable String conflictToken) {
-        return close(subject, rawScope, rawView, rawId, conflictToken, null, null, null);
+        return close(subject, rawScope, rawView, rawId, conflictToken, VerbInput.Closing.none());
     }
 
     /**
@@ -479,7 +479,8 @@ public class VerbSurface {
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
                         @Nullable String conflictToken, @Nullable String produced) {
-        return close(subject, rawScope, rawView, rawId, conflictToken, produced, null, null);
+        return close(subject, rawScope, rawView, rawId, conflictToken,
+            new VerbInput.Closing(produced, null, null));
     }
 
     /**
@@ -492,32 +493,23 @@ public class VerbSurface {
      * of them on a path that has no place for it is a value the call does
      * not take there, and is refused naming it.
      *
-     * @param produced      the produced-name; absent where the caller sent none
      * @param conflictToken the token the transport carried; absent where it carried
      *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
-     * @param reason        why an item closes; absent where the caller sent none
-     * @param status        the status an item closes into; absent where the
-     *                      caller named none
+     * @param closing       the produced-name, the reason and the status, each
+     *                      absent where the caller sent none
      */
     @Transactional
     public Result close(String subject, String rawScope, String rawView, String rawId,
-                        @Nullable String conflictToken, @Nullable String produced,
-                        @Nullable String reason, @Nullable String status) {
+                        @Nullable String conflictToken, VerbInput.Closing closing) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         requireWritable(target);
-        boolean item = Selector.ITEM.equals(in.view());
-        if (item && produced != null) {
-            throw SurfaceException.invalid(PRODUCED);
-        }
-        if (!item && reason != null) {
-            throw SurfaceException.invalid(SurfaceDeclaration.REASON_ARGUMENT);
-        }
-        if (!item && status != null) {
-            throw SurfaceException.invalid(SurfaceDeclaration.STATUS_ARGUMENT);
-        }
+        refuseOutOfPlace(Selector.ITEM.equals(in.view()), closing);
         UUID id = resolve(in, target);
         String token = requireToken(conflictToken);
+        String produced = closing.produced();
+        String reason = closing.reason();
+        String status = closing.status();
 
         return opened(in, at(target, switch (in.view()) {
             case Selector.ITERATION -> logged(iterations.close(in.scopeId(), id, produced, token),
@@ -629,6 +621,26 @@ public class VerbSurface {
         return opened(in, at(target, logged(items.return_(in.scopeId(), id, token, why,
                 optionalLabel(SurfaceDeclaration.STATUS_ARGUMENT, status)),
             PlatformLog.TechnicalAddress::of, address -> PlatformLog.returned(address, in.scope()))));
+    }
+
+    /**
+     * Refuses an argument of {@code close} on a path that has no place for
+     * it: what was produced on an item, a reason or a status on an iteration
+     * or a milestone. A value the call does not take there, decided before
+     * the address is resolved.
+     *
+     * @param item whether the close is addressed at an item
+     */
+    private static void refuseOutOfPlace(boolean item, VerbInput.Closing closing) {
+        if (item && closing.produced() != null) {
+            throw SurfaceException.invalid(PRODUCED);
+        }
+        if (!item && closing.reason() != null) {
+            throw SurfaceException.invalid(SurfaceDeclaration.REASON_ARGUMENT);
+        }
+        if (!item && closing.status() != null) {
+            throw SurfaceException.invalid(SurfaceDeclaration.STATUS_ARGUMENT);
+        }
     }
 
     /**

@@ -465,9 +465,9 @@ public class McpAdapter {
         Address at = address(in);
         Object produced = in.get("produced");
         return dressed(at.scope(), verbs.close(caller.subject(), at.scope(), at.view(),
-            at.head(), required(in, ARG_TOKEN),
-            produced == null ? null : String.valueOf(produced),
-            reason.orElse(null), status.orElse(null)));
+            at.head(), required(in, ARG_TOKEN), new VerbInput.Closing(
+                produced == null ? null : String.valueOf(produced),
+                reason.orElse(null), status.orElse(null))));
     }
 
     private Object submit(Map<String, Object> in) {

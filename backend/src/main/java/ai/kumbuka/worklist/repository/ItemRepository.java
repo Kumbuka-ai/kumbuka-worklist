@@ -218,7 +218,7 @@ public class ItemRepository {
     public List<UUID> childrenOf(Item item) {
         return em.createQuery(
                 "SELECT i.id FROM Item i WHERE i.scopeId = :scope AND i.parentNumber = :item "
-                    + "ORDER BY i.number", UUID.class)
+                    + "ORDER BY i.number, i.id", UUID.class)
             .setParameter(P_SCOPE, item.scopeId)
             .setParameter(P_ITEM, item.number)
             .getResultList();
@@ -230,12 +230,12 @@ public class ItemRepository {
      */
     @Transactional
     public List<UUID> sourcesOf(Item item) {
-        return em.createQuery(
-                "SELECT DISTINCT i.id, i.number FROM Item i, ItemRelation r "
-                    + "WHERE i.scopeId = :" + P_SCOPE + " AND r.scopeId = i.scopeId"
-                    + " AND r.fromItemNumber = i.number AND r.toItemNumber = :" + P_ITEM
-                    + " AND r.status = :" + P_STATUS + " AND i.number <> :" + P_ITEM
-                    + " ORDER BY i.number", Object[].class)
+        return em.createQuery("""
+                SELECT DISTINCT i.id, i.number FROM Item i, ItemRelation r
+                WHERE i.scopeId = :scope AND r.scopeId = i.scopeId
+                  AND r.fromItemNumber = i.number AND r.toItemNumber = :item
+                  AND r.status = :status AND i.number <> :item
+                ORDER BY i.number""", Object[].class)
             .setParameter(P_SCOPE, item.scopeId)
             .setParameter(P_ITEM, item.number)
             .setParameter(P_STATUS, ItemRelation.ASSERTED)
@@ -431,21 +431,16 @@ public class ItemRepository {
     @Transactional
     public void delete(Item item) {
         em.flush();
-        em.createQuery("DELETE FROM ItemRelation r WHERE r.scopeId = :" + P_SCOPE
-                + " AND (r.fromItemNumber = :" + P_ITEM + " OR r.toItemNumber = :" + P_ITEM + ")")
-            .setParameter(P_SCOPE, item.scopeId)
-            .setParameter(P_ITEM, item.number)
-            .executeUpdate();
-        em.createQuery("DELETE FROM ItemReference r WHERE r.scopeId = :" + P_SCOPE
-                + " AND r.itemNumber = :" + P_ITEM)
-            .setParameter(P_SCOPE, item.scopeId)
-            .setParameter(P_ITEM, item.number)
-            .executeUpdate();
-        em.createQuery("DELETE FROM ItemCriterion c WHERE c.scopeId = :" + P_SCOPE
-                + " AND c.itemNumber = :" + P_ITEM)
-            .setParameter(P_SCOPE, item.scopeId)
-            .setParameter(P_ITEM, item.number)
-            .executeUpdate();
+        for (String statement : List.of(
+                "DELETE FROM ItemRelation r WHERE r.scopeId = :scope "
+                    + "AND (r.fromItemNumber = :item OR r.toItemNumber = :item)",
+                "DELETE FROM ItemReference r WHERE r.scopeId = :scope AND r.itemNumber = :item",
+                "DELETE FROM ItemCriterion c WHERE c.scopeId = :scope AND c.itemNumber = :item")) {
+            em.createQuery(statement)
+                .setParameter(P_SCOPE, item.scopeId)
+                .setParameter(P_ITEM, item.number)
+                .executeUpdate();
+        }
         em.remove(item);
         em.flush();
     }

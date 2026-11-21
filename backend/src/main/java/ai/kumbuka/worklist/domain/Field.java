@@ -211,7 +211,7 @@ public enum Field {
     STATUS("status", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
 
     /**
-     * The phase of an item, one of {@link Phase#TOKENS} (REA-0011 D11).
+     * The phase of an item, one of {@link Phase#tokens()} (REA-0011 D11).
      *
      * <p>Read-only: a phase moves through a transition alone -- {@code submit},
      * {@code start}, {@code return}, {@code close} -- and never through

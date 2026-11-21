@@ -331,8 +331,8 @@ public class WorklistResource {
             case CLOSE -> {
                 ArgumentsPayload given = arguments(body, PRODUCED, REASON, STATUS);
                 yield ok(scope, verbs.close(subject, scope, selector, id, token,
-                    given.text(PRODUCED).orElse(null), given.text(REASON).orElse(null),
-                    given.text(STATUS).orElse(null)));
+                    new VerbInput.Closing(given.text(PRODUCED).orElse(null),
+                        given.text(REASON).orElse(null), given.text(STATUS).orElse(null))));
             }
 
             case SUBMIT -> {
