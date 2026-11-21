@@ -344,14 +344,10 @@ class ServiceRolePrivilegeIT {
     @Test
     void the_retired_lease_table_is_absent_and_holds_no_grant() throws SQLException {
         List<String> tables;
-        List<String> present = new ArrayList<>();
+        List<String> present;
         try (Connection c = admin()) {
             tables = tablesIn(c, schema());
-            for (String retired : RETIRED_TABLES) {
-                if (relationExists(c, schema() + "." + retired)) {
-                    present.add(schema() + "." + retired);
-                }
-            }
+            present = retiredPresent(c);
         }
 
         assertThat(tables)
@@ -470,6 +466,37 @@ class ServiceRolePrivilegeIT {
     }
 
     /**
+     * The retired table's own red state: a relation under its name is back
+     * for the length of one assertion, and the check must name it.
+     *
+     * <p>Planted as the superuser with one column, which is all
+     * {@code to_regclass} needs to see it, and dropped again in the same case.
+     */
+    @Test
+    void the_check_reports_a_retired_table_that_is_back() throws SQLException {
+        String table = schema() + ".claim";
+        try (Connection c = admin()) {
+            try {
+                exec(c, "CREATE TABLE " + table + " (planted INT)");
+
+                assertThat(retiredPresent(c))
+                    .as("RED STATE, observed: a table under the lease's retired name must be "
+                        + "reported, by its name")
+                    .containsExactly(table);
+                assertThat(tablesIn(c, schema()))
+                    .as("RED STATE, observed: and it is seen as a base table of the schema")
+                    .contains("claim");
+            } finally {
+                exec(c, "DROP TABLE IF EXISTS " + table);
+            }
+
+            assertThat(retiredPresent(c))
+                .as("and gone again, so the red state was that table and nothing else")
+                .isEmpty();
+        }
+    }
+
+    /**
      * The other direction: a privilege that SHOULD be held and is not must
      * also be reported.
      *
@@ -558,6 +585,17 @@ class ServiceRolePrivilegeIT {
                 return rs.getBoolean(1);
             }
         }
+    }
+
+    /** The qualified names of the retired tables a relation carries again. */
+    private static List<String> retiredPresent(Connection c) throws SQLException {
+        List<String> present = new ArrayList<>();
+        for (String retired : RETIRED_TABLES) {
+            if (relationExists(c, schema() + "." + retired)) {
+                present.add(schema() + "." + retired);
+            }
+        }
+        return present;
     }
 
     /** Whether any relation carries the qualified name, from {@code to_regclass}. */
