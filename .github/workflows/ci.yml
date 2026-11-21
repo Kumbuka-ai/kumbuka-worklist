@@ -10,7 +10,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, wave-1]
+    branches: [main, wave-2]
   # On the schedule security.yml's image job ran on, so the image of an
   # unchanged tree is still scanned against newly published CVEs. That job
   # built the image a second time; the scan now runs here, on the image built
