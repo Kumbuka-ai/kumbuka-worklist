@@ -86,13 +86,8 @@ class LifecycleChainIT {
         selectors.open(scope, Selector.MILESTONE);
         selectors.open(scope, Selector.ITERATION);
 
-        // Cardinality limits are the scope's own — the service admits or
-        // refuses against these numbers, so the test writes them.
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        // Open the scope: its settings row.
+        settings.create(scope, Map.of());
 
         // Two statuses: one an item can enter an iteration under, one it
         // can leave with. Both are declared through the vocabulary verb;

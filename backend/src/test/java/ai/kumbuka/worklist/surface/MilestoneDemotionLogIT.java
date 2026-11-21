@@ -145,11 +145,7 @@ class MilestoneDemotionLogIT {
     /** A scope of this case's own, visible to the member, with the goal axis open. */
     private void stage(String slug, UUID id) {
         SurfaceFixture.publishScope(slug, id, "project", false);
-        settings.create(id, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(id, Map.of());
         selectors.open(id, Selector.MILESTONE);
         workstreams.requireDefault(id);
     }

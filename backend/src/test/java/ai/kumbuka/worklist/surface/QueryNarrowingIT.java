@@ -1050,11 +1050,7 @@ class QueryNarrowingIT {
 
     private Staged stage() {
         SurfaceFixture.publishScope(SCOPE, SCOPE_ID, "project", false);
-        settings.create(SCOPE_ID, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(SCOPE_ID, Map.of());
         for (String view : Selector.VIEWS) {
             selectors.open(SCOPE_ID, view);
         }
@@ -1104,11 +1100,7 @@ class QueryNarrowingIT {
     /** Two items in the second scope, enough for one page and a cursor. */
     private void stageOtherScope() {
         SurfaceFixture.publishScope(OTHER_SCOPE, OTHER_SCOPE_ID, "project", false);
-        settings.create(OTHER_SCOPE_ID, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(OTHER_SCOPE_ID, Map.of());
         selectors.open(OTHER_SCOPE_ID, Selector.ITEM);
         vocabulary.declareStatus(OTHER_SCOPE_ID, OPEN, 1, true, false, false, false);
         workstreams.requireDefault(OTHER_SCOPE_ID);
@@ -1136,11 +1128,7 @@ class QueryNarrowingIT {
             if (!selectors.inScope(SCOPE_IN_B).isEmpty()) {
                 return;
             }
-            settings.create(SCOPE_IN_B, Map.of(
-                "max_planned_iterations", 10,
-                "warn_planned_iterations", 9,
-                "max_memberships_per_iteration", 10,
-                "warn_memberships_per_iteration", 9));
+            settings.create(SCOPE_IN_B, Map.of());
             selectors.open(SCOPE_IN_B, Selector.ITEM);
             vocabulary.declareStatus(SCOPE_IN_B, OPEN, 1, true, false, false, false);
             workstreams.requireDefault(SCOPE_IN_B);

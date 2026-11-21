@@ -134,7 +134,7 @@ public final class DeclarationSpecification {
                 Arg.opt("idempotency_key", "string", null)),
             reasons(WRITE, List.of("SELECTOR_DECLARED_NOT_WRITTEN", "FIELD_RETRACTED",
                 "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
-                "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING", "SETTING_ABSENT",
+                "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING",
                 "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED"))),
         // fulfilment: the latest entry per criterion and instance, or the
         // whole ledger in booking order.
@@ -167,7 +167,7 @@ public final class DeclarationSpecification {
         new Verb("worklist_plan", "GRAPH_ADD_OR_REMOVE", "OBJECT_CREATED",
             List.of(ADDRESS, TOKEN),
             reasons(WRITE, TOKENED, List.of("MEMBERSHIP_PRESENT", "TRANSITION_REFUSED",
-                "ITEM_UNPLANNABLE", "SETTING_ABSENT", "CARDINALITY_EXCEEDED"))),
+                "ITEM_UNPLANNABLE", "CARDINALITY_EXCEEDED"))),
         new Verb("worklist_unplan", "GRAPH_ADD_OR_REMOVE", "OBJECT", List.of(ADDRESS, TOKEN),
             reasons(WRITE, TOKENED, List.of("TRANSITION_REFUSED"))),
         // TRANSITION_REFUSED: duplicate_of closes the item and is open only

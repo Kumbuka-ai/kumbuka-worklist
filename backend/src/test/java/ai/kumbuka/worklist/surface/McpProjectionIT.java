@@ -368,27 +368,22 @@ class McpProjectionIT {
     }
 
     /**
-     * The scope's settings row, without which no iteration can be created.
+     * The scope's settings row, written by the act that opens the scope.
      *
      * <p>Written through the service because the surface does not carry it:
      * {@code scope_setting} has no view and is not addressed. A scope therefore
      * cannot be opened over the machine surface at all, which is reported rather
-     * than worked around here.
+     * than worked around here. The opening names no number, so a scope opened
+     * by an earlier run has nothing to change.
      */
     private void openTheScope() {
-        Map<String, Object> limits = Map.of(
-            "max_planned_iterations", 1_000, "warn_planned_iterations", 1_000,
-            "max_memberships_per_iteration", 1_000, "warn_memberships_per_iteration", 1_000);
         try {
-            settings.create(SCOPE_ID, limits);
+            settings.create(SCOPE_ID, Map.of());
         } catch (ai.kumbuka.worklist.domain.WorklistException alreadyOpen) {
             if (alreadyOpen.reason()
                     != ai.kumbuka.worklist.domain.WorklistException.Reason.SETTING_PRESENT) {
                 throw alreadyOpen;
             }
-            Map<String, Object> raise = new java.util.HashMap<>(limits);
-            raise.put("conflict_token", settingToken());
-            settings.update(SCOPE_ID, raise);
         }
     }
 

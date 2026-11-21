@@ -140,9 +140,7 @@ class MilestoneWorkstreamRetractionIT {
 
         scope = UUID.randomUUID();
         openStatus = vocabulary.declareStatus(scope, "open", 1, true, false, false, false).pk;
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10, "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
         selectors.open(scope, Selector.ITEM);
         selectors.open(scope, Selector.MILESTONE);
     }
@@ -391,10 +389,7 @@ class MilestoneWorkstreamRetractionIT {
      */
     private void openTheSurfaceScope() {
         try {
-            settings.create(SURFACE_SCOPE, Map.of(
-                "max_planned_iterations", 100, "warn_planned_iterations", 99,
-                "max_memberships_per_iteration", 100,
-                "warn_memberships_per_iteration", 99));
+            settings.create(SURFACE_SCOPE, Map.of());
         } catch (WorklistException alreadyOpen) {
             if (alreadyOpen.reason() != WorklistException.Reason.SETTING_PRESENT) {
                 throw alreadyOpen;

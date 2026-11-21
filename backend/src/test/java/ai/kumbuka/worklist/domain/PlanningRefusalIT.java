@@ -63,9 +63,7 @@ class PlanningRefusalIT {
     void aScopeOfItsOwn() {
         scope = UUID.randomUUID();
         openStatus = vocabulary.declareStatus(scope, "open", 1, true, false, false, false).pk;
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10, "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10, "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
     }
 
     // ==================================================================
@@ -73,66 +71,107 @@ class PlanningRefusalIT {
     // ==================================================================
 
     /**
-     * A scope plans against a settings row, and planning without one is a
-     * refusal that says so rather than a limit this service invented.
+     * No planning write is refused because the settings row is missing
+     * (TAR-0002, the running service's deviation "refuses a write to a scope
+     * without a settings row"), and none of them writes the row: a scope whose
+     * views are open and whose settings were never written creates a
+     * milestone and an iteration, plans an item and closes the iteration, and
+     * its settings still read as absent afterwards. A read writes nothing.
      */
     @Test
-    void a_scope_with_no_settings_row_cannot_plan() {
-        UUID unopened = UUID.randomUUID();
+    void no_planning_write_is_refused_for_a_missing_settings_row() {
+        UUID rowless = UUID.randomUUID();
+        selectors.open(rowless, Selector.ITEM);
+        selectors.open(rowless, Selector.ITERATION);
+        selectors.open(rowless, Selector.MILESTONE);
+        String status = vocabulary.declareStatus(rowless, "open", 1,
+            true, false, false, false).name;
 
-        WorklistException refusal = refusalFrom(() -> iterations.create(unopened, Map.of(
-            "motto", "nowhere", "description", "a scope that was never opened")));
-        assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SETTING_ABSENT);
-        assertThat(refusal.offenders()).isEmpty();
+        UUID milestone = (UUID) milestones.create(rowless, Map.of("title", "a goal"))
+            .answer().get("id");
+        UUID iteration = (UUID) iterations.create(rowless, Map.of(
+            "title", "rowless", "motto", "rowless",
+            "description", "a scope whose settings were never written")).answer().get("id");
+        UUID item = (UUID) items.create(rowless, "probe-subject", Map.of(
+            "title", "planned without settings", "status", status)).answer().get("id");
+        String iterationToken = (String) iterations.read(rowless, iteration)
+            .get("conflict_token");
+        memberships.plan(rowless, iteration, item, iterationToken);
+        String planned = (String) iterations.read(rowless, iteration).get("conflict_token");
+        memberships.update(rowless, iteration, item, Map.of(
+            "membership_status", IterationMembership.DONE, "conflict_token", planned));
+        String done = (String) iterations.read(rowless, iteration).get("conflict_token");
+        assertThat(iterations.close(rowless, iteration, "test outcome", done)
+                .answer().get("closed_at"))
+            .as("the close clears a pointer where one stands and asks for no row")
+            .isNotNull();
+        assertThat(milestones.read(rowless, milestone).get("title")).isEqualTo("a goal");
 
-        assertThat(refusalFrom(() -> settings.read(unopened)).reason())
-            .as("reading them is the same absence and the same refusal")
+        WorklistException absent = refusalFrom(() -> settings.read(rowless));
+        assertThat(absent.reason())
+            .as("and no write above wrote the row, and the read writes none either")
             .isEqualTo(WorklistException.Reason.SETTING_ABSENT);
+        assertThat(absent.offenders()).isEmpty();
     }
 
     /** One settings row per scope, and the second call says so. */
     @Test
     void a_scope_is_opened_once() {
+        Map<String, Object> before = settings.read(scope);
+
         WorklistException refusal = refusalFrom(() -> settings.create(scope, Map.of(
-            "max_planned_iterations", 1, "warn_planned_iterations", 1,
-            "max_memberships_per_iteration", 1, "warn_memberships_per_iteration", 1)));
+            "default_columns", List.of("title"))));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.SETTING_PRESENT);
-        assertThat(settings.read(scope).get("max_planned_iterations"))
-            .as("and the limits the scope is already working under are untouched")
-            .isEqualTo(10);
+        assertThat(settings.read(scope))
+            .as("and the settings the scope is already working with are untouched")
+            .isEqualTo(before);
     }
 
     /**
-     * The four cardinality numbers are mandatory and positive.
-     *
-     * <p>V4 gives them no defaults on purpose, so this verb has none to fall
-     * back on. A limit of zero forbids what the setting exists to bound.
+     * A scope opens without a number, and reads back its settings: the pointer
+     * empty and the column set it was opened with (TAR-0002 B11). The four
+     * cardinality numbers of the running service are gone from the settings:
+     * the answer carries none of them, and a write naming one is refused as a
+     * write naming any other field the settings do not carry ({@code motto},
+     * an iteration's field, is that other field here).
      */
     @Test
-    void the_four_cardinality_numbers_are_mandatory_and_positive() {
-        assertThat(refusalFrom(() -> settings.create(UUID.randomUUID(), Map.of(
-                "max_planned_iterations", 5, "warn_planned_iterations", 4,
-                "max_memberships_per_iteration", 5))).reason())
-            .as("a number left out is a refusal, not a default")
-            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+    void a_scope_opens_without_a_number_and_the_four_numbers_are_unknown_to_its_settings() {
+        List<String> retired = List.of("max_planned_iterations", "warn_planned_iterations",
+            "max_memberships_per_iteration", "warn_memberships_per_iteration");
 
-        assertThat(refusalFrom(() -> settings.create(UUID.randomUUID(), Map.of(
-                "max_planned_iterations", 0, "warn_planned_iterations", 1,
-                "max_memberships_per_iteration", 1,
-                "warn_memberships_per_iteration", 1))).offenders())
-            .containsExactly("fields.max_planned_iterations");
+        WorklistException foreignField = refusalFrom(() -> settings.create(UUID.randomUUID(),
+            Map.of("motto", "an iteration's field")));
+        assertThat(foreignField.reason()).isEqualTo(WorklistException.Reason.ARGUMENT_UNKNOWN);
+        for (String number : retired) {
+            WorklistException onCreate = refusalFrom(() -> settings.create(UUID.randomUUID(),
+                Map.of(number, 100)));
+            assertThat(onCreate.reason())
+                .as("%s on create is refused as the foreign field is", number)
+                .isEqualTo(foreignField.reason());
+            assertThat(onCreate.accepts())
+                .as("and the fields it names as accepted are the same")
+                .isEqualTo(foreignField.accepts())
+                .doesNotContain("fields." + number);
+            assertThat(refusalFrom(() -> settings.update(scope, Map.of(number, 100,
+                    "conflict_token", settingToken()))).reason())
+                .as("%s on update is refused the same way", number)
+                .isEqualTo(WorklistException.Reason.ARGUMENT_UNKNOWN);
+        }
 
-        assertThat(refusalFrom(() -> settings.update(scope, Map.of(
-                "max_planned_iterations", "not a number",
-                "conflict_token", settingToken()))).reason())
-            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
+        // The admitted neighbour: nothing named, and a column set named.
+        UUID bare = UUID.randomUUID();
+        Map<String, Object> opened = settings.create(bare, Map.of());
+        assertThat(opened.get("current_iteration")).isNull();
+        assertThat(opened.get("default_columns")).isEqualTo(List.of());
+        assertThat(opened.keySet()).doesNotContainAnyElementsOf(retired);
+        assertThat(settings.read(bare))
+            .as("and the newly opened scope reads back what the opening answered")
+            .isEqualTo(opened);
 
-        // The admitted neighbour, and the column set beside the four numbers.
-        UUID opened = UUID.randomUUID();
-        Map<String, Object> answer = settings.create(opened, Map.of(
-            "max_planned_iterations", 5, "warn_planned_iterations", 4,
-            "max_memberships_per_iteration", 5, "warn_memberships_per_iteration", 4,
+        UUID withColumns = UUID.randomUUID();
+        Map<String, Object> answer = settings.create(withColumns, Map.of(
             "default_columns", List.of("title", "status")));
         assertThat(answer.get("default_columns")).isEqualTo(List.of("title", "status"));
         assertThat(answer.get("current_iteration")).isNull();
@@ -186,9 +225,7 @@ class PlanningRefusalIT {
         // A milestone of ANOTHER scope is unknown here too, and that is the
         // half worth having: the row exists, and it is not this scope's.
         UUID elsewhere = UUID.randomUUID();
-        settings.create(elsewhere, Map.of(
-            "max_planned_iterations", 1, "warn_planned_iterations", 1,
-            "max_memberships_per_iteration", 1, "warn_memberships_per_iteration", 1));
+        settings.create(elsewhere, Map.of());
         UUID foreign = (UUID) milestones.create(elsewhere,
             Map.of("title", "another scope's goal")).answer().get("id");
         assertThat(refusalFrom(() -> milestones.read(scope, foreign)).reason())
@@ -530,7 +567,7 @@ class PlanningRefusalIT {
         return "worklist://" + scopeSlug + "/item/" + number;
     }
 
-    /** An actionable item carrying a real goal, which is what makes it plannable. */
+    /** An open item carrying a real goal. */
     private UUID onPath(String title) {
         // The item view, declared before anything is created under it: the
         // address is allocated at creation now. Declaring is idempotent.

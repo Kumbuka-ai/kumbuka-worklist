@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.domain;
 
+import ai.kumbuka.worklist.tenancy.Db;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -14,6 +15,11 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -91,11 +97,7 @@ class ScopeOpeningProbeIT {
 
     @Test
     void a_freshly_opened_scope_carries_every_view_seeded() {
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
 
         assertThat(selectors.inScope(scope))
             .as("the scope-opening call is one act, and it seeds the four views the "
@@ -112,11 +114,7 @@ class ScopeOpeningProbeIT {
 
     @Test
     void an_item_and_an_iteration_can_be_created_immediately_after_opening() {
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
 
         // Both calls go through without a further declaration. Without the
         // seeding, each would refuse with SELECTOR_UNDECLARED — the trace of
@@ -141,11 +139,7 @@ class ScopeOpeningProbeIT {
 
     @Test
     void item_iteration_and_milestone_each_number_from_one_in_a_fresh_scope() {
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
 
         Map<String, Object> item = items.create(scope, "probe-subject", Map.of(
             Field.TITLE.canonicalName(), "an item",
@@ -185,5 +179,54 @@ class ScopeOpeningProbeIT {
 
         assertThat(secondItem.get(Field.NUMBER.canonicalName())).isEqualTo(2L);
         assertThat(secondIteration.get(Field.NUMBER.canonicalName())).isEqualTo(2L);
+    }
+
+    // ==================================================================
+    // Probe 4 — the settings exist from the moment the scope is opened
+    // ==================================================================
+
+    /**
+     * A scope opened without a number reads back its settings: the pointer
+     * empty and the default column set empty, and none of the four
+     * cardinality numbers of the running service (TAR-0002 B11).
+     *
+     * <p>The row in the store carries the defaults V32 gives the four
+     * columns, which are the constants of REA-0011 D9 — the values the
+     * previous image, which still reads the columns, finds at a row this
+     * release writes. The four numbers below are written here from D9.
+     */
+    @Test
+    void a_scope_opened_without_a_number_reads_back_its_settings() throws SQLException {
+        settings.create(scope, Map.of());
+
+        Map<String, Object> read = settings.read(scope);
+        assertThat(read.get("current_iteration")).as("the pointer is empty").isNull();
+        assertThat(read.get("default_columns"))
+            .as("the default column set is the empty one")
+            .isEqualTo(List.of());
+        assertThat(read.get("conflict_token")).as("and the row carries a token").isNotNull();
+        assertThat(read.keySet())
+            .as("the answer carries none of the four retired numbers")
+            .doesNotContainAnyElementsOf(List.of("max_planned_iterations",
+                "warn_planned_iterations", "max_memberships_per_iteration",
+                "warn_memberships_per_iteration"));
+
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, PlanningFixture.boundTenant());
+            try (PreparedStatement st = c.prepareStatement(
+                    "SELECT max_planned_iterations, warn_planned_iterations, "
+                        + "max_memberships_per_iteration, warn_memberships_per_iteration "
+                        + "FROM worklist.scope_setting WHERE scope_id = ?")) {
+                st.setObject(1, scope);
+                try (ResultSet row = st.executeQuery()) {
+                    assertThat(row.next()).as("the opening wrote the row").isTrue();
+                    assertThat(List.of(row.getInt(1), row.getInt(2), row.getInt(3),
+                            row.getInt(4)))
+                        .as("the previous image reads the bounds of D9 at a row this "
+                            + "release writes")
+                        .containsExactly(100, 100, 1000, 1000);
+                }
+            }
+        }
     }
 }

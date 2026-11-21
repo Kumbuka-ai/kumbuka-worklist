@@ -27,17 +27,23 @@ import java.util.UUID;
  * aggregate root with children: nothing hangs off it, and it is still a row
  * two callers can hold a view of at once.
  *
- * <h2>The four cardinality numbers are settings, not constants</h2>
+ * <h2>What the settings hold, and what they no longer hold</h2>
  *
- * A hard limit on planned iterations and on memberships per iteration, and an
- * advisory warning below each. They are a scope's working style rather than a
- * platform property, which is why they are here and not in a Java constant —
- * and why V4 gives them NO defaults: a number written at the column would be
- * a platform constant wearing a setting's clothes.
+ * The pointer to the current iteration and the default column set, and
+ * nothing that bounds planning (TAR-0002 B11). Planning is bounded by the
+ * platform constants of REA-0011 D9, held in {@link PlanningService} and
+ * configurable nowhere.
  *
- * <p>The consequence is that a scope has to be opened before it can plan.
- * That is not an accident of this design; it is the same order in which a
- * selector has to be declared before an address can be allocated.
+ * <p>The four cardinality columns V4 created ({@code max_planned_iterations},
+ * {@code warn_planned_iterations}, {@code max_memberships_per_iteration},
+ * {@code warn_memberships_per_iteration}) still stand in the table and are
+ * deliberately not mapped: the previous image reads them, and V32 gives them
+ * defaults equal to the constants, so a row this entity writes without them
+ * reads to the previous image with the bounds of D9. They are removed in a
+ * later release.
+ *
+ * <p>The row is written by the act that opens the scope in this service,
+ * with the scope's views, and asks the caller for nothing.
  *
  * <h2>The current iteration is a pointer and lives here</h2>
  *
@@ -93,22 +99,6 @@ public class ScopeSetting extends AggregateRoot {
      */
     @Column(name = "current_iteration_number")
     public @Nullable Long currentIterationNumber;
-
-    /** The hard limit on iterations that are open at once. Refuses. */
-    @Column(name = "max_planned_iterations", nullable = false)
-    public int maxPlannedIterations;
-
-    /** The advisory threshold below that limit. Warns and admits. */
-    @Column(name = "warn_planned_iterations", nullable = false)
-    public int warnPlannedIterations;
-
-    /** The hard limit on memberships of one iteration. Refuses. */
-    @Column(name = "max_memberships_per_iteration", nullable = false)
-    public int maxMembershipsPerIteration;
-
-    /** The advisory threshold below that limit. Warns and admits. */
-    @Column(name = "warn_memberships_per_iteration", nullable = false)
-    public int warnMembershipsPerIteration;
 
     /**
      * The declared default column set of a reader's first view.

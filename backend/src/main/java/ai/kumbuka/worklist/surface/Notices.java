@@ -11,19 +11,13 @@ import io.quarkus.qute.i18n.Message;
 import io.quarkus.qute.i18n.MessageBundle;
 
 /**
- * The fixed notices an answer carries, such as the warnings of a planning write. A notice may state a finding in the negative; it never repeats the caller's input or the tenant's vocabulary (DEC-0043 R18).
+ * The fixed notices an answer carries, such as the findings of {@code validate}. A notice may state a finding in the negative; it never repeats the caller's input or the tenant's vocabulary (DEC-0043 R18).
  *
  * <p>The texts live in {@code src/main/resources/messages/notice.properties}; {@code @Message}
  * carries no value, so the build fails when the file lacks a text.
  */
 @MessageBundle(value = "notice")
 public interface Notices {
-
-    @Message
-    String plannedIterationsAtThreshold();
-
-    @Message
-    String membershipsAtThreshold();
 
     @Message
     String blockingCycle();

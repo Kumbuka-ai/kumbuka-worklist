@@ -74,6 +74,7 @@ class PlanningDomainIT {
     private UUID scope;
     private Long actionableStatus;
     private Long restingStatus;
+    private Long closedStatus;
 
     @BeforeEach
     void aScopeOfItsOwn() {
@@ -82,11 +83,9 @@ class PlanningDomainIT {
             true, false, false, false).pk;
         restingStatus = vocabulary.declareStatus(scope, "on hold", 2,
             false, false, false, false).pk;
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        closedStatus = vocabulary.declareStatus(scope, "done", 3,
+            false, false, true, true).pk;
+        settings.create(scope, Map.of());
     }
 
     // ==================================================================
@@ -257,97 +256,91 @@ class PlanningDomainIT {
     }
 
     // ==================================================================
-    // Probe 3 — the cardinality limits, from the row and not from the code.
+    // Probe 3 — the platform constants of planning (REA-0011 D9).
     // ==================================================================
 
     /**
-     * The hard limit refuses and writes nothing; the warning admits and says
-     * so.
+     * The hundred-and-first OPEN iteration of a scope is refused with the
+     * cardinality code; a closed iteration does not count (D9, D8).
      *
-     * <p>Both numbers come from the scope's own row. The proof that they do is
-     * that this method never mentions a number the code could have held: it
-     * writes two limits into the settings and watches the behaviour follow
-     * them.
+     * <p>The numbers are written here from D9 and from nowhere in the code.
+     * The scope's settings carry no number: the scope was opened with none.
+     * No write below the constant carries a warning (TAR-0002 B11: the
+     * constants surface only as a refusal).
      */
     @Test
-    void the_membership_limit_refuses_and_the_threshold_below_it_warns() {
-        settings.update(scope, Map.of(
-            "max_memberships_per_iteration", 2,
-            "warn_memberships_per_iteration", 2,
-            "conflict_token", settingToken()));
+    void the_hundred_and_first_open_iteration_is_refused_and_a_closed_one_does_not_count() {
+        UUID closed = iterationId(created("closed before the count", 0));
+        iterations.close(scope, closed, "closed outcome", token(closed));
 
-        UUID iteration = iterationId(created("fifth", 1));
-        UUID first = onPath(item("within"));
-        UUID second = onPath(item("at the threshold"));
-        UUID third = onPath(item("beyond the limit"));
+        for (int i = 1; i <= 100; i++) {
+            Map<String, Object> admitted = created("open " + i, i);
+            assertThat(warningsOf(admitted))
+                .as("open iteration %s: admitted, and without a warning", i)
+                .isEmpty();
+        }
 
-        Map<String, Object> quiet = memberships.plan(scope, iteration, first,
-            token(iteration)).answer();
-        assertThat(warningsOf(quiet))
-            .as("below the threshold there is nothing to say, and a warning here would "
-                + "make every plan carry noise")
-            .isEmpty();
-
-        Map<String, Object> warned = memberships.plan(scope, iteration, second,
-            token(iteration)).answer();
-        assertThat(warningsOf(warned))
-            .as("at the threshold the answer warns AND the write goes through: the "
-                + "warning exists so the limit is met deliberately rather than "
-                + "discovered at the moment it refuses")
-            .hasSize(1);
-        assertThat(warningsOf(warned).get(0))
-            .as("a fixed notice, worded at the edge and carrying no number")
-            .isEqualTo(ai.kumbuka.worklist.domain.Notice.MEMBERSHIPS_AT_THRESHOLD);
-
-        WorklistException refusal = refusalFrom(() ->
-            memberships.plan(scope, iteration, third, token(iteration)));
+        WorklistException refusal = refusalFrom(() -> created("one too many", 101));
         assertThat(refusal.reason())
+            .as("the hundred-and-first open iteration, with one closed one beside the hundred")
             .isEqualTo(WorklistException.Reason.CARDINALITY_EXCEEDED);
         assertThat(refusal.offenders())
-            .as("the limit is the scope's setting and travels in the read of the settings, "
-                + "never in the refusal (DEC-0043 R18)")
+            .as("the constant travels in no refusal member (DEC-0043 R18)")
             .isEmpty();
 
-        assertThat(memberships.query(scope))
-            .as("RED STATE, by its trace: with the check removed the third membership "
-                + "would be here, and the limit would have been passed in silence")
-            .containsExactlyInAnyOrder(first, second);
-
-        // The limit is the ROW's. Raise it and the same call goes through,
-        // with no change to a line of code.
-        settings.update(scope, Map.of(
-            "max_memberships_per_iteration", 3,
-            "conflict_token", settingToken()));
-        memberships.plan(scope, iteration, third, token(iteration));
-        assertThat(memberships.query(scope))
-            .as("raising the scope's own number admits the write that was refused a "
-                + "moment ago — which is what makes the number a setting rather than a "
-                + "constant in this file")
-            .containsExactlyInAnyOrder(first, second, third);
+        assertThat(Pages.all(scope, Selector.ITERATION, iterations::query))
+            .as("RED STATE, by its trace: with the check removed the refused iteration "
+                + "would be here beside the hundred open ones and the closed one")
+            .hasSize(101);
     }
 
-    /** The same pair on the other axis: open iterations per scope. */
+    /**
+     * The thousand-and-first membership of an iteration is refused with the
+     * same code; a dropped membership does not count (D9, D8).
+     *
+     * <p>A thousand items are planned, the next is refused, one membership is
+     * dropped through {@code unplan}, and then the refused item goes through:
+     * the dropped row still stands in the store, and it is not counted.
+     */
     @Test
-    void the_open_iteration_limit_refuses_and_the_threshold_below_it_warns() {
-        settings.update(scope, Map.of(
-            "max_planned_iterations", 2,
-            "warn_planned_iterations", 2,
-            "conflict_token", settingToken()));
+    void the_thousand_and_first_membership_is_refused_and_a_dropped_one_does_not_count()
+            throws SQLException {
+        UUID iteration = iterationId(created("a thousand", 1));
+        List<UUID> planned = new java.util.ArrayList<>();
+        String current = token(iteration);
+        for (int i = 1; i <= 1000; i++) {
+            UUID item = item("member " + i);
+            Map<String, Object> answer = memberships.plan(scope, iteration, item, current)
+                .answer();
+            assertThat(warningsOf(answer))
+                .as("membership %s: admitted, and without a warning", i)
+                .isEmpty();
+            current = (String) answer.get("conflict_token");
+            planned.add(item);
+        }
 
-        assertThat(warningsOf(created("first", 1))).isEmpty();
-        assertThat(warningsOf(created("second", 2)))
-            .as("at the threshold, warned and admitted")
-            .hasSize(1);
-
-        WorklistException refusal = refusalFrom(() -> created("third", 3));
+        UUID beyond = item("one too many");
+        String atTheBound = current;
+        WorklistException refusal = refusalFrom(() ->
+            memberships.plan(scope, iteration, beyond, atTheBound));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.CARDINALITY_EXCEEDED);
+        assertThat(membershipRowsOf(iteration))
+            .as("RED STATE, by its trace: with the check removed a thousand-and-first row "
+                + "would stand")
+            .isEqualTo(1000);
 
-        assertThat(Pages.all(scope, Selector.ITERATION, iterations::query))
-            .as("RED STATE, by its trace: with the check removed the third iteration "
-                + "would be here — and it would have consumed a number, which is not "
-                + "handed back")
-            .hasSize(2);
+        memberships.unplan(scope, iteration, planned.get(0), token(iteration));
+        memberships.plan(scope, iteration, beyond, token(iteration));
+        assertThat(membershipRowsOf(iteration))
+            .as("the dropped row stands in the store beside a thousand counted ones")
+            .isEqualTo(1001);
+
+        UUID oneMore = item("one too many again");
+        assertThat(refusalFrom(() ->
+                memberships.plan(scope, iteration, oneMore, token(iteration))).reason())
+            .as("and with a thousand counted again, the next is refused again")
+            .isEqualTo(WorklistException.Reason.CARDINALITY_EXCEEDED);
     }
 
     // ==================================================================
@@ -393,41 +386,42 @@ class PlanningDomainIT {
     // ==================================================================
 
     /**
-     * An item enters an iteration only when it is actionable and carries a
-     * milestone on the product path, and each refusal names what it found.
+     * Planning sets no condition on an item but that its status does not
+     * answer {@code closed} (TAR-0002 B9): an open item without a milestone,
+     * an item whose status is not actionable, and an item whose milestone is
+     * off the product path all enter an open iteration. An item whose status
+     * answers {@code closed} is refused as before, naming the address only.
      */
     @Test
-    void an_item_enters_an_iteration_only_when_it_is_actionable_and_on_the_path() {
+    void an_item_enters_an_iteration_unless_its_status_answers_closed() {
         UUID iteration = iterationId(created("seventh", 1));
 
-        UUID resting = onPath(item("on hold", restingStatus));
-        WorklistException notActionable = refusalFrom(() ->
-            memberships.plan(scope, iteration, resting, token(iteration)));
-        assertThat(notActionable.reason())
+        UUID noMilestone = item("open, without a milestone");
+        memberships.plan(scope, iteration, noMilestone, token(iteration));
+
+        UUID resting = item("on hold, not actionable, without a milestone", restingStatus);
+        memberships.plan(scope, iteration, resting, token(iteration));
+
+        UUID offPath = withMilestone(item("off the path"), marker(Milestone.OFF_PATH));
+        memberships.plan(scope, iteration, offPath, token(iteration));
+
+        assertThat(memberships.query(scope))
+            .as("RED STATE, by its trace: with the old precondition restored the item "
+                + "without a milestone and the item that is not actionable would be "
+                + "refused, and neither would be planned")
+            .containsExactlyInAnyOrder(noMilestone, resting, offPath);
+
+        UUID closed = onPath(item("finished", closedStatus));
+        WorklistException refusal = refusalFrom(() ->
+            memberships.plan(scope, iteration, closed, token(iteration)));
+        assertThat(refusal.reason())
+            .as("a closed item is refused with the code it was refused with before")
             .isEqualTo(WorklistException.Reason.ITEM_UNPLANNABLE);
-        assertThat(notActionable.offenders())
+        assertThat(refusal.offenders())
             .as("the refusal names the address, never the status it found: a status name "
                 + "is the tenant's vocabulary (DEC-0043 R18)")
             .containsExactly("address");
-
-        UUID unassessed = item("not assessed yet");
-        WorklistException noMilestone = refusalFrom(() ->
-            memberships.plan(scope, iteration, unassessed, token(iteration)));
-        assertThat(noMilestone.reason())
-            .isEqualTo(WorklistException.Reason.ITEM_UNPLANNABLE);
-
-        UUID offPath = withMilestone(item("off the path"), marker(Milestone.OFF_PATH));
-        WorklistException off = refusalFrom(() ->
-            memberships.plan(scope, iteration, offPath, token(iteration)));
-        assertThat(off.offenders())
-            .as("and here too the address, never the kind it found")
-            .containsExactly("address");
-
-        // The legitimate neighbour, without which all three assertions would
-        // be satisfied by a precondition that refuses everything.
-        UUID admissible = onPath(item("actionable, on the path"));
-        memberships.plan(scope, iteration, admissible, token(iteration));
-        assertThat(memberships.query(scope)).containsExactly(admissible);
+        assertThat(memberships.query(scope)).doesNotContain(closed);
     }
 
     // ==================================================================
@@ -448,14 +442,6 @@ class PlanningDomainIT {
      */
     @Test
     void a_reorder_writes_every_membership_and_presents_one_token() {
-        // Twelve is above this fixture's default limit, so the scope's own
-        // number is raised first — which is what a scope that works in
-        // twelves would do, and is not a way around the check.
-        settings.update(scope, Map.of(
-            "max_memberships_per_iteration", 20,
-            "warn_memberships_per_iteration", 20,
-            "conflict_token", settingToken()));
-
         UUID iteration = iterationId(created("the reorder", 1));
         List<UUID> planned = new java.util.ArrayList<>();
         for (int i = 0; i < 12; i++) {
@@ -768,14 +754,14 @@ class PlanningDomainIT {
             "title", kind + " position", "kind", kind)).answer().get("id");
     }
 
-    /** An item carrying a real goal, which is what makes it plannable. */
+    /** An item carrying a real goal. */
     private UUID onPath(UUID itemId) {
         return withMilestone(itemId, (UUID) milestones.create(scope, Map.of(
             "title", "a goal", "vision", "the north star in a sentence")).answer().get("id"));
     }
 
     /**
-     * An item carrying a real goal, which is what makes it plannable.
+     * An item pointed at the given milestone.
      *
      * <p>The pointing itself is {@link PlanningFixture}, which names why it
      * has to go around the service: no verb assigns this field.

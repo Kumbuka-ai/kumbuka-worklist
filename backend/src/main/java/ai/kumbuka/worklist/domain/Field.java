@@ -463,20 +463,6 @@ public enum Field {
      */
     CURRENT_ITERATION("current_iteration", Set.of(SETTING), Set.of()),
 
-    /** The hard limit on iterations open at once. Refuses. */
-    MAX_PLANNED_ITERATIONS("max_planned_iterations", Set.of(SETTING), Set.of(SETTING)),
-
-    /** The advisory threshold below that limit. Warns and admits. */
-    WARN_PLANNED_ITERATIONS("warn_planned_iterations", Set.of(SETTING), Set.of(SETTING)),
-
-    /** The hard limit on memberships of one iteration. Refuses. */
-    MAX_MEMBERSHIPS_PER_ITERATION("max_memberships_per_iteration",
-        Set.of(SETTING), Set.of(SETTING)),
-
-    /** The advisory threshold below that limit. Warns and admits. */
-    WARN_MEMBERSHIPS_PER_ITERATION("warn_memberships_per_iteration",
-        Set.of(SETTING), Set.of(SETTING)),
-
     /** The declared default column set of a reader's first view. */
     DEFAULT_COLUMNS("default_columns", Set.of(SETTING), Set.of(SETTING)),
 
@@ -489,8 +475,10 @@ public enum Field {
     CHANGED_AT("changed_at", Set.of(ITEM), Set.of()),
 
     /**
-     * What a write admitted and wants noticed: the cardinality thresholds a
-     * scope set for itself, reached but not exceeded.
+     * What a write admitted and wants noticed. No planning write produces a
+     * warning today: the platform constants of planning surface only as a
+     * refusal (TAR-0002 B11), so the list is empty on every answer that
+     * carries it.
      *
      * <p>Always present and usually empty, rather than present only when
      * there is something to say. A key that appears and disappears is a key

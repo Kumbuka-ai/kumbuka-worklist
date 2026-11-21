@@ -56,7 +56,6 @@ class StateRefusalIT {
     private static final String SCOPE = "state-refusals";
     private static final UUID SCOPE_ID = UUID.fromString("5ea7e000-0000-4000-8000-000000000001");
     private static final String OPEN = "sr-open";
-    private static final int GENEROUS = 1_000;
 
     private static boolean staged;
 
@@ -78,10 +77,7 @@ class StateRefusalIT {
             vocabulary.declareStatus(SCOPE_ID, OPEN, 1, true, false, false, false);
             workstreams.requireDefault(SCOPE_ID);
             try {
-                settings.create(SCOPE_ID, Map.of(
-                    "max_planned_iterations", GENEROUS, "warn_planned_iterations", GENEROUS,
-                    "max_memberships_per_iteration", GENEROUS,
-                    "warn_memberships_per_iteration", GENEROUS));
+                settings.create(SCOPE_ID, Map.of());
             } catch (WorklistException alreadyThere) {
                 assertThat(alreadyThere.reason())
                     .isEqualTo(WorklistException.Reason.SETTING_PRESENT);

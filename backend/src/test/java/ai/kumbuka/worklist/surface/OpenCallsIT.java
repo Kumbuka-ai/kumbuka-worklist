@@ -44,9 +44,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>an item, in every state: {@code read}, {@code update}, {@code relate},
  *       {@code unrelate}, {@code tag_attach}, {@code tag_detach}, {@code book},
  *       and {@code plan} into each open iteration it is no member of, where
- *       the item may enter an iteration at all (an actionable status and a
- *       milestone on the product path). A closed item stays writable and
- *       takes a booking;</li>
+ *       the item may enter an iteration at all: its status does not answer
+ *       {@code closed}, whatever its milestone and whether or not its status
+ *       is actionable (TAR-0002 B9). A closed item stays writable and takes a
+ *       booking, and is named no {@code plan}, which it is refused;</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
  *       {@code plan} at its own address, and {@code advance} at the iteration
  *       collection while an open iteration stands that is not the current one;
@@ -69,11 +70,9 @@ class OpenCallsIT {
 
     private static final String OPEN = "oc-open";
     private static final String DONE = "oc-done";
+    private static final String RESTING = "oc-resting";
     private static final String RELATION = "oc-relates";
     private static final String TAG = "oc-tag";
-
-    /** Roomy, so that no limit of the scope is what a call meets. */
-    private static final int GENEROUS = 1_000;
 
     @Inject TestIdentityAssociation identity;
     @Inject SelectorRegistry selectors;
@@ -112,13 +111,17 @@ class OpenCallsIT {
         check(offences, "milestone closed, read", at.execute("worklist_read " + m1),
             at.milestone(m1, false));
 
-        // ---- items: one that may enter an iteration, one that may not ------
+        // ---- items: three that may enter an iteration, one that may not ---
         String path = address(at.create(Selector.MILESTONE, Map.of("title", "the path")));
         String a = address(at.create(Selector.ITEM, Map.of("title", "plannable",
             "status", OPEN, "milestone", number(path),
             "criteria", List.of(Map.of("text", "the criterion book reports on")))));
         String b = address(at.create(Selector.ITEM, Map.of("title", "without a milestone",
             "status", OPEN)));
+        String c = address(at.create(Selector.ITEM, Map.of(
+            "title", "resting: not actionable, without a milestone", "status", RESTING)));
+        String d = address(at.create(Selector.ITEM, Map.of("title", "closed from the start",
+            "status", DONE)));
         at.relateTo(b);
 
         // ---- two open iterations, no current one ---------------------------
@@ -132,9 +135,37 @@ class OpenCallsIT {
 
         check(offences, "item, plannable into both", at.read(a),
             at.item(a, i1 + "/" + number(a), i2 + "/" + number(a)));
-        check(offences, "item, not plannable", at.read(b), at.item(b));
+        check(offences, "item without a milestone, plannable into both", at.read(b),
+            at.item(b, i1 + "/" + number(b), i2 + "/" + number(b)));
         check(offences, "item, as listed", entry(at.query(Selector.ITEM), a),
             at.item(a, i1 + "/" + number(a), i2 + "/" + number(a)));
+
+        // The item that is neither actionable nor on a milestone is named plan
+        // into both open iterations, and each named plan is accepted.
+        check(offences, "item not actionable, without a milestone, plannable into both",
+            at.read(c), at.item(c, i1 + "/" + number(c), i2 + "/" + number(c)));
+        for (String call : List.of("worklist_plan " + i1 + "/" + number(c),
+                "worklist_plan " + i2 + "/" + number(c))) {
+            at.execute(call);
+        }
+        check(offences, "item not actionable, planned into both", at.read(c), at.item(c));
+        // Taken out of the first again, so that its close below meets no live
+        // membership; the dropped row keeps it a member, and no plan is named.
+        at.execute("worklist_unplan " + i1 + "/" + number(c));
+        check(offences, "item not actionable, unplanned from the first", at.read(c),
+            at.item(c));
+
+        // The closed item is named no plan, and a plan of it is refused: plan
+        // is named exactly where plan is accepted.
+        check(offences, "item closed, never planned", at.read(d), at.item(d));
+        Response refused = Mcp.call("worklist_plan", Map.of(
+            "address", i1 + "/" + number(d), "conflict_token", at.token(i1)));
+        assertThat(refused.jsonPath().getBoolean("result.isError"))
+            .as("a plan of the closed item is refused: %s", refused.asString())
+            .isTrue();
+        assertThat(refused.jsonPath().getString("result.structuredContent.reason"))
+            .as("with the code a closed item was refused with before")
+            .isEqualTo("ITEM_UNPLANNABLE");
 
         // Every call the plannable item names is carried out, in this order:
         // relate before unrelate, so that the edge unrelate takes stands.
@@ -188,8 +219,10 @@ class OpenCallsIT {
         check(offences, "item closed", at.read(a), at.item(a));
         check(offences, "item closed, updated", at.execute("worklist_update " + a),
             at.item(a));
-        check(offences, "item, not plannable, open iteration beside it", at.read(b),
-            at.item(b));
+        check(offences, "item without a milestone, the one open iteration beside it",
+            at.read(b), at.item(b, i2 + "/" + number(b)));
+        check(offences, "item closed, the one open iteration beside it", at.read(d),
+            at.item(d));
 
         // ---- a workstream --------------------------------------------------
         Map<String, Object> stream = at.query(Selector.WORKSTREAM).get(0);
@@ -284,16 +317,13 @@ class OpenCallsIT {
         }
         vocabulary.declareStatus(id, OPEN, 1, true, false, false, false);
         vocabulary.declareStatus(id, DONE, 2, false, false, true, true);
+        vocabulary.declareStatus(id, RESTING, 3, false, false, false, false);
         if (vocabulary.relationTypeByName(id, RELATION).isEmpty()) {
             vocabulary.declareRelationType(id, RELATION, false, 1);
         }
         workstreams.requireDefault(id);
-        Map<String, Object> limits = Map.of(
-            "max_planned_iterations", GENEROUS, "warn_planned_iterations", GENEROUS,
-            "max_memberships_per_iteration", GENEROUS, "warn_memberships_per_iteration",
-            GENEROUS);
         try {
-            settings.create(id, limits);
+            settings.create(id, Map.of());
         } catch (WorklistException alreadyThere) {
             // A rerun against the same database: the row stands.
             assertThat(alreadyThere.reason()).isEqualTo(WorklistException.Reason.SETTING_PRESENT);

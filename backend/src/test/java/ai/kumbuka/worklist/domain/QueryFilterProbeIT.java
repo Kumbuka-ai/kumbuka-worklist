@@ -76,11 +76,7 @@ class QueryFilterProbeIT {
     @BeforeEach
     void aFreshScopeWithTwoStatuses() {
         scope = UUID.randomUUID();
-        settings.create(scope, Map.of(
-            "max_planned_iterations", 10,
-            "warn_planned_iterations", 9,
-            "max_memberships_per_iteration", 10,
-            "warn_memberships_per_iteration", 9));
+        settings.create(scope, Map.of());
 
         openStatus = vocabulary.declareStatus(scope, "open", 1,
             true, false, false, false).pk;

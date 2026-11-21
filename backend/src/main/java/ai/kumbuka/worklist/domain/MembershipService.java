@@ -106,16 +106,16 @@ public class MembershipService extends PlanningService {
     /**
      * Put an item into an iteration, at the end of its sequence.
      *
-     * <p>The preconditions are the concept's: an item enters an iteration
-     * only when it is <strong>actionable</strong> and carries a milestone
-     * that is <strong>on the product path</strong>. An item off the path is not
-     * plannable and an item without a milestone is not worked out. Every
-     * such refusal is {@code ITEM_UNPLANNABLE} with {@code address} as its
-     * only offender; it does not name the value it found.
+     * <p>The one precondition on the item is that its status does not answer
+     * {@code closed} (TAR-0002 B9: any item in phase open or in_progress may
+     * be planned, and planning sets no other condition on the item). Neither
+     * an actionable status nor a milestone is asked for. A closed item is
+     * refused as {@code ITEM_UNPLANNABLE} with {@code address} as its only
+     * offender; the refusal does not name the value it found.
      *
-     * <p>The cardinality of the iteration is checked before the write: the
-     * hard limit refuses, the advisory threshold warns in the answer and
-     * admits. Both numbers come from the scope's own row.
+     * <p>The memberships of the iteration are checked before the write
+     * against the platform constant {@link #MEMBERSHIPS_PER_ITERATION}; a
+     * dropped membership does not count. The scope's settings are not read.
      *
      * <p>The position is the end of the sequence and is not given. Where in
      * the sequence it should sit is the reorder's question, addressed at the
@@ -135,10 +135,8 @@ public class MembershipService extends PlanningService {
                 List.of(ADDRESS));
         }
 
-        ScopeSetting setting = requireSetting(scopeId);
         List<IterationMembership> living = planning.membershipsOf(scopeId, iteration.number);
-        int afterwards = living.size() + 1;
-        refuseBeyond(afterwards, setting.maxMembershipsPerIteration);
+        refuseBeyond(countedMemberships(living) + 1, MEMBERSHIPS_PER_ITERATION);
 
         IterationMembership membership = new IterationMembership();
         membership.scopeId = scopeId;
@@ -150,9 +148,7 @@ public class MembershipService extends PlanningService {
         iteration.stamp(clock.instant());
         planning.flushAndRefresh(membership);
 
-        return new Written<>(project(iteration, membership, warnings(warningAt(afterwards,
-            setting.warnMembershipsPerIteration, Notice.MEMBERSHIPS_AT_THRESHOLD))),
-            membership);
+        return new Written<>(project(iteration, membership, List.of()), membership);
     }
 
     /**
@@ -248,18 +244,11 @@ public class MembershipService extends PlanningService {
     // ------------------------------------------------------------------
 
     /**
-     * An item enters an iteration only when it is actionable and carries a
-     * milestone on the product path.
+     * An item enters an iteration unless its status answers {@code closed}.
      *
-     * <p>Three distinct causes and one reason code, and the offender is
-     * {@code address} for all three, so they read the same from outside. The
-     * remedy for each is different: an item that is not actionable needs its
-     * status moved, an item without a milestone needs the axis assigned, and
-     * one off the path needs a decision that it belongs on it.
-     *
-     * <p>The milestone is assigned through {@code item.update} against
-     * {@link Field#MILESTONE_ID}, and the item verb runs the existence check
-     * — same scope, milestone not closed.
+     * <p>The status is the one thing read: the term "open item" is read over
+     * the status in this step, and neither its milestone nor whether its
+     * status is actionable decides anything here.
      */
     private Item refuseUnplannable(UUID scopeId, UUID itemId) {
         Item item = items.byId(itemId).orElse(null);
@@ -268,10 +257,7 @@ public class MembershipService extends PlanningService {
                 WorklistException.Reason.ITEM_UNKNOWN,
                 List.of(ADDRESS));
         }
-        ItemStatus status = vocabulary.requireStatus(scopeId, item.statusPk);
-        Milestone milestone = item.milestoneNumber == null ? null
-            : planning.milestoneByNumber(scopeId, item.milestoneNumber).orElse(null);
-        if (!plannable(status, milestone)) {
+        if (!plannable(vocabulary.requireStatus(scopeId, item.statusPk))) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
                 List.of(ADDRESS));
@@ -280,20 +266,18 @@ public class MembershipService extends PlanningService {
     }
 
     /**
-     * Whether an item may enter an iteration at all: an actionable status and
-     * a milestone on the product path.
+     * Whether an item may enter an iteration at all: its status does not
+     * answer {@code closed} (TAR-0002 B9).
      *
      * <p>One decision for two readers: {@link #plan} refuses where it says
      * no, and the open calls of an item name {@code plan} only where it says
      * yes ({@link OpenCallService}), so a named {@code plan} is never refused
      * for the item's state.
      *
-     * @param status    the item's status
-     * @param milestone the item's milestone; absent where it carries none or
-     *                  names none of the scope
+     * @param status the item's status
      */
-    static boolean plannable(ItemStatus status, @Nullable Milestone milestone) {
-        return status.actionable && milestone != null && milestone.onTheProductPath();
+    static boolean plannable(ItemStatus status) {
+        return !status.closed;
     }
 
     /**

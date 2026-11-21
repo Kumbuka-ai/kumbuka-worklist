@@ -8,8 +8,9 @@
 package ai.kumbuka.worklist.domain;
 
 /**
- * A fixed notice an answer carries: a warning of a planning write, or a
- * finding of {@code validate}.
+ * A fixed notice an answer carries: a finding of {@code validate}. The
+ * platform constants of planning carry no warning below them; they surface
+ * only as a refusal.
  *
  * <p>The domain names the notice and words nothing. The text is the surface's,
  * one per constant in the {@code notices} message bundle under the constant's
@@ -18,12 +19,6 @@ package ai.kumbuka.worklist.domain;
  * a tenant declared (DEC-0043 R18).
  */
 public enum Notice {
-
-    /** The scope's planned iterations reached the warning threshold it set. */
-    PLANNED_ITERATIONS_AT_THRESHOLD,
-
-    /** An iteration's memberships reached the warning threshold the scope set. */
-    MEMBERSHIPS_AT_THRESHOLD,
 
     /** A set of items forms a cycle over relation types that block. */
     BLOCKING_CYCLE
