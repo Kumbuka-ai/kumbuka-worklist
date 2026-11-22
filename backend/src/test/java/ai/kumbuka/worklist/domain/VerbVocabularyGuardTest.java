@@ -71,11 +71,13 @@ class VerbVocabularyGuardTest {
      * The platform verb set, transcribed from section 2 of the catalogue, and
      * the two tag verbs sprint/210 adds to it for worklist, dispatch and
      * memory alike, {@code book}, the call on an item that records in its
-     * fulfilment ledger what an instance reported against its criteria, and
-     * the transitions of an item beside {@code close} (REA-0011 D1):
-     * {@code submit}, {@code discard}, {@code start} and {@code return}.
+     * fulfilment ledger what an instance reported against its criteria, the
+     * transitions of an item beside {@code close} (REA-0011 D1):
+     * {@code submit}, {@code discard}, {@code start} and {@code return}, and
+     * {@code addendum}, the append-only text on an item whose content is
+     * frozen, from the same line of the same decision (REA-0011 D1, D13).
      *
-     * <p>Thirty-one, grouped as the catalogue groups them. Its purpose here
+     * <p>Thirty-two, grouped as the catalogue groups them. Its purpose here
      * is narrow and it is not the main assertion: it catches a name that was
      * added to {@link #CARRIED_BY_THIS_SCHEME} without being a platform verb
      * at all. Without it, a fantasy name added in both places at once would
@@ -102,7 +104,10 @@ class VerbVocabularyGuardTest {
         "book",
         // The lifecycle of an item (REA-0011 D1, TAR-0002 B20): the
         // transitions beside close, each a verb of its own
-        "submit", "discard", "start", "return");
+        "submit", "discard", "start", "return",
+        // The addendum of an item (REA-0011 D1, D13): an append-only text
+        // beside its frozen content, a verb of its own
+        "addendum");
 
     /**
      * The verbs each service of this scheme carries TODAY, and therefore
@@ -166,7 +171,12 @@ class VerbVocabularyGuardTest {
         // The fulfilment ledger of an item: a table of its own beside the
         // item, written by `book` alone.
         FulfilmentService.class,
-        Set.of("book"));
+        Set.of("book"),
+
+        // The addenda of an item: a table of its own beside the item,
+        // append-only, written by `addendum` alone.
+        AddendumService.class,
+        Set.of("addendum"));
 
     /**
      * The public methods of the verb surface that are not verbs.
@@ -194,7 +204,7 @@ class VerbVocabularyGuardTest {
     @Test
     void every_verb_this_scheme_claims_to_carry_is_a_platform_verb() {
         assertThat(PLATFORM_VOCABULARY)
-            .as("a verb this scheme carries is one of the platform's thirty-one. A name "
+            .as("a verb this scheme carries is one of the platform's thirty-two. A name "
                 + "that is not in that set is a service-private verb wearing the "
                 + "vocabulary's clothes, and adding it here as well as to the class "
                 + "would make this whole guard a list compared with itself")
@@ -386,20 +396,21 @@ class VerbVocabularyGuardTest {
      * records: the draw-candidate read folded into {@code query}, and the two
      * failure verbs folded into {@code abandon}. Sprint/210 adds the two tag
      * verbs, which three services carry with one semantics, the fulfilment
-     * ledger adds {@code book}, and the lifecycle of an item adds
+     * ledger adds {@code book}, the lifecycle of an item adds
      * {@code submit}, {@code discard}, {@code start} and {@code return}
-     * (REA-0011 D1), so thirty-one. A transcription that had quietly picked
-     * up a thirty-second would be a transcription of something else.
+     * (REA-0011 D1), and the addendum of an item adds {@code addendum}
+     * (REA-0011 D1, D13), so thirty-two. A transcription that had quietly
+     * picked up a thirty-third would be a transcription of something else.
      */
     @Test
-    void the_transcribed_vocabulary_is_the_thirty_one_the_catalogue_settled_on() {
+    void the_transcribed_vocabulary_is_the_thirty_two_the_catalogue_settled_on() {
         assertThat(PLATFORM_VOCABULARY)
             .as("the catalogue settles on twenty-four verbs after two reductions, "
                 + "sprint/210 adds tag_attach and tag_detach, the fulfilment ledger adds "
-                + "book, and the lifecycle of an item adds submit, discard, start and return. "
-                + "A different count here means this transcription is of a different "
-                + "revision than the one that was ratified")
-            .hasSize(31);
+                + "book, the lifecycle of an item adds submit, discard, start and return, and "
+                + "the addendum of an item adds addendum. A different count here means this "
+                + "transcription is of a different revision than the one that was ratified")
+            .hasSize(32);
     }
 
     /**

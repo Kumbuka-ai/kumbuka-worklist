@@ -47,13 +47,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       {@code tag_attach}, {@code tag_detach}, {@code submit},
  *       {@code discard}; an open item {@code read}, {@code update},
  *       {@code relate}, {@code unrelate}, {@code tag_attach},
- *       {@code tag_detach}, {@code book}, {@code start} where its status
- *       answers {@code actionable} and it carries a type, {@code close}, and
- *       {@code plan} into each open iteration it is no member of, whatever its
- *       milestone (TAR-0002 B9); an item in progress the same with
- *       {@code return} in place of {@code start}; a closed item {@code read}
- *       alone. The addendum and the narrower calls of the phase in progress
- *       are later steps (S10, S11) and are not expected here. A closed item
+ *       {@code tag_detach}, {@code addendum}, {@code book}, {@code start}
+ *       where its status answers {@code actionable} and it carries a type,
+ *       {@code close}, and {@code plan} into each open iteration it is no
+ *       member of, whatever its milestone (TAR-0002 B9); an item in progress
+ *       the same with {@code return} in place of {@code start}; a closed item
+ *       {@code read} alone. The narrower calls of the phase in progress are a
+ *       later step (S11) and are not expected here. A closed item
  *       still takes {@code book}, which it does not name (Annex A1). A draft
  *       and a closed item are named no {@code plan}, which they are refused;</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
@@ -517,6 +517,11 @@ class OpenCallsIT {
                     arguments.put("tag", TAG);
                 }
                 case "worklist_book" -> arguments.putAll(booking(address));
+                case "worklist_addendum" -> {
+                    // No conflict token: an addendum stands beside the item.
+                    arguments.put("address", address);
+                    arguments.put("text", "a correction the probe writes");
+                }
                 case "worklist_advance" -> {
                     arguments.put("scope", slug);
                     arguments.put("selector", Selector.ITERATION);
@@ -541,7 +546,13 @@ class OpenCallsIT {
             if (address.contains("/" + Selector.ITERATION + "/")) {
                 return Map.of("motto", "updated");
             }
-            return Map.of("title", "updated");
+            if (address.contains("/" + Selector.MILESTONE + "/")) {
+                return Map.of("title", "updated");
+            }
+            // A planning field: an item takes it in every phase that names
+            // update, where its title is frozen once it is submitted
+            // (REA-0011 D13, Annex A2).
+            return Map.of("contributor", List.of("subject-of-a-contributor"));
         }
 
         private long firstMilestoneNumber() {
@@ -563,16 +574,16 @@ class OpenCallsIT {
         }
 
         /**
-         * An open item (Annex A1): its writes, book, start where it may be
-         * started, close, and plan into each open iteration with room it is
-         * no member of.
+         * An open item (Annex A1): its writes, addendum, book, start where it
+         * may be started, close, and plan into each open iteration with room
+         * it is no member of.
          */
         List<String> item(String address, boolean startable, String... plans) {
             List<String> calls = new ArrayList<>(List.of(
                 "worklist_read " + address, "worklist_update " + address,
                 "worklist_relate " + address, "worklist_unrelate " + address,
                 "worklist_tag_attach " + address, "worklist_tag_detach " + address,
-                "worklist_book " + address));
+                "worklist_addendum " + address, "worklist_book " + address));
             if (startable) {
                 calls.add("worklist_start " + address);
             }
@@ -585,14 +596,16 @@ class OpenCallsIT {
 
         /**
          * An item in progress (Annex A1, without the narrowing of S11): its
-         * writes, book, return, close, and plan as an open item has it.
+         * writes, addendum, book, return, close, and plan as an open item has
+         * it.
          */
         List<String> inProgress(String address, String... plans) {
             List<String> calls = new ArrayList<>(List.of(
                 "worklist_read " + address, "worklist_update " + address,
                 "worklist_relate " + address, "worklist_unrelate " + address,
                 "worklist_tag_attach " + address, "worklist_tag_detach " + address,
-                "worklist_book " + address, "worklist_return " + address,
+                "worklist_addendum " + address, "worklist_book " + address,
+                "worklist_return " + address,
                 "worklist_close " + address));
             for (String membership : plans) {
                 calls.add("worklist_plan " + membership);

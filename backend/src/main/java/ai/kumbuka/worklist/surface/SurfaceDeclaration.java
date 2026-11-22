@@ -60,6 +60,9 @@ public final class SurfaceDeclaration {
     public static final String BOOK_INSTANCE = "instance";
     public static final String BOOK_ENTRIES = "entries";
 
+    /** The argument of {@code addendum}: what the addendum says. */
+    public static final String ADDENDUM_TEXT = "text";
+
     /**
      * The option of {@code read} on an item, and its two values: the latest
      * entry per criterion and instance, which every answer carries, or the
@@ -303,6 +306,9 @@ public final class SurfaceDeclaration {
     /** The entries of a booking, one per criterion. */
     private static final Argument ENTRIES =
         required(BOOK_ENTRIES, ArgumentType.ARRAY, ArgumentDescriptions::entries);
+    /** The text of an addendum, mandatory and never blank. */
+    private static final Argument TEXT =
+        required(ADDENDUM_TEXT, ArgumentType.STRING, ArgumentDescriptions::text);
     /** How much of an item's fulfilment ledger a read answers. */
     private static final Argument FULFILMENT =
         chosen(FULFILMENT_ARGUMENT, FULFILMENT_LATEST,
@@ -499,7 +505,16 @@ public final class SurfaceDeclaration {
         verb("book", ToolDescriptions::book, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
                 RefusalCode.TRANSITION_REFUSED)),
-            ADDRESS, INSTANCE, ENTRIES));
+            ADDRESS, INSTANCE, ENTRIES),
+        // The addenda (REA-0011 D1, D13). A write beside the item that
+        // presents no conflict token, as the tags and the ledger: an addendum
+        // moves neither the item's timestamp nor its token. Open on an item
+        // that is open or in progress; the answer is the item, its addenda
+        // included.
+        verb("addendum", ToolDescriptions::addendum, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
+                RefusalCode.TRANSITION_REFUSED)),
+            ADDRESS, TEXT));
 
     /**
      * The verbs of the worklist scheme this service refuses by name rather

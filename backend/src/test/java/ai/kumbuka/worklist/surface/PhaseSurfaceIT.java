@@ -213,6 +213,96 @@ class PhaseSurfaceIT {
     }
 
     // ====================================================================
+    // The field classes (REA-0011 S10, D13): content frozen at submit, the
+    // refusal naming the addendum, and the addendum on both surfaces
+    // ====================================================================
+
+    @Test
+    void s10_k1_a_title_write_on_an_open_item_is_refused_by_state_and_names_the_addendum() {
+        Map<String, Object> open = Submitted.createOverMcp(SLUG,
+            Map.of("title", "frozen at submit", "status", "planned"));
+        String address = String.valueOf(open.get("address"));
+
+        Map<String, Object> refusal = Mcp.refusal(Mcp.call("worklist_update", Map.of(
+            "address", address, "conflict_token", open.get("conflict_token"),
+            "fields", Map.of("title", "renamed after submit"))));
+        assertThat(refusal.get("reason")).as("content is frozen at submit (D13, Annex A2)")
+            .isEqualTo("TRANSITION_REFUSED");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) refusal.get("data");
+        assertThat(data.get("state")).as("the refusal names the state (D8)").isEqualTo("open");
+        assertThat(callsOf(data))
+            .as("and the open calls, the addendum among them")
+            .contains("worklist_addendum " + address);
+
+        Response rest = given().contentType(ContentType.JSON)
+            .header("If-Match", "\"" + open.get("conflict_token") + "\"")
+            .body(Map.of("description", "described after submit"))
+            .patch(path(address));
+        assertThat(rest.statusCode()).as(rest.asString()).isEqualTo(409);
+        assertThat(rest.jsonPath().getString("reason")).isEqualTo("TRANSITION_REFUSED");
+        assertThat(rest.jsonPath().getString("data.state")).isEqualTo("open");
+        assertThat(rest.jsonPath().getList("data.next.call", String.class))
+            .as("REST names the calls in its own verb names")
+            .contains("addendum " + address);
+    }
+
+    @Test
+    void s10_k5_an_addendum_is_written_over_rest_and_mcp_and_refused_on_a_draft() {
+        Map<String, Object> open = Submitted.createOverMcp(SLUG,
+            Map.of("title", "corrected by addenda", "status", "planned"));
+        String address = String.valueOf(open.get("address"));
+
+        Response overRest = given().contentType(ContentType.JSON)
+            .body(Map.of("text", "the first, over rest"))
+            .post(path(address) + ":addendum");
+        assertThat(overRest.statusCode()).as(overRest.asString()).isEqualTo(200);
+        assertThat(overRest.jsonPath().getString("fields.conflict_token"))
+            .as("an addendum moves the item's token neither (D1)")
+            .isEqualTo(String.valueOf(open.get("conflict_token")));
+
+        Map<String, Object> overMcp = Mcp.answer(Mcp.call("worklist_addendum", Map.of(
+            "address", address, "text", "the second, over mcp")));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> addenda =
+            (List<Map<String, Object>>) fields(overMcp).get("addenda");
+        assertThat(addenda).extracting(entry -> entry.get("text"))
+            .as("in the order written")
+            .containsExactly("the first, over rest", "the second, over mcp");
+        assertThat(addenda).allSatisfy(entry -> {
+            assertThat(entry.get("author"))
+                .as("the author is the caller, as the service derives the creator")
+                .isEqualTo(fields(overMcp).get("creator"));
+            assertThat(entry.get("written_at")).isNotNull();
+        });
+
+        Response drafted = given().contentType(ContentType.JSON)
+            .body(Map.of("title", "still a draft"))
+            .post("/api/" + SLUG + "/" + Selector.ITEM);
+        Response refused = given().contentType(ContentType.JSON)
+            .body(Map.of("text", "too early"))
+            .post(path(drafted.jsonPath().getString("address")) + ":addendum");
+        assertThat(refused.statusCode()).as(refused.asString()).isEqualTo(409);
+        assertThat(refused.jsonPath().getString("reason")).isEqualTo("TRANSITION_REFUSED");
+        assertThat(refused.jsonPath().getString("data.state")).isEqualTo("draft");
+        assertThat(refused.jsonPath().getList("data.next.call", String.class))
+            .as("a draft is edited: the addendum is no call of it")
+            .noneMatch(call -> call.startsWith("addendum "));
+
+        Response elsewhere = given().contentType(ContentType.JSON)
+            .body(Map.of("text", "on an iteration"))
+            .post("/api/" + SLUG + "/" + Selector.ITERATION + "/1:addendum");
+        assertThat(elsewhere.jsonPath().getString("reason"))
+            .as("only an item takes an addendum")
+            .isEqualTo("VERB_UNCARRIED");
+    }
+
+    /** The REST path of an item's address. */
+    private static String path(String address) {
+        return "/api/" + SLUG + "/" + Selector.ITEM + "/" + numberOf(address);
+    }
+
+    // ====================================================================
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> fields(Map<String, Object> answer) {

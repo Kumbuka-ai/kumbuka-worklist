@@ -279,9 +279,15 @@ class FulfilmentLedgerIT {
 
     @Test
     void k4_a_booking_on_a_withdrawn_identifier_is_taken() throws SQLException {
-        UUID item = create("a criterion withdrawn", 2);
+        // The criteria are content, written while the item is a draft and
+        // frozen at submit (REA-0011 D13): criterion 2 is withdrawn before.
+        UUID item = (UUID) items.create(scope, CALLER, Map.of(
+                "title", "a criterion withdrawn", "status", "open",
+                "criteria", List.of(Map.of("text", "criterion 1"), Map.of("text", "criterion 2"))))
+            .answer().get("id");
         update(item, Map.of("criteria", List.of(
             Map.of("address", address(item, 1), "text", "criterion 1"))));
+        ItemLifecycle.submit(items, scope, item);
         assertThat(items.read(scope, item).get("criteria"))
             .as("criterion 2 is withdrawn")
             .isEqualTo(List.of(Map.of("address", address(item, 1), "text", "criterion 1")));

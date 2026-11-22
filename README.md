@@ -21,9 +21,10 @@ case. The service fixes the **form** of a list and the meaning of a small
 number of questions about it. Everything else is the scope's.
 
 It is the sibling of the dispatch service and the opposite of it in one
-property: **a worklist item stays writable through its draft, open and
-in-progress phases until it is closed, while a dispatch object freezes when it
-is sent.**
+property: **a worklist item stays plannable through its open and in-progress
+phases until it is closed, while a dispatch object freezes when it is sent.**
+What an item says -- its content -- freezes when it is submitted, and is
+corrected from then on by an addendum beside it.
 
 ## What is here today
 
@@ -37,7 +38,7 @@ them, milestones, workstreams and iterations, and the number space.
 
 The **caller surface** carries the verbs of the worklist scheme -- `create`,
 `read`, `update`, `query`, `relate`, `unrelate`, `validate`, `tag_attach`,
-`tag_detach`, `book`, `close`, `advance`, `plan` and `unplan`, and the
+`tag_detach`, `book`, `addendum`, `close`, `advance`, `plan` and `unplan`, and the
 transitions of an item `submit`, `discard`, `start` and `return` -- over REST
 under `/api/{scope}` and over MCP at `/mcp`, both through the one verb surface.
 
@@ -48,7 +49,21 @@ to submit in the same act; the assistant surface submits in a second act),
 `submit` opens it, `discard` deletes a draft, `start` and `return` move it into
 and out of the phase in progress, and `close` ends it for good. Every declared
 status is bound to one phase, and `update` moves an item's status within its
-phase only; a closed item takes no write but a booking. Every answer about an object names
+phase only; a closed item takes no write but a booking.
+
+The phase also decides which fields `update` may change. An item's content --
+its title, its description and its acceptance criteria -- is written in a
+draft alone; its classification -- its type, the attribute `type`, and its
+workstream -- in a draft and an open item; everything else, its status within
+the phase included, until it closes. A change to a frozen field is refused by
+state, and the refusal names `addendum` among the open calls; a value sent back
+as it is held is taken in every phase, so a read answer may go back as it came.
+`addendum` writes an append-only text on an open item or one in progress, with
+its author and time, and `read` answers the addenda under `addenda` in the
+order they were written; like the tag calls and `book`, it presents no conflict
+token and moves neither the item's token nor its change time.
+
+Every answer about an object names
 under `next` the calls open to the caller on it in its state, and a refusal by
 state names the state and those calls. Beside them stand the service's
 declaration at `GET /api/declaration`, `GET /api/whoami` and the health
@@ -132,6 +147,9 @@ maintained list and requires, per table and per privilege:
   only where a verb genuinely deletes -- an item's tags for `tag_detach`, and
   a draft with its references, criteria and relations for `discard` -- and
   never `TRUNCATE`, `TRIGGER` or `REFERENCES`;
+- exactly `SELECT` and `INSERT` on the two append-only tables, the fulfilment
+  ledger and the addenda of an item, so that nothing in them can be changed or
+  removed;
 - nothing whatever on `flyway_schema_history`, which belongs to the migrator;
 - and that the runtime role owns nothing, so the privileges above are grants
   rather than an owner's implicit set.

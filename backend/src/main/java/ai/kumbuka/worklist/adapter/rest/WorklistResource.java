@@ -364,6 +364,9 @@ public class WorklistResource {
             case BOOK -> ok(scope, verbs.book(subject, scope, selector, id,
                 booking(arguments(body, INSTANCE, ENTRIES)).orElse(null)));
 
+            case ADDENDUM -> ok(scope, verbs.addendum(subject, scope, selector, id,
+                arguments(body, TEXT).text(TEXT).orElse(null)));
+
             case SEND, APPEND, ABANDON, BLOCK, RESUME, CONSUME ->
                 uncarried(scope, selector, id, at.verb());
 
@@ -569,6 +572,7 @@ public class WorklistResource {
     private static final String TAG = "tag";
     private static final String INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
     private static final String ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
+    private static final String TEXT = SurfaceDeclaration.ADDENDUM_TEXT;
 
     /**
      * The arguments of a body under the names the verb declares, checked for

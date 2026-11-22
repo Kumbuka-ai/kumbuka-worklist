@@ -86,6 +86,9 @@ public interface ArgumentDescriptions {
     String entries();
 
     @Message
+    String text();
+
+    @Message
     String fulfilment();
 
     @Message

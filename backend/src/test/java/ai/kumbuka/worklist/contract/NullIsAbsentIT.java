@@ -141,6 +141,8 @@ class NullIsAbsentIT {
         calls.put("book", args("address", item, "instance", "https://instances.example/run/1",
             "entries", List.of(Map.of("criterion", 9999, "status", "met",
                 "evidence", "a report"))));
+        // A text of blanks alone: refused, so the item takes no addendum.
+        calls.put("addendum", args("address", item, "text", "   "));
 
         SoftAssertions soft = new SoftAssertions();
         List<String> tools = toolsList().getList("result.tools.name", String.class);

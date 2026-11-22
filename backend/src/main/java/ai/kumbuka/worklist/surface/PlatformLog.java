@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.surface;
 
 import ai.kumbuka.worklist.domain.Item;
+import ai.kumbuka.worklist.domain.ItemAddendum;
 import ai.kumbuka.worklist.domain.ItemFulfilment;
 import ai.kumbuka.worklist.domain.ItemTag;
 import ai.kumbuka.worklist.domain.Iteration;
@@ -104,6 +105,10 @@ public final class PlatformLog {
 
     static void booked(TechnicalAddress entry, ScopeId scope) {
         LOG.infof("book on %s in scope %s", entry, scope);
+    }
+
+    static void addended(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("addendum on %s in scope %s", entry, scope);
     }
 
     static void submitted(TechnicalAddress entry, ScopeId scope) {
@@ -227,6 +232,10 @@ public final class PlatformLog {
 
     static void fulfilmentBooked(TechnicalAddress entry, Count entries, ScopeId scope) {
         LOG.debugf("%s ledger entr(y/ies) booked on item %s in scope %s", entries, entry, scope);
+    }
+
+    static void addendumWritten(TechnicalAddress entry, ScopeId scope) {
+        LOG.debugf("addendum written on item %s in scope %s", entry, scope);
     }
 
     // ======================================================================
@@ -385,6 +394,14 @@ public final class PlatformLog {
          */
         static TechnicalAddress of(ItemFulfilment entry) {
             return new TechnicalAddress(String.valueOf(entry.itemNumber));
+        }
+
+        /**
+         * An addendum, by the item it is written on; the text, the author and
+         * the delegated identity are values of the caller and stay out.
+         */
+        static TechnicalAddress of(ItemAddendum addendum) {
+            return new TechnicalAddress(String.valueOf(addendum.itemNumber));
         }
 
         static TechnicalAddress of(IterationMembership membership) {

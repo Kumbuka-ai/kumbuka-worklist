@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.repository;
 
 import ai.kumbuka.worklist.domain.Item;
+import ai.kumbuka.worklist.domain.ItemAddendum;
 import ai.kumbuka.worklist.domain.ItemCriterion;
 import ai.kumbuka.worklist.domain.ItemFulfilment;
 import ai.kumbuka.worklist.domain.ItemReference;
@@ -356,6 +357,21 @@ public class ItemRepository {
             .getResultList();
     }
 
+    /**
+     * The addenda of an item, every one, in the order they were written: by
+     * time, and by the row's surrogate where two share an instant.
+     */
+    @Transactional
+    public List<ItemAddendum> addendaOf(Item item) {
+        return em.createQuery(
+                "SELECT a FROM ItemAddendum a WHERE a.scopeId = :" + P_SCOPE
+                    + " AND a.itemNumber = :" + P_ITEM + " ORDER BY a.writtenAt, a.pk",
+                ItemAddendum.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .getResultList();
+    }
+
     // ------------------------------------------------------------------
     // Writing
     // ------------------------------------------------------------------
@@ -417,6 +433,18 @@ public class ItemRepository {
     @Transactional
     public void insertFulfilment(List<ItemFulfilment> entries) {
         entries.forEach(em::persist);
+        em.flush();
+    }
+
+    /**
+     * Inserts one addendum and flushes, so a constraint the table holds is
+     * reported at the call site. There is no counterpart that changes or
+     * removes an addendum, and there cannot be: V34 grants SELECT and INSERT
+     * on the table and nothing else.
+     */
+    @Transactional
+    public void insertAddendum(ItemAddendum addendum) {
+        em.persist(addendum);
         em.flush();
     }
 

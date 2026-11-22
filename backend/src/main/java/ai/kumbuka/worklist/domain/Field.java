@@ -194,8 +194,9 @@ public enum Field {
      * never chooses an identifier. Criteria that stand as prose in a
      * description stay there.
      *
-     * <p>As writable as the description until the field classes per phase
-     * arrive with a later step (REA-0011 S10), which freezes them at submit.
+     * <p>Content, as the title and the description are: written in a draft
+     * alone, and frozen at submit ({@link FieldClass#CONTENT}). A frozen item
+     * is corrected by an addendum ({@link #ADDENDA}).
      */
     CRITERIA("criteria", Set.of(ITEM), Set.of(ITEM)),
 
@@ -304,6 +305,20 @@ public enum Field {
      * field is, in either of the two forms a read answers.
      */
     FULFILMENT("fulfilment", Set.of(ITEM), Set.of()),
+
+    /**
+     * The addenda of an item, in the order they were written, each with
+     * {@code text}, {@code author}, {@code delegated_identity} where the call
+     * that wrote it carried one, and {@code written_at}; an empty list where
+     * there are none (REA-0011 D13).
+     *
+     * <p>Read-only: an addendum stands beside the item and is not its
+     * content. It is written by {@code addendum} alone, append only, on an
+     * item in the phase open or in progress, and writing one moves neither
+     * the item's change time nor its conflict token. A read answer sent back
+     * with its addenda unchanged is accepted, as every read-only field is.
+     */
+    ADDENDA("addenda", Set.of(ITEM), Set.of()),
 
     // --- the goal axis ----------------------------------------------------
 

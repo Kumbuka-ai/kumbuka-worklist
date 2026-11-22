@@ -59,6 +59,17 @@ import java.util.UUID;
  * open calls of an item read too ({@link #submittable}, {@link #startable},
  * {@link #firstOf}): a call an answer names is a call its object takes.
  *
+ * <h2>The phase decides what may be written</h2>
+ *
+ * Every field {@code update} writes belongs to a {@link FieldClass}, and the
+ * class decides in which phases it may change (REA-0011 D13, Annex A2): the
+ * content -- title, description, criteria -- in a draft alone, the
+ * classification -- type and workstream -- in a draft and an open item, the
+ * planning in every phase but closed. A change to a frozen class is refused
+ * by state before anything is written; a value sent back as it is held is no
+ * change and is taken. A frozen item is corrected by an addendum, which
+ * {@link AddendumService} writes beside it.
+ *
  * <p>Every transition is open to every caller with the write right of the
  * scope (REA-0011 section 4); the reason {@code return} and {@code close}
  * require is checked and stored nowhere, since this step builds no audit
@@ -413,9 +424,17 @@ public class ItemService {
      * {@code TRANSITION_REFUSED}, before anything is written: the phase moves
      * through a transition, and the refusal names the calls open on the
      * item. A draft takes a status of the phase open, the phase its status
-     * belongs to. A closed item takes no update at all. Every other field is
-     * taken in each of the three phases as it was before the phases arrived;
-     * the field classes per phase come with a later step (REA-0011 S10).
+     * belongs to. A closed item takes no update at all.
+     *
+     * <p><strong>The phase decides which fields may change</strong>
+     * (REA-0011 D13, Annex A2; {@link FieldClass}). A change to the content
+     * of an open item or one in progress, or to the classification of an item
+     * in progress, is refused with {@code TRANSITION_REFUSED} before anything
+     * is written, and the refusal names the open calls -- {@code addendum}
+     * among them. A field sent back with the value it holds is no change and
+     * is taken in every phase, so a read answer may go back as it came. The
+     * references and the relations are written as before in every phase but
+     * closed.
      *
      * <p><strong>A write that changes nothing writes nothing.</strong> Not a
      * timestamp, not a rotated token, not a statement. The comparison below
@@ -440,6 +459,7 @@ public class ItemService {
 
         Map<String, Object> current = project(item);
         refuseUnsettableChanges(current, withoutEchoedLedger(item, given));
+        refuseFrozenChanges(item, current, given);
 
         Map<Field, Object> settable = new EnumMap<>(Field.class);
         given.forEach((field, value) -> {
@@ -1021,6 +1041,93 @@ public class ItemService {
                 WorklistException.Reason.FIELD_NOT_SETTABLE,
                 refused);
         }
+    }
+
+    /**
+     * Refuse by state a change to a field whose class the item's phase has
+     * frozen (REA-0011 D13, Annex A2), before anything is written.
+     *
+     * <p>A field carrying the value it holds is no change, as for a read-only
+     * field: it is compared against the projection, in the form the write
+     * itself normalises it to. A {@code null} is absent (C7.4) and changes
+     * nothing. The attributes are compared key by key, because one of them,
+     * the type, is classification while the rest are planning.
+     */
+    private void refuseFrozenChanges(Item item, Map<String, Object> current,
+            Map<Field, Object> given) {
+        Phase phase = item.phase();
+        for (Map.Entry<Field, Object> entry : given.entrySet()) {
+            Field field = entry.getKey();
+            Object value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            boolean frozen = field == Field.ATTRIBUTES
+                ? changesFrozenAttribute(phase, current, value)
+                : FieldClass.of(field).filter(fieldClass -> !fieldClass.writableIn(phase))
+                    .isPresent() && changes(item, current, field, value);
+            if (frozen) {
+                throw transitionRefused();
+            }
+        }
+    }
+
+    /**
+     * Whether a field's value differs from the one held, normalised as the
+     * write normalises it: text trimmed, the empty text the absence of one,
+     * the criteria by identifier and text.
+     */
+    private boolean changes(Item item, Map<String, Object> current, Field field, Object value) {
+        Object held = current.get(field.canonicalName());
+        return switch (field) {
+            case TITLE, DESCRIPTION, WORKSTREAM_ID ->
+                !ItemFields.unchangedAsText(held, ItemFields.text(field, value).orElse(null));
+            case CRITERIA -> changesCriteria(item, value);
+            default -> !ItemFields.unchangedAsText(held, value);
+        };
+    }
+
+    /**
+     * Whether a criteria list changes the living criteria: it does unless it
+     * names each living criterion once, by its identifier, with the text it
+     * holds, and names nothing else. An entry without an identifier is a new
+     * criterion, and a living one the list leaves out would be withdrawn.
+     */
+    private boolean changesCriteria(Item item, Object value) {
+        List<ItemFields.CriterionEntry> wanted =
+            ItemFields.criteria(value, addressOf(item, slugOf(item.scopeId)));
+        Map<Long, ItemCriterion> living = livingByNumber(items.criteriaOf(item));
+        if (wanted.size() != living.size()) {
+            return true;
+        }
+        for (ItemFields.CriterionEntry entry : wanted) {
+            ItemCriterion held = entry.number() == null ? null : living.get(entry.number());
+            if (held == null || !held.text.equals(entry.text())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether an attribute map changes an attribute whose class the phase has
+     * frozen. The map is written whole, so an attribute it leaves out is one
+     * it removes; each key either side names is compared.
+     */
+    private static boolean changesFrozenAttribute(Phase phase, Map<String, Object> current,
+            Object value) {
+        Map<String, Object> wanted = ItemFields.attributes(value);
+        Map<?, ?> held = current.get(Field.ATTRIBUTES.canonicalName()) instanceof Map<?, ?> map
+            ? map : Map.of();
+        Set<String> keys = new java.util.TreeSet<>(wanted.keySet());
+        held.keySet().forEach(key -> keys.add(String.valueOf(key)));
+        for (String key : keys) {
+            if (!FieldClass.ofAttribute(key).writableIn(phase)
+                    && !ItemFields.unchangedAsText(held.get(key), wanted.get(key))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -2062,6 +2169,7 @@ public class ItemService {
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
         fields.put(Field.TAGS.canonicalName(), tagsOf(item));
         fields.put(Field.FULFILMENT.canonicalName(), fulfilmentOf(item, scopeSlug, Ledger.LATEST));
+        fields.put(Field.ADDENDA.canonicalName(), addendaOf(item));
         fields.put(Field.MILESTONE_ID.canonicalName(), item.milestoneNumber);
         fields.put(Field.WORKSTREAM_ID.canonicalName(),
             workstreamTokenOf(item.scopeId, item.workstreamNumber).orElse(null));
@@ -2275,6 +2383,34 @@ public class ItemService {
             rendered.put(ItemFields.LEDGER_ACTOR, entry.actor);
             rendered.put(ItemFields.LEDGER_BOOKED_AT, entry.bookedAt);
             rendered.put(ItemFields.LEDGER_AFTER_CLOSE, ItemFields.afterClose(entry, item.closeDate));
+            answer.add(Collections.unmodifiableMap(rendered));
+        }
+        return List.copyOf(answer);
+    }
+
+    /**
+     * The addenda of the item in the order they were written, each with its
+     * {@code text}, {@code author}, {@code delegated_identity} and
+     * {@code written_at}; an empty list where there are none, as the item
+     * answers its criteria. A delegated identity the row does not carry is
+     * left out of the entry rather than answered empty (C6.5), so that a read
+     * answer sent back through a transport that drops an absent member still
+     * compares equal.
+     */
+    private List<Map<String, Object>> addendaOf(Item item) {
+        List<ItemAddendum> written = items.addendaOf(item);
+        if (written.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> answer = new ArrayList<>(written.size());
+        for (ItemAddendum addendum : written) {
+            Map<String, Object> rendered = new LinkedHashMap<>();
+            rendered.put(ItemFields.ADDENDUM_TEXT, addendum.text);
+            rendered.put(ItemFields.ADDENDUM_AUTHOR, addendum.author);
+            if (addendum.delegatedIdentity != null) {
+                rendered.put(ItemFields.ADDENDUM_DELEGATED_IDENTITY, addendum.delegatedIdentity);
+            }
+            rendered.put(ItemFields.ADDENDUM_WRITTEN_AT, addendum.writtenAt);
             answer.add(Collections.unmodifiableMap(rendered));
         }
         return List.copyOf(answer);
