@@ -62,6 +62,9 @@ public interface ToolDescriptions {
     String book();
 
     @Message
+    String addendum();
+
+    @Message
     String submit();
 
     @Message

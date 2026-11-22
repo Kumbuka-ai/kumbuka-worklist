@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import ai.kumbuka.worklist.domain.AddendumService;
 import ai.kumbuka.worklist.domain.AddressRegistry;
 import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.FulfilmentService;
@@ -111,7 +112,8 @@ import java.util.regex.Pattern;
  * and {@code query} on the same view do act — a workstream is addressable like
  * any other declared view — and every other verb refuses on the existing view
  * checks (item-only for the graph and tag verbs and for {@code submit},
- * {@code discard}, {@code start} and {@code return}, iteration-only for
+ * {@code discard}, {@code start}, {@code return}, {@code book} and
+ * {@code addendum}, iteration-only for
  * {@code advance}, iteration, milestone and item for {@code close},
  * iteration-only for the membership addresses).
  */
@@ -149,6 +151,7 @@ public class VerbSurface {
     @Inject OpenCallService openCalls;
     @Inject TagService tags;
     @Inject FulfilmentService fulfilment;
+    @Inject AddendumService addenda;
     @Inject IdempotencyService idempotency;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
@@ -980,6 +983,43 @@ public class VerbSurface {
     }
 
     // ======================================================================
+    // The addenda
+    // ======================================================================
+
+    /**
+     * Write one addendum on an item: an append-only text beside its frozen
+     * content (REA-0011 D1, D13).
+     *
+     * <p>A write, so the scope is resolved for writing and a subject without
+     * the write right meets {@code SCOPE_READ_ONLY}; until permissions per
+     * transition arrive the write right of the scope is what guards it
+     * (REA-0011 section 4). An item in the phase open or in progress takes
+     * one, and a draft or a closed item is refused by state. No conflict
+     * token, as the tag calls: the addendum stands beside the item, and the
+     * item's token and change time stay as they are. The author is the
+     * subject this surface derived from the token. Only an item takes an
+     * addendum; an address of another view is refused as a verb that view
+     * does not carry.
+     *
+     * @param rawText the text the transport carried; absent where it carried
+     *                none, which this surface refuses as ARGUMENT_MISSING
+     */
+    @Transactional
+    public Result addendum(String subject, String rawScope, String rawView, String rawId,
+                           @Nullable String rawText) {
+        Entry in = entry(subject, rawScope, rawView, Access.WRITE);
+        AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, ADDENDUM);
+        UUID id = resolve(in, target);
+        String text = requireText(SurfaceDeclaration.ADDENDUM_TEXT, rawText);
+
+        return opened(in, at(target, logged(addenda.addendum(in.scopeId(), id, text, subject),
+            PlatformLog.TechnicalAddress::of, address -> {
+                PlatformLog.addendumWritten(address, in.scope());
+                PlatformLog.addended(address, in.scope());
+            })));
+    }
+
+    // ======================================================================
     // The validation check
     // ======================================================================
 
@@ -1180,6 +1220,7 @@ public class VerbSurface {
             case TAG_ATTACH -> NextStepTexts::tagAttach;
             case TAG_DETACH -> NextStepTexts::tagDetach;
             case BOOK -> NextStepTexts::book;
+            case ADDENDUM -> NextStepTexts::addendum;
             case SUBMIT -> NextStepTexts::submit;
             case DISCARD -> NextStepTexts::discard;
             case START -> NextStepTexts::start;
@@ -1380,6 +1421,7 @@ public class VerbSurface {
     private static final String TYPE = "type";
     private static final String TAG = "tag";
     private static final String BOOK = "book";
+    private static final String ADDENDUM = "addendum";
     private static final String INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
     private static final String ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
     private static final String CLOSE = "close";

@@ -134,6 +134,9 @@ public class McpAdapter {
     private static final String ARG_INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
     private static final String ARG_ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
 
+    /** The text of an addendum. */
+    private static final String ARG_TEXT = SurfaceDeclaration.ADDENDUM_TEXT;
+
     /** How much of an item's fulfilment ledger a read answers. */
     private static final String ARG_FULFILMENT = SurfaceDeclaration.FULFILMENT_ARGUMENT;
 
@@ -393,6 +396,9 @@ public class McpAdapter {
             // The fulfilment ledger, addressed at an item.
             case "book" -> book(in);
 
+            // The addenda, addressed at an item.
+            case "addendum" -> addendum(in);
+
             // Not in tools/list, and still answered by name.
             case "send", "append", "digest", "abandon", "block", "resume", "consume" ->
                 refused(in, verb, false);
@@ -559,6 +565,17 @@ public class McpAdapter {
         return dressed(at.scope(), verbs.book(caller.subject(), at.scope(), at.view(),
             at.head(), new VerbInput.Booking(text(in, ARG_INSTANCE).orElse(null),
                 list(in, ARG_ENTRIES).orElse(null))));
+    }
+
+    /**
+     * An addendum. The text is checked here for its JSON type alone, a form
+     * fault decided before the scope (C1.3); a missing or empty one is
+     * refused by the surface.
+     */
+    private Object addendum(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.addendum(caller.subject(), at.scope(), at.view(),
+            at.head(), text(in, ARG_TEXT).orElse(null)));
     }
 
     /**

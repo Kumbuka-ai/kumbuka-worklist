@@ -58,6 +58,9 @@ public interface NextStepTexts {
     String book();
 
     @Message
+    String addendum();
+
+    @Message
     String submit();
 
     @Message

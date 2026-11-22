@@ -153,6 +153,7 @@ class MarkerProbeIT {
         minimal.put("discard", Map.of("address", item, "conflict_token", "t"));
         minimal.put("start", Map.of("address", item, "conflict_token", "t"));
         minimal.put("return", Map.of("address", item, "conflict_token", "t"));
+        minimal.put("addendum", Map.of("address", item));
         minimal.forEach((tool, args) -> {
             Map<String, Object> with = new LinkedHashMap<>(args);
             with.put(MARKER, MARKER);

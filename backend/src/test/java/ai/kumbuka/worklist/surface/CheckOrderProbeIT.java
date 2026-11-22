@@ -178,6 +178,14 @@ class CheckOrderProbeIT {
                 .body("reason", is("NOT_FOUND"));
         }
 
+        // The addendum (REA-0011 D13): no text sent, and the stranger still
+        // learns nothing but NOT_FOUND.
+        given()
+            .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":addendum")
+            .then()
+            .statusCode(404)
+            .body("reason", is("NOT_FOUND"));
+
         SurfaceFixture.asMember(identity);
         given()
             .when().post(SurfaceFixture.item(Selector.ITEM, 999_999) + ":tag_attach")

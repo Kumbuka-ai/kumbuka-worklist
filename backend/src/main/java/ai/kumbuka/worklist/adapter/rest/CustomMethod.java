@@ -122,6 +122,14 @@ public enum CustomMethod {
 
     BOOK("book", Depth.ITEM, Kind.CARRIED),
 
+    // ---- Carried, at item depth: the addenda -----------------------------
+    //
+    // An append-only text beside the item's frozen content that presents no
+    // conflict token, as the tags and the ledger (REA-0011 D1, D13). Only the
+    // item view answers to it.
+
+    ADDENDUM("addendum", Depth.ITEM, Kind.CARRIED),
+
     // ---- Carried, at collection depth -----------------------------------
     //
     // {@code validate} was declared at item depth in the previous revision of

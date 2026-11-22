@@ -78,6 +78,15 @@ final class ItemFields {
     static final String LEDGER_BOOKED_AT = "booked_at";
     static final String LEDGER_AFTER_CLOSE = "after_close";
 
+    /**
+     * The argument of {@code addendum}, as a refusal of it names it, and the
+     * members of an addendum as an item answers it.
+     */
+    static final String ADDENDUM_TEXT = "text";
+    static final String ADDENDUM_AUTHOR = "author";
+    static final String ADDENDUM_DELEGATED_IDENTITY = "delegated_identity";
+    static final String ADDENDUM_WRITTEN_AT = "written_at";
+
     /** The keys of the predicates every scope answers (TAR-0002 Annex A1). */
     static final String CLOSED = "closed";
     static final String SUCCESSFUL = "successful";

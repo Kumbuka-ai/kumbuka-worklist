@@ -279,6 +279,18 @@ class SurfaceCoverageIT {
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("INVALID_VALUE"));
 
+        // ---- addendum, at item depth ---------------------------------------
+        //
+        // Reached and carried out: the item is open, and an addendum stands
+        // beside it. It presents no token, and the item's token stays, so the
+        // calls below still present the one read before. The semantics sit in
+        // ItemFieldClassIT.
+        call("POST", item(Selector.ITEM, itemNumber) + ":addendum", null,
+            Map.of("text", "a correction to the open item"))
+            .statusCode(200)
+            .body("fields.addenda[0].text",
+                org.hamcrest.Matchers.is("a correction to the open item"));
+
         // ---- start and return, at item depth --------------------------------
         //
         // Reached, refused by the item's state: it carries no type, so it is

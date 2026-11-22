@@ -219,6 +219,13 @@ public final class DeclarationSpecification {
         // no booking (Annex A1).
         new Verb("worklist_book", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, Arg.req("instance", "string"), Arg.req("entries", "array")),
+            reasons(WRITE, List.of("VERB_UNCARRIED", "INVALID_VALUE", "TRANSITION_REFUSED"))),
+        // The addenda (REA-0011 D1, D13): an append-only text beside the
+        // item that presents no conflict token, as the tags and the ledger.
+        // Open on an item that is open or in progress; a draft and a closed
+        // item refuse it by state.
+        new Verb("worklist_addendum", "ITEM_TRANSITION", "OBJECT",
+            List.of(ADDRESS, Arg.req("text", "string")),
             reasons(WRITE, List.of("VERB_UNCARRIED", "INVALID_VALUE", "TRANSITION_REFUSED"))));
 
     @SafeVarargs

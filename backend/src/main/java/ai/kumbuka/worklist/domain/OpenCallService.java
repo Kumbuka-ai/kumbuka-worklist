@@ -37,7 +37,8 @@ import java.util.function.LongFunction;
  * {@link Milestone#open}, {@link MembershipService#plannable},
  * {@link IterationService#promotable}, {@link PlanningService#within},
  * {@link ItemService#submittable}, {@link ItemService#startable},
- * {@link ItemService#firstOf}, and the membership row {@code plan} refuses as
+ * {@link ItemService#firstOf}, {@link FieldClass#addendumOpen}, and the
+ * membership row {@code plan} refuses as
  * present. So a call named here is never refused for the object's state: a
  * second table would be one the verbs drift away from.
  *
@@ -48,16 +49,18 @@ import java.util.function.LongFunction;
  *       {@code tag_attach}, {@code tag_detach}, {@code submit} where it may
  *       be submitted, and {@code discard}; an open item {@code read},
  *       {@code update}, {@code relate}, {@code unrelate}, {@code tag_attach},
- *       {@code tag_detach}, {@code book}, {@code start} where it may be
- *       started, {@code close}, and {@code plan} into each open iteration it
- *       is no member of and that has room; an item in progress the same, with
- *       {@code return} in place of {@code start}; a closed item {@code read}
- *       alone. A transition into a phase the scope declares no status of is
- *       not named, since it is refused. A closed item still takes
- *       {@code book}, and does not name it: that call is open to the identity
- *       concluding an instance, which this service does not yet recognise
- *       (Annex A1). The addendum and the narrower calls of the phase in
- *       progress come with later steps (REA-0011 S10, S11);</li>
+ *       {@code tag_detach}, {@code addendum}, {@code book}, {@code start}
+ *       where it may be started, {@code close}, and {@code plan} into each
+ *       open iteration it is no member of and that has room; an item in
+ *       progress the same, with {@code return} in place of {@code start}; a
+ *       closed item {@code read} alone. A transition into a phase the scope
+ *       declares no status of is not named, since it is refused. A closed
+ *       item still takes {@code book}, and does not name it: that call is
+ *       open to the identity concluding an instance, which this service does
+ *       not yet recognise (Annex A1). {@code addendum} is named exactly where
+ *       {@link FieldClass#addendumOpen} admits it, the function the call
+ *       itself is refused on. The narrower calls of the phase in progress
+ *       come with a later step (REA-0011 S11);</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
  *       {@code plan} at its own address while it has room, and
  *       {@code advance} at the iteration collection while an open iteration
@@ -104,6 +107,7 @@ public class OpenCallService extends PlanningService {
         TAG_ATTACH(true),
         TAG_DETACH(true),
         BOOK(true),
+        ADDENDUM(true),
         SUBMIT(true),
         DISCARD(true),
         START(true),
@@ -293,6 +297,9 @@ public class OpenCallService extends PlanningService {
                 }
                 calls.add(at(Verb.DISCARD, Selector.ITEM, number));
                 return new Open(phase.token(), List.copyOf(calls));
+            }
+            if (FieldClass.addendumOpen(phase)) {
+                calls.add(at(Verb.ADDENDUM, Selector.ITEM, number));
             }
             calls.add(at(Verb.BOOK, Selector.ITEM, number));
             if (phase == Phase.OPEN && declares(Phase.IN_PROGRESS)

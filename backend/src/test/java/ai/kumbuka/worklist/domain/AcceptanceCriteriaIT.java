@@ -169,7 +169,8 @@ class AcceptanceCriteriaIT {
     void k3_a_closed_item_keeps_its_identifiers_and_takes_no_further_criterion() {
         UUID item = create("closed with its criteria", List.of(
             Map.of("text", "one"), Map.of("text", "two")));
-        ItemLifecycle.submit(items, scope, item);
+        // The criteria are content: written while the item is a draft, and
+        // frozen once it is submitted (REA-0011 D13, Annex A2).
         update(item, Map.of("criteria", List.of(
             Map.of("address", address(item, 1), "text", "one"))));
         Map<String, Object> appended = update(item, Map.of("criteria", List.of(
@@ -180,6 +181,7 @@ class AcceptanceCriteriaIT {
             .containsExactly(
                 criterion(item, 1, "one"),
                 criterion(item, 3, "before closing"));
+        ItemLifecycle.submit(items, scope, item);
 
         Map<String, Object> closed = ItemLifecycle.close(items, scope, item, "done");
         assertThat(closed.get("close_date")).as("the item is closed").isNotNull();

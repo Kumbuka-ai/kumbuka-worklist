@@ -29,13 +29,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>The calls, per kind of object, as the target cut fixes them: an item is
  * created, read, updated, queried, related and unrelated, validated, tagged
- * and untagged, and booked against in its fulfilment ledger, its status moves
- * within a phase through {@code update}, and its phase through the
- * transitions {@code submit}, {@code discard}, {@code start}, {@code return}
- * and {@code close} (REA-0011 D1); an iteration is created, read, updated,
- * queried, closed and advanced; a milestone is created, read, updated, queried
- * and closed; a membership is planned, unplanned, read and updated; a
- * workstream is read and queried. Their union is the eighteen below, written
+ * and untagged, booked against in its fulfilment ledger, and given an
+ * addendum, its status moves within a phase through {@code update}, and its
+ * phase through the transitions {@code submit}, {@code discard},
+ * {@code start}, {@code return} and {@code close} (REA-0011 D1); an iteration
+ * is created, read, updated, queried, closed and advanced; a milestone is
+ * created, read, updated, queried and closed; a membership is planned,
+ * unplanned, read and updated; a workstream is read and queried. Their union
+ * is the nineteen below, written
  * here and never read from the service. {@code accept}, {@code withdraw}, {@code claim}, {@code release}
  * and {@code claim_next} are not among them.
  */
@@ -45,7 +46,7 @@ class CallSetTest {
     static final List<String> VERBS = List.of(
         "create", "read", "update", "query", "relate", "unrelate", "validate",
         "tag_attach", "tag_detach", "book", "close", "advance", "plan", "unplan",
-        "submit", "discard", "start", "return");
+        "submit", "discard", "start", "return", "addendum");
 
     /** The same, as the assistant surface names them: {@code worklist_<verb>}. */
     static final List<String> TOOLS = VERBS.stream().map(verb -> "worklist_" + verb).toList();
