@@ -175,6 +175,53 @@ class ItemFieldClassIT {
             .containsEntry("effort", "small");
     }
 
+    /**
+     * The type compared in the form the column holds, never as text: in a
+     * scope that declares {@code type} as a number, an item in progress typed
+     * 5 is refused the text "5" -- stored, it would be another value -- and
+     * takes the read answer back, which carries 5.
+     *
+     * <p>RED PROBE: with the frozen attribute compared as text again
+     * ({@code ItemFields.unchangedAsText} over the answered values), "5"
+     * passes as an echo and is written, and the first assertion here fails on
+     * a refusal expected and none thrown.
+     */
+    @Test
+    void k2_a_type_respelled_in_another_json_type_on_an_item_in_progress_is_refused() {
+        UUID numbered = UUID.randomUUID();
+        for (String view : Selector.VIEWS) {
+            selectors.open(numbered, view);
+        }
+        vocabulary.declareStatus(numbered, OPEN, 1, true, false, false, false);
+        vocabulary.declareStatus(numbered, DOING, 2, true, true, false, false);
+        vocabulary.declareAttribute(numbered, "type", "Type", "number", 1, false);
+        workstreams.requireDefault(numbered);
+        UUID item = ItemLifecycle.draft(items, numbered, Map.of(
+            Field.TITLE.canonicalName(), "typed by a number",
+            Field.STATUS.canonicalName(), OPEN));
+        updateIn(numbered, item, Map.of("attributes", Map.of("type", 5)));
+        ItemLifecycle.submit(items, numbered, item);
+        ItemLifecycle.start(items, numbered, item, DOING);
+        Map<String, Object> before = items.read(numbered, item);
+
+        assertThat(refusal(() -> updateIn(numbered, item,
+                Map.of("attributes", Map.of("type", "5")))).reason())
+            .as("the text \"5\" would be stored as another value than the number 5: a change "
+                + "of the type, frozen in progress (Annex A2)")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        Map<String, Object> after = items.read(numbered, item);
+        assertThat(after).as("nothing is written").isEqualTo(before);
+        assertThat(attributes(after).get("type"))
+            .as("the type is still the number 5")
+            .isInstanceOf(Number.class)
+            .satisfies(type -> assertThat(((Number) type).intValue()).isEqualTo(5));
+
+        Written<Map<String, Object>, Item> echoed = items.update(numbered, item, after);
+        assertThat(echoed.stored())
+            .as("the read answer sent back, carrying the number 5, is no change (K8)")
+            .isNull();
+    }
+
     // ====================================================================
     // K3: planning is written in the phases open and in_progress
     // ====================================================================
@@ -396,9 +443,15 @@ class ItemFieldClassIT {
 
     /** An update with the item's current token. */
     private Map<String, Object> update(UUID item, Map<String, ?> change) {
+        return updateIn(scope, item, change);
+    }
+
+    /** An update of an item of the scope named, with the item's current token. */
+    private Map<String, Object> updateIn(UUID inScope, UUID item, Map<String, ?> change) {
         Map<String, Object> fields = new LinkedHashMap<>(change);
-        fields.put(Field.CONFLICT_TOKEN.canonicalName(), ItemLifecycle.tokenOf(items, scope, item));
-        return items.update(scope, item, fields).answer();
+        fields.put(Field.CONFLICT_TOKEN.canonicalName(),
+            ItemLifecycle.tokenOf(items, inScope, item));
+        return items.update(inScope, item, fields).answer();
     }
 
     private List<String> openVerbs(UUID item) {

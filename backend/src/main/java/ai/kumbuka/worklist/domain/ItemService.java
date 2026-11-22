@@ -1051,7 +1051,8 @@ public class ItemService {
      * field: it is compared against the projection, in the form the write
      * itself normalises it to. A {@code null} is absent (C7.4) and changes
      * nothing. The attributes are compared key by key, because one of them,
-     * the type, is classification while the rest are planning.
+     * the type, is classification while the rest are planning, and in the
+     * form the column holds ({@link #changesFrozenAttribute}).
      */
     private void refuseFrozenChanges(Item item, Map<String, Object> current,
             Map<Field, Object> given) {
@@ -1063,7 +1064,7 @@ public class ItemService {
                 continue;
             }
             boolean frozen = field == Field.ATTRIBUTES
-                ? changesFrozenAttribute(phase, current, value)
+                ? changesFrozenAttribute(item, phase, current, value)
                 : FieldClass.of(field).filter(fieldClass -> !fieldClass.writableIn(phase))
                     .isPresent() && changes(item, current, field, value);
             if (frozen) {
@@ -1113,8 +1114,18 @@ public class ItemService {
      * Whether an attribute map changes an attribute whose class the phase has
      * frozen. The map is written whole, so an attribute it leaves out is one
      * it removes; each key either side names is compared.
+     *
+     * <p>Compared in the form the column holds, never as text: the value the
+     * item stores under the declaration's surrogate against the value
+     * {@link #storedValue} would store for the wanted one, which is the
+     * comparison {@link #applyAttributes} decides a change by. A value
+     * re-spelled in another JSON type -- the number 5 sent as the text
+     * {@code "5"} -- would be stored as that other value, so it is a change,
+     * and on a frozen key it is refused. A read answer sent back as it came
+     * stores what the column holds and is no change. A key the scope does not
+     * declare is left to the write, which refuses it as undeclared.
      */
-    private static boolean changesFrozenAttribute(Phase phase, Map<String, Object> current,
+    private boolean changesFrozenAttribute(Item item, Phase phase, Map<String, Object> current,
             Object value) {
         Map<String, Object> wanted = ItemFields.attributes(value);
         Map<?, ?> held = current.get(Field.ATTRIBUTES.canonicalName()) instanceof Map<?, ?> map
@@ -1122,8 +1133,18 @@ public class ItemService {
         Set<String> keys = new java.util.TreeSet<>(wanted.keySet());
         held.keySet().forEach(key -> keys.add(String.valueOf(key)));
         for (String key : keys) {
-            if (!FieldClass.ofAttribute(key).writableIn(phase)
-                    && !ItemFields.unchangedAsText(held.get(key), wanted.get(key))) {
+            if (FieldClass.ofAttribute(key).writableIn(phase)) {
+                continue;
+            }
+            Optional<AttributeDefinition> definition =
+                vocabulary.attributeByKey(item.scopeId, key);
+            if (definition.isEmpty()) {
+                continue;
+            }
+            Object stored = item.attributes.get(String.valueOf(definition.get().pk));
+            Object written = wanted.containsKey(key)
+                ? storedValue(definition.get(), wanted.get(key)) : null;
+            if (!Objects.equals(stored, written)) {
                 return true;
             }
         }
