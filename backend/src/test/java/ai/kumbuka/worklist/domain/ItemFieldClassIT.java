@@ -63,14 +63,16 @@ class ItemFieldClassIT {
     @BeforeEach
     void aScopeOfItsOwn() {
         scope = UUID.randomUUID();
-        selectors.open(scope, Selector.ITEM);
-        selectors.open(scope, Selector.MILESTONE);
+        for (String view : Selector.VIEWS) {
+            selectors.open(scope, view);
+        }
         vocabulary.declareStatus(scope, OPEN, 1, true, false, false, false);
         vocabulary.declareStatus(scope, DOING, 2, true, true, false, false);
         vocabulary.declareStatus(scope, DONE, 3, false, false, true, true);
         vocabulary.declareAttribute(scope, "type", "Type", AttributeDefinition.TEXT, 1, false);
         vocabulary.declareAttribute(scope, "effort", "Effort", AttributeDefinition.TEXT, 2, false);
         vocabulary.declareUsage(scope, ScopeUsage.Property.PRIORITY);
+        workstreams.requireDefault(scope);
         workstreams.declare(scope, OTHER_WORKSTREAM, "the backend stream");
         milestone = ((Number) milestones.create(scope, Map.of(
                 Field.TITLE.canonicalName(), "the first goal",
