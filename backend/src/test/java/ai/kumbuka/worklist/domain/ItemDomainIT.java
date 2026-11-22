@@ -440,12 +440,12 @@ class ItemDomainIT {
         assertThat(numberOf(second)).isEqualTo(numberOf(first) + 1);
         assertThat(thirdNumber).isEqualTo(numberOf(second) + 1);
 
-        // The highest one is taken back -- through `update`, into the scope's
-        // terminal status, the one way an item's state moves. This is what
-        // the predecessor's `delete` would have done, and it removed the row.
-        items.update(SCOPE, third, Map.of(
-            "status", statusNameOf(closedStatus()),
-            "conflict_token", (String) items.read(SCOPE, third).get("conflict_token")));
+        // The highest one is taken back -- submitted and closed, into the
+        // scope's terminal status, through the transitions that move an
+        // item's phase. This is what the predecessor's `delete` would have
+        // done, and it removed the row.
+        ItemLifecycle.submit(items, SCOPE, third);
+        ItemLifecycle.close(items, SCOPE, third, statusNameOf(closedStatus()));
         assertThat(items.read(SCOPE, third).get("number"))
             .as("a withdrawn item keeps its address. That is what makes the mark a mark "
                 + "by construction rather than by a rule somebody has to keep")
@@ -808,27 +808,37 @@ class ItemDomainIT {
     }
 
     /**
-     * An item reaches a status the scope declared as closed through
-     * {@code update}, the one way its state moves, and stays writable there:
-     * a closed item takes the next write like any other.
+     * An item reaches a status the scope declared as closed through the
+     * transition {@code close}, never through a status write (REA-0011 D1,
+     * D11), and a closed item takes no further write (D6).
      */
     @Test
-    void an_item_closes_through_update_and_stays_writable() {
+    void an_item_closes_through_close_and_takes_no_further_write() {
         UUID id = createdId("closing probe");
+        ItemLifecycle.submit(items, SCOPE, id);
 
-        Map<String, Object> closed = items.update(SCOPE, id, Map.of(
-            "status", statusNameOf(closedStatus()),
-            "conflict_token", (String) items.read(SCOPE, id).get("conflict_token"))).answer();
+        WorklistException byStatus = catchWorklistException(() -> items.update(SCOPE, id,
+            Map.of("status", statusNameOf(closedStatus()),
+                "conflict_token", (String) items.read(SCOPE, id).get("conflict_token"))));
+        assertThat(byStatus.reason())
+            .as("a status of the phase closed is refused on an open item: the phase moves "
+                + "through a transition")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+
+        Map<String, Object> closed = ItemLifecycle.close(items, SCOPE, id,
+            statusNameOf(closedStatus()));
         assertThat(closed.get("status"))
             .as("the value a scope closes with is the scope's own declaration")
             .isEqualTo(vocabulary.requireStatus(SCOPE, closedStatus()).name);
+        assertThat(closed.get("phase")).isEqualTo("closed");
 
-        Map<String, Object> retitled = items.update(SCOPE, id, Map.of(
+        WorklistException retitle = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "title", "closing probe, retitled",
-            "conflict_token", String.valueOf(closed.get("conflict_token")))).answer();
-        assertThat(retitled.get("title"))
-            .as("a closed item stays writable")
-            .isEqualTo("closing probe, retitled");
+            "conflict_token", String.valueOf(closed.get("conflict_token")))));
+        assertThat(retitle.reason())
+            .as("a closed item is final and refuses the write by state")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertThat(items.read(SCOPE, id).get("title")).isEqualTo("closing probe");
     }
 
     // ==================================================================
@@ -844,7 +854,8 @@ class ItemDomainIT {
      * the same edge comes BACK: the row that was already there is asserted
      * again, and no second row appears. A delete-and-reinsert would be
      * indistinguishable from the outside, which is why the guarantee is
-     * carried by the missing DELETE privilege rather than by this test.
+     * carried by the write path, which withdraws, rather than by this test;
+     * the runtime role deletes an edge only with a discarded draft (V33).
      */
     @Test
     void relations_are_set_as_a_whole_and_a_removed_edge_comes_back() {
@@ -1211,21 +1222,35 @@ class ItemDomainIT {
             .containsExactly("fields.number");
     }
 
-    /** And it carries a title and a status, on every path. */
+    /**
+     * And it carries a title and a status, on every path: a create without a
+     * title is refused, and a draft created without a status of the phase
+     * open takes the first such status the scope declares, by rank, since the
+     * column is mandatory and no status is bound to the phase draft
+     * (REA-0011 S9, D12).
+     */
     @Test
-    void an_item_without_a_title_or_a_status_is_refused() {
+    void an_item_without_a_title_is_refused_and_a_draft_falls_back_to_a_status_of_the_open_phase() {
         assertThat(catchWorklistException(() ->
             items.create(SCOPE, "probe-subject", Map.of("status", statusNameOf(openStatus())))).reason())
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
 
-        WorklistException statusless = catchWorklistException(() ->
-            items.create(SCOPE, "probe-subject", Map.of("title", "no status given")));
-        assertThat(statusless.reason())
-            .as("a status is a declared value now, so there is no default to fall back "
-                + "on — inventing one here would be this service deciding what a scope's "
-                + "list means")
-            .isEqualTo(WorklistException.Reason.INVALID_VALUE);
-        assertThat(statusless.offenders()).containsExactly("fields.status");
+        closedStatus();
+        Map<String, Object> statusless = items.create(SCOPE, "probe-subject",
+            Map.of("title", "no status given")).answer();
+        assertThat(statusless)
+            .as("the scope's first status of the phase open, by rank: 'open' at rank 1")
+            .containsEntry("status", "open")
+            .containsEntry("phase", "draft");
+
+        Map<String, Object> namedClosed = items.create(SCOPE, "probe-subject", Map.of(
+            "title", "a closed status named at create",
+            "status", statusNameOf(closedStatus()))).answer();
+        assertThat(namedClosed)
+            .as("a status of another phase named at create is replaced by the first of "
+                + "the phase open: a draft is never closed")
+            .containsEntry("status", "open")
+            .containsEntry("phase", "draft");
 
         UUID id = createdId("title clearing probe");
         assertThat(catchWorklistException(() -> {

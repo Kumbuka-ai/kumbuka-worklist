@@ -36,7 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * creator is the subject the token carries and nothing the call says, that a
  * create naming a creator is refused at the surface, and that a
  * {@code duplicate_of} refused by state names the item's state and the open
- * calls, {@code relate} among them.
+ * calls: on a closed item its phase and {@code read} alone, on an open one
+ * {@code relate} among them.
  */
 @QuarkusTest
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
@@ -151,11 +152,11 @@ class PropertyCoreSurfaceIT {
         refused.then().statusCode(409);
         assertThat(refused.jsonPath().getString("reason")).isEqualTo("TRANSITION_REFUSED");
         assertThat(refused.jsonPath().getString("data.state"))
-            .as("the refusal names the item's state")
-            .isEqualTo(OBSOLETE);
+            .as("the refusal names the item's state: its phase, closed (REA-0011 D11)")
+            .isEqualTo("closed");
         assertThat(refused.jsonPath().getList("data.next.call", String.class))
-            .as("and the calls open on it")
-            .anySatisfy(call -> assertThat(call).startsWith("relate"));
+            .as("and the calls open on it: a closed item opens read alone (REA-0011 D6)")
+            .containsExactly("read " + address(duplicate));
     }
 
     @Test
@@ -183,10 +184,11 @@ class PropertyCoreSurfaceIT {
     // Fixtures
     // =======================================================================
 
+    /** An open item: created over REST and submitted in the same act (REA-0011 D12). */
     private static long createItem(String title) {
         Response created = given().contentType(ContentType.JSON)
             .body(Map.of("title", title, "status", OPEN))
-            .when().post("/api/" + SCOPE + "/" + Selector.ITEM);
+            .when().post(Submitted.restCreate("/api/" + SCOPE + "/" + Selector.ITEM));
         created.then().statusCode(201);
         return created.jsonPath().getLong("fields.number");
     }

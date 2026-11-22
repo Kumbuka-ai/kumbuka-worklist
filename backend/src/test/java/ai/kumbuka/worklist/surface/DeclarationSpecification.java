@@ -113,6 +113,10 @@ public final class DeclarationSpecification {
     private static final Arg TO_ITEM = Arg.req("to_item", "string");
     private static final Arg TYPE = Arg.req("type", "string");
     private static final Arg TAG = Arg.req("tag", "string");
+    /** The status a transition of an item sets in the phase it enters. */
+    private static final Arg STATUS = Arg.opt("status", "string", null);
+    /** The reason of a close, mandatory only where the item leaves in_progress. */
+    private static final Arg REASON_OPT = Arg.opt("reason", "string", null);
 
     /** Every refusal a call can meet before its own work begins. */
     private static final List<String> COMMON = List.of(
@@ -129,13 +133,17 @@ public final class DeclarationSpecification {
         "CONFLICT_TOKEN_MISSING", "CONFLICT", "ADDRESS_READ_ONLY");
 
     public static final List<Verb> VERBS = List.of(
+        // submit (REA-0011 D12): the REST surface submits the draft in the
+        // same act; a boolean, false by default. TRANSITION_REFUSED: the
+        // guard of submit refuses the draft.
         new Verb("worklist_create", "CREATE", "OBJECT_CREATED",
             List.of(SCOPE, Arg.view("item", "iteration", "milestone"), FIELDS,
-                Arg.opt("idempotency_key", "string", null)),
+                Arg.opt("idempotency_key", "string", null),
+                Arg.opt("submit", "boolean", false)),
             reasons(WRITE, List.of("SELECTOR_DECLARED_NOT_WRITTEN", "FIELD_RETRACTED",
                 "FIELD_NOT_SETTABLE", "INVALID_VALUE", "VALUE_UNDECLARED",
                 "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING",
-                "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED"))),
+                "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED", "TRANSITION_REFUSED"))),
         // fulfilment: the latest entry per criterion and instance, or the
         // whole ledger in booking order.
         new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS,
@@ -156,10 +164,26 @@ public final class DeclarationSpecification {
             reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "PREDICATE_UNKNOWN",
                 "VALUE_UNDECLARED", "PAGE_SIZE_REJECTED", "CURSOR_MALFORMED", "CURSOR_FOREIGN",
                 "SORT_UNDECLARED"))),
+        // close acts on an item too (REA-0011 D1): a reason, mandatory where
+        // the item leaves in_progress, and the status of the phase closed.
         new Verb("worklist_close", "ITEM_TRANSITION", "OBJECT",
-            List.of(ADDRESS, TOKEN, Arg.opt("produced", "string", null)),
+            List.of(ADDRESS, TOKEN, Arg.opt("produced", "string", null), REASON_OPT, STATUS),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "TRANSITION_REFUSED",
-                "ITERATION_INCOMPLETE", "ITERATION_PRODUCED_MISSING"))),
+                "ITERATION_INCOMPLETE", "ITERATION_PRODUCED_MISSING", "VALUE_UNDECLARED",
+                "INVALID_VALUE"))),
+        // The transitions of an item (REA-0011 D1), each refused by state
+        // where the item's phase does not open it.
+        new Verb("worklist_submit", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TOKEN),
+            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "TRANSITION_REFUSED"))),
+        new Verb("worklist_discard", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TOKEN),
+            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "TRANSITION_REFUSED"))),
+        new Verb("worklist_start", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TOKEN, STATUS),
+            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "TRANSITION_REFUSED",
+                "VALUE_UNDECLARED", "INVALID_VALUE"))),
+        new Verb("worklist_return", "ITEM_TRANSITION", "OBJECT",
+            List.of(ADDRESS, TOKEN, Arg.req("reason", "string"), STATUS),
+            reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "TRANSITION_REFUSED",
+                "VALUE_UNDECLARED", "INVALID_VALUE"))),
         new Verb("worklist_advance", "COLLECTION_COMPOUND", "OBJECT",
             List.of(SCOPE, ITERATION_VIEW, TOKEN),
             reasons(WRITE, List.of("CONFLICT_TOKEN_MISSING", "CONFLICT", "VERB_UNCARRIED",
@@ -179,21 +203,23 @@ public final class DeclarationSpecification {
         new Verb("worklist_unrelate", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
-                "VALUE_UNDECLARED"))),
+                "VALUE_UNDECLARED", "TRANSITION_REFUSED"))),
         new Verb("worklist_validate", "COLLECTION_COMPOUND", "OBJECT",
             List.of(SCOPE, ITEM_VIEW),
             reasons(List.of("SELECTOR_UNDECLARED", "SELECTOR_WITHDRAWN", "VERB_UNCARRIED"))),
         // The tags (sprint/210): a write on an addressed object that presents
         // no conflict token, classed as an item transition.
         new Verb("worklist_tag_attach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
-            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED", "TAG_WITHDRAWN"))),
+            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED", "TAG_WITHDRAWN",
+                "TRANSITION_REFUSED"))),
         new Verb("worklist_tag_detach", "ITEM_TRANSITION", "OBJECT", List.of(ADDRESS, TAG),
-            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED"))),
+            reasons(WRITE, List.of("TAG_ITEM_ONLY", "VALUE_UNDECLARED", "TRANSITION_REFUSED"))),
         // The fulfilment ledger: a write beside the item that presents no
-        // conflict token, as the tags; the entries are a list.
+        // conflict token, as the tags; the entries are a list. A draft takes
+        // no booking (Annex A1).
         new Verb("worklist_book", "ITEM_TRANSITION", "OBJECT",
             List.of(ADDRESS, Arg.req("instance", "string"), Arg.req("entries", "array")),
-            reasons(WRITE, List.of("VERB_UNCARRIED", "INVALID_VALUE"))));
+            reasons(WRITE, List.of("VERB_UNCARRIED", "INVALID_VALUE", "TRANSITION_REFUSED"))));
 
     @SafeVarargs
     private static List<String> reasons(List<String>... groups) {

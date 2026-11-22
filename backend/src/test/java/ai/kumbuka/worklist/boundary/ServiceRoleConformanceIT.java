@@ -150,14 +150,18 @@ class ServiceRoleConformanceIT {
      * instead. Without it, a role stripped of every privilege would satisfy
      * each assertion above: a green suite describing a deployment that cannot
      * start.
+     *
+     * <p>DELETE is among them since V33: {@code discard} deletes a draft, and
+     * V2 adds the grant on the day a verb genuinely deletes.
+     * {@link ServiceRolePrivilegeIT} holds the entitlement of every table.
      */
     @Test
     void the_service_role_does_hold_grants_in_its_own_schema() throws SQLException {
         assertThat(grantsOn(OWN_SCHEMA, "item"))
-            .as("the enumerated entitlement of V2 must actually be in place. A role "
+            .as("the enumerated entitlement of V2 and V33 must actually be in place. A role "
                 + "holding nothing would pass every absence checked above and be unable "
                 + "to read a single row")
-            .containsExactly("INSERT", "SELECT", "UPDATE");
+            .containsExactly("DELETE", "INSERT", "SELECT", "UPDATE");
     }
 
     /**

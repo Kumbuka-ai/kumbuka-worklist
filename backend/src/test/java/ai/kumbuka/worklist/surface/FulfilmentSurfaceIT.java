@@ -147,7 +147,7 @@ class FulfilmentSurfaceIT {
         String token = read(item).jsonPath().getString("fields.conflict_token");
         given().contentType(ContentType.JSON).header("If-Match", "\"" + token + "\"")
             .body(Map.of("status", DONE))
-            .when().patch("/api/" + SCOPE + "/" + Selector.ITEM + "/" + item)
+            .when().post("/api/" + SCOPE + "/" + Selector.ITEM + "/" + item + ":close")
             .then().statusCode(200);
 
         Response booked = bookOverRest(item, Map.of("instance", INSTANCE, "entries",
@@ -264,11 +264,40 @@ class FulfilmentSurfaceIT {
         assertThat(read(item).jsonPath().getList("fields.fulfilment")).isEmpty();
     }
 
+    /**
+     * A draft takes no booking: no instance works on what was never
+     * submitted (REA-0011 Annex A1). It is named no book, and a booking is
+     * refused by its state.
+     */
+    @Test
+    void a_draft_is_named_no_book_and_refuses_one_by_its_state() {
+        Response created = given().contentType(ContentType.JSON)
+            .body(Map.of("title", "still a draft", "status", OPEN,
+                "criteria", List.of(Map.of("text", "criterion 1"))))
+            .when().post("/api/" + SCOPE + "/" + Selector.ITEM);
+        created.then().statusCode(201);
+        long draft = created.jsonPath().getLong("fields.number");
+        assertThat(created.jsonPath().getList("next.call", String.class))
+            .as("a draft is named its calls, and no book among them")
+            .isNotEmpty()
+            .doesNotContain("book " + address(draft));
+
+        Response refused = bookOverRest(draft, Map.of("instance", INSTANCE, "entries",
+            List.of(Map.of("criterion", 1, "status", "met", "evidence", "x"))));
+        refused.then().statusCode(409);
+        assertThat(refused.jsonPath().getString("reason")).isEqualTo("TRANSITION_REFUSED");
+        assertThat(refused.jsonPath().getString("data.state")).isEqualTo("draft");
+        assertThat(read(draft).jsonPath().getList("fields.fulfilment")).isEmpty();
+    }
+
     // =======================================================================
     // Fixtures
     // =======================================================================
 
-    /** An item with criteria 1 to {@code count}. */
+    /**
+     * An open item with criteria 1 to {@code count}: created over REST and
+     * submitted in the same act (REA-0011 D12).
+     */
     private static long createItem(int count) {
         List<Map<String, Object>> criteria = new java.util.ArrayList<>();
         for (int k = 1; k <= count; k++) {
@@ -276,7 +305,7 @@ class FulfilmentSurfaceIT {
         }
         Response created = given().contentType(ContentType.JSON)
             .body(Map.of("title", "booked against", "status", OPEN, "criteria", criteria))
-            .when().post("/api/" + SCOPE + "/" + Selector.ITEM);
+            .when().post(Submitted.restCreate("/api/" + SCOPE + "/" + Selector.ITEM));
         created.then().statusCode(201);
         return created.jsonPath().getLong("fields.number");
     }

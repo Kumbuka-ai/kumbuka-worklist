@@ -106,12 +106,12 @@ public class MembershipService extends PlanningService {
     /**
      * Put an item into an iteration, at the end of its sequence.
      *
-     * <p>The one precondition on the item is that its status does not answer
-     * {@code closed} (TAR-0002 B9: any item in phase open or in_progress may
-     * be planned, and planning sets no other condition on the item). Neither
-     * an actionable status nor a milestone is asked for. A closed item is
-     * refused as {@code ITEM_UNPLANNABLE} with {@code address} as its only
-     * offender; the refusal does not name the value it found.
+     * <p>The one precondition on the item is its phase: open or in progress
+     * (TAR-0002 B9: any item in phase open or in_progress may be planned, and
+     * planning sets no other condition on the item). Neither an actionable
+     * status nor a milestone is asked for. A draft and a closed item are
+     * refused as {@code ITEM_UNPLANNABLE} with {@code address} as the only
+     * offender; the refusal does not name the phase it found.
      *
      * <p>The memberships of the iteration are checked before the write
      * against the platform constant {@link #MEMBERSHIPS_PER_ITERATION}; a
@@ -158,8 +158,8 @@ public class MembershipService extends PlanningService {
      * either axis: a membership in any state can be removed, and the item
      * returns to the pool it came from.
      *
-     * <p><strong>The row is not deleted, because this schema grants DELETE
-     * nowhere.</strong> The membership moves to {@code dropped}, which is
+     * <p><strong>The row is not deleted, because this schema grants no DELETE
+     * on memberships.</strong> The membership moves to {@code dropped}, which is
      * terminal, so the derivation stops counting it as planned — the visible
      * effect a caller asked for — and the record of the item having been in
      * this iteration survives.
@@ -244,11 +244,10 @@ public class MembershipService extends PlanningService {
     // ------------------------------------------------------------------
 
     /**
-     * An item enters an iteration unless its status answers {@code closed}.
+     * An item enters an iteration where its phase is open or in progress.
      *
-     * <p>The status is the one thing read: the term "open item" is read over
-     * the status in this step, and neither its milestone nor whether its
-     * status is actionable decides anything here.
+     * <p>The phase is the one thing read: neither the item's milestone nor
+     * whether its status is actionable decides anything here.
      */
     private Item refuseUnplannable(UUID scopeId, UUID itemId) {
         Item item = items.byId(itemId).orElse(null);
@@ -257,7 +256,7 @@ public class MembershipService extends PlanningService {
                 WorklistException.Reason.ITEM_UNKNOWN,
                 List.of(ADDRESS));
         }
-        if (!plannable(vocabulary.requireStatus(scopeId, item.statusPk))) {
+        if (!plannable(item.phase())) {
             throw new WorklistException(
                 WorklistException.Reason.ITEM_UNPLANNABLE,
                 List.of(ADDRESS));
@@ -266,18 +265,19 @@ public class MembershipService extends PlanningService {
     }
 
     /**
-     * Whether an item may enter an iteration at all: its status does not
-     * answer {@code closed} (TAR-0002 B9).
+     * Whether an item may enter an iteration at all: it is in the phase open
+     * or in progress, and so neither a draft nor closed (TAR-0002 B9,
+     * REA-0011 Annex A1).
      *
      * <p>One decision for two readers: {@link #plan} refuses where it says
      * no, and the open calls of an item name {@code plan} only where it says
      * yes ({@link OpenCallService}), so a named {@code plan} is never refused
      * for the item's state.
      *
-     * @param status the item's status
+     * @param phase the item's phase
      */
-    static boolean plannable(ItemStatus status) {
-        return !status.closed;
+    static boolean plannable(Phase phase) {
+        return phase == Phase.OPEN || phase == Phase.IN_PROGRESS;
     }
 
     /**

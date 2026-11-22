@@ -101,6 +101,24 @@ class ConcurrentWriteIT {
             .as("the first writer's change stands").isEqualTo("first");
     }
 
+    /**
+     * A transition locks the item as an update does: two callers submitting
+     * one draft with one token, and exactly one moves it (C10.2).
+     */
+    @Test
+    void two_transitions_with_one_token_on_an_item_exactly_one_writes() throws Exception {
+        Map<String, Object> created = items.create(scope, "probe-subject", Map.of(
+            Field.TITLE.canonicalName(), "contested draft",
+            Field.STATUS.canonicalName(), openStatus)).answer();
+        UUID id = idOf(created);
+        String token = tokenOf(created);
+
+        contest(ignored -> items.submit(scope, id, token).answer());
+
+        assertThat(items.read(scope, id).get(Field.PHASE.canonicalName()))
+            .as("the first submit stands").isEqualTo("open");
+    }
+
     @Test
     void two_writers_with_one_token_on_an_iteration_exactly_one_writes() throws Exception {
         Map<String, Object> created = iterations.create(scope, Map.of(

@@ -173,8 +173,9 @@ class FulfilmentLedgerIT {
         UUID item = create("closed, then booked", 2);
         book(item, INSTANCE, List.of(entry(1, "met", "before closing")));
 
-        Map<String, Object> closed = update(item, Map.of("status", "done"));
+        Map<String, Object> closed = ItemLifecycle.close(items, scope, item, "done");
         assertThat(closed.get("close_date")).as("the item closed").isNotNull();
+        assertThat(closed.get("phase")).isEqualTo("closed");
         assertThat(closed.get("status")).isEqualTo("done");
 
         book(item, INSTANCE, List.of(entry(2, "met", "after closing")));
@@ -191,22 +192,28 @@ class FulfilmentLedgerIT {
     }
 
     @Test
-    void k3_the_mark_follows_the_current_close_date_and_is_stored_nowhere() throws SQLException {
-        UUID item = create("closed and reopened", 1);
-        update(item, Map.of("status", "done"));
-        book(item, INSTANCE, List.of(entry(1, "met", "after the first close")));
+    void k3_the_mark_follows_the_close_date_nothing_reopens_and_is_stored_nowhere()
+            throws SQLException {
+        UUID item = create("closed for good", 1);
+        book(item, INSTANCE, List.of(entry(1, "not_met", "before the close")));
         assertThat(fulfilmentOf(items.read(scope, item)).get(0))
+            .as("an open item carries no close date, and no entry is marked")
+            .containsEntry("after_close", false);
+
+        ItemLifecycle.close(items, scope, item, "done");
+        assertThat(fulfilmentOf(items.read(scope, item)).get(0))
+            .as("the entry lies before the close date the item carries now")
+            .containsEntry("after_close", false);
+        book(item, INSTANCE, List.of(entry(1, "met", "after the close")));
+        assertThat(fulfilmentOf(items.read(scope, item)).get(0))
+            .containsEntry("evidence", "after the close")
             .containsEntry("after_close", true);
 
-        update(item, Map.of("status", "open"));
-        assertThat(fulfilmentOf(items.read(scope, item)).get(0))
-            .as("reopened, the item carries no close date, and no entry is marked")
-            .containsEntry("after_close", false);
-
-        update(item, Map.of("status", "done"));
-        assertThat(fulfilmentOf(items.read(scope, item)).get(0))
-            .as("closed again later, the entry lies before the close date it carries now")
-            .containsEntry("after_close", false);
+        WorklistException reopen = refusalFrom(() -> update(item, Map.of("status", "open")));
+        assertThat(reopen.reason())
+            .as("nothing reopens a closed item (TAR-0002 B20), so its close date stands")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertThat(items.read(scope, item).get("close_date")).isNotNull();
 
         assertThat(columnsOfTheLedger())
             .as("no column holds the mark: it is derived from the two times")
@@ -318,7 +325,7 @@ class FulfilmentLedgerIT {
             .isEqualTo(before.get("conflict_token"));
         assertThat(after.get("changed_at")).isEqualTo(before.get("changed_at"));
 
-        update(item, Map.of("status", "done"));
+        ItemLifecycle.close(items, scope, item, "done");
         Map<String, Object> closed = items.read(scope, item);
         book(item, INSTANCE, List.of(entry(1, "not_met", "after")));
         assertThat(items.read(scope, item).get("conflict_token"))
@@ -349,6 +356,28 @@ class FulfilmentLedgerIT {
             .as("a ledger of another value is a read-only field set: refused")
             .isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders()).containsExactly("fields.fulfilment");
+    }
+
+    // ====================================================================
+    // A draft takes no booking (REA-0011 Annex A1)
+    // ====================================================================
+
+    @Test
+    void a_draft_is_refused_a_booking_by_state_and_nothing_is_written() throws SQLException {
+        UUID draft = ItemLifecycle.draft(items, scope, Map.of("title", "a draft",
+            "status", "open", "criteria", List.of(Map.of("text", "criterion 1"))));
+
+        WorklistException refusal = refusalFrom(() -> ledger.book(scope, draft, INSTANCE,
+            List.of(entry(1, "met", "on a draft")), CALLER));
+
+        assertThat(refusal.reason())
+            .as("no instance works on what was never submitted: refused by state")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertThat(storedRows(draft)).isEmpty();
+
+        ItemLifecycle.submit(items, scope, draft);
+        book(draft, INSTANCE, List.of(entry(1, "met", "once submitted")));
+        assertThat(storedRows(draft)).as("submitted, the item takes the booking").hasSize(1);
     }
 
     // ====================================================================
@@ -405,7 +434,10 @@ class FulfilmentLedgerIT {
     // Fixtures
     // ====================================================================
 
-    /** An item with criteria 1 to {@code count}. */
+    /**
+     * An open item with criteria 1 to {@code count}: created as a draft and
+     * submitted, since a draft takes no booking.
+     */
     private UUID create(String title, int count) {
         Map<String, Object> arguments = new LinkedHashMap<>();
         arguments.put("title", title);
@@ -417,7 +449,9 @@ class FulfilmentLedgerIT {
             }
             arguments.put("criteria", criteria);
         }
-        return (UUID) items.create(scope, CALLER, arguments).answer().get("id");
+        UUID item = (UUID) items.create(scope, CALLER, arguments).answer().get("id");
+        ItemLifecycle.submit(items, scope, item);
+        return item;
     }
 
     private Map<String, Object> book(UUID item, String instance, List<Map<String, Object>> entries) {

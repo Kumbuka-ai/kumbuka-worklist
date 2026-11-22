@@ -132,6 +132,20 @@ class ConflictTokenIT {
         assertThat(storedToken("item", idOf(created))).isEqualTo(tokenOf(created));
     }
 
+    /** A transition is an effective write: submit moves the token as an update does. */
+    @Test
+    void a_transition_of_an_item_moves_the_token_by_the_same_rule() throws SQLException {
+        Map<String, Object> created = item("a draft");
+
+        Map<String, Object> submitted = items.submit(scope, idOf(created),
+            tokenOf(created)).answer();
+
+        assertThat(tokenOf(submitted))
+            .as("submit in the same microsecond moves the token by one microsecond")
+            .isEqualTo(token(T.plus(1, ChronoUnit.MICROS)));
+        assertThat(storedToken("item", idOf(created))).isEqualTo(tokenOf(submitted));
+    }
+
     @Test
     void an_iteration_takes_its_token_the_same_way() throws SQLException {
         Map<String, Object> created = iterations.create(scope, Map.of(

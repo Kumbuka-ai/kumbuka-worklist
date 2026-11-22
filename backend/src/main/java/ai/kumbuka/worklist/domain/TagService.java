@@ -46,8 +46,9 @@ import java.util.UUID;
  * its first call landed sends it again.
  *
  * <p>Only items carry tags; the surface refuses a tag verb at an iteration, a
- * milestone or a workstream before it reaches here. Any status of an item
- * admits tags, intake and closed ones included.
+ * milestone or a workstream before it reaches here. A draft, an open item
+ * and one in progress admit tags in any status; a closed item takes no write,
+ * and both verbs are refused on it by state (REA-0011 D6).
  */
 @ApplicationScoped
 @TenantBound
@@ -135,13 +136,15 @@ public class TagService {
 
     /**
      * The item, locked for the call, or the refusal an item of another scope
-     * gets. The lock writes nothing: the item's timestamp and token stay.
+     * gets, and the refusal by state a closed item gets. The lock writes
+     * nothing: the item's timestamp and token stay.
      */
     private Item requireLocked(UUID scopeId, UUID itemId) {
         @Nullable Item item = items.lockById(itemId).orElse(null);
         if (item == null || !item.scopeId.equals(scopeId)) {
             throw new WorklistException(WorklistException.Reason.ITEM_UNKNOWN, List.of());
         }
+        ItemService.refuseClosed(item);
         return item;
     }
 }

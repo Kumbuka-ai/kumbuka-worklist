@@ -176,6 +176,27 @@ class SurfaceHeaderIT {
         }
     }
 
+    /**
+     * Under the header a create answers as the assistant surface, where
+     * creating and submitting are two acts (TAR-0002 B12, REA-0011 D12): the
+     * submit of the REST create is an argument that surface does not declare,
+     * and nothing is written.
+     */
+    @Test
+    void with_the_header_the_submit_of_a_create_is_an_argument_the_tool_does_not_declare() {
+        String before = newest();
+        Response refused = assistant().contentType(ContentType.JSON)
+            .body(fields("submitted under the header"))
+            .post(Submitted.restCreate(SurfaceFixture.collection(Selector.ITEM)));
+        assertThat(refused.statusCode()).as(refused.asString()).isEqualTo(400);
+        assertThat(refused.jsonPath().getString("reason")).isEqualTo("ARGUMENT_UNKNOWN");
+        assertThat(refused.jsonPath().getList("data.accepts", String.class))
+            .as("the arguments the create tool declares, submit not among them")
+            .contains("scope", "selector", "fields", "idempotency_key")
+            .doesNotContain("submit");
+        assertThat(newest()).as("nothing was written").isEqualTo(before);
+    }
+
     @Test
     void the_header_decides_nothing_about_who_sees_what() {
         String item = SurfaceFixture.item(Selector.ITEM, create("the stranger's item"));

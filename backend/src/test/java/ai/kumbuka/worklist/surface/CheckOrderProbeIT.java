@@ -168,6 +168,16 @@ class CheckOrderProbeIT {
             .statusCode(404)
             .body("reason", is("NOT_FOUND"));
 
+        // The transitions of an item (REA-0011 D1): no token and no reason
+        // sent, and the stranger still learns nothing but NOT_FOUND.
+        for (String transition : java.util.List.of("submit", "discard", "start", "return")) {
+            given()
+                .when().post(SurfaceFixture.item(Selector.ITEM, 1) + ":" + transition)
+                .then()
+                .statusCode(404)
+                .body("reason", is("NOT_FOUND"));
+        }
+
         SurfaceFixture.asMember(identity);
         given()
             .when().post(SurfaceFixture.item(Selector.ITEM, 999_999) + ":tag_attach")

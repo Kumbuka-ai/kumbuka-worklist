@@ -137,6 +137,10 @@ public class McpAdapter {
     /** How much of an item's fulfilment ledger a read answers. */
     private static final String ARG_FULFILMENT = SurfaceDeclaration.FULFILMENT_ARGUMENT;
 
+    /** The status and the reason of a transition of an item. */
+    private static final String ARG_STATUS = SurfaceDeclaration.STATUS_ARGUMENT;
+    private static final String ARG_REASON = SurfaceDeclaration.REASON_ARGUMENT;
+
     /** The query's filter and paging, as arguments rather than address parts. */
     private static final String ARG_FILTER = QueryFilter.FILTER_ARGUMENT;
     private static final String ARG_PAGE_SIZE = QuerySpec.PAGE_SIZE_ARGUMENT;
@@ -366,6 +370,13 @@ public class McpAdapter {
             case "update" -> update(in);
             case "query" -> query(in);
             case "close" -> close(in);
+
+            // The transitions of an item.
+            case "submit" -> submit(in);
+            case "discard" -> discard(in);
+            case "start" -> start(in);
+            case "return" -> returnItem(in);
+
             case "advance" -> advance(in);
             case "plan" -> plan(in);
             case "unplan" -> unplan(in);
@@ -391,6 +402,12 @@ public class McpAdapter {
         };
     }
 
+    /**
+     * A create, always of a draft where it creates an item: the assistant
+     * surface creates and submits in two acts (TAR-0002 B12), so the tool
+     * declares no {@code submit} and an argument of that name is refused as
+     * one the tool does not declare.
+     */
     private Object create(Map<String, Object> in) {
         String scope = required(in, ARG_SCOPE);
         return dressed(scope, verbs.create(caller.subject(), scope,
@@ -443,11 +460,42 @@ public class McpAdapter {
     }
 
     private Object close(Map<String, Object> in) {
+        Optional<String> reason = text(in, ARG_REASON);
+        Optional<String> status = text(in, ARG_STATUS);
         Address at = address(in);
         Object produced = in.get("produced");
         return dressed(at.scope(), verbs.close(caller.subject(), at.scope(), at.view(),
-            at.head(), required(in, ARG_TOKEN),
-            produced == null ? null : String.valueOf(produced)));
+            at.head(), required(in, ARG_TOKEN), new VerbInput.Closing(
+                produced == null ? null : String.valueOf(produced),
+                reason.orElse(null), status.orElse(null))));
+    }
+
+    private Object submit(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.submit(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN)));
+    }
+
+    private Object discard(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.discard(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN)));
+    }
+
+    private Object start(Map<String, Object> in) {
+        Optional<String> status = text(in, ARG_STATUS);
+        Address at = address(in);
+        return dressed(at.scope(), verbs.start(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN), status.orElse(null)));
+    }
+
+    /** {@code return}; the reason is refused by the surface where it is missing. */
+    private Object returnItem(Map<String, Object> in) {
+        Optional<String> reason = text(in, ARG_REASON);
+        Optional<String> status = text(in, ARG_STATUS);
+        Address at = address(in);
+        return dressed(at.scope(), verbs.return_(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN), reason.orElse(null), status.orElse(null)));
     }
 
     private Object advance(Map<String, Object> in) {

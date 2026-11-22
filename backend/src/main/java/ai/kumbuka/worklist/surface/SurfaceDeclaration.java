@@ -69,6 +69,18 @@ public final class SurfaceDeclaration {
     public static final String FULFILMENT_LATEST = "latest";
     public static final String FULFILMENT_ALL = "all";
 
+    /**
+     * The argument of {@code create} that submits the draft in the same act
+     * (REA-0011 D12): the REST surface's alone, a query parameter there, and
+     * refused on the assistant surface, where creating and submitting are
+     * always two acts (TAR-0002 B12).
+     */
+    public static final String SUBMIT_ARGUMENT = "submit";
+
+    /** The arguments a transition of an item names its status and its reason under. */
+    public static final String STATUS_ARGUMENT = "status";
+    public static final String REASON_ARGUMENT = "reason";
+
     private SurfaceDeclaration() {
     }
 
@@ -80,6 +92,7 @@ public final class SurfaceDeclaration {
     public enum ArgumentType {
         STRING("string"),
         INTEGER("integer"),
+        BOOLEAN("boolean"),
         OBJECT("object"),
         ARRAY("array");
 
@@ -142,7 +155,20 @@ public final class SurfaceDeclaration {
         public Placement placement() {
             return Placement.TOP;
         }
+
+        /**
+         * Whether the assistant surface carries the argument: the tool list
+         * declares it and the MCP adapter takes it. One argument is the REST
+         * surface's alone, {@link #SUBMIT_ARGUMENT}; the MCP adapter refuses it
+         * as an argument the tool does not declare (TAR-0002 B12).
+         */
+        public boolean assistant() {
+            return !REST_ONLY.contains(name.name());
+        }
     }
+
+    /** The arguments the REST surface alone carries. */
+    private static final Set<String> REST_ONLY = Set.of(SUBMIT_ARGUMENT);
 
     /**
      * The closed set of effect classes, named exactly as the router's verb
@@ -204,6 +230,11 @@ public final class SurfaceDeclaration {
         /** The names of the arguments, in order. */
         public List<String> argumentNames() {
             return arguments.stream().map(a -> a.name().name()).toList();
+        }
+
+        /** The arguments the assistant surface carries, in order. */
+        public List<Argument> assistantArguments() {
+            return arguments.stream().filter(Argument::assistant).toList();
         }
     }
 
@@ -282,6 +313,22 @@ public final class SurfaceDeclaration {
     private static final Argument IDEMPOTENCY_KEY =
         optional("idempotency_key", ArgumentType.STRING, null,
             ArgumentDescriptions::idempotencyKey);
+    /**
+     * The submit of a create (REA-0011 D12): a query parameter on REST, and
+     * carried by no tool, so that the assistant surface creates and submits
+     * in two acts (TAR-0002 B12).
+     */
+    private static final Argument SUBMIT =
+        optional(SUBMIT_ARGUMENT, ArgumentType.BOOLEAN, "false", ArgumentDescriptions::submit);
+    /** The status a transition sets in the phase it enters, by name. */
+    private static final Argument STATUS =
+        optional(STATUS_ARGUMENT, ArgumentType.STRING, null, ArgumentDescriptions::status);
+    /** Why an item in progress returns to the phase open: mandatory. */
+    private static final Argument REASON_RETURN =
+        required(REASON_ARGUMENT, ArgumentType.STRING, ArgumentDescriptions::reasonReturn);
+    /** Why an item closes: mandatory where it leaves the phase in progress. */
+    private static final Argument REASON_CLOSE =
+        optional(REASON_ARGUMENT, ArgumentType.STRING, null, ArgumentDescriptions::reasonClose);
 
     /**
      * The view argument, with the views the verb acts on as its fixed values.
@@ -339,9 +386,9 @@ public final class SurfaceDeclaration {
     private static final List<Verb> VERBS = List.of(
         verb("create", ToolDescriptions::create, EffectClass.CREATE, Answer.OBJECT_CREATED,
             reasons(WRITE, FIELD_WRITE, codes(RefusalCode.CARDINALITY_EXCEEDED,
-                RefusalCode.IDEMPOTENCY_KEY_REUSED)),
+                RefusalCode.IDEMPOTENCY_KEY_REUSED, RefusalCode.TRANSITION_REFUSED)),
             SCOPE, selector(ArgumentDescriptions::selectorCreate, Selector.ITEM, Selector.ITERATION,
-                Selector.MILESTONE), FIELDS, IDEMPOTENCY_KEY),
+                Selector.MILESTONE), FIELDS, IDEMPOTENCY_KEY, SUBMIT),
         verb("read", ToolDescriptions::read, EffectClass.ITEM_READ, Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.ITERATION_ABSENT)),
             ADDRESS, FULFILMENT),
@@ -376,9 +423,33 @@ public final class SurfaceDeclaration {
         verb("close", ToolDescriptions::close, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
                 RefusalCode.TRANSITION_REFUSED, RefusalCode.ITERATION_INCOMPLETE,
-                RefusalCode.ITERATION_PRODUCED_MISSING)),
+                RefusalCode.ITERATION_PRODUCED_MISSING, RefusalCode.VALUE_UNDECLARED,
+                RefusalCode.INVALID_VALUE)),
             ADDRESS, TOKEN,
-            optional("produced", ArgumentType.STRING, null, ArgumentDescriptions::produced)),
+            optional("produced", ArgumentType.STRING, null, ArgumentDescriptions::produced),
+            REASON_CLOSE, STATUS),
+        // The transitions of an item (REA-0011 D1): each presents the item's
+        // conflict token, and each is refused by state where the item's phase
+        // does not open it. The argument that submits on a REST create
+        // carries the name of this transition, so the two share one constant.
+        verb(SUBMIT_ARGUMENT, ToolDescriptions::submit, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
+                RefusalCode.TRANSITION_REFUSED)),
+            ADDRESS, TOKEN),
+        verb("discard", ToolDescriptions::discard, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
+                RefusalCode.TRANSITION_REFUSED)),
+            ADDRESS, TOKEN),
+        verb("start", ToolDescriptions::start, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
+                RefusalCode.TRANSITION_REFUSED, RefusalCode.VALUE_UNDECLARED,
+                RefusalCode.INVALID_VALUE)),
+            ADDRESS, TOKEN, STATUS),
+        verb("return", ToolDescriptions::returnItem, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
+            reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED,
+                RefusalCode.TRANSITION_REFUSED, RefusalCode.VALUE_UNDECLARED,
+                RefusalCode.INVALID_VALUE)),
+            ADDRESS, TOKEN, REASON_RETURN, STATUS),
         verb("advance", ToolDescriptions::advance, EffectClass.COLLECTION_COMPOUND, Answer.OBJECT,
             reasons(WRITE, codes(RefusalCode.CONFLICT_TOKEN_MISSING, RefusalCode.CONFLICT,
                 RefusalCode.VERB_UNCARRIED, RefusalCode.ITERATION_ABSENT,
@@ -400,7 +471,7 @@ public final class SurfaceDeclaration {
             ADDRESS, TOKEN, TO_ITEM, TYPE),
         verb("unrelate", ToolDescriptions::unrelate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
-                RefusalCode.VALUE_UNDECLARED)),
+                RefusalCode.VALUE_UNDECLARED, RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TOKEN, TO_ITEM, TYPE),
         verb("validate", ToolDescriptions::validate, EffectClass.COLLECTION_COMPOUND,
             Answer.OBJECT,
@@ -414,18 +485,20 @@ public final class SurfaceDeclaration {
         verb("tag_attach", ToolDescriptions::tagAttach, EffectClass.ITEM_TRANSITION,
             Answer.OBJECT,
             reasons(WRITE, codes(RefusalCode.TAG_ITEM_ONLY, RefusalCode.VALUE_UNDECLARED,
-                RefusalCode.TAG_WITHDRAWN)),
+                RefusalCode.TAG_WITHDRAWN, RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TAG),
         verb("tag_detach", ToolDescriptions::tagDetach, EffectClass.ITEM_TRANSITION,
             Answer.OBJECT,
-            reasons(WRITE, codes(RefusalCode.TAG_ITEM_ONLY, RefusalCode.VALUE_UNDECLARED)),
+            reasons(WRITE, codes(RefusalCode.TAG_ITEM_ONLY, RefusalCode.VALUE_UNDECLARED,
+                RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TAG),
         // The fulfilment ledger. A write on an addressed item that presents no
         // conflict token, as the tags: the ledger stands beside the item, and
         // a booking moves neither the item's timestamp nor its token. The
         // answer is the item, its ledger included.
         verb("book", ToolDescriptions::book, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
-            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE)),
+            reasons(WRITE, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
+                RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, INSTANCE, ENTRIES));
 
     /**

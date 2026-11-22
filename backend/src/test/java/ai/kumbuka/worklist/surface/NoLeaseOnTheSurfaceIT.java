@@ -141,7 +141,12 @@ class NoLeaseOnTheSurfaceIT {
         answers.put("query over MCP", Mcp.call("worklist_query", Map.of("scope", SCOPE,
             "selector", Selector.ITEM)).asString());
         answers.put("update over MCP", Mcp.call("worklist_update", Map.of("address", item,
-            "conflict_token", token(item), "fields", Map.of("status", DONE))).asString());
+            "conflict_token", token(item), "fields", Map.of("title", "held by nobody, yet")))
+            .asString());
+        answers.put("submit over MCP", Mcp.call("worklist_submit", Map.of("address", item,
+            "conflict_token", token(item))).asString());
+        answers.put("close over MCP", Mcp.call("worklist_close", Map.of("address", item,
+            "conflict_token", token(item), "status", DONE)).asString());
         answers.put("a stale token over MCP", Mcp.call("worklist_update", Map.of(
             "address", item, "conflict_token", "stale", "fields", Map.of("title", "x")))
             .asString());

@@ -87,4 +87,16 @@ public interface ArgumentDescriptions {
 
     @Message
     String fulfilment();
+
+    @Message
+    String submit();
+
+    @Message
+    String status();
+
+    @Message
+    String reasonReturn();
+
+    @Message
+    String reasonClose();
 }

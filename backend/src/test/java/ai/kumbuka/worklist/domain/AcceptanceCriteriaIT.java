@@ -161,30 +161,40 @@ class AcceptanceCriteriaIT {
     }
 
     // ====================================================================
-    // K3: closing the item keeps the identifiers; appending goes on
+    // K3: closing the item keeps the identifiers; a closed item takes no
+    // further criterion (REA-0011 D6)
     // ====================================================================
 
     @Test
-    void k3_a_closed_item_keeps_its_identifiers_and_the_next_is_one_never_issued() {
+    void k3_a_closed_item_keeps_its_identifiers_and_takes_no_further_criterion() {
         UUID item = create("closed with its criteria", List.of(
             Map.of("text", "one"), Map.of("text", "two")));
+        ItemLifecycle.submit(items, scope, item);
         update(item, Map.of("criteria", List.of(
             Map.of("address", address(item, 1), "text", "one"))));
+        Map<String, Object> appended = update(item, Map.of("criteria", List.of(
+            Map.of("address", address(item, 1), "text", "one"),
+            Map.of("text", "before closing"))));
+        assertThat(criteriaOf(appended))
+            .as("a criterion appended gets 3: 2 was issued before and stays spent")
+            .containsExactly(
+                criterion(item, 1, "one"),
+                criterion(item, 3, "before closing"));
 
-        Map<String, Object> closed = update(item, Map.of("status", "done"));
+        Map<String, Object> closed = ItemLifecycle.close(items, scope, item, "done");
         assertThat(closed.get("close_date")).as("the item is closed").isNotNull();
         assertThat(criteriaOf(items.read(scope, item)))
             .as("the closed item reads back with the identifiers it had")
-            .containsExactly(criterion(item, 1, "one"));
+            .containsExactly(criterion(item, 1, "one"), criterion(item, 3, "before closing"));
 
-        Map<String, Object> appended = update(item, Map.of("criteria", List.of(
+        Map<String, Object> before = items.read(scope, item);
+        WorklistException refusal = refusalFrom(() -> update(item, Map.of("criteria", List.of(
             Map.of("address", address(item, 1), "text", "one"),
-            Map.of("text", "after closing"))));
-        assertThat(criteriaOf(appended))
-            .as("a criterion appended after closing gets 3: 2 was issued before and stays spent")
-            .containsExactly(
-                criterion(item, 1, "one"),
-                criterion(item, 3, "after closing"));
+            Map.of("text", "after closing")))));
+        assertThat(refusal.reason())
+            .as("a closed item is final: an update is refused by state")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertNothingWritten(item, before);
     }
 
     // ====================================================================

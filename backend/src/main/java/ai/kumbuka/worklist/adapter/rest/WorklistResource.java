@@ -134,6 +134,13 @@ public class WorklistResource {
      * transition wrongly addressed at a collection would answer 415 about its
      * content type instead of 405 about its address — a refusal about the wrong
      * thing entirely.
+     *
+     * <p>{@code create} takes the query parameter {@code submit}, which
+     * submits a new item in the same act (REA-0011 D12): {@code true} or
+     * {@code false}, any other value a fault of form decided before the scope.
+     * A call that names the assistant surface creates and submits in two acts
+     * (TAR-0002 B12), so there the parameter is refused as an argument the
+     * tool does not declare, as the MCP adapter refuses it.
      */
     @POST
     @Path("{selector}")
@@ -141,15 +148,18 @@ public class WorklistResource {
                                    @PathParam("selector") String segment,
                                    @HeaderParam("If-Match") @Nullable String ifMatch,
                                    @HeaderParam(IDEMPOTENCY_KEY) @Nullable String key,
+                                   @QueryParam(SurfaceDeclaration.SUBMIT_ARGUMENT)
+                                   @Nullable String submit,
                                    @Nullable String body) {
         var split = CustomMethod.split(segment, CustomMethod.Depth.COLLECTION);
         if (split.isEmpty()) {
             // No colon: a plain collection address, and create is the one
             // writing verb whose set semantics is declared as exactly one.
             calling(CREATE);
+            boolean submitting = submitting(submit);
             return created(scope, verbs.create(caller.subject(), scope, segment,
                 ArgumentsPayload.object(json, body).map(a -> Payloads.fields(a.values())).orElse(null),
-                key));
+                key, submitting));
         }
 
         CustomMethod.Split at = split.get();
@@ -318,8 +328,28 @@ public class WorklistResource {
         String id = at.address();
 
         return switch (at.known()) {
-            case CLOSE -> ok(scope, verbs.close(subject, scope, selector, id, token,
-                arguments(body, PRODUCED).text(PRODUCED).orElse(null)));
+            case CLOSE -> {
+                ArgumentsPayload given = arguments(body, PRODUCED, REASON, STATUS);
+                yield ok(scope, verbs.close(subject, scope, selector, id, token,
+                    new VerbInput.Closing(given.text(PRODUCED).orElse(null),
+                        given.text(REASON).orElse(null), given.text(STATUS).orElse(null))));
+            }
+
+            case SUBMIT -> {
+                arguments(body);
+                yield ok(scope, verbs.submit(subject, scope, selector, id, token));
+            }
+            case DISCARD -> {
+                arguments(body);
+                yield ok(scope, verbs.discard(subject, scope, selector, id, token));
+            }
+            case START -> ok(scope, verbs.start(subject, scope, selector, id, token,
+                arguments(body, STATUS).text(STATUS).orElse(null)));
+            case RETURN -> {
+                ArgumentsPayload given = arguments(body, REASON, STATUS);
+                yield ok(scope, verbs.return_(subject, scope, selector, id, token,
+                    given.text(REASON).orElse(null), given.text(STATUS).orElse(null)));
+            }
 
             case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
                 edge(arguments(body, TO_ITEM, TYPE)).orElse(null)));
@@ -383,9 +413,10 @@ public class WorklistResource {
      *
      * <p>The one DELETE this surface offers, and it is not a delete of an object:
      * a membership is a relation with a position, and removing it is the verb
-     * {@code unplan}. Nothing in this scheme is hard-deleted — an item closed
-     * keeps its address forever — so the method is available here precisely
-     * because what it removes is not an object.
+     * {@code unplan}. The one object this scheme deletes is a draft, through
+     * the transition {@code discard}; an item closed keeps its address
+     * forever. So the method is available here precisely because what it
+     * removes is not an object.
      */
     @DELETE
     @Path("{selector}/{id}/{member}")
@@ -429,6 +460,32 @@ public class WorklistResource {
      */
     private void calling(String verb) {
         context.call(verb, assistant());
+    }
+
+    /**
+     * The query parameter {@code submit} of a create, read for its form: its
+     * absence and {@code false} keep the new item a draft, {@code true}
+     * submits it in the same act, and any other value is refused naming it.
+     * On the assistant surface the parameter is refused whatever it says,
+     * with the arguments the tool declares.
+     *
+     * @param raw the parameter as it arrived; absent where the call sent none
+     */
+    private boolean submitting(@Nullable String raw) {
+        if (raw == null) {
+            return false;
+        }
+        if (assistant()) {
+            throw SurfaceException.unknown(SurfaceDeclaration.verb(CREATE)
+                .map(verb -> verb.assistantArguments().stream()
+                    .map(argument -> argument.name().name()).toList())
+                .orElseThrow(() -> new IllegalStateException("create is a declared verb")));
+        }
+        return switch (raw) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw SurfaceException.invalid(SurfaceDeclaration.SUBMIT_ARGUMENT);
+        };
     }
 
     /**
@@ -505,6 +562,8 @@ public class WorklistResource {
     // ======================================================================
 
     private static final String PRODUCED = "produced";
+    private static final String REASON = SurfaceDeclaration.REASON_ARGUMENT;
+    private static final String STATUS = SurfaceDeclaration.STATUS_ARGUMENT;
     private static final String TO_ITEM = "to_item";
     private static final String TYPE = "type";
     private static final String TAG = "tag";

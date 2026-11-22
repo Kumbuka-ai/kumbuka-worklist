@@ -14,6 +14,7 @@ import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.SelectorRegistry;
 import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import ai.kumbuka.worklist.domain.WorkstreamService;
+import ai.kumbuka.worklist.surface.Submitted;
 import ai.kumbuka.worklist.surface.SurfaceFixture;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -108,6 +109,9 @@ class SerialisationIT {
         JsonPath item = created.jsonPath();
         String address = item.getString("result.structuredContent.address");
         String number = item.getString("result.structuredContent.fields.number");
+        // A create makes a draft (REA-0011 D12); it is planned once submitted.
+        answers.put("submit over MCP", call("submit", Map.of("address", address,
+            "conflict_token", tokenOf(address))).asString());
         answers.put("read over MCP", call("read", Map.of("address", address)).asString());
         answers.put("query over MCP", call("query", Map.of("scope", SCOPE,
             "selector", Selector.ITEM, "page_size", 1)).asString());
@@ -133,6 +137,9 @@ class SerialisationIT {
         answers.put("create over REST", given().contentType(ContentType.JSON)
             .body(Map.of("title", "written over REST", "status", "open"))
             .when().post(items).asString());
+        answers.put("create and submit over REST", given().contentType(ContentType.JSON)
+            .body(Map.of("title", "written and submitted over REST", "status", "open"))
+            .when().post(Submitted.restCreate(items)).asString());
         answers.put("read over REST", given().get(items + "/" + number).asString());
         answers.put("query over REST", given().queryParam("page_size", 1).get(items).asString());
         answers.put("membership over REST", given()

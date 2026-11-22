@@ -152,6 +152,36 @@ class GraphSemanticsIT {
     }
 
     // ====================================================================
+    // A closed item takes no relation and gives up none (REA-0011 D6)
+    // ====================================================================
+
+    @Test
+    void relate_and_unrelate_are_refused_by_state_on_a_closed_item() {
+        vocabulary.declareStatus(scope, "done", 2, false, false, true, true);
+        vocabulary.declareRelationType(scope, "carries", false, 1);
+        UUID from = ItemLifecycle.open(items, scope, Map.of(
+            Field.TITLE.canonicalName(), "source", Field.STATUS.canonicalName(), "open"));
+        UUID to = createItem("target");
+        UUID other = createItem("other target");
+        items.relate(scope, from, addressOf(to), "carries", tokenOf(from));
+        ItemLifecycle.close(items, scope, from, "done");
+        String closedToken = tokenOf(from);
+
+        WorklistException relate = refusalFrom(() ->
+            items.relate(scope, from, addressOf(other), "carries", closedToken));
+        assertThat(relate.reason())
+            .as("a closed item is final: relate is refused by state")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+
+        WorklistException unrelate = refusalFrom(() ->
+            items.unrelate(scope, from, addressOf(to), "carries", closedToken));
+        assertThat(unrelate.reason())
+            .as("and so is unrelate, so the edge stands")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertThat(tokenOf(from)).as("nothing was written").isEqualTo(closedToken);
+    }
+
+    // ====================================================================
     // validate: the two report shapes, empty and one blocking cycle
     // ====================================================================
 

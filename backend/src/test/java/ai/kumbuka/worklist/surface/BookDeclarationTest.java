@@ -69,8 +69,9 @@ class BookDeclarationTest {
     /**
      * K10: the description says what holds -- append-only, the three
      * statuses of the platform, the actor from the caller's identity, the
-     * item unwritten, open on a closed item, and the narrowing to the
-     * identity concluding an instance a later step's.
+     * item unwritten, open on an item that is open, in progress or closed
+     * and so on a closed item too (REA-0011 Annex A1, S13), and the
+     * narrowing to the identity concluding an instance a later step's.
      */
     @Test
     void the_description_of_book_says_what_holds() {
@@ -80,7 +81,7 @@ class BookDeclarationTest {
             .contains("met, not_met or not_applicable")
             .contains("your own identity")
             .contains("conflict_token and changed_at stay")
-            .contains("closed included")
+            .contains("open, in progress or closed")
             .contains("a later step narrows a closed item to the identity concluding an instance");
         assertThat(tool.length())
             .as("within the description budget")

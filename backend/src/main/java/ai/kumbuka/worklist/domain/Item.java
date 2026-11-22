@@ -53,13 +53,18 @@ import java.util.UUID;
  * seventeenth column was a schema change there, and here it is a row in
  * {@link AttributeDefinition}.
  *
- * <h2>The status is a reference, and the predicates are never stored here</h2>
+ * <h2>The phase is a column, the status a reference</h2>
  *
- * {@link #statusId} points at a declared {@link ItemStatus} carrying
- * {@code actionable}, {@code in_progress}, {@code closed} and
- * {@code successful}. The answer to "is this closed" is a join, and a copy of
- * it on this row would be a second truth that drifts — which is what a check
- * constraint over five literals was.
+ * {@link #phase()} is the item's place in its lifecycle ({@link Phase}), held
+ * here and written by the transitions alone (REA-0011 D11): a status write
+ * never moves it, so a change to a scope's vocabulary moves no item between
+ * phases. The predicates {@code closed} and {@code in_progress} are a
+ * projection of it (TAR-0002 B3).
+ *
+ * <p>{@link #statusPk} points at a declared {@link ItemStatus} of the phase
+ * the item's phase binds it to ({@link Phase#statusPhase()}), carrying
+ * {@code actionable}, {@code successful} and the predicates a scope may use.
+ * Those are a join and never a copy on this row.
  *
  * <h2>The address, and why half of it may be absent</h2>
  *
@@ -142,8 +147,20 @@ public class Item extends AggregateRoot {
     public @Nullable String description;
 
     /**
-     * The declared status. Mandatory: an item always has one, and which
-     * statuses exist is the scope's declaration rather than this service's.
+     * The phase, as its token ({@link Phase#token()}). Written by the
+     * transitions and by nothing else; read through {@link #phase()}.
+     *
+     * <p>The column defaults to {@code open} for the image before V33, which
+     * inserts without it (N-1); this image writes it on every insert.
+     */
+    @Column(name = "phase", nullable = false)
+    public String phaseToken = Phase.OPEN.token();
+
+    /**
+     * The declared status. Mandatory: an item always has one, a draft
+     * included, and which statuses exist is the scope's declaration rather
+     * than this service's. It belongs to the phase {@link #phase()} binds it
+     * to: a status of another phase is refused by {@code update}.
      */
     @Column(name = "status_pk", nullable = false)
     public Long statusPk;
@@ -232,10 +249,11 @@ public class Item extends AggregateRoot {
     public @Nullable String severity;
 
     /**
-     * When the item closed: set by the service when the item moves from a
-     * status that is not closed into one that is, and cleared when it leaves
-     * a closed status again. Absent on an open item, and on an item closed
-     * before the property core arrived.
+     * When the item closed: set by the service when the item enters the
+     * phase closed, through {@code close} or through {@code relate} with
+     * {@code duplicate_of}. Nothing reopens a closed item, so nothing clears
+     * it. Absent on an item that is not closed, and on an item closed before
+     * the property core arrived.
      */
     @Column(name = "close_date")
     public @Nullable Instant closeDate;
@@ -267,6 +285,22 @@ public class Item extends AggregateRoot {
      */
     @Column(name = "changed_at", nullable = false)
     public Instant changedAt;
+
+    /**
+     * The phase this item is in.
+     *
+     * @throws IllegalStateException for a token the column's CHECK of V33
+     *         refuses, which no row can carry
+     */
+    public Phase phase() {
+        return Phase.byToken(phaseToken).orElseThrow(() -> new IllegalStateException(
+            "an item carries a phase the store admits no row with"));
+    }
+
+    /** Moves the item into a phase: the act of a transition, and of nothing else. */
+    void enter(Phase next) {
+        phaseToken = next.token();
+    }
 
     /**
      * The item, as a refusal names it.

@@ -303,9 +303,10 @@ class RestRouteFormTest {
             .as("a collection carries create, query and its custom methods")
             .containsExactlyInAnyOrder("create", "query", "advance", "validate");
         assertThat(CustomMethod.accepts(CustomMethod.Depth.ITEM))
-            .as("an object carries read, update and its custom methods")
-            .containsExactlyInAnyOrder("read", "update", "close", "relate", "unrelate",
-                "tag_attach", "tag_detach", "book");
+            .as("an object carries read, update and its custom methods, the transitions of "
+                + "an item among them (REA-0011 D1)")
+            .containsExactlyInAnyOrder("read", "update", "close", "submit", "discard", "start",
+                "return", "relate", "unrelate", "tag_attach", "tag_detach", "book");
         assertThat(CustomMethod.accepts(CustomMethod.Depth.MEMBERSHIP))
             .as("a membership carries read, update, plan and unplan")
             .containsExactlyInAnyOrder("read", "update", "plan", "unplan");

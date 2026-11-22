@@ -321,12 +321,16 @@ class UnstampedWriteIT {
             Field.STATUS.canonicalName(), openStatus)).answer();
     }
 
-    /** An item pointed at a milestone, which is what makes it plannable. */
+    /**
+     * An item pointed at a milestone and submitted: an item is planned in the
+     * phase open (REA-0011 Annex A1), and a draft is not.
+     */
     private Map<String, Object> itemOnPath(String title, Object milestoneNumber) {
-        return items.create(scope, "probe-subject", Map.of(
+        UUID item = ItemLifecycle.open(items, scope, Map.of(
             Field.TITLE.canonicalName(), title,
             Field.STATUS.canonicalName(), openStatus,
-            Field.MILESTONE_ID.canonicalName(), milestoneNumber)).answer();
+            Field.MILESTONE_ID.canonicalName(), milestoneNumber));
+        return items.read(scope, item);
     }
 
     private Map<String, Object> iteration(String title) {

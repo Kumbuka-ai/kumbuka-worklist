@@ -297,8 +297,9 @@ class ScopeIsolationIT {
      * a member whose write right stands.
      *
      * <p>It gets past the scope stage and is answered by the vocabulary stage
-     * instead — {@code INVALID_VALUE}, because an item carries a status and
-     * this scope has declared none. That is the assertion: not that the write
+     * instead — {@code VALUE_UNDECLARED}, because a draft carries a status of
+     * the phase open, the call names none and this scope has declared none to
+     * fall back on (REA-0011 D12). That is the assertion: not that the write
      * succeeds (it cannot, in a scope with no vocabulary, and staging one here
      * would put the counter-probe's weight on machinery that has nothing to do
      * with the scope), but that the refusal it meets is a DIFFERENT one, from
@@ -317,7 +318,7 @@ class ScopeIsolationIT {
             .when().post("/api/" + OPEN_SCOPE + "/" + Selector.ITEM)
             .then()
             .statusCode(422)
-            .body(RefusalSpecification.REASON, is("INVALID_VALUE"));
+            .body(RefusalSpecification.REASON, is("VALUE_UNDECLARED"));
     }
 
     /** The call a refusal names, which differs between the two forms by design (C6.2). */

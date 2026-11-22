@@ -245,10 +245,12 @@ class StatusPredicatesIT {
         vocabulary.declareUsage(scope, ScopeUsage.Property.VERIFIED);
         vocabulary.declareStatus(scope, "open", 1, true, false, false, false);
         vocabulary.declareStatus(scope, "confirmed", 2, false, false, true, true, false, false, true);
-        UUID item = create("confirmed incident", "open");
+        UUID item = ItemLifecycle.open(items, scope,
+            Map.of("title", "confirmed incident", "status", "open"));
         assertThat(predicates(items.read(scope, item))).containsEntry("verified", false);
 
-        assertThat(predicates(update(item, Map.of("status", "confirmed"))))
+        assertThat(predicates(ItemLifecycle.close(items, scope, item, "confirmed")))
+            .as("closed into a status of the phase closed, through close (REA-0011 D1)")
             .containsEntry("verified", true)
             .doesNotContainKeys("reviewed", "approved");
     }
@@ -258,7 +260,7 @@ class StatusPredicatesIT {
     // ====================================================================
 
     @Test
-    void k4_the_answer_carries_the_four_predicates_of_every_scope_from_the_status() {
+    void k4_the_answer_carries_the_four_predicates_of_every_scope_from_phase_and_status() {
         vocabulary.declareStatus(scope, "open", 1, true, false, false, false);
         vocabulary.declareStatus(scope, "running", 2, false, true, false, false);
         vocabulary.declareStatus(scope, "done", 3, false, false, true, true);
@@ -267,12 +269,19 @@ class StatusPredicatesIT {
 
         assertThat(predicates(items.read(scope, create("open", "open"))))
             .isEqualTo(Map.of("closed", false, "actionable", true, "in_progress", false));
-        assertThat(predicates(items.read(scope, create("running", "running"))))
+        UUID running = ItemLifecycle.inProgress(items, vocabulary, scope,
+            Map.of("title", "running", "status", "open"), "running");
+        assertThat(predicates(items.read(scope, running)))
+            .as("started into a status of the phase in progress (TAR-0002 B3)")
             .isEqualTo(Map.of("closed", false, "actionable", false, "in_progress", true));
-        assertThat(predicates(items.read(scope, create("done", "done"))))
+        UUID done = ItemLifecycle.closed(items, scope,
+            Map.of("title", "done", "status", "open"), "done");
+        assertThat(predicates(items.read(scope, done)))
             .isEqualTo(Map.of("closed", true, "successful", true, "actionable", false,
                 "in_progress", false));
-        assertThat(predicates(items.read(scope, create("dropped", "dropped"))))
+        UUID dropped = ItemLifecycle.closed(items, scope,
+            Map.of("title", "dropped", "status", "open"), "dropped");
+        assertThat(predicates(items.read(scope, dropped)))
             .isEqualTo(Map.of("closed", true, "successful", false, "actionable", false,
                 "in_progress", false));
         assertThat(predicates(items.read(scope, create("early", "achieved-early"))))
@@ -472,6 +481,9 @@ class StatusPredicatesIT {
             .containsEntry("description", "as it was")
             .containsEntry("status", "from-before")
             .containsEntry("number", number);
+        assertThat(read.get("phase"))
+            .as("an item the image before inserts takes the column's default phase")
+            .isEqualTo("open");
         assertThat(predicates(read))
             .isEqualTo(Map.of("closed", false, "actionable", true, "in_progress", false));
     }

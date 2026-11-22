@@ -276,12 +276,20 @@ class QueryFilterProbeIT {
     // Fixtures
     // ==================================================================
 
+    /**
+     * An item in the status given: created and submitted, and closed into the
+     * status where it is bound to the phase closed, since a status write never
+     * moves a phase (REA-0011 D11).
+     */
     private UUID createItem(String title, Long statusId) {
-        Map<String, Object> created = items.create(scope, "probe-subject", Map.of(
+        ItemStatus status = vocabulary.requireStatus(scope, statusId);
+        if (status.closed) {
+            return ItemLifecycle.closed(items, scope,
+                Map.of(Field.TITLE.canonicalName(), title), status.name);
+        }
+        return ItemLifecycle.open(items, scope, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.STATUS.canonicalName(),
-            vocabulary.requireStatus(scope, statusId).name)).answer();
-        return UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
+            Field.STATUS.canonicalName(), status.name));
     }
 
     @SuppressWarnings("unused")

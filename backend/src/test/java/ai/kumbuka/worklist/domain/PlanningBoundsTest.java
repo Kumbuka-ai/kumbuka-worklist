@@ -64,32 +64,24 @@ class PlanningBoundsTest {
         assertThat(PlanningService.countedMemberships(List.of())).isZero();
     }
 
+    /**
+     * TAR-0002 B9 and REA-0011 Annex A1: an item in the phase open or in
+     * progress is planned, a draft and a closed item are refused.
+     */
     @Test
-    void an_item_is_plannable_unless_its_status_answers_closed() {
-        assertThat(MembershipService.plannable(status(false, false, false)))
-            .as("a status that is neither actionable nor closed: a raw intake is planned")
-            .isTrue();
-        assertThat(MembershipService.plannable(status(true, false, false)))
-            .as("an actionable status").isTrue();
-        assertThat(MembershipService.plannable(status(false, true, false)))
-            .as("a status in progress").isTrue();
-        assertThat(MembershipService.plannable(status(false, false, true)))
-            .as("a closed status is refused").isFalse();
-        assertThat(MembershipService.plannable(status(true, false, true)))
-            .as("closed decides, whatever else the status answers").isFalse();
+    void an_item_is_plannable_in_the_phases_open_and_in_progress() {
+        assertThat(MembershipService.plannable(Phase.OPEN)).as("an open item").isTrue();
+        assertThat(MembershipService.plannable(Phase.IN_PROGRESS))
+            .as("an item in progress").isTrue();
+        assertThat(MembershipService.plannable(Phase.DRAFT))
+            .as("a draft is refused").isFalse();
+        assertThat(MembershipService.plannable(Phase.CLOSED))
+            .as("a closed item is refused").isFalse();
     }
 
     private static IterationMembership membership(String status) {
         IterationMembership membership = new IterationMembership();
         membership.status = status;
         return membership;
-    }
-
-    private static ItemStatus status(boolean actionable, boolean inProgress, boolean closed) {
-        ItemStatus status = new ItemStatus();
-        status.actionable = actionable;
-        status.inProgress = inProgress;
-        status.closed = closed;
-        return status;
     }
 }

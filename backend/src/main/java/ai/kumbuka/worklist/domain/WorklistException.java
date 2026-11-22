@@ -220,6 +220,14 @@ public class WorklistException extends RuntimeException {
         ARGUMENT_INVALID,
 
         /**
+         * A mandatory argument was left out where the object's state makes it
+         * mandatory: the {@code reason} of a {@code close} that takes an item
+         * out of the phase in progress (TAR-0002 B19). The offender is the
+         * argument's declared name; the remedy is the same call with it.
+         */
+        ARGUMENT_MISSING,
+
+        /**
          * A filter on a field that the vocabulary of the scope does not declare
          * for the view (DEC-0042). Raised only once the caller has been found
          * to see the scope, so it never tells a stranger that the scope exists.
@@ -264,7 +272,10 @@ public class WorklistException extends RuntimeException {
          * The object's state keeps the call closed, and the way out is a call
          * on the object itself (service contract C8.7, DEC-0043): a write to
          * a closed iteration or to a membership of one, a plan into a closed
-         * iteration, an update or a second close of a closed milestone.
+         * iteration, an update or a second close of a closed milestone; on an
+         * item, a transition its phase does not open or its guard refuses, a
+         * status of another phase, and every write to a closed item but a
+         * booking (REA-0011 D8, D11).
          *
          * <p>Closing is the one act on these axes that is not reversible
          * through a verb. What a closed object holds stays readable, which is
@@ -294,8 +305,9 @@ public class WorklistException extends RuntimeException {
         ITERATION_ABSENT,
 
         /**
-         * The item may not enter an iteration: its status answers
-         * {@code closed} (TAR-0002 B9).
+         * The item may not enter an iteration: it is a draft or closed, and
+         * only an item in the phase open or in progress is planned
+         * (TAR-0002 B9).
          *
          * <p>The offender is {@code address}; the refusal does not name the
          * status it found. The contract has no member that would carry the

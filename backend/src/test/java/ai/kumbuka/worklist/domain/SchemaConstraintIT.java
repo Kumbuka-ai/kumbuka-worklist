@@ -402,7 +402,7 @@ class SchemaConstraintIT {
             Db.bindTenant(c, tenant);
             assertThat(count(c, "item_reference"))
                 .as("all seven rows stand: five living and two tombstones. Nothing was "
-                    + "deleted, because nothing in this schema can delete")
+                    + "deleted: a reference row goes only with a discarded draft")
                 .isEqualTo(7);
 
             assertThat(livingOrdinals(c, item))

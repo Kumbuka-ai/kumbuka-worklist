@@ -13,6 +13,7 @@ import ai.kumbuka.worklist.domain.VocabularyRegistry;
 import ai.kumbuka.worklist.domain.WorkstreamService;
 import ai.kumbuka.worklist.platform.PlatformFixture;
 import ai.kumbuka.worklist.surface.Mcp;
+import ai.kumbuka.worklist.surface.Submitted;
 import ai.kumbuka.worklist.surface.SurfaceFixture;
 import ai.kumbuka.worklist.tenancy.SubstrateDatabaseResource;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -54,9 +55,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>After 24 hours the key speaks for nothing, and the call creates.</li>
  * </ul>
  *
- * <p>The object is removed by the database's superuser: no verb of this
- * service removes one, which is the reason the ledger cannot rely on a removal
- * it would see.
+ * <p>The object is removed by the database's superuser, and by the one verb
+ * of this service that removes one, {@code discard} of a draft (REA-0011
+ * D12): the ledger relies on neither, and reads whether the object stands.
+ *
+ * <p>A REST create that submits in the same act ({@code ?submit=true}) is
+ * another call than one that does not: under one key the second is refused.
  *
  * <p>RED STATE, observed 2026-10-29 with the repeat path made to create anew
  * where the object is gone ({@code IdempotencyService.firstAnswer} answering
@@ -174,6 +178,38 @@ class IdempotencyIT {
             .as("an object that is gone is not made again: %s", again.asString())
             .isEqualTo("IDEMPOTENCY_KEY_REUSED");
         assertThat(items()).isEqualTo(before);
+    }
+
+    @Test
+    void a_repeat_after_the_draft_was_discarded_is_refused_and_creates_nothing() {
+        String key = key();
+        Map<String, Object> fields = Map.of("title", "to be discarded", "status", "open");
+        Map<String, Object> first = Mcp.answer(mcpCreate(Selector.ITEM, fields, key));
+        Mcp.answer(Mcp.call("worklist_discard", Map.of("address", first.get("address"),
+            "conflict_token", first.get("conflict_token"))));
+        long before = items();
+
+        Response again = mcpCreate(Selector.ITEM, fields, key);
+        assertThat(Mcp.refusal(again).get("reason"))
+            .as("a discarded draft is not made again: %s", again.asString())
+            .isEqualTo("IDEMPOTENCY_KEY_REUSED");
+        assertThat(items()).isEqualTo(before);
+    }
+
+    @Test
+    void a_rest_repeat_that_submits_where_the_first_did_not_is_another_call() {
+        String key = key();
+        Map<String, Object> fields = Map.of("title", "a draft first", "status", "open");
+        Response first = restCreate(fields, key);
+        assertThat(first.statusCode()).isEqualTo(201);
+        assertThat(first.jsonPath().getString("fields.phase")).isEqualTo("draft");
+        long before = items();
+
+        Response submitting = given().contentType(ContentType.JSON).header(KEY_HEADER, key)
+            .body(fields).post(Submitted.restCreate("/api/" + SCOPE + "/" + Selector.ITEM));
+        assertThat(submitting.statusCode()).as(submitting.asString()).isEqualTo(409);
+        assertThat(submitting.jsonPath().getString("reason")).isEqualTo("IDEMPOTENCY_KEY_REUSED");
+        assertThat(items()).as("nothing was carried out").isEqualTo(before);
     }
 
     @Test

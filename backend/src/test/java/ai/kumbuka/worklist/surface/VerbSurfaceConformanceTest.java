@@ -71,12 +71,14 @@ class VerbSurfaceConformanceTest {
     private static final int MINIMUM_ROUTES = 8;
 
     /**
-     * The verb set is twenty-seven: the catalogue's twenty-four, after its two
-     * reductions, the two tag verbs of sprint/210, and {@code book}, the call
-     * of the fulfilment ledger. Five of them left this scheme's surface with
-     * its target cut, so the specification places twenty-two.
+     * The verb set is thirty-one: the catalogue's twenty-four, after its two
+     * reductions, the two tag verbs of sprint/210, {@code book}, the call of
+     * the fulfilment ledger, and the four transitions of an item beside
+     * {@code close} (REA-0011 D1): {@code submit}, {@code discard},
+     * {@code start} and {@code return}. Five of them left this scheme's
+     * surface with its target cut, so the specification places twenty-six.
      */
-    private static final int PLACED = 22;
+    private static final int PLACED = 26;
 
     /** The five verbs that left the surface: no class of the specification names them. */
     private static final List<String> RETIRED =
@@ -228,8 +230,9 @@ class VerbSurfaceConformanceTest {
 
         assertThat(named)
             .as("the catalogue settles on twenty-four verbs after two reductions, sprint/210 "
-                + "adds the two tag verbs, the fulfilment ledger adds book, and of the "
-                + "twenty-seven the twenty-two that stay are either carried, refused by name, "
+                + "adds the two tag verbs, the fulfilment ledger adds book, the lifecycle of "
+                + "an item adds submit, discard, start and return, and of the thirty-one the "
+                + "twenty-six that stay are either carried, refused by name, "
                 + "declared-but-unbuilt, or the platform's")
             .hasSize(PLACED)
             .doesNotContainAnyElementsOf(RETIRED);

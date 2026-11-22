@@ -51,10 +51,10 @@ import java.util.UUID;
  * constraint expresses "this graph is acyclic", and the walk that answers it
  * is a domain check with a red probe of its own. It is not built here.
  *
- * <p><strong>Withdrawal rather than deletion</strong>, here as everywhere in
- * this schema. An edge that is no longer asserted keeps its row and changes
- * its status, and that is what lets "no verb deletes" be held by the GRANTS
- * rather than by a rule somebody has to remember.
+ * <p><strong>Withdrawal rather than deletion.</strong> An edge that is no
+ * longer asserted keeps its row and changes its status. The rows go only with
+ * a discarded draft at either end: {@code discard} deletes a draft and what
+ * stands beside it, which is what V33 grants DELETE on this table for.
  */
 @Entity
 @Table(name = "item_relation", schema = "worklist")

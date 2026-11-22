@@ -21,8 +21,9 @@ case. The service fixes the **form** of a list and the meaning of a small
 number of questions about it. Everything else is the scope's.
 
 It is the sibling of the dispatch service and the opposite of it in one
-property: **a worklist item is mutable for its whole life, while a dispatch
-object freezes when it is sent.**
+property: **a worklist item stays writable through its draft, open and
+in-progress phases until it is closed, while a dispatch object freezes when it
+is sent.**
 
 ## What is here today
 
@@ -36,9 +37,18 @@ them, milestones, workstreams and iterations, and the number space.
 
 The **caller surface** carries the verbs of the worklist scheme -- `create`,
 `read`, `update`, `query`, `relate`, `unrelate`, `validate`, `tag_attach`,
-`tag_detach`, `close`, `advance`, `plan` and `unplan` -- over REST under
-`/api/{scope}` and over MCP at `/mcp`, both through the one verb surface. An
-item's status moves through `update` alone. Every answer about an object names
+`tag_detach`, `book`, `close`, `advance`, `plan` and `unplan`, and the
+transitions of an item `submit`, `discard`, `start` and `return` -- over REST
+under `/api/{scope}` and over MCP at `/mcp`, both through the one verb surface.
+
+An item is in one of four **phases**, `draft`, `open`, `in_progress` and
+`closed`, held in a column of its own and moved by the transitions alone:
+`create` makes a draft on every surface (the REST create takes `?submit=true`
+to submit in the same act; the assistant surface submits in a second act),
+`submit` opens it, `discard` deletes a draft, `start` and `return` move it into
+and out of the phase in progress, and `close` ends it for good. Every declared
+status is bound to one phase, and `update` moves an item's status within its
+phase only; a closed item takes no write but a booking. Every answer about an object names
 under `next` the calls open to the caller on it in its state, and a refusal by
 state names the state and those calls. Beside them stand the service's
 declaration at `GET /api/declaration`, `GET /api/whoami` and the health
@@ -118,9 +128,10 @@ and permanent. The drift the ownership arrangement was guarding against is
 answered by `ServiceRolePrivilegeIT`, which reads the catalog rather than a
 maintained list and requires, per table and per privilege:
 
-- exactly `SELECT`, `INSERT`, `UPDATE` on every domain table — no `DELETE`
-  until a verb genuinely deletes, and never `TRUNCATE`, `TRIGGER` or
-  `REFERENCES`;
+- exactly `SELECT`, `INSERT`, `UPDATE` on every domain table, with `DELETE`
+  only where a verb genuinely deletes -- an item's tags for `tag_detach`, and
+  a draft with its references, criteria and relations for `discard` -- and
+  never `TRUNCATE`, `TRIGGER` or `REFERENCES`;
 - nothing whatever on `flyway_schema_history`, which belongs to the migrator;
 - and that the runtime role owns nothing, so the privileges above are grants
   rather than an owner's implicit set.

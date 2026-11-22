@@ -338,6 +338,16 @@ public class VocabularyRegistry {
     }
 
     /**
+     * The declaration of that key in this scope, if the scope declared one:
+     * the form a question about an item's type asks it in, where a scope
+     * without the declaration is an answer and no refusal.
+     */
+    @Transactional
+    public Optional<AttributeDefinition> attributeByKey(UUID scopeId, String key) {
+        return vocabulary.definitionByKey(scopeId, key);
+    }
+
+    /**
      * The declaration of that surrogate, if there is one; the read path's
      * second key form.
      */
