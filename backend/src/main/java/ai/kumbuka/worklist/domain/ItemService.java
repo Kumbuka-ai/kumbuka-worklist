@@ -2656,8 +2656,8 @@ public class ItemService {
     }
 
     /**
-     * The cancelled references, in the order they were written, each as its
-     * entry form with its end: {@code label} where it carries one,
+     * The cancelled references, by the place each last held in the list, each
+     * as its entry form with its end: {@code label} where it carries one,
      * {@code target}, and {@code ended_at}, {@code ended_by} and
      * {@code end_reason} where the row records them. A value the row does not
      * record is left out of the entry rather than answered empty (C6.5), so

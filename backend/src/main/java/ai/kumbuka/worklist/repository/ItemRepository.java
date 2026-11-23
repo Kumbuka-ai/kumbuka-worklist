@@ -272,16 +272,7 @@ public class ItemRepository {
      */
     @Transactional
     public List<ItemRelation> assertedRelations(Item item) {
-        return em.createQuery(
-                "SELECT r FROM ItemRelation r "
-                    + "WHERE r.scopeId = :" + P_SCOPE
-                    + " AND r.fromItemNumber = :" + P_ITEM
-                    + " AND r.status = :" + P_STATUS
-                    + " ORDER BY r.toItemNumber, r.relationTypePk", ItemRelation.class)
-            .setParameter(P_SCOPE, item.scopeId)
-            .setParameter(P_ITEM, item.number)
-            .setParameter(P_STATUS, ItemRelation.ASSERTED)
-            .getResultList();
+        return relationsIn(item, ItemRelation.ASSERTED);
     }
 
     /**
@@ -291,6 +282,11 @@ public class ItemRepository {
      */
     @Transactional
     public List<ItemRelation> cancelledRelations(Item item) {
+        return relationsIn(item, ItemRelation.WITHDRAWN);
+    }
+
+    /** The relations out of an item in one status, by target then type. */
+    private List<ItemRelation> relationsIn(Item item, String status) {
         return em.createQuery(
                 "SELECT r FROM ItemRelation r "
                     + "WHERE r.scopeId = :" + P_SCOPE
@@ -299,7 +295,7 @@ public class ItemRepository {
                     + " ORDER BY r.toItemNumber, r.relationTypePk", ItemRelation.class)
             .setParameter(P_SCOPE, item.scopeId)
             .setParameter(P_ITEM, item.number)
-            .setParameter(P_STATUS, ItemRelation.WITHDRAWN)
+            .setParameter(P_STATUS, status)
             .getResultList();
     }
 
@@ -317,33 +313,32 @@ public class ItemRepository {
     /** The asserted pointers only, in the reader's order. */
     @Transactional
     public List<ItemReference> assertedReferences(Item item) {
-        return em.createQuery(
-                "SELECT r FROM ItemReference r "
-                    + "WHERE r.scopeId = :" + P_SCOPE
-                    + " AND r.itemNumber = :" + P_ITEM
-                    + " AND r.status = :" + P_STATUS + " ORDER BY r.ordinal",
-                ItemReference.class)
-            .setParameter(P_SCOPE, item.scopeId)
-            .setParameter(P_ITEM, item.number)
-            .setParameter(P_STATUS, ItemReference.ASSERTED)
-            .getResultList();
+        return referencesIn(item, ItemReference.ASSERTED);
     }
 
     /**
-     * The cancelled pointers only, in the order they were written: by the
-     * row's surrogate, since a cancelled entry's ordinal orders nothing.
+     * The cancelled pointers only, by the place each last held in the list,
+     * and in the order they were written where two held the same place.
      */
     @Transactional
     public List<ItemReference> cancelledReferences(Item item) {
+        return referencesIn(item, ItemReference.WITHDRAWN);
+    }
+
+    /**
+     * The pointers of an item in one status, by ordinal, and by the row's
+     * surrogate where two share one -- which only cancelled rows can.
+     */
+    private List<ItemReference> referencesIn(Item item, String status) {
         return em.createQuery(
                 "SELECT r FROM ItemReference r "
                     + "WHERE r.scopeId = :" + P_SCOPE
                     + " AND r.itemNumber = :" + P_ITEM
-                    + " AND r.status = :" + P_STATUS + " ORDER BY r.pk",
+                    + " AND r.status = :" + P_STATUS + " ORDER BY r.ordinal, r.pk",
                 ItemReference.class)
             .setParameter(P_SCOPE, item.scopeId)
             .setParameter(P_ITEM, item.number)
-            .setParameter(P_STATUS, ItemReference.WITHDRAWN)
+            .setParameter(P_STATUS, status)
             .getResultList();
     }
 

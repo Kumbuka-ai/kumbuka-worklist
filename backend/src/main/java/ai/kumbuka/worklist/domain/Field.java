@@ -293,7 +293,8 @@ public enum Field {
      * The cancelled references, each with {@code label} where it carries one,
      * {@code target}, and {@code ended_at}, {@code ended_by} and
      * {@code end_reason} where the row records them; answered only by a read
-     * with the option for cancelled edges, in the order they were written.
+     * with the option for cancelled edges, by the place each last held in the
+     * list.
      *
      * <p>Under a key of its own and never mixed into {@link #REFERENCES}, so
      * that a read answer sent back writes nothing. Read-only: sent back as the
