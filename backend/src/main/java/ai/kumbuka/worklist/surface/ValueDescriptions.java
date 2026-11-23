@@ -51,4 +51,10 @@ public interface ValueDescriptions {
 
     @Message
     String fulfilmentAll();
+
+    @Message
+    String cancelledCount();
+
+    @Message
+    String cancelledAll();
 }

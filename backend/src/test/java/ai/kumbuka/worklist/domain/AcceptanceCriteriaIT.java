@@ -299,7 +299,7 @@ class AcceptanceCriteriaIT {
         Map<String, Object> read = items.read(scope, item);
         List<String> rowsBefore = storedRows(item);
 
-        Written<Map<String, Object>, Item> echoed = items.update(scope, item, read);
+        Written<Map<String, Object>, Item> echoed = items.update(scope, item, read, CALLER);
 
         assertThat(echoed.answer().get("conflict_token"))
             .as("the token stays")
@@ -320,7 +320,7 @@ class AcceptanceCriteriaIT {
         java.util.Collections.reverse(reversed);
 
         Map<String, Object> answer = items.update(scope, item, Map.of(
-            "conflict_token", read.get("conflict_token"), "criteria", reversed)).answer();
+            "conflict_token", read.get("conflict_token"), "criteria", reversed), CALLER).answer();
 
         assertThat(answer.get("conflict_token"))
             .as("an item answers its criteria by identifier, so their order is no change")
@@ -470,7 +470,7 @@ class AcceptanceCriteriaIT {
     private Map<String, Object> update(UUID item, Map<String, Object> fields) {
         Map<String, Object> arguments = new LinkedHashMap<>(fields);
         arguments.put("conflict_token", tokenOf(item));
-        return items.update(scope, item, arguments).answer();
+        return items.update(scope, item, arguments, CALLER).answer();
     }
 
     /** The address of criterion {@code k} of an item, in the form D14 fixes. */

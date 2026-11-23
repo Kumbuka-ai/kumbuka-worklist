@@ -52,9 +52,13 @@ import java.time.Instant;
  * exempt. A withdrawn row keeps whatever ordinal it had and is never consulted
  * for order.
  *
- * <p><strong>Withdrawal rather than deletion</strong>: a list that gets
- * shorter marks its tail withdrawn and leaves it standing. The rows go only
- * with the draft they belong to, when {@code discard} deletes it (V33).
+ * <p><strong>Cancellation rather than deletion</strong> (REA-0011 D15): an
+ * entry a list leaves out is cancelled and left standing, its status moved to
+ * {@link #WITHDRAWN}, the stored word of the cancelled state, with when it
+ * ended and who ended it (V35). Its label and its target are never
+ * overwritten: an entry is matched by its content, and a different content is
+ * a new row. The rows go only with the draft they belong to, when
+ * {@code discard} deletes it (V33).
  */
 @Entity
 @Table(name = "item_reference", schema = "worklist")
@@ -62,7 +66,7 @@ public class ItemReference extends TenantScoped {
 
     /** The entry is part of the list. */
     public static final String ASSERTED = "asserted";
-    /** The entry was part of it once and is not any more. */
+    /** The entry was cancelled: part of the list once, and not any more. */
     public static final String WITHDRAWN = "withdrawn";
 
     /**
@@ -101,4 +105,37 @@ public class ItemReference extends TenantScoped {
 
     @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
+
+    /**
+     * When the entry was cancelled. Absent on a living entry, and on one
+     * cancelled before V35 recorded it.
+     */
+    @Column(name = "ended_at")
+    public @Nullable Instant endedAt;
+
+    /**
+     * Who cancelled the entry, as the service derived the subject from the
+     * token. Absent where {@link #endedAt} is.
+     */
+    @Column(name = "ended_by")
+    public @Nullable String endedBy;
+
+    /**
+     * Why the entry was cancelled. Absent where the cancelling call took no
+     * reason, which is every {@code update}: no call cancels a single entry
+     * with a reason.
+     */
+    @Column(name = "end_reason")
+    public @Nullable String endReason;
+
+    /**
+     * Cancels the entry: its status moves and it records when and by whom. The
+     * ordinal is left where it was; nothing reads it on a cancelled entry.
+     */
+    public void cancel(Instant at, String actor) {
+        status = WITHDRAWN;
+        endedAt = at;
+        endedBy = actor;
+        updatedAt = at;
+    }
 }

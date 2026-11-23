@@ -250,7 +250,7 @@ class SurfaceCoverageIT {
         // absent in the scope, so this is refused as VALUE_UNDECLARED at
         // the vocabulary check. Answered by the same domain refusal path.
         call("POST", item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
-            Map.of("to_item", itemAddress, "type", missingTypeName))
+            Map.of("to_item", itemAddress, "type", missingTypeName, "reason", "a mistake"))
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 

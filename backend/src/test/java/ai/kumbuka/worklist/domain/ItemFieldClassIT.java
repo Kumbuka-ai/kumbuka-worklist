@@ -216,7 +216,7 @@ class ItemFieldClassIT {
             .isInstanceOf(Number.class)
             .satisfies(type -> assertThat(((Number) type).intValue()).isEqualTo(5));
 
-        Written<Map<String, Object>, Item> echoed = items.update(numbered, item, after);
+        Written<Map<String, Object>, Item> echoed = items.update(numbered, item, after, ItemLifecycle.CALLER);
         assertThat(echoed.stored())
             .as("the read answer sent back, carrying the number 5, is no change (K8)")
             .isNull();
@@ -350,9 +350,8 @@ class ItemFieldClassIT {
     // ====================================================================
 
     /**
-     * Annex A1, without the narrowing of {@code unrelate} in progress, which
-     * is a later step's; {@code plan} is absent because the scope holds no
-     * open iteration.
+     * Annex A1, {@code unrelate} narrowed away in progress (REA-0011 D15);
+     * {@code plan} is absent because the scope holds no open iteration.
      */
     @Test
     void k7_an_item_driven_through_every_phase_names_exactly_the_calls_of_annex_a1() {
@@ -371,7 +370,7 @@ class ItemFieldClassIT {
 
         ItemLifecycle.start(items, scope, item, DOING);
         assertThat(openVerbs(item)).as("in_progress").containsExactlyInAnyOrder(
-            "read", "update", "relate", "unrelate", "tag_attach", "tag_detach",
+            "read", "update", "relate", "tag_attach", "tag_detach",
             "addendum", "book", "return", "close");
         assertThat(addenda.addendum(scope, item, "named in progress", AUTHOR).stored())
             .as("addendum named in progress is taken").isNotNull();
@@ -393,7 +392,7 @@ class ItemFieldClassIT {
         addenda.addendum(scope, item, "so the echo carries an addendum", AUTHOR);
         Map<String, Object> read = items.read(scope, item);
 
-        Written<Map<String, Object>, Item> echoed = items.update(scope, item, read);
+        Written<Map<String, Object>, Item> echoed = items.update(scope, item, read, ItemLifecycle.CALLER);
 
         assertThat(echoed.stored()).as("no field differs, so nothing is stored").isNull();
         assertThat(echoed.answer().get("conflict_token")).isEqualTo(read.get("conflict_token"));
@@ -405,7 +404,7 @@ class ItemFieldClassIT {
         UUID item = inProgress();
         Map<String, Object> read = items.read(scope, item);
 
-        assertThat(items.update(scope, item, read).stored()).isNull();
+        assertThat(items.update(scope, item, read, ItemLifecycle.CALLER).stored()).isNull();
     }
 
     // ====================================================================
@@ -451,7 +450,7 @@ class ItemFieldClassIT {
         Map<String, Object> fields = new LinkedHashMap<>(change);
         fields.put(Field.CONFLICT_TOKEN.canonicalName(),
             ItemLifecycle.tokenOf(items, inScope, item));
-        return items.update(inScope, item, fields).answer();
+        return items.update(inScope, item, fields, ItemLifecycle.CALLER).answer();
     }
 
     private List<String> openVerbs(UUID item) {

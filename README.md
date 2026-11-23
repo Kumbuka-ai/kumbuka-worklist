@@ -63,6 +63,22 @@ its author and time, and `read` answers the addenda under `addenda` in the
 order they were written; like the tag calls and `book`, it presents no conflict
 token and moves neither the item's token nor its change time.
 
+References and relations are cancelled, never deleted. `unrelate` takes a
+mandatory `reason` and cancels the edge: the row stays, with its end time, the
+caller as the one who ended it, and the reason. An `update` whose
+`references` or `relations` leave an entry out cancels that entry the same
+way, without a reason, which `update` does not carry; references are matched
+by their content, label and target, so no entry is ever rewritten into
+another. Cancelling is open on a draft and an open item; in progress the two
+lists only grow, `unrelate` is refused by state and not named among the open
+calls, and whoever needs to cancel returns the item first. `relate` on a
+cancelled edge makes the same row active again. `read` and `query` answer
+the active entries alone, with `cancelled_references_count` and
+`cancelled_relations_count`; `read` with `cancelled=all` answers the
+cancelled entries too, under `cancelled_references` and `cancelled_relations`,
+each with `ended_at`, `ended_by` and `end_reason` where recorded. A cancelled
+blocking edge counts nowhere: `validate` walks the active edges only.
+
 Every answer about an object names
 under `next` the calls open to the caller on it in its state, and a refusal by
 state names the state and those calls. Beside them stand the service's

@@ -158,7 +158,7 @@ class LifecycleChainIT {
 
         Map<String, Object> assigned = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), milestoneNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), itemToken)).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), itemToken), "probe-subject").answer();
         assertThat(assigned.get(Field.MILESTONE_ID.canonicalName()))
             .as("item.update carries the milestone assignment through the verb "
                 + "surface — SPRINT_180.4 fixed the wire form to the number, so this "

@@ -104,14 +104,14 @@ class PropertyCoreIT {
 
         for (String field : List.of("creator", "close_date")) {
             WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
-                "conflict_token", token, field, "2026-11-20T10:00:00Z")));
+                "conflict_token", token, field, "2026-11-20T10:00:00Z"), CALLER));
             assertThat(refusal.reason())
                 .as("an update that gives %s a value of its own is refused", field)
                 .isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
             assertThat(refusal.offenders()).containsExactly("fields." + field);
         }
 
-        Map<String, Object> echoed = items.update(scope, item, items.read(scope, item)).answer();
+        Map<String, Object> echoed = items.update(scope, item, items.read(scope, item), CALLER).answer();
         assertThat(echoed.get("conflict_token"))
             .as("the read answer sent back as it came, creator included, changes nothing")
             .isEqualTo(token);
@@ -296,7 +296,8 @@ class PropertyCoreIT {
             DUPLICATE_OF, tokenOf(duplicate)).answer();
 
         WorklistException refusal = refusalFrom(() -> items.unrelate(scope, duplicate,
-            addressOf(original), DUPLICATE_OF, String.valueOf(closed.get("conflict_token"))));
+            addressOf(original), DUPLICATE_OF, "a reason", CALLER,
+            String.valueOf(closed.get("conflict_token"))));
 
         assertThat(refusal.reason())
             .as("a closed item takes no write: unrelate is refused by state (REA-0011 D6)")
@@ -342,7 +343,7 @@ class PropertyCoreIT {
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, duplicate, Map.of(
             "conflict_token", before.get("conflict_token"),
-            "relations", List.of(Map.of("type", DUPLICATE_OF, "item", addressOf(original))))));
+            "relations", List.of(Map.of("type", DUPLICATE_OF, "item", addressOf(original)))), CALLER));
 
         assertThat(refusal.reason())
             .as("adding duplicate_of through update is refused by state; relate is the "
@@ -361,7 +362,7 @@ class PropertyCoreIT {
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, duplicate, Map.of(
             "conflict_token", before.get("conflict_token"),
-            "relations", List.of())));
+            "relations", List.of()), CALLER));
 
         assertThat(refusal.reason())
             .as("removing duplicate_of through update is refused by state: the edge closed "
@@ -386,7 +387,7 @@ class PropertyCoreIT {
         items.relate(scope, duplicate, addressOf(original), DUPLICATE_OF, tokenOf(duplicate));
         Map<String, Object> read = items.read(scope, duplicate);
 
-        WorklistException echo = refusalFrom(() -> items.update(scope, duplicate, read));
+        WorklistException echo = refusalFrom(() -> items.update(scope, duplicate, read, CALLER));
         assertThat(echo.reason())
             .as("the closed item refuses the update by state, whatever it carries")
             .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
@@ -395,7 +396,7 @@ class PropertyCoreIT {
         withAnother.put("relations", List.of(
             Map.of("type", DUPLICATE_OF, "item", addressOf(original)),
             Map.of("type", "carries", "item", addressOf(other))));
-        WorklistException another = refusalFrom(() -> items.update(scope, duplicate, withAnother));
+        WorklistException another = refusalFrom(() -> items.update(scope, duplicate, withAnother, CALLER));
         assertThat(another.reason()).isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
         assertNothingWritten(duplicate, read);
     }
@@ -464,7 +465,7 @@ class PropertyCoreIT {
         for (Map.Entry<String, String> outside : Map.of(
                 "priority", "P1", "severity", "trivial").entrySet()) {
             WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
-                "conflict_token", token, outside.getKey(), outside.getValue())));
+                "conflict_token", token, outside.getKey(), outside.getValue()), CALLER));
             assertThat(refusal.reason())
                 .as("%s is outside the value set of %s", outside.getValue(), outside.getKey())
                 .isEqualTo(WorklistException.Reason.INVALID_VALUE);
@@ -483,14 +484,14 @@ class PropertyCoreIT {
         UUID c = create("c");
 
         WorklistException self = refusalFrom(() -> items.update(scope, a, Map.of(
-            "conflict_token", tokenOf(a), "parent", addressOf(a))));
+            "conflict_token", tokenOf(a), "parent", addressOf(a)), CALLER));
         assertThat(self.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(self.offenders()).containsExactly("fields.parent");
 
         update(b, Map.of("parent", addressOf(a)));
         update(c, Map.of("parent", addressOf(b)));
         WorklistException cycle = refusalFrom(() -> items.update(scope, a, Map.of(
-            "conflict_token", tokenOf(a), "parent", addressOf(c))));
+            "conflict_token", tokenOf(a), "parent", addressOf(c)), CALLER));
         assertThat(cycle.reason())
             .as("a's parent c, whose chain runs c, b, a, would close a cycle")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
@@ -510,7 +511,7 @@ class PropertyCoreIT {
         UUID item = create("wants a foreign parent");
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
-            "conflict_token", tokenOf(item), "parent", foreignAddress)));
+            "conflict_token", tokenOf(item), "parent", foreignAddress), CALLER));
 
         assertThat(refusal.reason())
             .as("a parent lies in the item's own scope; another scope's item is one this "
@@ -593,7 +594,7 @@ class PropertyCoreIT {
     private Map<String, Object> update(UUID item, Map<String, Object> fields) {
         Map<String, Object> arguments = new LinkedHashMap<>(fields);
         arguments.put("conflict_token", tokenOf(item));
-        return items.update(scope, item, arguments).answer();
+        return items.update(scope, item, arguments, CALLER).answer();
     }
 
     private void assertNothingWritten(UUID item, Map<String, Object> before) {

@@ -34,6 +34,9 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 @QuarkusTestResource(value = SubstrateDatabaseResource.class, restrictToAnnotatedClass = true)
 class GraphSemanticsIT {
 
+    /** The reason every unrelate of these probes gives (REA-0011 D15). */
+    private static final String REASON = "the edge was asserted by mistake";
+
     private UUID scope;
     private Long openStatus;
 
@@ -98,28 +101,28 @@ class GraphSemanticsIT {
     }
 
     @Test
-    void relate_moves_a_withdrawn_edge_back_to_asserted() {
+    void relate_moves_a_cancelled_edge_back_to_asserted() {
         UUID from = createItem("source");
         UUID to = createItem("target");
         vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
         token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token).answer());
-        token = tokenOfProjection(
-            items.unrelate(scope, from, addressOf(to), "carries", token).answer());
+        token = tokenOfProjection(items.unrelate(scope, from, addressOf(to), "carries", REASON,
+            ItemLifecycle.CALLER, token).answer());
 
-        // The row is now withdrawn. Re-asserting it moves the status back
+        // The row is now cancelled. Re-asserting it moves the status back
         // and stamps the aggregate — the token rotates.
         String afterReassert = tokenOfProjection(
             items.relate(scope, from, addressOf(to), "carries", token).answer());
         assertThat(afterReassert)
-            .as("re-asserting a withdrawn edge is a write: the row moves from withdrawn "
+            .as("re-asserting a cancelled edge is a write: the row moves from cancelled "
                 + "to asserted, and the aggregate is stamped so the token rotates")
             .isNotEqualTo(token);
     }
 
     // ====================================================================
-    // unrelate: RELATION_UNKNOWN for absence and for withdrawn alike
+    // unrelate: RELATION_UNKNOWN for absence and for cancelled alike
     // ====================================================================
 
     @Test
@@ -128,25 +131,25 @@ class GraphSemanticsIT {
         UUID to = createItem("target");
         vocabulary.declareRelationType(scope, "carries", false, 1);
 
-        WorklistException refusal = refusalFrom(() ->
-            items.unrelate(scope, from, addressOf(to), "carries", tokenOf(from)));
+        WorklistException refusal = refusalFrom(() -> items.unrelate(scope, from, addressOf(to),
+            "carries", REASON, ItemLifecycle.CALLER, tokenOf(from)));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.RELATION_UNKNOWN);
     }
 
     @Test
-    void unrelate_refuses_an_edge_that_has_already_been_withdrawn() {
+    void unrelate_refuses_an_edge_that_has_already_been_cancelled() {
         UUID from = createItem("source");
         UUID to = createItem("target");
         vocabulary.declareRelationType(scope, "carries", false, 1);
 
         String token = tokenOf(from);
         token = tokenOfProjection(items.relate(scope, from, addressOf(to), "carries", token).answer());
-        String withdrawnToken = tokenOfProjection(
-            items.unrelate(scope, from, addressOf(to), "carries", token).answer());
+        String cancelledToken = tokenOfProjection(items.unrelate(scope, from, addressOf(to),
+            "carries", REASON, ItemLifecycle.CALLER, token).answer());
 
-        WorklistException refusal = refusalFrom(() ->
-            items.unrelate(scope, from, addressOf(to), "carries", withdrawnToken));
+        WorklistException refusal = refusalFrom(() -> items.unrelate(scope, from, addressOf(to),
+            "carries", REASON, ItemLifecycle.CALLER, cancelledToken));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.RELATION_UNKNOWN);
     }
@@ -173,8 +176,8 @@ class GraphSemanticsIT {
             .as("a closed item is final: relate is refused by state")
             .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
 
-        WorklistException unrelate = refusalFrom(() ->
-            items.unrelate(scope, from, addressOf(to), "carries", closedToken));
+        WorklistException unrelate = refusalFrom(() -> items.unrelate(scope, from, addressOf(to),
+            "carries", REASON, ItemLifecycle.CALLER, closedToken));
         assertThat(unrelate.reason())
             .as("and so is unrelate, so the edge stands")
             .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);

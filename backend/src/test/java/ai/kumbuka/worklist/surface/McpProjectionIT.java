@@ -363,8 +363,10 @@ class McpProjectionIT {
                 Map.of("address", first,
                     "conflict_token", firstToken,
                     "to_item", second,
-                    "type", relationTypeName))
-            .body("result.isError", is(false));
+                    "type", relationTypeName,
+                    "reason", "the edge was a mistake"))
+            .body("result.isError", is(false))
+            .body("result.structuredContent.fields.cancelled_relations_count", is(1));
 
         // ---- validate: the scope walk at collection depth ------------------
         //

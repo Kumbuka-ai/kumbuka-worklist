@@ -108,7 +108,7 @@ class ItemDomainIT {
         // Somebody else gets there first.
         Map<String, Object> moved = items.update(SCOPE, id, Map.of(
             "title", "moved on",
-            "conflict_token", staleToken)).answer();
+            "conflict_token", staleToken), "probe-subject").answer();
         String currentToken = (String) moved.get("conflict_token");
 
         assertThat(currentToken)
@@ -118,7 +118,7 @@ class ItemDomainIT {
 
         WorklistException refusal = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "title", "written over the top",
-            "conflict_token", staleToken)));
+            "conflict_token", staleToken), "probe-subject"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.CONFLICT);
         assertThat(refusal.offenders())
@@ -147,7 +147,7 @@ class ItemDomainIT {
         UUID id = createdId("tokenless probe");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.update(SCOPE, id, Map.of("title", "no token given")));
+            items.update(SCOPE, id, Map.of("title", "no token given"), "probe-subject"));
 
         assertThat(refusal.reason())
             .as("no token and a wrong token are the same fact — this write was not built "
@@ -195,7 +195,7 @@ class ItemDomainIT {
         String storedDateBefore = storedChangedAt(id);
 
         // The obvious caller move: read, change nothing, send it all back.
-        Map<String, Object> echoed = items.update(SCOPE, id, new HashMap<>(before)).answer();
+        Map<String, Object> echoed = items.update(SCOPE, id, new HashMap<>(before), "probe-subject").answer();
 
         assertThat(echoed.get("changed_at"))
             .as("the modification date must not move for a write that changed no value — "
@@ -237,7 +237,7 @@ class ItemDomainIT {
 
         Map<String, Object> changed = new HashMap<>(before);
         changed.put("title", "an actual change");
-        Map<String, Object> after = items.update(SCOPE, id, changed).answer();
+        Map<String, Object> after = items.update(SCOPE, id, changed, "probe-subject").answer();
 
         assertThat(after.get("conflict_token"))
             .as("a real change rotates the token. Without this half, 'nothing writes on a "
@@ -275,7 +275,7 @@ class ItemDomainIT {
         Map<String, Object> reordered = new HashMap<>(before);
         reordered.put("relations", List.of(
             relation(type, third), relation(type, second), relation(type, third)));
-        Map<String, Object> after = items.update(SCOPE, first, reordered).answer();
+        Map<String, Object> after = items.update(SCOPE, first, reordered, "probe-subject").answer();
 
         assertThat(after.get("conflict_token"))
             .as("the same set, in another order and with a repeat, is the same value")
@@ -307,7 +307,7 @@ class ItemDomainIT {
         misspelt.put("Titel", "the predecessor's spelling");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.update(SCOPE, id, misspelt));
+            items.update(SCOPE, id, misspelt, "probe-subject"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.ARGUMENT_UNKNOWN);
         assertThat(refusal.accepts())
@@ -356,7 +356,7 @@ class ItemDomainIT {
         arguments.put("cluster", "three");
 
         WorklistException refusal = catchWorklistException(() ->
-            items.update(SCOPE, id, arguments));
+            items.update(SCOPE, id, arguments, "probe-subject"));
 
         assertThat(refusal.accepts())
             .as("a caller that misspelt three fields learns in one round trip which fields "
@@ -381,7 +381,7 @@ class ItemDomainIT {
         Map<String, Object> roundTrip = new HashMap<>(before);
         roundTrip.put("description", "changed one thing");
 
-        Map<String, Object> after = items.update(SCOPE, id, roundTrip).answer();
+        Map<String, Object> after = items.update(SCOPE, id, roundTrip, "probe-subject").answer();
 
         assertThat(after.get("description")).isEqualTo("changed one thing");
         assertThat(after.get("id"))
@@ -401,7 +401,7 @@ class ItemDomainIT {
         tampered.put("number", 99L);
 
         WorklistException refusal = catchWorklistException(() ->
-            items.update(SCOPE, id, tampered));
+            items.update(SCOPE, id, tampered, "probe-subject"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders())
@@ -598,7 +598,7 @@ class ItemDomainIT {
 
         WorklistException refusal = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "attributes", Map.of("not_declared", "anything"),
-            "conflict_token", conflictToken)));
+            "conflict_token", conflictToken), "probe-subject"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
         assertThat(refusal.offenders())
@@ -690,7 +690,7 @@ class ItemDomainIT {
 
         WorklistException refusal = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "status", "no such status name here",
-            "conflict_token", conflictToken)));
+            "conflict_token", conflictToken), "probe-subject"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.VALUE_UNDECLARED);
         assertThat(refusal.getMessage())
@@ -706,7 +706,7 @@ class ItemDomainIT {
         WorklistException uuidShape = catchWorklistException(() ->
             items.update(SCOPE, id, Map.of(
                 "status", String.valueOf(UUID.randomUUID()),
-                "conflict_token", conflictToken)));
+                "conflict_token", conflictToken), "probe-subject"));
         assertThat(uuidShape.reason())
             .as("a uuid where a status name is expected is a form refusal — the wire "
                 + "form fixed in Sprint 180.4 is the declared display name, and the "
@@ -756,7 +756,7 @@ class ItemDomainIT {
             Map<String, Object> clearing = new HashMap<>();
             clearing.put("status", "");
             clearing.put("conflict_token", conflictToken);
-            items.update(SCOPE, id, clearing);
+            items.update(SCOPE, id, clearing, "probe-subject");
         });
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
@@ -819,7 +819,7 @@ class ItemDomainIT {
 
         WorklistException byStatus = catchWorklistException(() -> items.update(SCOPE, id,
             Map.of("status", statusNameOf(closedStatus()),
-                "conflict_token", (String) items.read(SCOPE, id).get("conflict_token"))));
+                "conflict_token", (String) items.read(SCOPE, id).get("conflict_token")), "probe-subject"));
         assertThat(byStatus.reason())
             .as("a status of the phase closed is refused on an open item: the phase moves "
                 + "through a transition")
@@ -834,7 +834,7 @@ class ItemDomainIT {
 
         WorklistException retitle = catchWorklistException(() -> items.update(SCOPE, id, Map.of(
             "title", "closing probe, retitled",
-            "conflict_token", String.valueOf(closed.get("conflict_token")))));
+            "conflict_token", String.valueOf(closed.get("conflict_token"))), "probe-subject"));
         assertThat(retitle.reason())
             .as("a closed item is final and refuses the write by state")
             .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
@@ -1046,8 +1046,8 @@ class ItemDomainIT {
     // ==================================================================
 
     /**
-     * The references are an ordered list, rewritten as a whole, and a list
-     * that gets shorter actually gets shorter.
+     * The references are an ordered list, written as a whole and matched by
+     * content, and a list that gets shorter actually gets shorter.
      *
      * <p>The second half is the one worth asserting. Nothing in this schema
      * holds a DELETE privilege, so a shrinking list is the case an
@@ -1071,8 +1071,8 @@ class ItemDomainIT {
         Map<String, Object> one = updateField(id, "references", List.of(
             Map.of("label", "second", "target", "docs/b.md")));
         assertThat(targetsOfReferences(one))
-            .as("a shorter list is shorter: the entries above it are withdrawn, which is "
-                + "what withdrawal-instead-of-deletion has to mean for an ordered list")
+            .as("a shorter list is shorter: the entries it leaves out are cancelled, which "
+                + "is what cancellation-instead-of-deletion has to mean for an ordered list")
             .containsExactly("docs/b.md");
 
         Map<String, Object> none = updateField(id, "references", List.of());
@@ -1256,7 +1256,7 @@ class ItemDomainIT {
         assertThat(catchWorklistException(() -> {
             Map<String, Object> clearing = new HashMap<>(items.read(SCOPE, id));
             clearing.put("title", "   ");
-            items.update(SCOPE, id, clearing);
+            items.update(SCOPE, id, clearing, "probe-subject");
         }).reason())
             .as("the title cannot be cleared either — it is the one field required "
                 + "regardless of status")
@@ -1611,7 +1611,12 @@ class ItemDomainIT {
                 assertThat(item.get("id")).isEqualTo(id);
                 assertThat(item).containsKeys("title", "description", "status", "attributes",
                     "references", "relations", "tags", "milestone", "conflict_token",
-                    "created_at", "changed_at");
+                    "created_at", "changed_at",
+                    "cancelled_references_count", "cancelled_relations_count");
+                assertThat(item)
+                    .as("a query answers as read without the option: the cancelled edges "
+                        + "counted, never listed (REA-0011 D15)")
+                    .doesNotContainKeys("cancelled_references", "cancelled_relations");
             });
     }
 
@@ -1765,7 +1770,7 @@ class ItemDomainIT {
         Map<String, Object> arguments = new HashMap<>();
         arguments.put(field, value);
         arguments.put("conflict_token", items.read(SCOPE, id).get("conflict_token"));
-        return items.update(SCOPE, id, arguments).answer();
+        return items.update(SCOPE, id, arguments, "probe-subject").answer();
     }
 
     private long numberOf(UUID id) {

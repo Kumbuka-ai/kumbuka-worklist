@@ -223,11 +223,11 @@ class ItemPhaseIT {
         Map<String, Object> update = new LinkedHashMap<>();
         update.put("conflict_token", token);
         update.put("title", "renamed after the close");
-        assertByState(() -> items.update(scope, item, update), "update");
+        assertByState(() -> items.update(scope, item, update, ItemLifecycle.CALLER), "update");
         assertByState(() -> items.relate(scope, item, addressOf(other), "relates", token),
             "relate");
-        assertByState(() -> items.unrelate(scope, item, addressOf(other), "relates", token),
-            "unrelate");
+        assertByState(() -> items.unrelate(scope, item, addressOf(other), "relates",
+            "a reason", ItemLifecycle.CALLER, token), "unrelate");
         assertByState(() -> tags.tagAttach(scope, item, "any-tag", ItemLifecycle.CALLER),
             "tag_attach");
         assertByState(() -> tags.tagDetach(scope, item, "any-tag"), "tag_detach");
@@ -273,7 +273,7 @@ class ItemPhaseIT {
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("conflict_token", before.get("conflict_token"));
             fields.put("status", other);
-            WorklistException refusal = refusalFrom(() -> items.update(scope, item, fields));
+            WorklistException refusal = refusalFrom(() -> items.update(scope, item, fields, ItemLifecycle.CALLER));
             assertThat(refusal.reason())
                 .as("%s belongs to another phase; the phase moves through a transition (D11)",
                     other)
@@ -284,7 +284,7 @@ class ItemPhaseIT {
         Map<String, Object> within = new LinkedHashMap<>();
         within.put("conflict_token", before.get("conflict_token"));
         within.put("status", "planned");
-        Map<String, Object> moved = items.update(scope, item, within).answer();
+        Map<String, Object> moved = items.update(scope, item, within, ItemLifecycle.CALLER).answer();
         assertThat(moved.get("status")).as("a status of the same phase is taken")
             .isEqualTo("planned");
         assertThat(moved.get("phase")).isEqualTo("open");
@@ -298,12 +298,12 @@ class ItemPhaseIT {
         Map<String, Object> closing = new LinkedHashMap<>();
         closing.put("conflict_token", before.get("conflict_token"));
         closing.put("status", "done");
-        assertByState(() -> items.update(scope, item, closing), "a closed status on a draft");
+        assertByState(() -> items.update(scope, item, closing, ItemLifecycle.CALLER), "a closed status on a draft");
 
         Map<String, Object> planned = new LinkedHashMap<>();
         planned.put("conflict_token", before.get("conflict_token"));
         planned.put("status", "planned");
-        Map<String, Object> answer = items.update(scope, item, planned).answer();
+        Map<String, Object> answer = items.update(scope, item, planned, ItemLifecycle.CALLER).answer();
         assertThat(answer.get("status")).isEqualTo("planned");
         assertThat(answer.get("phase")).isEqualTo("draft");
     }
@@ -313,14 +313,14 @@ class ItemPhaseIT {
         UUID item = ItemLifecycle.open(items, scope, Map.of("title", "open"));
         Map<String, Object> read = items.read(scope, item);
 
-        Map<String, Object> echoed = items.update(scope, item, read).answer();
+        Map<String, Object> echoed = items.update(scope, item, read, ItemLifecycle.CALLER).answer();
         assertThat(echoed.get("conflict_token"))
             .as("the phase sent back as it came changes nothing")
             .isEqualTo(read.get("conflict_token"));
 
         Map<String, Object> changed = new LinkedHashMap<>(read);
         changed.put("phase", "closed");
-        WorklistException refusal = refusalFrom(() -> items.update(scope, item, changed));
+        WorklistException refusal = refusalFrom(() -> items.update(scope, item, changed, ItemLifecycle.CALLER));
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
         assertThat(refusal.offenders()).containsExactly("fields.phase");
     }

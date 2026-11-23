@@ -284,6 +284,25 @@ public class ItemRepository {
             .getResultList();
     }
 
+    /**
+     * The cancelled relations only, in the order of {@link #assertedRelations}:
+     * what a read answers with the option for cancelled edges, and counts
+     * otherwise.
+     */
+    @Transactional
+    public List<ItemRelation> cancelledRelations(Item item) {
+        return em.createQuery(
+                "SELECT r FROM ItemRelation r "
+                    + "WHERE r.scopeId = :" + P_SCOPE
+                    + " AND r.fromItemNumber = :" + P_ITEM
+                    + " AND r.status = :" + P_STATUS
+                    + " ORDER BY r.toItemNumber, r.relationTypePk", ItemRelation.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .setParameter(P_STATUS, ItemRelation.WITHDRAWN)
+            .getResultList();
+    }
+
     /** Every external pointer of an item, asserted and withdrawn alike. */
     @Transactional
     public List<ItemReference> referencesOf(Item item) {
@@ -307,6 +326,24 @@ public class ItemRepository {
             .setParameter(P_SCOPE, item.scopeId)
             .setParameter(P_ITEM, item.number)
             .setParameter(P_STATUS, ItemReference.ASSERTED)
+            .getResultList();
+    }
+
+    /**
+     * The cancelled pointers only, in the order they were written: by the
+     * row's surrogate, since a cancelled entry's ordinal orders nothing.
+     */
+    @Transactional
+    public List<ItemReference> cancelledReferences(Item item) {
+        return em.createQuery(
+                "SELECT r FROM ItemReference r "
+                    + "WHERE r.scopeId = :" + P_SCOPE
+                    + " AND r.itemNumber = :" + P_ITEM
+                    + " AND r.status = :" + P_STATUS + " ORDER BY r.pk",
+                ItemReference.class)
+            .setParameter(P_SCOPE, item.scopeId)
+            .setParameter(P_ITEM, item.number)
+            .setParameter(P_STATUS, ItemReference.WITHDRAWN)
             .getResultList();
     }
 
@@ -400,10 +437,10 @@ public class ItemRepository {
     /**
      * Inserts a reference entry. Flushed by the caller, once, after the list.
      *
-     * <p>No write removes one: a list that shrinks is rewritten in place and
-     * its tail is withdrawn — see {@code ItemService} on why the ordinal is
-     * dense. The rows go only with the draft they belong to, in
-     * {@link #delete}.
+     * <p>No write removes one: an entry a list leaves out is cancelled and
+     * stays, and an entry is never rewritten -- see {@code ItemService} on
+     * how a list is matched by content. The rows go only with the draft they
+     * belong to, in {@link #delete}.
      */
     @Transactional
     public void insertReference(ItemReference reference) {

@@ -242,7 +242,7 @@ class ConflictTokenIT {
     private Map<String, Object> renameItem(Map<String, Object> item, String title) {
         return items.update(scope, idOf(item), Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(item))).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(item)), "probe-subject").answer();
     }
 
     /** What the row's {@code conflict_token} column holds, read under the runtime role. */

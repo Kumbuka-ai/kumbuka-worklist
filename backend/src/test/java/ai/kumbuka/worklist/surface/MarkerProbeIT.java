@@ -245,7 +245,12 @@ class MarkerProbeIT {
                 "to_item", other, "type", MARKER)));
         absent(soft, "unrelate an absent edge", mcpRaw("unrelate",
             Map.of("address", item, "conflict_token", tokenOf(item),
-                "to_item", other, "type", RELATION)));
+                "to_item", other, "type", RELATION, "reason", MARKER)));
+        absent(soft, "unrelate with an empty reason", mcpRaw("unrelate",
+            Map.of("address", item, "conflict_token", tokenOf(item),
+                "to_item", other, "type", RELATION, "reason", " ")));
+        absent(soft, "read with a marked option for cancelled edges", mcpRaw("read",
+            Map.of("address", item, "cancelled", MARKER)));
         // The status and the reason the transitions of an item take.
         absent(soft, "close an item into a marked status", mcpRaw("close",
             Map.of("address", item, "conflict_token", tokenOf(item), "status", MARKER)));
@@ -293,6 +298,10 @@ class MarkerProbeIT {
                 "criterion", 1, "status", MARKER, "evidence", "a report")))));
         absent(soft, "a ledger option", given().queryParam("fulfilment", MARKER)
             .when().get(itemPath + "/1").then().extract().asString());
+        absent(soft, "an option for cancelled edges", given().queryParam("cancelled", MARKER)
+            .when().get(itemPath + "/1").then().extract().asString());
+        absent(soft, "an unrelate reason", post(itemPath + "/1:unrelate", Map.of(
+            "to_item", "worklist://" + SCOPE + "/item/2", "type", RELATION, "reason", MARKER)));
         absent(soft, "an edge", post(itemPath + "/1:relate", Map.of("to_item", MARKER,
             "type", MARKER)));
         staleAbsent(soft, "a stale token", given().contentType(ContentType.JSON)
@@ -368,8 +377,10 @@ class MarkerProbeIT {
             }
         } finally {
             // The scope is shared by every case of this class: the ring goes.
-            items.unrelate(SCOPE_ID, a, addressOfB, RELATION, itemToken(a));
-            items.unrelate(SCOPE_ID, b, addressOfA, RELATION, itemToken(b));
+            items.unrelate(SCOPE_ID, a, addressOfB, RELATION, "the ring goes",
+                ItemLifecycle.CALLER, itemToken(a));
+            items.unrelate(SCOPE_ID, b, addressOfA, RELATION, "the ring goes",
+                ItemLifecycle.CALLER, itemToken(b));
         }
         soft.assertAll();
     }

@@ -87,6 +87,14 @@ final class ItemFields {
     static final String ADDENDUM_DELEGATED_IDENTITY = "delegated_identity";
     static final String ADDENDUM_WRITTEN_AT = "written_at";
 
+    /**
+     * The members a cancelled reference or relation carries beside its own
+     * (REA-0011 D15): when it ended, who ended it, and why.
+     */
+    static final String ENDED_AT = "ended_at";
+    static final String ENDED_BY = "ended_by";
+    static final String END_REASON = "end_reason";
+
     /** The keys of the predicates every scope answers (TAR-0002 Annex A1). */
     static final String CLOSED = "closed";
     static final String SUCCESSFUL = "successful";
@@ -276,6 +284,74 @@ final class ItemFields {
             out.add(Collections.unmodifiableMap(normalised));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * How a wanted reference list meets the living one, matched by content
+     * (REA-0011 D15).
+     *
+     * @param kept      per position of the wanted list, the index of the
+     *                  living entry that stands there, or {@code -1} where
+     *                  the position takes a new entry
+     * @param cancelled the indices of the living entries the wanted list
+     *                  leaves out, ascending
+     */
+    record ReferencePlan(List<Integer> kept, List<Integer> cancelled) {
+
+        /**
+         * Whether the wanted list keeps every living entry where it stands and
+         * only adds behind them: the one change an item in progress takes.
+         */
+        boolean appendsOnly() {
+            for (int position = 0; position < kept.size(); position++) {
+                int index = kept.get(position);
+                if (index != (position < livingCount() ? position : -1)) {
+                    return false;
+                }
+            }
+            return cancelled.isEmpty();
+        }
+
+        /** How many living entries the plan was made against. */
+        private int livingCount() {
+            return (int) kept.stream().filter(index -> index >= 0).count() + cancelled.size();
+        }
+    }
+
+    /**
+     * Matches a wanted reference list against the living one by content, the
+     * label and the target together.
+     *
+     * <p>Each wanted entry, in order, takes the first living entry of the same
+     * content that no earlier position took; one with no such entry is new.
+     * A living entry no position took is cancelled. So an entry is never
+     * rewritten into another: a changed label or target is the old entry
+     * cancelled and a new one written. Both lists are in the normalised form
+     * of {@link #references}.
+     */
+    static ReferencePlan referencePlan(List<Map<String, Object>> living,
+            List<Map<String, Object>> wanted) {
+        boolean[] taken = new boolean[living.size()];
+        List<Integer> kept = new ArrayList<>(wanted.size());
+        for (Map<String, Object> entry : wanted) {
+            int match = -1;
+            for (int index = 0; index < living.size() && match < 0; index++) {
+                if (!taken[index] && living.get(index).equals(entry)) {
+                    match = index;
+                }
+            }
+            if (match >= 0) {
+                taken[match] = true;
+            }
+            kept.add(match);
+        }
+        List<Integer> cancelled = new ArrayList<>();
+        for (int index = 0; index < living.size(); index++) {
+            if (!taken[index]) {
+                cancelled.add(index);
+            }
+        }
+        return new ReferencePlan(List.copyOf(kept), List.copyOf(cancelled));
     }
 
     /**

@@ -105,7 +105,7 @@ class MilestoneWorkstreamDecouplingIT {
 
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject").answer();
 
         assertThat(updated.get(Field.MILESTONE_ID.canonicalName()))
             .as("the milestone attaches — the edge that would have vetoed it is retracted")
@@ -130,11 +130,11 @@ class MilestoneWorkstreamDecouplingIT {
         Object goalNumber = milestones.read(scope, goal).get(Field.NUMBER.canonicalName());
         items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject");
 
         Map<String, Object> moved = items.update(scope, itemId, Map.of(
             Field.WORKSTREAM_ID.canonicalName(), backend.token,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject").answer();
 
         assertThat(moved.get(Field.WORKSTREAM_ID.canonicalName()))
             .as("the item moved to backend — the milestone-workstream edge is gone")

@@ -117,7 +117,7 @@ public final class ItemLifecycle {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("attributes", attributes);
         fields.put("conflict_token", read.get("conflict_token"));
-        return items.update(scope, item, fields).answer();
+        return items.update(scope, item, fields, CALLER).answer();
     }
 
     /** The current conflict token of an item. */

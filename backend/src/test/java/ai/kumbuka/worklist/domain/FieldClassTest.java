@@ -70,11 +70,35 @@ class FieldClassTest {
             .isEqualTo(FieldClass.PLANNING);
     }
 
-    /** References and relations keep the rules they had; theirs are a step of their own. */
+    /**
+     * References and relations belong to no class: they are appended and
+     * cancelled rather than changed (REA-0011 D15), by a row of their own.
+     */
     @Test
-    void references_and_relations_belong_to_no_class_yet() {
+    void references_and_relations_belong_to_no_class() {
         assertThat(FieldClass.of(Field.REFERENCES)).isEmpty();
         assertThat(FieldClass.of(Field.RELATIONS)).isEmpty();
+    }
+
+    /** TAR-0002 Annex A4, references and relations: append in every phase but closed. */
+    @Test
+    void references_and_relations_are_appended_in_draft_open_and_in_progress() {
+        assertThat(FieldClass.edgeAppendOpen(Phase.DRAFT)).isTrue();
+        assertThat(FieldClass.edgeAppendOpen(Phase.OPEN)).isTrue();
+        assertThat(FieldClass.edgeAppendOpen(Phase.IN_PROGRESS)).isTrue();
+        assertThat(FieldClass.edgeAppendOpen(Phase.CLOSED)).isFalse();
+    }
+
+    /**
+     * TAR-0002 Annex A4 and B20, concept section 4: cancelled in draft and
+     * open, and in progress nothing is cancelled; a closed item takes nothing.
+     */
+    @Test
+    void references_and_relations_are_cancelled_in_draft_and_open_alone() {
+        assertThat(FieldClass.edgeCancelOpen(Phase.DRAFT)).isTrue();
+        assertThat(FieldClass.edgeCancelOpen(Phase.OPEN)).isTrue();
+        assertThat(FieldClass.edgeCancelOpen(Phase.IN_PROGRESS)).isFalse();
+        assertThat(FieldClass.edgeCancelOpen(Phase.CLOSED)).isFalse();
     }
 
     /** Annex A1: addendum in open and in_progress, in draft and closed not. */

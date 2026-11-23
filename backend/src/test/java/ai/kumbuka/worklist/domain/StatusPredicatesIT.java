@@ -295,7 +295,7 @@ class StatusPredicatesIT {
         UUID item = create("echoed", "open");
         Map<String, Object> read = items.read(scope, item);
 
-        Map<String, Object> echoed = items.update(scope, item, read).answer();
+        Map<String, Object> echoed = items.update(scope, item, read, CALLER).answer();
         assertThat(echoed.get("conflict_token"))
             .as("the predicates are read-only and an unchanged echo changes nothing")
             .isEqualTo(read.get("conflict_token"));
@@ -303,7 +303,7 @@ class StatusPredicatesIT {
         Map<String, Object> changed = new LinkedHashMap<>(read);
         changed.put("predicates", Map.of("closed", true, "actionable", true,
             "in_progress", false));
-        WorklistException refusal = refusalFrom(() -> items.update(scope, item, changed));
+        WorklistException refusal = refusalFrom(() -> items.update(scope, item, changed, CALLER));
         assertThat(refusal.reason())
             .as("a predicate is changed through the status, never set (REA-0011 D1)")
             .isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
@@ -349,7 +349,7 @@ class StatusPredicatesIT {
                 : Map.of("priority", "low", "severity", "minor").entrySet()) {
             WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
                 "conflict_token", before.get("conflict_token"),
-                valued.getKey(), valued.getValue())));
+                valued.getKey(), valued.getValue()), CALLER));
             assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
             assertThat(refusal.offenders()).containsExactly("fields." + valued.getKey());
         }
@@ -357,7 +357,7 @@ class StatusPredicatesIT {
             .as("nothing was written")
             .isEqualTo(before);
 
-        Map<String, Object> echoed = items.update(scope, item, before).answer();
+        Map<String, Object> echoed = items.update(scope, item, before, CALLER).answer();
         assertThat(echoed.get("conflict_token"))
             .as("the read answer, which names neither, goes back as it came")
             .isEqualTo(before.get("conflict_token"));
@@ -398,7 +398,7 @@ class StatusPredicatesIT {
             .containsEntry("priority", "medium");
         WorklistException severity = refusalFrom(() -> items.update(scope, item, Map.of(
             "conflict_token", items.read(scope, item).get("conflict_token"),
-            "severity", "major")));
+            "severity", "major"), CALLER));
         assertThat(severity.offenders())
             .as("each of the two is declared on its own")
             .containsExactly("fields.severity");
@@ -574,7 +574,7 @@ class StatusPredicatesIT {
     private Map<String, Object> update(UUID item, Map<String, Object> fields) {
         Map<String, Object> arguments = new LinkedHashMap<>(fields);
         arguments.put("conflict_token", items.read(scope, item).get("conflict_token"));
-        return items.update(scope, item, arguments).answer();
+        return items.update(scope, item, arguments, CALLER).answer();
     }
 
     @SuppressWarnings("unchecked")

@@ -87,7 +87,7 @@ class AttributeFormsIT {
 
         Map<String, Object> again = items.update(scope, item, Map.of(
             Field.ATTRIBUTES.canonicalName(), attributesOf(read),
-            Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName()))).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName())), "probe-subject").answer();
         assertThat(again.get(Field.CONFLICT_TOKEN.canonicalName()))
             .as("the names the answer carried name the same options, so nothing changed and "
                 + "the token did not rotate")
