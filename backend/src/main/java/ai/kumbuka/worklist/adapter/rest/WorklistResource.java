@@ -257,8 +257,10 @@ public class WorklistResource {
 
     /**
      * GET at item depth: {@code read}, with the option of an item's
-     * fulfilment ledger as the query parameter {@code ?fulfilment=}, read by
-     * the verb surface as the MCP argument is.
+     * fulfilment ledger as the query parameter {@code ?fulfilment=} and the
+     * option for its cancelled references and relations as
+     * {@code ?cancelled=}, each read by the verb surface as the MCP argument
+     * is.
      */
     @GET
     @Path("{selector}/{id}")
@@ -266,9 +268,12 @@ public class WorklistResource {
                          @PathParam("selector") String selector,
                          @PathParam("id") String id,
                          @QueryParam(SurfaceDeclaration.FULFILMENT_ARGUMENT)
-                         @Nullable String fulfilment) {
+                         @Nullable String fulfilment,
+                         @QueryParam(SurfaceDeclaration.CANCELLED_ARGUMENT)
+                         @Nullable String cancelled) {
         calling(READ);
-        return ok(scope, verbs.read(caller.subject(), scope, selector, id, fulfilment));
+        return ok(scope, verbs.read(caller.subject(), scope, selector, id, fulfilment,
+            cancelled));
     }
 
     /** The field write. PATCH with {@code If-Match}; a stale token is 412. */
@@ -353,8 +358,11 @@ public class WorklistResource {
 
             case RELATE -> ok(scope, verbs.relate(subject, scope, selector, id, token,
                 edge(arguments(body, TO_ITEM, TYPE)).orElse(null)));
-            case UNRELATE -> ok(scope, verbs.unrelate(subject, scope, selector, id, token,
-                edge(arguments(body, TO_ITEM, TYPE)).orElse(null)));
+            case UNRELATE -> {
+                ArgumentsPayload given = arguments(body, TO_ITEM, TYPE, REASON);
+                yield ok(scope, verbs.unrelate(subject, scope, selector, id, token,
+                    edge(given).orElse(null), given.text(REASON).orElse(null)));
+            }
 
             case TAG_ATTACH -> ok(scope, verbs.tagAttach(subject, scope, selector, id,
                 arguments(body, TAG).text(TAG).orElse(null)));

@@ -350,14 +350,14 @@ class FulfilmentLedgerIT {
         for (Map<String, Object> answer : List.of(read, whole)) {
             Map<String, Object> echoed = items.update(scope, item, Map.of(
                 "conflict_token", answer.get("conflict_token"),
-                "fulfilment", answer.get("fulfilment"))).answer();
+                "fulfilment", answer.get("fulfilment")), CALLER).answer();
             assertThat(echoed.get("conflict_token"))
                 .as("the ledger sent back as a read answered it is accepted and writes nothing")
                 .isEqualTo(read.get("conflict_token"));
         }
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
-            "conflict_token", read.get("conflict_token"), "fulfilment", List.of())));
+            "conflict_token", read.get("conflict_token"), "fulfilment", List.of()), CALLER));
         assertThat(refusal.reason())
             .as("a ledger of another value is a read-only field set: refused")
             .isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
@@ -472,7 +472,7 @@ class FulfilmentLedgerIT {
     private Map<String, Object> update(UUID item, Map<String, Object> fields) {
         Map<String, Object> arguments = new LinkedHashMap<>(fields);
         arguments.put("conflict_token", items.read(scope, item).get("conflict_token"));
-        return items.update(scope, item, arguments).answer();
+        return items.update(scope, item, arguments, CALLER).answer();
     }
 
     /** The address of criterion {@code k} of an item, in the form the item answers. */

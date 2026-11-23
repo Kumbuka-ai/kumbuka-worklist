@@ -34,9 +34,23 @@ import java.util.Set;
  * open calls of an item read {@link #addendumOpen}, which is derived from the
  * same table: a call an answer names is a call its object takes.
  *
- * <p>The references and the relations of an item belong to no class here:
- * their rules per phase are a step of their own, and until it arrives they
- * are written as before in every phase but closed.
+ * <p>The references and the relations of an item belong to no class: they
+ * are not changed in place but appended and cancelled (REA-0011 D15), and
+ * their row of the table is TAR-0002 Annex A4's, which this class holds
+ * beside the three:
+ *
+ * <table>
+ *   <caption>Annex A4, references and relations</caption>
+ *   <tr><th>act</th><th>draft</th><th>open</th><th>in_progress</th><th>closed</th></tr>
+ *   <tr><td>append</td><td>yes</td><td>yes</td><td>yes</td><td>no</td></tr>
+ *   <tr><td>cancel</td><td>yes</td><td>yes</td><td>no</td><td>no</td></tr>
+ * </table>
+ *
+ * <p>{@code update}, {@code relate} and {@code unrelate} read
+ * {@link #edgeAppendOpen} and {@link #edgeCancelOpen} to refuse by state, and
+ * the open calls of an item read them to name {@code relate} and
+ * {@code unrelate}: whoever needs to cancel on an item in progress returns
+ * it first.
  */
 public enum FieldClass {
 
@@ -91,5 +105,30 @@ public enum FieldClass {
      */
     public static boolean addendumOpen(Phase phase) {
         return !CONTENT.writableIn(phase) && PLANNING.writableIn(phase);
+    }
+
+    /** The phases in which an item takes a new reference or relation (Annex A4). */
+    private static final Set<Phase> EDGE_APPEND =
+        EnumSet.of(Phase.DRAFT, Phase.OPEN, Phase.IN_PROGRESS);
+
+    /** The phases in which an item's reference or relation is cancelled (Annex A4). */
+    private static final Set<Phase> EDGE_CANCEL = EnumSet.of(Phase.DRAFT, Phase.OPEN);
+
+    /**
+     * Whether an item in this phase takes a new reference or relation, or an
+     * edge asserted again: every phase but closed.
+     */
+    public static boolean edgeAppendOpen(Phase phase) {
+        return EDGE_APPEND.contains(phase);
+    }
+
+    /**
+     * Whether a reference or relation of an item in this phase may be
+     * cancelled, or an active reference moved in the list: a draft and an
+     * open item. In progress only appending is open, and a closed item takes
+     * nothing.
+     */
+    public static boolean edgeCancelOpen(Phase phase) {
+        return EDGE_CANCEL.contains(phase);
     }
 }

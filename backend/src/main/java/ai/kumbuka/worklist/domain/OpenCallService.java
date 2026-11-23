@@ -37,8 +37,9 @@ import java.util.function.LongFunction;
  * {@link Milestone#open}, {@link MembershipService#plannable},
  * {@link IterationService#promotable}, {@link PlanningService#within},
  * {@link ItemService#submittable}, {@link ItemService#startable},
- * {@link ItemService#firstOf}, {@link FieldClass#addendumOpen}, and the
- * membership row {@code plan} refuses as
+ * {@link ItemService#firstOf}, {@link FieldClass#addendumOpen},
+ * {@link FieldClass#edgeAppendOpen}, {@link FieldClass#edgeCancelOpen}, and
+ * the membership row {@code plan} refuses as
  * present. So a call named here is never refused for the object's state: a
  * second table would be one the verbs drift away from.
  *
@@ -52,15 +53,18 @@ import java.util.function.LongFunction;
  *       {@code tag_detach}, {@code addendum}, {@code book}, {@code start}
  *       where it may be started, {@code close}, and {@code plan} into each
  *       open iteration it is no member of and that has room; an item in
- *       progress the same, with {@code return} in place of {@code start}; a
+ *       progress the same, with {@code return} in place of {@code start} and
+ *       without {@code unrelate}, since in progress references and relations
+ *       are only appended (REA-0011 D15, Annex A1); a
  *       closed item {@code read} alone. A transition into a phase the scope
  *       declares no status of is not named, since it is refused. A closed
  *       item still takes {@code book}, and does not name it: that call is
  *       open to the identity concluding an instance, which this service does
  *       not yet recognise (Annex A1). {@code addendum} is named exactly where
  *       {@link FieldClass#addendumOpen} admits it, the function the call
- *       itself is refused on. The narrower calls of the phase in progress
- *       come with a later step (REA-0011 S11);</li>
+ *       itself is refused on; {@code relate} and {@code unrelate} exactly
+ *       where {@link FieldClass#edgeAppendOpen} and
+ *       {@link FieldClass#edgeCancelOpen} admit them;</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
  *       {@code plan} at its own address while it has room, and
  *       {@code advance} at the iteration collection while an open iteration
@@ -287,10 +291,15 @@ public class OpenCallService extends PlanningService {
                 return new Open(phase.token(), List.of(at(Verb.READ, Selector.ITEM, number)));
             }
             List<Call> calls = new ArrayList<>(List.of(
-                at(Verb.READ, Selector.ITEM, number), at(Verb.UPDATE, Selector.ITEM, number),
-                at(Verb.RELATE, Selector.ITEM, number), at(Verb.UNRELATE, Selector.ITEM, number),
-                at(Verb.TAG_ATTACH, Selector.ITEM, number),
-                at(Verb.TAG_DETACH, Selector.ITEM, number)));
+                at(Verb.READ, Selector.ITEM, number), at(Verb.UPDATE, Selector.ITEM, number)));
+            if (FieldClass.edgeAppendOpen(phase)) {
+                calls.add(at(Verb.RELATE, Selector.ITEM, number));
+            }
+            if (FieldClass.edgeCancelOpen(phase)) {
+                calls.add(at(Verb.UNRELATE, Selector.ITEM, number));
+            }
+            calls.add(at(Verb.TAG_ATTACH, Selector.ITEM, number));
+            calls.add(at(Verb.TAG_DETACH, Selector.ITEM, number));
             if (phase == Phase.DRAFT) {
                 if (ItemService.submittable(item)) {
                     calls.add(at(Verb.SUBMIT, Selector.ITEM, number));

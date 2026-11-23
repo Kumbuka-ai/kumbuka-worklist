@@ -87,7 +87,7 @@ class ItemMilestoneAssignmentIT {
 
         Map<String, Object> answer = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject").answer();
         // The projection carries the milestone's NUMBER — the wire form
         // fixed in Sprint 180.4 — and the write path takes the same.
         assertThat(answer.get(Field.MILESTONE_ID.canonicalName()))
@@ -102,7 +102,7 @@ class ItemMilestoneAssignmentIT {
         Long markerNumber = numberOf(markerId);
         answer = items.update(scope, secondItem, Map.of(
             Field.MILESTONE_ID.canonicalName(), markerNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(secondItem))).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(secondItem)), "probe-subject").answer();
         assertThat(answer.get(Field.MILESTONE_ID.canonicalName())).isEqualTo(markerNumber);
     }
 
@@ -114,7 +114,7 @@ class ItemMilestoneAssignmentIT {
 
         items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject");
         String settled = tokenOf(itemId);
 
         // The same number again is not a change. Nothing is written, the
@@ -122,7 +122,7 @@ class ItemMilestoneAssignmentIT {
         // rather than refused.
         items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), settled));
+            Field.CONFLICT_TOKEN.canonicalName(), settled), "probe-subject");
         assertThat(tokenOf(itemId))
             .as("a no-op assignment writes nothing")
             .isEqualTo(settled);
@@ -131,7 +131,7 @@ class ItemMilestoneAssignmentIT {
         // regular state — the assignment is optional.
         Map<String, Object> answer = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "",
-            Field.CONFLICT_TOKEN.canonicalName(), settled)).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), settled), "probe-subject").answer();
         assertThat(answer.get(Field.MILESTONE_ID.canonicalName())).isNull();
     }
 
@@ -161,7 +161,7 @@ class ItemMilestoneAssignmentIT {
         // relative, so no such probe exists at the wire level any more.
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), foreignNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject"));
 
         assertThat(refusal.reason())
             .as("a milestone number that names nothing in this scope is a typed refusal — "
@@ -178,7 +178,7 @@ class ItemMilestoneAssignmentIT {
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), 999_999L,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.MILESTONE_UNKNOWN);
         assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.path());
@@ -194,7 +194,7 @@ class ItemMilestoneAssignmentIT {
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), goalNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject"));
 
         assertThat(refusal.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(refusal.offenders()).containsExactly(Field.MILESTONE_ID.path());
@@ -218,7 +218,7 @@ class ItemMilestoneAssignmentIT {
 
         WorklistException zeroNumber = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), 0,
-            Field.CONFLICT_TOKEN.canonicalName(), token)));
+            Field.CONFLICT_TOKEN.canonicalName(), token), "probe-subject"));
         assertThat(zeroNumber.reason())
             .as("zero is not a milestone number — the scope allocates from one, so "
                 + "zero cannot have been handed out")
@@ -227,13 +227,13 @@ class ItemMilestoneAssignmentIT {
 
         WorklistException negativeNumber = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), -1L,
-            Field.CONFLICT_TOKEN.canonicalName(), token)));
+            Field.CONFLICT_TOKEN.canonicalName(), token), "probe-subject"));
         assertThat(negativeNumber.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(negativeNumber.offenders()).containsExactly(Field.MILESTONE_ID.path());
 
         WorklistException negativeString = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "-5",
-            Field.CONFLICT_TOKEN.canonicalName(), token)));
+            Field.CONFLICT_TOKEN.canonicalName(), token), "probe-subject"));
         assertThat(negativeString.reason())
             .as("the String path parses first and refuses second — a value that parses "
                 + "to a non-positive number is the same refusal as the Number path, so "
@@ -243,7 +243,7 @@ class ItemMilestoneAssignmentIT {
 
         WorklistException unparseable = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "abc",
-            Field.CONFLICT_TOKEN.canonicalName(), token)));
+            Field.CONFLICT_TOKEN.canonicalName(), token), "probe-subject"));
         assertThat(unparseable.reason())
             .as("a value that does not parse as a number at all is a form refusal — "
                 + "the message names the field so a caller writing several at once knows "
@@ -258,7 +258,7 @@ class ItemMilestoneAssignmentIT {
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), "milestone/1",
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject"));
 
         assertThat(refusal.reason())
             .as("a value that is not a number is a form refusal — the wire form fixed "
@@ -270,7 +270,7 @@ class ItemMilestoneAssignmentIT {
         // no longer part of the wire form.
         WorklistException uuidShape = refusalFrom(() -> items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), UUID.randomUUID().toString(),
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))));
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject"));
         assertThat(uuidShape.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(uuidShape.offenders()).containsExactly(Field.MILESTONE_ID.path());
     }

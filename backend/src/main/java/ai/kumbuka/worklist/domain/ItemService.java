@@ -68,7 +68,11 @@ import java.util.UUID;
  * planning in every phase but closed. A change to a frozen class is refused
  * by state before anything is written; a value sent back as it is held is no
  * change and is taken. A frozen item is corrected by an addendum, which
- * {@link AddendumService} writes beside it.
+ * {@link AddendumService} writes beside it. References and relations are
+ * appended and cancelled, never rewritten or deleted (REA-0011 D15): in a
+ * draft and an open item both, in progress appended alone
+ * ({@link FieldClass#edgeCancelOpen}), and a read answers the active ones
+ * with a count of the cancelled ones.
  *
  * <p>Every transition is open to every caller with the write right of the
  * scope (REA-0011 section 4); the reason {@code return} and {@code close}
@@ -189,17 +193,50 @@ public class ItemService {
     }
 
     /**
+     * How much of an item's cancelled references and relations a read
+     * answers (REA-0011 D15).
+     */
+    public enum Cancelled {
+        /** A count of each kind: what every answer carries. */
+        COUNT,
+        /** The count and every cancelled entry, under keys of their own: the option of {@code read}. */
+        ALL
+    }
+
+    /**
      * One item, as the canonical field map, with the fulfilment ledger as
      * the option asks: the latest entry per criterion and instance, or the
      * whole ledger in booking order.
      */
     @Transactional
     public Map<String, Object> read(UUID scopeId, UUID itemId, Ledger ledger) {
+        return read(scopeId, itemId, ledger, Cancelled.COUNT);
+    }
+
+    /**
+     * One item, as the canonical field map, with the fulfilment ledger and
+     * the cancelled edges as the two options ask.
+     *
+     * <p>Every answer carries the active references and relations alone, and
+     * a count of the cancelled ones of each kind. With {@link Cancelled#ALL}
+     * the cancelled ones are answered too, under keys of their own
+     * ({@link Field#CANCELLED_REFERENCES}, {@link Field#CANCELLED_RELATIONS})
+     * and never mixed into the active lists, so that the answer sent back by
+     * {@code update} writes nothing.
+     */
+    @Transactional
+    public Map<String, Object> read(UUID scopeId, UUID itemId, Ledger ledger,
+            Cancelled cancelled) {
         Item item = require(scopeId, itemId);
         Map<String, Object> fields = project(item);
         if (ledger == Ledger.ALL) {
             fields.put(Field.FULFILMENT.canonicalName(),
                 fulfilmentOf(item, slugOf(item.scopeId), Ledger.ALL));
+        }
+        if (cancelled == Cancelled.ALL) {
+            fields.put(Field.CANCELLED_REFERENCES.canonicalName(), cancelledReferences(item));
+            fields.put(Field.CANCELLED_RELATIONS.canonicalName(),
+                cancelledRelations(item, slugOf(item.scopeId)));
         }
         return fields;
     }
@@ -409,7 +446,7 @@ public class ItemService {
         rest.remove(Field.TITLE);
         rest.remove(Field.STATUS);
         rest.remove(Field.WORKSTREAM_ID);
-        if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest, true)) {
+        if (!rest.isEmpty() && applyEffectiveChanges(item, project(item), rest, true, creator)) {
             items.flush();
         }
 
@@ -432,9 +469,17 @@ public class ItemService {
      * in progress, is refused with {@code TRANSITION_REFUSED} before anything
      * is written, and the refusal names the open calls -- {@code addendum}
      * among them. A field sent back with the value it holds is no change and
-     * is taken in every phase, so a read answer may go back as it came. The
-     * references and the relations are written as before in every phase but
-     * closed.
+     * is taken in every phase, so a read answer may go back as it came.
+     *
+     * <p><strong>References and relations are appended and cancelled, never
+     * rewritten</strong> (REA-0011 D15, TAR-0002 Annex A4;
+     * {@link FieldClass#edgeCancelOpen}). In a draft and an open item a
+     * reference or a relation the list leaves out is cancelled, with the
+     * service's time and the caller as its end, and no reason, which an
+     * update does not carry. In progress the lists may only grow: one that
+     * leaves out, changes or moves an active entry is refused by state before
+     * anything is written, and the refusal names the open calls --
+     * {@code return} among them, which reopens cancelling.
      *
      * <p><strong>A write that changes nothing writes nothing.</strong> Not a
      * timestamp, not a rotated token, not a statement. The comparison below
@@ -447,10 +492,13 @@ public class ItemService {
      * <p>The conflict token travels IN the field map, under
      * {@link Field#CONFLICT_TOKEN}, which is what makes the round trip work:
      * the answer a caller read already carries it.
+     *
+     * @param actor the calling subject, recorded as the end of what the write
+     *              cancels
      */
     @Transactional
     public Written<Map<String, Object>, Item> update(UUID scopeId, UUID itemId,
-            Map<String, ?> arguments) {
+            Map<String, ?> arguments, String actor) {
         Map<Field, Object> given = Field.resolve(Addressed.ITEM, arguments);
         Item item = requireLocked(scopeId, itemId);
 
@@ -458,8 +506,10 @@ public class ItemService {
         refuseClosed(item);
 
         Map<String, Object> current = project(item);
-        refuseUnsettableChanges(current, withoutEchoedLedger(item, given));
+        refuseUnsettableChanges(current, withoutEchoedCancelled(item,
+            withoutEchoedLedger(item, given)));
         refuseFrozenChanges(item, current, given);
+        refuseCancelling(item, given);
 
         Map<Field, Object> settable = new EnumMap<>(Field.class);
         given.forEach((field, value) -> {
@@ -468,7 +518,7 @@ public class ItemService {
             }
         });
 
-        boolean changed = applyEffectiveChanges(item, current, settable, false);
+        boolean changed = applyEffectiveChanges(item, current, settable, false, actor);
         if (!changed) {
             // The whole point. No statement is issued, so the modification
             // date and the token stay where they are, and the change trail
@@ -491,8 +541,11 @@ public class ItemService {
      *
      * <p>Idempotent: asserting an already-asserted edge changes nothing and
      * writes nothing, exactly as the whole-set rewrite would treat the same
-     * edge in a longer list. Reasserting a WITHDRAWN edge moves it back to
-     * asserted; the row was already there, and no row is created twice.
+     * edge in a longer list. Asserting a cancelled edge again makes it active
+     * on the row that was already there, since the key (from, to, type) admits
+     * no second one; its end columns stay as the trace of its last
+     * cancellation (TAR-0002 B5), and a read answers them for a cancelled edge
+     * alone. Open in every phase but closed ({@link FieldClass#edgeAppendOpen}).
      *
      * <p>The conflict token this verb presents is the SOURCE item's, because
      * the source is the aggregate being written. The target is looked up
@@ -519,7 +572,9 @@ public class ItemService {
             String toItemAddress, String relationTypeName, String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
-        refuseClosed(item);
+        if (!FieldClass.edgeAppendOpen(item.phase())) {
+            throw transitionRefused();
+        }
 
         Item target = resolveItemAddress(scopeId, toItemAddress, TO_ITEM);
         if (item.id.equals(target.id)) {
@@ -594,26 +649,45 @@ public class ItemService {
     }
 
     /**
-     * Withdraw one edge from this item to another, of a declared type.
+     * Cancel one edge from this item to another, of a declared type
+     * (REA-0011 D15).
      *
-     * <p>Withdrawal, not deletion: the row remains and its status moves. That
+     * <p>Cancellation, not deletion: the row remains, its status moves, and it
+     * records the service's time, the caller and the reason as its end. That
      * matches {@link #applyRelations}; an edge is deleted only with a draft
-     * {@link #discard} deletes.
+     * {@link #discard} deletes. A read then answers the edge only with the
+     * option for cancelled edges, and as a count otherwise, and a cancelled
+     * blocking edge counts nowhere ({@link #validate}).
+     *
+     * <p>Open on a draft and an open item ({@link FieldClass#edgeCancelOpen}):
+     * an item in progress refuses it by state, and its refusal names the open
+     * calls, {@code return} among them (REA-0011 D8). A closed item takes no
+     * write, so the edge of a {@code duplicate_of} that closed it stays, and
+     * nothing reopens the item (REA-0011 D18).
      *
      * <p>An unknown edge answers {@code RELATION_UNKNOWN}, and an
-     * already-withdrawn one answers the same way — from a caller's side those
+     * already-cancelled one answers the same way — from a caller's side those
      * are one state, and the refusal names the triple so the caller knows
      * which of the three parts they got wrong.
      *
-     * <p>A closed item takes no write, so the edge of a {@code duplicate_of}
-     * that closed it stays, and nothing reopens the item (REA-0011 D18).
+     * @param reason why the edge ends; the surface refuses a call without one
+     *               before this is entered
+     * @param actor  the calling subject, recorded as the one who ended it
      */
     @Transactional
     public Written<Map<String, Object>, RelationWrite> unrelate(UUID scopeId, UUID itemId,
-            String toItemAddress, String relationTypeName, String conflictToken) {
+            String toItemAddress, String relationTypeName, String reason, String actor,
+            String conflictToken) {
         Item item = requireLocked(scopeId, itemId);
         item.requireCurrentToken(conflictToken);
-        refuseClosed(item);
+        if (!FieldClass.edgeCancelOpen(item.phase())) {
+            throw transitionRefused();
+        }
+        String why = reason.strip();
+        if (why.isEmpty()) {
+            throw new WorklistException(WorklistException.Reason.INVALID_VALUE,
+                List.of(REASON_ARGUMENT));
+        }
 
         Item target = resolveItemAddress(scopeId, toItemAddress, TO_ITEM);
         RelationType type = resolveRelationTypeByName(scopeId, relationTypeName, TYPE);
@@ -624,10 +698,16 @@ public class ItemService {
                 WorklistException.Reason.RELATION_UNKNOWN,
                 List.of(TO_ITEM, TYPE)));
 
-        edge.status = ItemRelation.WITHDRAWN;
-        item.stamp(clock.instant());
+        java.time.Instant now = clock.instant();
+        item.stamp(now);
+        edge.cancel(microsOf(now), actor, why);
         items.flushAndRefresh(item);
         return new Written<>(project(item), new RelationWrite(item, target));
+    }
+
+    /** An instant at the microsecond the timestamp columns store (C20.1). */
+    private static java.time.Instant microsOf(java.time.Instant instant) {
+        return instant.truncatedTo(ChronoUnit.MICROS);
     }
 
     private Optional<ItemRelation> findEdge(Item from, Long toItemNumber, Long relationTypePk) {
@@ -949,8 +1029,9 @@ public class ItemService {
     /**
      * Every cycle over blocking edges in a scope, as a list of item ids.
      *
-     * <p>DFS from every item, following only edges whose relation type is
-     * {@code blocks}. A cycle is a return to a node already on the current
+     * <p>DFS from every item, following only active edges whose relation type
+     * is {@code blocks}: a cancelled edge counts nowhere (REA-0011 D15), and
+     * this walk is the one place the service evaluates blocking edges. A cycle is a return to a node already on the current
      * stack, and it is reported as the sequence from that node around to it —
      * the redundant closing node is left off, because the cycle is the ring
      * rather than a walk.
@@ -1074,6 +1155,36 @@ public class ItemService {
     }
 
     /**
+     * Refuse by state a reference or relation list that would cancel, change
+     * or move an active entry where the item's phase only appends
+     * ({@link FieldClass#edgeCancelOpen}; REA-0011 D15, TAR-0002 Annex A4),
+     * before anything is written.
+     *
+     * <p>A list that keeps every active entry where it stands and adds behind
+     * them is taken, and so is a read answer sent back as it came, which adds
+     * nothing. A {@code null} is absent (C7.4) and changes nothing.
+     */
+    private void refuseCancelling(Item item, Map<Field, Object> given) {
+        if (FieldClass.edgeCancelOpen(item.phase())) {
+            return;
+        }
+        Object references = given.get(Field.REFERENCES);
+        if (references != null && !ItemFields.referencePlan(assertedReferences(item),
+                ItemFields.references(references)).appendsOnly()) {
+            throw transitionRefused();
+        }
+        Object relations = given.get(Field.RELATIONS);
+        if (relations != null) {
+            List<ResolvedEdge> wanted = resolveEdges(item, ItemFields.relations(relations)).edges();
+            for (ItemRelation edge : items.assertedRelations(item)) {
+                if (!wanted.contains(new ResolvedEdge(edge.relationTypePk, edge.toItemNumber))) {
+                    throw transitionRefused();
+                }
+            }
+        }
+    }
+
+    /**
      * Whether a field's value differs from the one held, normalised as the
      * write normalises it: text trimmed, the empty text the absence of one,
      * the criteria by identifier and text.
@@ -1175,6 +1286,31 @@ public class ItemService {
     }
 
     /**
+     * The given fields without the cancelled references and relations where
+     * they are sent back as the option of {@code read} answers them.
+     *
+     * <p>Every answer carries their counts, and only a read with the option
+     * carries the entries; a read answer sent back is accepted in either
+     * form, as the ledger is. A list that differs from the one the item holds
+     * is left in, and refused as a read-only field carrying a different value.
+     */
+    private Map<Field, Object> withoutEchoedCancelled(Item item, Map<Field, Object> given) {
+        Map<Field, Object> rest = new EnumMap<>(Field.class);
+        rest.putAll(given);
+        if (rest.containsKey(Field.CANCELLED_REFERENCES)
+                && ItemFields.unchangedAsText(cancelledReferences(item),
+                    rest.get(Field.CANCELLED_REFERENCES))) {
+            rest.remove(Field.CANCELLED_REFERENCES);
+        }
+        if (rest.containsKey(Field.CANCELLED_RELATIONS)
+                && ItemFields.unchangedAsText(cancelledRelations(item, slugOf(item.scopeId)),
+                    rest.get(Field.CANCELLED_RELATIONS))) {
+            rest.remove(Field.CANCELLED_RELATIONS);
+        }
+        return rest;
+    }
+
+    /**
      * Apply the settable fields that actually differ, and report whether any
      * did.
      *
@@ -1192,12 +1328,15 @@ public class ItemService {
      *
      * @param creating whether the item is being created, which decides how a
      *                 {@code duplicate_of} edge in the relations is refused
+     * @param actor    the calling subject, recorded as the end of a reference
+     *                 or relation the write cancels
      */
     private boolean applyEffectiveChanges(Item item, Map<String, Object> current,
-            Map<Field, Object> settable, boolean creating) {
+            Map<Field, Object> settable, boolean creating, String actor) {
         boolean changed = false;
         for (Map.Entry<Field, Object> entry : settable.entrySet()) {
-            if (applyOne(item, current, entry.getKey(), entry.getValue(), creating) && !changed) {
+            if (applyOne(item, current, entry.getKey(), entry.getValue(), creating, actor)
+                    && !changed) {
                 item.stamp(clock.instant());
                 changed = true;
             }
@@ -1206,7 +1345,7 @@ public class ItemService {
     }
 
     private boolean applyOne(Item item, Map<String, Object> current, Field field,
-            @Nullable Object value, boolean creating) {
+            @Nullable Object value, boolean creating, String actor) {
         Object held = current.get(field.canonicalName());
         switch (field) {
             case TITLE -> {
@@ -1244,10 +1383,10 @@ public class ItemService {
                 return applyAttributes(item, ItemFields.attributes(value));
             }
             case REFERENCES -> {
-                return applyReferences(item, ItemFields.references(value));
+                return applyReferences(item, value, actor);
             }
             case RELATIONS -> {
-                return applyRelations(item, ItemFields.relations(value), creating);
+                return applyRelations(item, value, creating, actor);
             }
             case CONTRIBUTOR -> {
                 List<String> contributors = ItemFields.contributors(value);
@@ -1712,77 +1851,114 @@ public class ItemService {
     }
 
     /**
-     * Set the reference list to exactly the given entries, in the given order.
+     * Set the active references to exactly the given entries, in the given
+     * order, by cancelling and appending and never by rewriting (REA-0011
+     * D15).
      *
-     * <p><strong>The LIVING entries are what this walks, position by
-     * position.</strong> Entry i of the wanted list is matched against the
-     * i-th living row: its label, its target and its ordinal are moved to
-     * where they should be. A wanted list longer than the living one gets
-     * fresh rows for the tail; a shorter one withdraws the living rows beyond
-     * its end.
+     * <p><strong>An entry is matched by its content, never by its
+     * position.</strong> Each wanted entry takes the living row of the same
+     * label and target ({@link ItemFields#referencePlan}); one with no such
+     * row is a new row; a living row no entry takes is cancelled, with the
+     * service's time and the caller as its end. The label and the target of
+     * a row are never overwritten, so an entry taken out of the middle of a
+     * list cancels that entry alone and leaves the others as they were. The
+     * ordinals of the living rows follow the wanted order.
      *
-     * <p><strong>A withdrawn row is never touched again.</strong> Not its
-     * content, not its ordinal, not its status. That is the difference from
-     * walking by ordinal, which would find the tombstone sitting at the
-     * position a growing list needs and either collide with it or overwrite
-     * it — and an overwritten tombstone is a free slot that reads like
-     * preservation.
+     * <p><strong>A cancelled row is never touched again.</strong> Not its
+     * content, not its ordinal, not its status. A wanted entry equal to a
+     * cancelled one is a new row beside it.
      *
-     * <p>The two loops below cannot both do work in one call: a wanted list is
-     * either longer than the living one or shorter. So no ordinal is ever
-     * withdrawn and re-issued within a single flush, and the partial unique
-     * index never sees the two rows at once.
+     * <p><strong>Ordered in four flushes</strong>, because the partial unique
+     * index of V20 holds one living row per ordinal at every statement, and a
+     * flush writes its inserts before its updates. The cancelled rows leave
+     * the index first; a living row that moves is parked above every ordinal
+     * in use, then set to its place; the new rows are inserted last, into
+     * places no living row holds any more. A list sent back as it is held
+     * writes nothing.
+     *
+     * @param value the references as the caller sent them; a member sent as
+     *              null is absent (C7.4), and the references stay
+     * @param actor the calling subject, recorded as the end of a cancelled row
      */
-    private boolean applyReferences(Item item, List<Map<String, Object>> wanted) {
+    private boolean applyReferences(Item item, @Nullable Object value, String actor) {
+        if (value == null) {
+            return false;
+        }
+        List<Map<String, Object>> wanted = ItemFields.references(value);
         List<ItemReference> living = items.assertedReferences(item);
-        boolean changed = false;
+        ItemFields.ReferencePlan plan =
+            ItemFields.referencePlan(assertedReferences(item), wanted);
 
-        for (int position = 0; position < wanted.size(); position++) {
-            Map<String, Object> entry = wanted.get(position);
-            String label = (String) entry.get(ItemFields.LABEL);
-            // ItemFields.references refuses an entry without a target, so
-            // every entry that reaches this line carries one.
-            String target = (String) entry.get(ItemFields.TARGET);
-            if (target == null) {
-                throw new IllegalStateException("a normalised reference carries a target");
-            }
-
-            if (position >= living.size()) {
-                ItemReference row = new ItemReference();
-                row.itemNumber = item.number;
-                row.scopeId = item.scopeId;
-                row.ordinal = position;
-                row.label = label;
-                row.target = target;
-                items.insertReference(row);
-                changed = true;
-                continue;
-            }
-
-            ItemReference row = living.get(position);
-            if (row.ordinal != position) {
-                row.ordinal = position;
-                changed = true;
-            }
-            if (!Objects.equals(row.label, label) || !Objects.equals(row.target, target)) {
-                row.label = label;
-                row.target = target;
-                changed = true;
-            }
+        java.time.Instant now = microsOf(clock.instant());
+        for (int index : plan.cancelled()) {
+            living.get(index).cancel(now, actor);
         }
-
-        for (int position = wanted.size(); position < living.size(); position++) {
-            // The ordinal is left where it was. It is meaningless on a
-            // withdrawn row — nothing reads it for order — and rewriting it
-            // would be a change to a row that is supposed to stand as it was.
-            living.get(position).status = ItemReference.WITHDRAWN;
-            changed = true;
-        }
-
-        if (changed) {
+        if (!plan.cancelled().isEmpty()) {
             items.flush();
         }
-        return changed;
+
+        boolean moved = moveLiving(living, plan, now);
+
+        boolean appended = false;
+        for (int position = 0; position < wanted.size(); position++) {
+            if (plan.kept().get(position) < 0) {
+                insertReference(item, position, wanted.get(position));
+                appended = true;
+            }
+        }
+        if (appended) {
+            items.flush();
+        }
+        return appended || moved || !plan.cancelled().isEmpty();
+    }
+
+    /**
+     * Moves each living reference the plan keeps to its place in the wanted
+     * list, and reports whether any moved. A row that moves is parked above
+     * every ordinal in use first, so that no two living rows share one at any
+     * statement (the partial unique index of V20).
+     */
+    private boolean moveLiving(List<ItemReference> living, ItemFields.ReferencePlan plan,
+            java.time.Instant now) {
+        Map<ItemReference, Integer> moving = new LinkedHashMap<>();
+        for (int position = 0; position < plan.kept().size(); position++) {
+            int index = plan.kept().get(position);
+            if (index >= 0 && living.get(index).ordinal != position) {
+                moving.put(living.get(index), position);
+            }
+        }
+        if (moving.isEmpty()) {
+            return false;
+        }
+        int parked = living.stream().mapToInt(row -> row.ordinal).max().orElse(0)
+            + plan.kept().size() + 1;
+        for (ItemReference row : moving.keySet()) {
+            row.ordinal = parked++;
+        }
+        items.flush();
+        moving.forEach((row, position) -> {
+            row.ordinal = position;
+            row.updatedAt = now;
+        });
+        items.flush();
+        return true;
+    }
+
+    /** A new living reference of the item, at its place in the list. */
+    private void insertReference(Item item, int position, Map<String, Object> entry) {
+        // ItemFields.references refuses an entry without a target, so every
+        // entry that reaches this line carries one.
+        String target = (String) entry.get(ItemFields.TARGET);
+        if (target == null) {
+            throw new IllegalStateException("a normalised reference carries a target");
+        }
+        ItemReference row = new ItemReference();
+        row.itemNumber = item.number;
+        row.scopeId = item.scopeId;
+        row.ordinal = position;
+        row.label = (String) entry.get(ItemFields.LABEL);
+        row.target = target;
+        items.insertReference(row);
     }
 
     /**
@@ -1924,12 +2100,16 @@ public class ItemService {
     }
 
     /**
-     * Set the relations to exactly the given set.
+     * Set the active relations to exactly the given set.
      *
-     * <p>An edge that leaves the set is WITHDRAWN, never deleted: an edge is
-     * deleted only with a draft {@link #discard} deletes. An edge that
-     * re-enters a set it had left is asserted again on the row that was
-     * already there.
+     * <p>An edge that leaves the set is CANCELLED, never deleted (REA-0011
+     * D15): its row stays with the service's time and the caller as its end,
+     * and no reason, which an update does not carry. An edge is deleted only
+     * with a draft {@link #discard} deletes. An edge that re-enters a set it
+     * had left is asserted again on the row that was already there, its end
+     * columns kept as the trace of its last cancellation. Where the item's
+     * phase only appends, {@link #refuseCancelling} has refused a set that
+     * leaves an active edge out before this is entered.
      *
      * <p>Entries arrive with the type as a display name and the item as its
      * canonical address; both are resolved here against the scope. A
@@ -1950,40 +2130,36 @@ public class ItemService {
      * comes back unchanged with a read answer changes nothing and is
      * accepted, so a read answer may go back as it came.
      *
+     * @param value    the relations as the caller sent them; a member sent as
+     *                 null is absent (C7.4), and the relations stay
      * @param creating whether the item is being created
+     * @param actor    the calling subject, recorded as the end of a cancelled edge
      */
-    private boolean applyRelations(Item item, List<Map<String, Object>> wanted,
-            boolean creating) {
-        List<ResolvedEdge> resolved = new ArrayList<>(wanted.size());
-        java.util.Set<Long> duplicateTypes = new java.util.HashSet<>();
-        for (Map<String, Object> entry : wanted) {
-            String typeName = (String) entry.get(ItemFields.TYPE);
-            String itemAddress = (String) entry.get(ItemFields.ITEM);
-            RelationType type = resolveRelationTypeByName(item.scopeId, typeName, RELATIONS);
-            Item target = resolveItemAddress(item.scopeId, itemAddress, RELATIONS);
-            if (item.id.equals(target.id)) {
-                throw new WorklistException(
-                    WorklistException.Reason.INVALID_VALUE,
-                    List.of(Field.RELATIONS.path()));
-            }
-            if (type.isDuplicateOf()) {
-                duplicateTypes.add(type.pk);
-            }
-            resolved.add(new ResolvedEdge(type.pk, target.number));
+    private boolean applyRelations(Item item, @Nullable Object value, boolean creating,
+            String actor) {
+        if (value == null) {
+            return false;
         }
+        WantedEdges wantedEdges = resolveEdges(item, ItemFields.relations(value));
+        List<ResolvedEdge> resolved = wantedEdges.edges();
 
         List<ItemRelation> edges = items.edgesOf(item);
-        refuseDuplicateMoves(edges, resolved, duplicateTypes, creating);
+        refuseDuplicateMoves(edges, resolved, wantedEdges.duplicateTypes(), creating);
         boolean changed = false;
 
+        java.time.Instant now = microsOf(clock.instant());
         List<ResolvedEdge> present = new ArrayList<>();
         for (ItemRelation edge : edges) {
             ResolvedEdge key = new ResolvedEdge(edge.relationTypePk, edge.toItemNumber);
             present.add(key);
-            String target = resolved.contains(key)
-                ? ItemRelation.ASSERTED : ItemRelation.WITHDRAWN;
-            if (!target.equals(edge.status)) {
-                edge.status = target;
+            boolean wantedHere = resolved.contains(key);
+            boolean active = ItemRelation.ASSERTED.equals(edge.status);
+            if (wantedHere && !active) {
+                edge.status = ItemRelation.ASSERTED;
+                edge.updatedAt = now;
+                changed = true;
+            } else if (!wantedHere && active) {
+                edge.cancel(now, actor, null);
                 changed = true;
             }
         }
@@ -2049,6 +2225,43 @@ public class ItemService {
 
     /** One resolved edge, keyed for set membership. */
     private record ResolvedEdge(Long typePk, Long toItemNumber) {
+    }
+
+    /**
+     * A wanted relation set, resolved against the scope.
+     *
+     * @param duplicateTypes the surrogates of the wanted entries' types that
+     *                       are {@code duplicate_of}
+     */
+    private record WantedEdges(List<ResolvedEdge> edges, java.util.Set<Long> duplicateTypes) {
+    }
+
+    /**
+     * Resolves each entry of a relation set: the type by its name, the other
+     * end by its address, both in the item's scope. An edge to the item itself
+     * is {@code INVALID_VALUE} naming the field; an undeclared type and an
+     * unknown item are refused as {@link #resolveRelationTypeByName} and
+     * {@link #resolveItemAddress} refuse them.
+     */
+    private WantedEdges resolveEdges(Item item, List<Map<String, Object>> wanted) {
+        List<ResolvedEdge> resolved = new ArrayList<>(wanted.size());
+        java.util.Set<Long> duplicateTypes = new java.util.HashSet<>();
+        for (Map<String, Object> entry : wanted) {
+            String typeName = (String) entry.get(ItemFields.TYPE);
+            String itemAddress = (String) entry.get(ItemFields.ITEM);
+            RelationType type = resolveRelationTypeByName(item.scopeId, typeName, RELATIONS);
+            Item target = resolveItemAddress(item.scopeId, itemAddress, RELATIONS);
+            if (item.id.equals(target.id)) {
+                throw new WorklistException(
+                    WorklistException.Reason.INVALID_VALUE,
+                    List.of(Field.RELATIONS.path()));
+            }
+            if (type.isDuplicateOf()) {
+                duplicateTypes.add(type.pk);
+            }
+            resolved.add(new ResolvedEdge(type.pk, target.number));
+        }
+        return new WantedEdges(List.copyOf(resolved), java.util.Set.copyOf(duplicateTypes));
     }
 
     /**
@@ -2188,6 +2401,12 @@ public class ItemService {
         fields.put(Field.ATTRIBUTES.canonicalName(), declaredAttributes(item));
         fields.put(Field.REFERENCES.canonicalName(), assertedReferences(item));
         fields.put(Field.RELATIONS.canonicalName(), assertedRelations(item, scopeSlug));
+        // Active edges alone above, and a count of the cancelled ones of each
+        // kind here; a read with the option answers the entries (REA-0011 D15).
+        fields.put(Field.CANCELLED_REFERENCES_COUNT.canonicalName(),
+            items.cancelledReferences(item).size());
+        fields.put(Field.CANCELLED_RELATIONS_COUNT.canonicalName(),
+            items.cancelledRelations(item).size());
         fields.put(Field.TAGS.canonicalName(), tagsOf(item));
         fields.put(Field.FULFILMENT.canonicalName(), fulfilmentOf(item, scopeSlug, Ledger.LATEST));
         fields.put(Field.ADDENDA.canonicalName(), addendaOf(item));
@@ -2453,6 +2672,60 @@ public class ItemService {
             answer.add(Collections.unmodifiableMap(entry));
         }
         return List.copyOf(answer);
+    }
+
+    /**
+     * The cancelled references, by the place each last held in the list, each
+     * as its entry form with its end: {@code label} where it carries one,
+     * {@code target}, and {@code ended_at}, {@code ended_by} and
+     * {@code end_reason} where the row records them. A value the row does not
+     * record is left out of the entry rather than answered empty (C6.5), so
+     * that a read answer sent back through a transport that drops an absent
+     * member still compares equal.
+     */
+    private List<Map<String, Object>> cancelledReferences(Item item) {
+        List<Map<String, Object>> answer = new ArrayList<>();
+        for (ItemReference reference : items.cancelledReferences(item)) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            if (reference.label != null) {
+                entry.put(ItemFields.LABEL, reference.label);
+            }
+            entry.put(ItemFields.TARGET, reference.target);
+            putEnd(entry, reference.endedAt, reference.endedBy, reference.endReason);
+            answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
+    }
+
+    /**
+     * The cancelled relations, in the order of the active ones, each as
+     * {@code type} and {@code item} with its end, as
+     * {@link #cancelledReferences}.
+     */
+    private List<Map<String, Object>> cancelledRelations(Item item, String scopeSlug) {
+        List<Map<String, Object>> answer = new ArrayList<>();
+        for (ItemRelation relation : items.cancelledRelations(item)) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put(ItemFields.TYPE, relationTypeNameOf(relation.relationTypePk).orElse(null));
+            entry.put(ItemFields.ITEM, itemAddressOf(scopeSlug, relation.toItemNumber).orElse(null));
+            putEnd(entry, relation.endedAt, relation.endedBy, relation.endReason);
+            answer.add(Collections.unmodifiableMap(entry));
+        }
+        return List.copyOf(answer);
+    }
+
+    /** The end values of a cancelled row that it records, each under its own key. */
+    private static void putEnd(Map<String, Object> entry, java.time.@Nullable Instant endedAt,
+            @Nullable String endedBy, @Nullable String endReason) {
+        if (endedAt != null) {
+            entry.put(ItemFields.ENDED_AT, endedAt);
+        }
+        if (endedBy != null) {
+            entry.put(ItemFields.ENDED_BY, endedBy);
+        }
+        if (endReason != null) {
+            entry.put(ItemFields.END_REASON, endReason);
+        }
     }
 
     /**

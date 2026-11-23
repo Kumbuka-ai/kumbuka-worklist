@@ -102,4 +102,10 @@ public interface ArgumentDescriptions {
 
     @Message
     String reasonClose();
+
+    @Message
+    String reasonUnrelate();
+
+    @Message
+    String cancelled();
 }

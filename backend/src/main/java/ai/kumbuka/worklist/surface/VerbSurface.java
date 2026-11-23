@@ -369,16 +369,43 @@ public class VerbSurface {
     @Transactional
     public Result read(String subject, String rawScope, String rawView, String rawId,
                        @Nullable String rawFulfilment) {
+        return read(subject, rawScope, rawView, rawId, rawFulfilment, null);
+    }
+
+    /**
+     * Reads one object, an item with as much of its fulfilment ledger and of
+     * its cancelled references and relations as the two options ask.
+     *
+     * <p>Both options are checked for form before the scope is resolved
+     * (C1.3), each against its two declared values. {@code cancelled} with
+     * {@code all} answers the cancelled entries of an item under keys of
+     * their own (REA-0011 D15); on another view, which carries none, it is
+     * refused as a value outside the form of the call, as the ledger's
+     * option is.
+     *
+     * @param rawFulfilment the ledger option as it arrived; absent where the
+     *                      call named none
+     * @param rawCancelled  the option for cancelled edges as it arrived;
+     *                      absent where the call named none, and then their
+     *                      counts alone are answered
+     */
+    @Transactional
+    public Result read(String subject, String rawScope, String rawView, String rawId,
+                       @Nullable String rawFulfilment, @Nullable String rawCancelled) {
         ItemService.Ledger ledger = ledger(rawFulfilment);
+        ItemService.Cancelled cancelled = cancelled(rawCancelled);
         Entry in = entry(subject, rawScope, rawView, Access.READ);
         AddressParser.Target target = AddressParser.target(rawView, rawId);
         if (ledger == ItemService.Ledger.ALL && !Selector.ITEM.equals(in.view())) {
             throw SurfaceException.invalid(SurfaceDeclaration.FULFILMENT_ARGUMENT);
         }
+        if (cancelled == ItemService.Cancelled.ALL && !Selector.ITEM.equals(in.view())) {
+            throw SurfaceException.invalid(SurfaceDeclaration.CANCELLED_ARGUMENT);
+        }
         UUID id = resolve(in, target);
 
         return opened(in, at(target, switch (in.view()) {
-            case Selector.ITEM -> items.read(in.scopeId(), id, ledger);
+            case Selector.ITEM -> items.read(in.scopeId(), id, ledger, cancelled);
             case Selector.ITERATION -> iterations.read(in.scopeId(), id);
             case Selector.MILESTONE -> milestones.read(in.scopeId(), id);
             case Selector.WORKSTREAM -> workstreams.read(in.scopeId(), id);
@@ -400,6 +427,23 @@ public class VerbSurface {
             return ItemService.Ledger.ALL;
         }
         throw SurfaceException.invalid(SurfaceDeclaration.FULFILMENT_ARGUMENT);
+    }
+
+    /**
+     * The option of {@code read} for cancelled edges as the domain takes it,
+     * or the refusal of a value outside its declared two. A form fault,
+     * decided before the scope.
+     *
+     * @param raw the option as it arrived; absent where the call named none
+     */
+    private static ItemService.Cancelled cancelled(@Nullable String raw) {
+        if (raw == null || SurfaceDeclaration.CANCELLED_COUNT.equals(raw)) {
+            return ItemService.Cancelled.COUNT;
+        }
+        if (SurfaceDeclaration.CANCELLED_ALL.equals(raw)) {
+            return ItemService.Cancelled.ALL;
+        }
+        throw SurfaceException.invalid(SurfaceDeclaration.CANCELLED_ARGUMENT);
     }
 
     /**
@@ -430,7 +474,7 @@ public class VerbSurface {
             .values();
 
         return opened(in, at(target, switch (in.view()) {
-            case Selector.ITEM -> logged(items.update(in.scopeId(), id, fields),
+            case Selector.ITEM -> logged(items.update(in.scopeId(), id, fields, subject),
                 PlatformLog.TechnicalAddress::of, address -> {
                     PlatformLog.itemUpdated(in.scope());
                     PlatformLog.updated(address, in.scope());
@@ -835,26 +879,34 @@ public class VerbSurface {
     }
 
     /**
-     * Withdraw one asserted edge from this item to another.
+     * Cancel one active edge from this item to another, with its mandatory
+     * reason (REA-0011 D15). The one who cancels is the subject this surface
+     * derived from the token; a caller never names it.
      *
      * @param conflictToken the token the transport carried; absent where it carried
      *                      none, which this surface refuses as CONFLICT_TOKEN_MISSING
      * @param body          the body the transport carried; absent where it carried
      *                      none, which this surface refuses where the verb needs one
+     * @param reason        the reason the transport carried; absent where it
+     *                      carried none, which this surface refuses as
+     *                      ARGUMENT_MISSING, and an empty one as ARGUMENT_INVALID
      */
     @Transactional
     public Result unrelate(String subject, String rawScope, String rawView, String rawId,
-                           @Nullable String conflictToken, VerbInput.@Nullable Edge body) {
+                           @Nullable String conflictToken, VerbInput.@Nullable Edge body,
+                           @Nullable String reason) {
         Entry in = entry(subject, rawScope, rawView, Access.WRITE);
         AddressParser.Target target = requireView(rawView, rawId, Selector.ITEM, "unrelate");
         UUID from = resolve(in, target);
 
-        VerbInput.Edge edge = required(body, TO_ITEM, TYPE);
+        VerbInput.Edge edge = required(body, TO_ITEM, TYPE, SurfaceDeclaration.REASON_ARGUMENT);
         String toAddress = requireLabel(TO_ITEM, edge.toItem());
         String typeName = requireLabel(TYPE, edge.type());
+        String token = requireToken(conflictToken);
+        String why = requireText(SurfaceDeclaration.REASON_ARGUMENT, reason);
 
         return opened(in, at(target, loggedAs(items.unrelate(in.scopeId(), from, toAddress,
-                typeName, requireToken(conflictToken)),
+                typeName, why, subject, token),
             write -> {
                 PlatformLog.TechnicalAddress source = PlatformLog.TechnicalAddress.of(write.stored());
                 PlatformLog.TechnicalAddress to = PlatformLog.TechnicalAddress.of(write.target());

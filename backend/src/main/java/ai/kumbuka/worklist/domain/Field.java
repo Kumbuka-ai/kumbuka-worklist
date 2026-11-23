@@ -250,7 +250,12 @@ public enum Field {
 
     /**
      * The external pointers, as an ordered list of entries carrying an
-     * optional {@code label} and a {@code target}.
+     * optional {@code label} and a {@code target}; the active ones alone
+     * (REA-0011 D15).
+     *
+     * <p>Written as a whole and matched by content: an entry the list leaves
+     * out is cancelled, a new one gets a row of its own, and no entry is ever
+     * rewritten.
      *
      * <p>A list and not one field. The single free-text column this replaces
      * came to hold, in the estate being migrated, an item's rationale, a
@@ -264,11 +269,45 @@ public enum Field {
      * {@code type} — the identity of a declared relation type — and an
      * {@code item}, the identity of the other end.
      *
-     * <p>Set as a whole. An edge that leaves the set is withdrawn and never
+     * <p>Set as a whole. An edge that leaves the set is cancelled and never
      * deleted, and one that re-enters is asserted again on the row that was
-     * already there.
+     * already there. Only active edges are answered here (REA-0011 D15).
      */
     RELATIONS("relations", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * How many references of the item are cancelled: answered on every read,
+     * beside {@link #REFERENCES}, which holds the active ones alone
+     * (REA-0011 D15). Read-only; sent back unchanged it is accepted, as every
+     * read-only field is.
+     */
+    CANCELLED_REFERENCES_COUNT("cancelled_references_count", Set.of(ITEM), Set.of()),
+
+    /**
+     * How many relations out of the item are cancelled, beside
+     * {@link #RELATIONS}, as {@link #CANCELLED_REFERENCES_COUNT}.
+     */
+    CANCELLED_RELATIONS_COUNT("cancelled_relations_count", Set.of(ITEM), Set.of()),
+
+    /**
+     * The cancelled references, each with {@code label} where it carries one,
+     * {@code target}, and {@code ended_at}, {@code ended_by} and
+     * {@code end_reason} where the row records them; answered only by a read
+     * with the option for cancelled edges, by the place each last held in the
+     * list.
+     *
+     * <p>Under a key of its own and never mixed into {@link #REFERENCES}, so
+     * that a read answer sent back writes nothing. Read-only: sent back as the
+     * option answered it, it is accepted.
+     */
+    CANCELLED_REFERENCES("cancelled_references", Set.of(ITEM), Set.of()),
+
+    /**
+     * The cancelled relations, each with {@code type}, {@code item}, and the
+     * end values where the row records them; answered only by a read with the
+     * option for cancelled edges, as {@link #CANCELLED_REFERENCES}.
+     */
+    CANCELLED_RELATIONS("cancelled_relations", Set.of(ITEM), Set.of()),
 
     /**
      * The tags an item carries, as the tokens of its scope's vocabulary in

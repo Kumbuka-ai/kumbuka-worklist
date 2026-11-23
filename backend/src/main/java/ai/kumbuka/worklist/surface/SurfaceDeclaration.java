@@ -73,6 +73,16 @@ public final class SurfaceDeclaration {
     public static final String FULFILMENT_ALL = "all";
 
     /**
+     * The option of {@code read} on an item for its cancelled references and
+     * relations (REA-0011 D15), and its two values: a count of each kind,
+     * which every answer carries, or the counts and every cancelled entry
+     * under keys of their own.
+     */
+    public static final String CANCELLED_ARGUMENT = "cancelled";
+    public static final String CANCELLED_COUNT = "count";
+    public static final String CANCELLED_ALL = "all";
+
+    /**
      * The argument of {@code create} that submits the draft in the same act
      * (REA-0011 D12): the REST surface's alone, a query parameter there, and
      * refused on the assistant surface, where creating and submitting are
@@ -315,6 +325,12 @@ public final class SurfaceDeclaration {
             List.of(new Value(FULFILMENT_LATEST, ValueDescriptions::fulfilmentLatest),
                 new Value(FULFILMENT_ALL, ValueDescriptions::fulfilmentAll)),
             ArgumentDescriptions::fulfilment);
+    /** How much of an item's cancelled references and relations a read answers. */
+    private static final Argument CANCELLED =
+        chosen(CANCELLED_ARGUMENT, CANCELLED_COUNT,
+            List.of(new Value(CANCELLED_COUNT, ValueDescriptions::cancelledCount),
+                new Value(CANCELLED_ALL, ValueDescriptions::cancelledAll)),
+            ArgumentDescriptions::cancelled);
     /** The key of a create (C10.4); a header on REST, an argument on MCP. */
     private static final Argument IDEMPOTENCY_KEY =
         optional("idempotency_key", ArgumentType.STRING, null,
@@ -335,6 +351,9 @@ public final class SurfaceDeclaration {
     /** Why an item closes: mandatory where it leaves the phase in progress. */
     private static final Argument REASON_CLOSE =
         optional(REASON_ARGUMENT, ArgumentType.STRING, null, ArgumentDescriptions::reasonClose);
+    /** Why an edge is cancelled: mandatory (REA-0011 D15). */
+    private static final Argument REASON_UNRELATE =
+        required(REASON_ARGUMENT, ArgumentType.STRING, ArgumentDescriptions::reasonUnrelate);
 
     /**
      * The view argument, with the views the verb acts on as its fixed values.
@@ -397,7 +416,7 @@ public final class SurfaceDeclaration {
                 Selector.MILESTONE), FIELDS, IDEMPOTENCY_KEY, SUBMIT),
         verb("read", ToolDescriptions::read, EffectClass.ITEM_READ, Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.ITERATION_ABSENT)),
-            ADDRESS, FULFILMENT),
+            ADDRESS, FULFILMENT, CANCELLED),
         verb("update", ToolDescriptions::update, EffectClass.FIELD_WRITE, Answer.OBJECT,
             reasons(WRITE, TOKENED, FIELD_WRITE, codes(RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TOKEN, FIELDS),
@@ -475,10 +494,12 @@ public final class SurfaceDeclaration {
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
                 RefusalCode.VALUE_UNDECLARED, RefusalCode.TRANSITION_REFUSED)),
             ADDRESS, TOKEN, TO_ITEM, TYPE),
+        // Cancels the edge (REA-0011 D15): open on a draft and an open item,
+        // refused by state in progress, and the reason is mandatory.
         verb("unrelate", ToolDescriptions::unrelate, EffectClass.ITEM_TRANSITION, Answer.OBJECT,
             reasons(WRITE, TOKENED, codes(RefusalCode.VERB_UNCARRIED, RefusalCode.INVALID_VALUE,
                 RefusalCode.VALUE_UNDECLARED, RefusalCode.TRANSITION_REFUSED)),
-            ADDRESS, TOKEN, TO_ITEM, TYPE),
+            ADDRESS, TOKEN, TO_ITEM, TYPE, REASON_UNRELATE),
         verb("validate", ToolDescriptions::validate, EffectClass.COLLECTION_COMPOUND,
             Answer.OBJECT,
             reasons(codes(RefusalCode.SELECTOR_UNDECLARED, RefusalCode.SELECTOR_WITHDRAWN,

@@ -95,7 +95,7 @@ class ConcurrentWriteIT {
 
         contest(title -> items.update(scope, id, Map.of(
             Field.TITLE.canonicalName(), title,
-            Field.CONFLICT_TOKEN.canonicalName(), token)).answer());
+            Field.CONFLICT_TOKEN.canonicalName(), token), "probe-subject").answer());
 
         assertThat(items.read(scope, id).get(Field.TITLE.canonicalName()))
             .as("the first writer's change stands").isEqualTo("first");

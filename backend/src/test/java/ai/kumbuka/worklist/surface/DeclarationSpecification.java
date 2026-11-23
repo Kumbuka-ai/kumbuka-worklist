@@ -145,9 +145,11 @@ public final class DeclarationSpecification {
                 "WORKSTREAM_WITHDRAWN", "ITEM_WORKSTREAM_MISSING",
                 "CARDINALITY_EXCEEDED", "IDEMPOTENCY_KEY_REUSED", "TRANSITION_REFUSED"))),
         // fulfilment: the latest entry per criterion and instance, or the
-        // whole ledger in booking order.
+        // whole ledger in booking order. cancelled: a count of the cancelled
+        // references and relations, or with them the entries (REA-0011 D15).
         new Verb("worklist_read", "ITEM_READ", "OBJECT", List.of(ADDRESS,
-                new Arg("fulfilment", "string", false, "latest", List.of("latest", "all"))),
+                new Arg("fulfilment", "string", false, "latest", List.of("latest", "all")),
+                new Arg("cancelled", "string", false, "count", List.of("count", "all"))),
             reasons(List.of("SELECTOR_UNDECLARED", "ITERATION_ABSENT"))),
         new Verb("worklist_update", "FIELD_WRITE", "OBJECT",
             List.of(ADDRESS, TOKEN, FIELDS),
@@ -200,8 +202,10 @@ public final class DeclarationSpecification {
             List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
                 "VALUE_UNDECLARED", "TRANSITION_REFUSED"))),
+        // unrelate cancels the edge with a mandatory reason, and is refused by
+        // state on an item in progress (REA-0011 D15, D8).
         new Verb("worklist_unrelate", "ITEM_TRANSITION", "OBJECT",
-            List.of(ADDRESS, TOKEN, TO_ITEM, TYPE),
+            List.of(ADDRESS, TOKEN, TO_ITEM, TYPE, Arg.req("reason", "string")),
             reasons(WRITE, TOKENED, List.of("VERB_UNCARRIED", "INVALID_VALUE",
                 "VALUE_UNDECLARED", "TRANSITION_REFUSED"))),
         new Verb("worklist_validate", "COLLECTION_COMPOUND", "OBJECT",

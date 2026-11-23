@@ -110,7 +110,7 @@ class NullIsAbsentIT {
         // two spellings meet the same state: each is refused, or is a read.
         Map<String, Map<String, Object>> calls = new LinkedHashMap<>();
         calls.put("create", args("scope", SCOPE, "selector", Selector.ITEM, "fields", Map.of()));
-        calls.put("read", args("address", item, "fulfilment", "latest"));
+        calls.put("read", args("address", item, "fulfilment", "latest", "cancelled", "count"));
         calls.put("update", args("address", item, "conflict_token", "stale",
             "fields", Map.of("title", "x")));
         calls.put("query", args("scope", SCOPE, "selector", Selector.ITEM,
@@ -132,7 +132,8 @@ class NullIsAbsentIT {
         calls.put("relate", args("address", item, "conflict_token", "stale",
             "to_item", "worklist://" + SCOPE + "/item/2", "type", "blocks"));
         calls.put("unrelate", args("address", item, "conflict_token", "stale",
-            "to_item", "worklist://" + SCOPE + "/item/2", "type", "blocks"));
+            "to_item", "worklist://" + SCOPE + "/item/2", "type", "blocks",
+            "reason", "a misreading"));
         calls.put("validate", args("scope", SCOPE, "selector", Selector.ITEM));
         // A token the scope does not declare: refused, so the store stays as it is.
         calls.put("tag_attach", args("address", item, "tag", "no-such-tag"));
@@ -344,7 +345,7 @@ class NullIsAbsentIT {
         bodies.put(itemPath + "/1:relate", args("to_item", "worklist://" + SCOPE + "/item/2",
             "type", "blocks"));
         bodies.put(itemPath + "/1:unrelate", args("to_item", "worklist://" + SCOPE + "/item/2",
-            "type", "blocks"));
+            "type", "blocks", "reason", "a misreading"));
         bodies.put(itemPath + "/1:tag_attach", args("tag", "no-such-tag"));
         bodies.put(itemPath + "/1:tag_detach", args("tag", "no-such-tag"));
         bodies.put(itemPath + "/1:book", args("instance", "https://instances.example/run/1",

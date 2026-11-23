@@ -272,6 +272,21 @@ public class ItemRepository {
      */
     @Transactional
     public List<ItemRelation> assertedRelations(Item item) {
+        return relationsIn(item, ItemRelation.ASSERTED);
+    }
+
+    /**
+     * The cancelled relations only, in the order of {@link #assertedRelations}:
+     * what a read answers with the option for cancelled edges, and counts
+     * otherwise.
+     */
+    @Transactional
+    public List<ItemRelation> cancelledRelations(Item item) {
+        return relationsIn(item, ItemRelation.WITHDRAWN);
+    }
+
+    /** The relations out of an item in one status, by target then type. */
+    private List<ItemRelation> relationsIn(Item item, String status) {
         return em.createQuery(
                 "SELECT r FROM ItemRelation r "
                     + "WHERE r.scopeId = :" + P_SCOPE
@@ -280,7 +295,7 @@ public class ItemRepository {
                     + " ORDER BY r.toItemNumber, r.relationTypePk", ItemRelation.class)
             .setParameter(P_SCOPE, item.scopeId)
             .setParameter(P_ITEM, item.number)
-            .setParameter(P_STATUS, ItemRelation.ASSERTED)
+            .setParameter(P_STATUS, status)
             .getResultList();
     }
 
@@ -298,15 +313,32 @@ public class ItemRepository {
     /** The asserted pointers only, in the reader's order. */
     @Transactional
     public List<ItemReference> assertedReferences(Item item) {
+        return referencesIn(item, ItemReference.ASSERTED);
+    }
+
+    /**
+     * The cancelled pointers only, by the place each last held in the list,
+     * and in the order they were written where two held the same place.
+     */
+    @Transactional
+    public List<ItemReference> cancelledReferences(Item item) {
+        return referencesIn(item, ItemReference.WITHDRAWN);
+    }
+
+    /**
+     * The pointers of an item in one status, by ordinal, and by the row's
+     * surrogate where two share one -- which only cancelled rows can.
+     */
+    private List<ItemReference> referencesIn(Item item, String status) {
         return em.createQuery(
                 "SELECT r FROM ItemReference r "
                     + "WHERE r.scopeId = :" + P_SCOPE
                     + " AND r.itemNumber = :" + P_ITEM
-                    + " AND r.status = :" + P_STATUS + " ORDER BY r.ordinal",
+                    + " AND r.status = :" + P_STATUS + " ORDER BY r.ordinal, r.pk",
                 ItemReference.class)
             .setParameter(P_SCOPE, item.scopeId)
             .setParameter(P_ITEM, item.number)
-            .setParameter(P_STATUS, ItemReference.ASSERTED)
+            .setParameter(P_STATUS, status)
             .getResultList();
     }
 
@@ -400,10 +432,10 @@ public class ItemRepository {
     /**
      * Inserts a reference entry. Flushed by the caller, once, after the list.
      *
-     * <p>No write removes one: a list that shrinks is rewritten in place and
-     * its tail is withdrawn — see {@code ItemService} on why the ordinal is
-     * dense. The rows go only with the draft they belong to, in
-     * {@link #delete}.
+     * <p>No write removes one: an entry a list leaves out is cancelled and
+     * stays, and an entry is never rewritten -- see {@code ItemService} on
+     * how a list is matched by content. The rows go only with the draft they
+     * belong to, in {@link #delete}.
      */
     @Transactional
     public void insertReference(ItemReference reference) {

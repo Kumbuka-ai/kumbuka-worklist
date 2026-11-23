@@ -140,6 +140,9 @@ public class McpAdapter {
     /** How much of an item's fulfilment ledger a read answers. */
     private static final String ARG_FULFILMENT = SurfaceDeclaration.FULFILMENT_ARGUMENT;
 
+    /** How much of an item's cancelled references and relations a read answers. */
+    private static final String ARG_CANCELLED = SurfaceDeclaration.CANCELLED_ARGUMENT;
+
     /** The status and the reason of a transition of an item. */
     private static final String ARG_STATUS = SurfaceDeclaration.STATUS_ARGUMENT;
     private static final String ARG_REASON = SurfaceDeclaration.REASON_ARGUMENT;
@@ -422,6 +425,7 @@ public class McpAdapter {
 
     private ObjectPayload read(Map<String, Object> in) {
         Optional<String> fulfilment = text(in, ARG_FULFILMENT);
+        Optional<String> cancelled = text(in, ARG_CANCELLED);
         Address at = address(in);
         String member = at.member();
         if (member != null && fulfilment.isPresent()
@@ -429,11 +433,16 @@ public class McpAdapter {
             // A membership carries no ledger: a form fault, decided before the scope.
             throw SurfaceException.invalid(ARG_FULFILMENT);
         }
+        if (member != null && cancelled.isPresent()
+                && !SurfaceDeclaration.CANCELLED_COUNT.equals(cancelled.get())) {
+            // A membership carries no edges: a form fault, decided before the scope.
+            throw SurfaceException.invalid(ARG_CANCELLED);
+        }
         return dressed(at.scope(), member != null
             ? verbs.readMembership(caller.subject(), at.scope(), at.view(), at.head(),
                 member)
             : verbs.read(caller.subject(), at.scope(), at.view(), at.head(),
-                fulfilment.orElse(null)));
+                fulfilment.orElse(null), cancelled.orElse(null)));
     }
 
     private Object update(Map<String, Object> in) {
@@ -529,11 +538,18 @@ public class McpAdapter {
             new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE))));
     }
 
+    /**
+     * {@code unrelate}; the reason is checked here for its JSON type alone, a
+     * form fault decided before the scope (C1.3), and refused by the surface
+     * where it is missing or empty.
+     */
     private Object unrelate(Map<String, Object> in) {
+        Optional<String> reason = text(in, ARG_REASON);
         Address at = address(in);
         return dressed(at.scope(), verbs.unrelate(caller.subject(), at.scope(), at.view(),
             at.head(), required(in, ARG_TOKEN),
-            new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE))));
+            new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE)),
+            reason.orElse(null)));
     }
 
     private Object validate(Map<String, Object> in) {

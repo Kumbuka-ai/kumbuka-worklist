@@ -1155,7 +1155,7 @@ class QueryNarrowingIT {
         UUID id = (UUID) created.get("id");
         if (milestone != null) {
             items.update(SCOPE_ID, id, Map.of(
-                "milestone", milestone, "conflict_token", created.get("conflict_token")));
+                "milestone", milestone, "conflict_token", created.get("conflict_token")), "probe-subject");
         }
         if (DONE.equals(status)) {
             ItemLifecycle.submit(items, SCOPE_ID, id);

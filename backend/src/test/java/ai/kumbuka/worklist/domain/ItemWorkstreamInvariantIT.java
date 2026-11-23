@@ -142,7 +142,7 @@ class ItemWorkstreamInvariantIT {
 
         Map<String, Object> updated = items.update(scope, itemId, Map.of(
             Field.WORKSTREAM_ID.canonicalName(), backend.token,
-            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId))).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId)), "probe-subject").answer();
         assertThat(updated.get(Field.WORKSTREAM_ID.canonicalName())).isEqualTo(backend.token);
     }
 
@@ -155,7 +155,7 @@ class ItemWorkstreamInvariantIT {
         Map<String, Object> args = new java.util.LinkedHashMap<>();
         args.put(Field.WORKSTREAM_ID.canonicalName(), null);
         args.put(Field.CONFLICT_TOKEN.canonicalName(), tokenOf(itemId));
-        WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, args));
+        WorklistException refusal = refusalFrom(() -> items.update(scope, itemId, args, "probe-subject"));
         assertThat(refusal.reason())
             .isEqualTo(WorklistException.Reason.ITEM_WORKSTREAM_MISSING);
     }

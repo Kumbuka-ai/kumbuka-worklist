@@ -96,7 +96,7 @@ class ItemCriterionIsolationIT {
             Field.CONFLICT_TOKEN.canonicalName(), read.get(Field.CONFLICT_TOKEN.canonicalName()),
             Field.CRITERIA.canonicalName(), List.of(
                 Map.of("address", addressOf(read, 1), "text", "the probe tenant's own"),
-                Map.of("text", "appended here")))).answer();
+                Map.of("text", "appended here"))), "probe-subject").answer();
         assertThat(addresses(appended))
             .as("the next identifier is this item's 2: the second tenant's 1, 2 and 3 are "
                 + "neither seen nor counted")

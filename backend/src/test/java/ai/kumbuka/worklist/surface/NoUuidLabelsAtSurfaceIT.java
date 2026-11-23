@@ -192,7 +192,8 @@ class NoUuidLabelsAtSurfaceIT {
 
         Response unrelated = restCall("POST",
             SurfaceFixture.item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
-            Map.of("to_item", secondItemAddress, "type", blocksTypeName));
+            Map.of("to_item", secondItemAddress, "type", blocksTypeName,
+                "reason", "the block was lifted"));
         unrelated.then().statusCode(200);
         assertNoUuid("unrelate", unrelated);
         itemToken = unrelated.jsonPath().getString("fields.conflict_token");

@@ -161,7 +161,7 @@ class UnstampedWriteIT {
     @Test
     void an_item_written_through_its_verbs_passes_the_flush() {
         Map<String, Object> created = item("first");
-        passesTheFlush(created, Field.TITLE, fields -> items.update(scope, idOf(created), fields).answer());
+        passesTheFlush(created, Field.TITLE, fields -> items.update(scope, idOf(created), fields, "probe-subject").answer());
     }
 
     @Test
