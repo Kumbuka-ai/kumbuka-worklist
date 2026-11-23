@@ -1383,14 +1383,10 @@ public class ItemService {
                 return applyAttributes(item, ItemFields.attributes(value));
             }
             case REFERENCES -> {
-                // A member sent as null is absent (C7.4): the references stay.
-                return value != null
-                    && applyReferences(item, ItemFields.references(value), actor);
+                return applyReferences(item, value, actor);
             }
             case RELATIONS -> {
-                // A member sent as null is absent (C7.4): the relations stay.
-                return value != null
-                    && applyRelations(item, ItemFields.relations(value), creating, actor);
+                return applyRelations(item, value, creating, actor);
             }
             case CONTRIBUTOR -> {
                 List<String> contributors = ItemFields.contributors(value);
@@ -1880,10 +1876,15 @@ public class ItemService {
      * places no living row holds any more. A list sent back as it is held
      * writes nothing.
      *
+     * @param value the references as the caller sent them; a member sent as
+     *              null is absent (C7.4), and the references stay
      * @param actor the calling subject, recorded as the end of a cancelled row
      */
-    private boolean applyReferences(Item item, List<Map<String, Object>> wanted,
-            String actor) {
+    private boolean applyReferences(Item item, @Nullable Object value, String actor) {
+        if (value == null) {
+            return false;
+        }
+        List<Map<String, Object>> wanted = ItemFields.references(value);
         List<ItemReference> living = items.assertedReferences(item);
         ItemFields.ReferencePlan plan =
             ItemFields.referencePlan(assertedReferences(item), wanted);
@@ -1896,26 +1897,7 @@ public class ItemService {
             items.flush();
         }
 
-        Map<ItemReference, Integer> moving = new LinkedHashMap<>();
-        for (int position = 0; position < wanted.size(); position++) {
-            int index = plan.kept().get(position);
-            if (index >= 0 && living.get(index).ordinal != position) {
-                moving.put(living.get(index), position);
-            }
-        }
-        if (!moving.isEmpty()) {
-            int parked = living.stream().mapToInt(row -> row.ordinal).max().orElse(0)
-                + wanted.size() + 1;
-            for (ItemReference row : moving.keySet()) {
-                row.ordinal = parked++;
-            }
-            items.flush();
-            moving.forEach((row, position) -> {
-                row.ordinal = position;
-                row.updatedAt = now;
-            });
-            items.flush();
-        }
+        boolean moved = moveLiving(living, plan, now);
 
         boolean appended = false;
         for (int position = 0; position < wanted.size(); position++) {
@@ -1927,7 +1909,39 @@ public class ItemService {
         if (appended) {
             items.flush();
         }
-        return appended || !moving.isEmpty() || !plan.cancelled().isEmpty();
+        return appended || moved || !plan.cancelled().isEmpty();
+    }
+
+    /**
+     * Moves each living reference the plan keeps to its place in the wanted
+     * list, and reports whether any moved. A row that moves is parked above
+     * every ordinal in use first, so that no two living rows share one at any
+     * statement (the partial unique index of V20).
+     */
+    private boolean moveLiving(List<ItemReference> living, ItemFields.ReferencePlan plan,
+            java.time.Instant now) {
+        Map<ItemReference, Integer> moving = new LinkedHashMap<>();
+        for (int position = 0; position < plan.kept().size(); position++) {
+            int index = plan.kept().get(position);
+            if (index >= 0 && living.get(index).ordinal != position) {
+                moving.put(living.get(index), position);
+            }
+        }
+        if (moving.isEmpty()) {
+            return false;
+        }
+        int parked = living.stream().mapToInt(row -> row.ordinal).max().orElse(0)
+            + plan.kept().size() + 1;
+        for (ItemReference row : moving.keySet()) {
+            row.ordinal = parked++;
+        }
+        items.flush();
+        moving.forEach((row, position) -> {
+            row.ordinal = position;
+            row.updatedAt = now;
+        });
+        items.flush();
+        return true;
     }
 
     /** A new living reference of the item, at its place in the list. */
@@ -2116,12 +2130,17 @@ public class ItemService {
      * comes back unchanged with a read answer changes nothing and is
      * accepted, so a read answer may go back as it came.
      *
+     * @param value    the relations as the caller sent them; a member sent as
+     *                 null is absent (C7.4), and the relations stay
      * @param creating whether the item is being created
      * @param actor    the calling subject, recorded as the end of a cancelled edge
      */
-    private boolean applyRelations(Item item, List<Map<String, Object>> wanted,
-            boolean creating, String actor) {
-        WantedEdges wantedEdges = resolveEdges(item, wanted);
+    private boolean applyRelations(Item item, @Nullable Object value, boolean creating,
+            String actor) {
+        if (value == null) {
+            return false;
+        }
+        WantedEdges wantedEdges = resolveEdges(item, ItemFields.relations(value));
         List<ResolvedEdge> resolved = wantedEdges.edges();
 
         List<ItemRelation> edges = items.edgesOf(item);
