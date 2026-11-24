@@ -107,7 +107,7 @@ public class AdministrationSurface {
 
     @Inject VocabularyRegistry vocabulary;
     @Inject WorkstreamService workstreams;
-    @Inject ScopeSettingService settings;
+    @Inject ScopeSettingService settingService;
     @Inject AddressRegistry addresses;
     @Inject ScopeDirectory scopes;
 
@@ -333,7 +333,7 @@ public class AdministrationSurface {
     public Entry settings(String subject, String rawScope) {
         Scope in = entry(subject, rawScope, Access.READ);
         PlatformLog.vocabularyRead(in.log());
-        return settingsEntry(settings.read(in.id()));
+        return settingsEntry(settingService.read(in.id()));
     }
 
     /**
@@ -344,7 +344,7 @@ public class AdministrationSurface {
     @Transactional
     public Entry openSettings(String subject, String rawScope, Map<String, Object> arguments) {
         Scope in = entry(subject, rawScope, Access.ADMINISTER);
-        Map<String, Object> opened = settings.create(in.id(), arguments);
+        Map<String, Object> opened = settingService.create(in.id(), arguments);
         PlatformLog.settingsOpened(in.log());
         return settingsEntry(opened);
     }
@@ -359,7 +359,7 @@ public class AdministrationSurface {
         Scope in = entry(subject, rawScope, Access.ADMINISTER);
         Map<String, Object> given = new LinkedHashMap<>(arguments);
         given.put(Field.CONFLICT_TOKEN.canonicalName(), requireToken(conflictToken));
-        Map<String, Object> changed = settings.update(in.id(), given);
+        Map<String, Object> changed = settingService.update(in.id(), given);
         PlatformLog.settingsChanged(in.log());
         return settingsEntry(changed);
     }
@@ -398,42 +398,43 @@ public class AdministrationSurface {
     // ======================================================================
 
     private static Entry statusEntry(ItemStatus status) {
-        return new Entry(STATUSES + "/" + status.name, VocabularyFields.of(status));
+        return new Entry(STATUSES_PATH + "/" + status.name, VocabularyFields.of(status));
     }
 
     private static Entry usageEntry(ScopeUsage.Property property) {
-        return new Entry(USAGES + "/" + property.token(), VocabularyFields.of(property));
+        return new Entry(USAGES_PATH + "/" + property.token(), VocabularyFields.of(property));
     }
 
     private Entry attributeEntry(Scope in, AttributeDefinition definition) {
         List<AttributeOption> options = AttributeDefinition.ENUMERATED.contains(definition.type)
             ? vocabulary.options(in.id(), definition.key) : List.of();
-        return new Entry(ATTRIBUTES + "/" + definition.key,
+        return new Entry(ATTRIBUTES_PATH + "/" + definition.key,
             VocabularyFields.of(definition, options));
     }
 
     private Entry relationEntry(RelationType type) {
         ItemStatus target = type.targetStatusPk == null ? null
             : vocabulary.statusByPk(type.targetStatusPk).orElse(null);
-        return new Entry(RELATION_TYPES + "/" + type.name, VocabularyFields.of(type, target));
+        return new Entry(RELATION_TYPES_PATH + "/" + type.name,
+            VocabularyFields.of(type, target));
     }
 
     private Entry workstreamEntry(Scope in, Workstream workstream) {
-        return new Entry(WORKSTREAMS + "/" + workstream.number,
+        return new Entry(WORKSTREAMS_PATH + "/" + workstream.number,
             workstreams.read(in.id(), workstream.id));
     }
 
     private static Entry settingsEntry(Map<String, Object> fields) {
-        return new Entry(SETTINGS, fields);
+        return new Entry(SETTINGS_PATH, fields);
     }
 
     /** The collections of this surface, as their paths under {@code admin} name them. */
-    public static final String STATUSES = "statuses";
-    public static final String USAGES = "usages";
-    public static final String ATTRIBUTES = "attributes";
-    public static final String RELATION_TYPES = "relation-types";
-    public static final String WORKSTREAMS = "workstreams";
-    public static final String SETTINGS = "settings";
+    public static final String STATUSES_PATH = "statuses";
+    public static final String USAGES_PATH = "usages";
+    public static final String ATTRIBUTES_PATH = "attributes";
+    public static final String RELATION_TYPES_PATH = "relation-types";
+    public static final String WORKSTREAMS_PATH = "workstreams";
+    public static final String SETTINGS_PATH = "settings";
 
     /**
      * One declared value, or the settings, as this surface answers them.

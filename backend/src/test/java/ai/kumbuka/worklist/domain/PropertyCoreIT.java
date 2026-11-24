@@ -283,13 +283,14 @@ class PropertyCoreIT {
         expected.put("retired", WorklistException.Reason.VALUE_UNDECLARED);
         expected.put("open", WorklistException.Reason.INVALID_VALUE);
         expected.put("done", WorklistException.Reason.INVALID_VALUE);
-        expected.forEach((target, reason) -> {
+        for (Map.Entry<String, WorklistException.Reason> entry : expected.entrySet()) {
+            String target = entry.getKey();
             WorklistException refusal = refusalFrom(() -> vocabulary.declareRelationType(scope,
                 DUPLICATE_OF, false, 2, "absent".equals(target) ? null : target));
-            assertThat(refusal.reason()).as("target %s", target).isEqualTo(reason);
+            assertThat(refusal.reason()).as("target %s", target).isEqualTo(entry.getValue());
             assertThat(refusal.offenders()).as("target %s", target)
                 .containsExactly("target_status");
-        });
+        }
         assertThat(vocabulary.relationTypes(scope))
             .extracting(type -> type.name)
             .as("no declaration was written")

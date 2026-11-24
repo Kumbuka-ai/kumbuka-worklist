@@ -258,17 +258,19 @@ class AdministrationSurfaceIT {
         expected.put("never-declared", "VALUE_UNDECLARED");
         expected.put("planned", "INVALID_VALUE");
         expected.put("done", "INVALID_VALUE");
-        expected.forEach((target, reason) -> {
+        for (Map.Entry<String, String> entry : expected.entrySet()) {
+            String target = entry.getKey();
             Map<String, Object> body = new LinkedHashMap<>(Map.of("name", "duplicate_of",
                 "rank", 1));
             if (!"absent".equals(target)) {
                 body.put("target_status", target);
             }
             Response refused = post("relation-types", body);
-            assertThat(refused.jsonPath().getString("reason")).as(target).isEqualTo(reason);
+            assertThat(refused.jsonPath().getString("reason")).as(target)
+                .isEqualTo(entry.getValue());
             assertThat(refused.jsonPath().getList("data.offenders", String.class)).as(target)
                 .containsExactly("target_status");
-        });
+        }
 
         assertThat(given().get(admin("relation-types")).jsonPath().getList("objects"))
             .as("nothing was written").isEmpty();
