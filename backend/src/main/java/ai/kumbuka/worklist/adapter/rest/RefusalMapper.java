@@ -10,6 +10,7 @@ package ai.kumbuka.worklist.adapter.rest;
 import ai.kumbuka.worklist.adapter.payload.Payloads;
 import ai.kumbuka.worklist.adapter.payload.RefusalPayload;
 import ai.kumbuka.worklist.domain.WorklistException;
+import ai.kumbuka.worklist.surface.AddressParser;
 import ai.kumbuka.worklist.surface.CallerActor;
 import ai.kumbuka.worklist.surface.PlatformLog;
 import ai.kumbuka.worklist.surface.RefusalCode;
@@ -286,10 +287,16 @@ public class RefusalMapper implements ExceptionMapper<SurfaceException> {
                 depth.map(CustomMethod::accepts).orElse(List.of()), null));
         }
 
-        /** The depth of a REST path: a collection, an object, a membership, or none. */
+        /**
+         * The depth of a REST path: a collection, an object, a membership, or
+         * none. A path of the administration surface has no depth of the verb
+         * surface, so its 405 names no verbs and keeps the framework's
+         * {@code Allow}.
+         */
         private static Optional<CustomMethod.Depth> depthOf(String path) {
             String[] segments = (path.startsWith("/") ? path.substring(1) : path).split("/", -1);
-            if (segments.length < 3 || !"api".equals(segments[0])) {
+            if (segments.length < 3 || !"api".equals(segments[0])
+                    || AddressParser.ADMINISTRATION.equals(segments[2])) {
                 return Optional.empty();
             }
             return switch (segments.length) {

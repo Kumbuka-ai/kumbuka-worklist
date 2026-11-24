@@ -1,0 +1,54 @@
+# Copyright (c) 2026 JBAConsult - Architekturberatung Johannes Bayer-Albert
+# SPDX-License-Identifier: AGPL-3.0-only
+# This file is part of Kumbuka and is licensed under the GNU Affero
+# General Public License v3.0 only. See the LICENSE file in the
+# repository root for the full licence text.
+# The administration surface of the worklist scheme (C1.6, C3.5).
+#
+# THIS FILE IS THE EXPECTATION, beside verb-surface.tsv and apart from it. It
+# is transcribed from the order that builds the surface (REA-0011 S4, TAR-0002
+# B13, ADR-0040: administration is resources, never verbs) and from the
+# service contract, and it is NOT derived from the built code.
+#
+# Every route under /api/{scope}/admin/... is a row here, and a JAX-RS route
+# that is in neither this file nor verb-surface.tsv is a defect (C3.5). None
+# of these calls is a verb: no tool of tools/list names one, the declaration
+# of GET /api/declaration carries none (C4.8, C5.7), and the verb
+# specification places none of them.
+#
+# Columns, tab-separated:
+#   call      the call of the administration surface, in snake case
+#   method    the HTTP method
+#   path      the route, exactly as it must be registered
+#   access    read: the read right of the scope; administer: the write right
+#             of the scope, until the administration permission exists
+#             (REA-0011 S15), refused without it as ROLE_INSUFFICIENT
+
+call	method	path	access
+# Statuses, with their phase and predicates. No change of a status: the
+# registry carries none, and a used status is withdrawn, never retyped.
+statuses	GET	/api/{scope}/admin/statuses	read
+declare_status	POST	/api/{scope}/admin/statuses	administer
+withdraw_status	DELETE	/api/{scope}/admin/statuses/{name}	administer
+# The optional predicates and properties a scope uses (DEC-0037 C5). A usage
+# is never taken back.
+usages	GET	/api/{scope}/admin/usages	read
+declare_usage	POST	/api/{scope}/admin/usages	administer
+# Attribute definitions with their options, the type of an item among them.
+attributes	GET	/api/{scope}/admin/attributes	read
+declare_attribute	POST	/api/{scope}/admin/attributes	administer
+withdraw_attribute	DELETE	/api/{scope}/admin/attributes/{key}	administer
+declare_option	POST	/api/{scope}/admin/attributes/{key}/options	administer
+# Relation types, duplicate_of with its target status (REA-0011 D18). No
+# rename: the registry carries none.
+relation_types	GET	/api/{scope}/admin/relation-types	read
+declare_relation_type	POST	/api/{scope}/admin/relation-types	administer
+withdraw_relation_type	DELETE	/api/{scope}/admin/relation-types/{name}	administer
+# Workstreams (D5): read and query stay verbs of the work surface.
+declare_workstream	POST	/api/{scope}/admin/workstreams	administer
+change_workstream	PATCH	/api/{scope}/admin/workstreams/{number}	administer
+withdraw_workstream	DELETE	/api/{scope}/admin/workstreams/{number}	administer
+# The settings, the default column set among them.
+settings	GET	/api/{scope}/admin/settings	read
+open_settings	POST	/api/{scope}/admin/settings	administer
+change_settings	PATCH	/api/{scope}/admin/settings	administer

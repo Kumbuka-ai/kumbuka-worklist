@@ -95,6 +95,18 @@ public class WorklistException extends RuntimeException {
          */
         SCOPE_READ_ONLY,
 
+        /**
+         * A call of the administration surface by a subject that may read the
+         * scope and may not write it (C8.7 {@code ROLE_INSUFFICIENT}).
+         *
+         * <p>The administration surface asks for the write right of the scope
+         * until the administration permission exists (REA-0011 S15, C1.6), and
+         * it answers its absence under the contract's code. The verbs keep
+         * {@link #SCOPE_READ_ONLY} until their own move to that code, which is
+         * a change of the work surface and not of this one.
+         */
+        ROLE_INSUFFICIENT,
+
 
         /**
          * An argument named a field the addressed object USED to carry, and

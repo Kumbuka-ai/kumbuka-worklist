@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.domain.WorklistException;
 import ai.kumbuka.worklist.surface.AddressParser;
+import ai.kumbuka.worklist.surface.AdministrationSurface;
 import ai.kumbuka.worklist.surface.PlatformLog;
 import ai.kumbuka.worklist.surface.RefusalCatalogue;
 import ai.kumbuka.worklist.surface.RefusalCode;
@@ -197,19 +198,29 @@ public record RefusalPayload(
         return data.isEmpty() ? null : data;
     }
 
+    /**
+     * The spellings a refusal may name: the declared names of the verbs, and
+     * the arguments of the administration surface, which the declaration does
+     * not carry (C1.6) and which are written once on that surface.
+     */
     private static List<String> declared(RefusalCode code, List<String> spellings) {
-        List<String> names = SurfaceDeclaration.declaredNames(spellings);
+        List<String> names = spellings.stream().filter(RefusalPayload::isDeclared).toList();
         if (names.size() != spellings.size()) {
             // A throw site named something the declaration lacks. The spelling
             // stays out of the answer and out of this line (DEC-0051): the
             // line counts the left-out paths, and says nothing of them.
             List<String> undeclared = spellings.stream()
-                .filter(spelling -> SurfaceDeclaration.declaredNames(List.of(spelling)).isEmpty())
+                .filter(spelling -> !isDeclared(spelling))
                 .toList();
             PlatformLog.undeclaredPathsLeftOut(PlatformLog.Reason.of(code),
                 PlatformLog.Count.of(undeclared));
         }
         return names;
+    }
+
+    private static boolean isDeclared(String spelling) {
+        return !SurfaceDeclaration.declaredNames(List.of(spelling)).isEmpty()
+            || AdministrationSurface.ARGUMENTS.contains(spelling);
     }
 
     /** @return the paths; absent where there are none, so the member is left out */

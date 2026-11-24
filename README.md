@@ -90,6 +90,47 @@ carries a holder or a receipt. Its table `claim` left the schema one release
 later (V31): the image before that step no longer read or wrote it, so it
 runs against the schema without the table.
 
+## The administration surface
+
+Where a scope is modelled: its statuses with their phase and predicates, the
+optional predicates and properties it uses, its attribute definitions with
+their options (the type of an item is an option of the attribute `type`), its
+relation types, its workstreams and its default column set. It is **not part of
+the work surface**: no MCP tool reaches it, no verb names its calls, and
+`GET /api/declaration` does not carry them. An agent working a scope does not
+change the scope's model through the surface it works on.
+
+It is REST only, under the literal segment `admin` after the scope; `admin` is
+never a selector, and no scope name is reserved for it. Resources, not verbs:
+GET reads a collection, POST declares into it, DELETE withdraws, PATCH changes
+under `If-Match`.
+
+| Path under `/api/{scope}/admin/` | Calls |
+|---|---|
+| `statuses`, `statuses/{name}` | GET, POST; DELETE withdraws a status |
+| `usages` | GET, POST (`reviewed`, `approved`, `verified`, `priority`, `severity`) |
+| `attributes`, `attributes/{key}`, `attributes/{key}/options` | GET, POST; DELETE withdraws an attribute; POST declares an option |
+| `relation-types`, `relation-types/{name}` | GET, POST (`duplicate_of` with its `target_status`); DELETE withdraws |
+| `workstreams`, `workstreams/{number}` | POST; PATCH changes the description or renames the token; DELETE withdraws |
+| `settings` | GET; POST opens the scope in this service with its views; PATCH writes `default_columns` |
+
+Every call goes through the same domain services the verbs use, so the
+surface writes the rows the migrations and the import wrote before. A status
+whose predicates contradict each other is refused and nothing is written;
+`duplicate_of` takes a target status that is declared, not withdrawn, closed
+and not successful; a workstream is renamed only while nothing points at it.
+No call changes a declared status or renames a relation type: a declared value
+in use is withdrawn, never retyped.
+
+**The right, in this step.** A read needs the read right of the scope, so a
+caller of the work surface reads the declared statuses, types and relation
+types. Every call that writes needs the **write right of the scope** and is
+refused without it with `ROLE_INSUFFICIENT` (a locked scope with
+`SCOPE_LOCKED`). That stands in for the administration permission, which
+arrives with the platform's rights store; then that permission replaces this
+check. A caller who cannot see the scope gets `NOT_FOUND`, as on the work
+surface.
+
 ## How isolation is built
 
 Five mechanisms, each of which can be removed independently and each of which

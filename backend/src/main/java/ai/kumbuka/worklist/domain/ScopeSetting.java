@@ -105,9 +105,9 @@ public class ScopeSetting extends AggregateRoot {
      *
      * <p>Declared and not compiled into the console: otherwise the
      * predecessor's disease reappears one level up, with the vocabulary free
-     * and the choice of what a reader sees code again. Nothing in this sprint
-     * writes it; the column is mapped so that a read of the settings answers
-     * with what the row holds.
+     * and the choice of what a reader sees code again. Written through the
+     * administration surface, by the opening of the settings and their
+     * update, and answered by a read of the settings as the row holds it.
      */
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "default_columns", nullable = false, columnDefinition = "text[]")

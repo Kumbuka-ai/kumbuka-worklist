@@ -8,6 +8,7 @@
 package ai.kumbuka.worklist.adapter.payload;
 
 import ai.kumbuka.worklist.surface.AddressParser;
+import ai.kumbuka.worklist.surface.AdministrationSurface;
 import ai.kumbuka.worklist.surface.NextStepTexts;
 import ai.kumbuka.worklist.surface.NoticeTexts;
 import ai.kumbuka.worklist.surface.VerbInput;
@@ -105,5 +106,31 @@ public final class Payloads {
         return new ListingPayload(listing.objects().stream()
             .map(result -> of(scope, result, toolNames))
             .toList(), listing.next());
+    }
+
+    // ----------------------------------------------------------------------
+    // Administration answer to wire shape
+    // ----------------------------------------------------------------------
+
+    /**
+     * One declared value, or the settings, as the administration surface
+     * answers them: at the path it stands under, with its conflict token where
+     * it carries one, and no open calls -- the calls of this surface are no
+     * verbs, and {@code next} names verbs (C6.1).
+     */
+    public static ObjectPayload of(String scope, AdministrationSurface.Entry entry) {
+        return new ObjectPayload(administrationPath(scope, entry.path()),
+            worded(entry.fields()), entry.conflictToken().orElse(null), List.of());
+    }
+
+    /** Every declared value of one collection, in one listing; nothing follows it. */
+    public static ListingPayload of(String scope, List<AdministrationSurface.Entry> entries) {
+        return new ListingPayload(entries.stream().map(entry -> of(scope, entry)).toList(),
+            null);
+    }
+
+    /** The REST path of a value under the administration surface of a scope. */
+    public static String administrationPath(String scope, String path) {
+        return "/api/" + scope + "/" + AddressParser.ADMINISTRATION + "/" + path;
     }
 }

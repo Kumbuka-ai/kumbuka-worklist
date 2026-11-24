@@ -115,7 +115,17 @@ public class ScopeDirectory {
         refuseUnservedKind(found);
         if (access == Access.WRITE) {
             refuseWriteIntoLockedScope(found);
-            refuseWriteWithoutTheRight(found);
+            refuseWriteWithoutTheRight(found, WorklistException.Reason.SCOPE_READ_ONLY);
+        }
+        if (access == Access.ADMINISTER) {
+            refuseWriteIntoLockedScope(found);
+            // Until the administration permission exists, the write right of
+            // the scope guards the administration surface (REA-0011 sections
+            // 4 and 6, C1.6). The permission arrives with S15 and the wave of
+            // TAR-0006 that brings the rights store and its resolver to the
+            // services (REA-0012); it replaces this check, and this branch
+            // asks the resolver then instead of the read contract's can_write.
+            refuseWriteWithoutTheRight(found, WorklistException.Reason.ROLE_INSUFFICIENT);
         }
 
         return new ScopeAccess(
@@ -140,7 +150,13 @@ public class ScopeDirectory {
         /** The act reads. A locked scope and a read-only one both admit it. */
         READ,
         /** The act writes. Both of those refuse it, for different reasons. */
-        WRITE
+        WRITE,
+        /**
+         * The act keeps the scope's vocabulary, through the administration
+         * surface. Refused like {@link #WRITE}, the missing right under the
+         * contract's code {@code ROLE_INSUFFICIENT} (C8.7).
+         */
+        ADMINISTER
     }
 
     /**
@@ -167,13 +183,17 @@ public class ScopeDirectory {
             List.of(SCOPE_ARGUMENT));
     }
 
-    /** A write this subject may not make in a scope it may read. */
-    private static void refuseWriteWithoutTheRight(ScopeAccessRepository.ScopeAccessRow scope) {
+    /**
+     * A write this subject may not make in a scope it may read.
+     *
+     * @param reason the refusal the caller's surface answers it under
+     */
+    private static void refuseWriteWithoutTheRight(ScopeAccessRepository.ScopeAccessRow scope,
+                                                   WorklistException.Reason reason) {
         if (scope.canWrite()) {
             return;
         }
-        throw new WorklistException(WorklistException.Reason.SCOPE_READ_ONLY,
-            List.of(SCOPE_ARGUMENT));
+        throw new WorklistException(reason, List.of(SCOPE_ARGUMENT));
     }
 
     /**

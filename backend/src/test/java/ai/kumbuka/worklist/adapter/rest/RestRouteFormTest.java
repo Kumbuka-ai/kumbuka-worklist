@@ -199,7 +199,7 @@ class RestRouteFormTest {
 
     /** The resources of the REST surface, by the class a test can load. */
     private static final List<Class<?>> RESOURCES = List.of(WorklistResource.class,
-        DeclarationResource.class, WhoamiResource.class);
+        DeclarationResource.class, WhoamiResource.class, AdministrationResource.class);
 
     /** C3.2: the two literal paths, as the contract names them. */
     private static final Set<String> LITERAL = Set.of("/api/declaration", "/api/whoami");
@@ -290,6 +290,81 @@ class RestRouteFormTest {
             }
         }
         return paths;
+    }
+
+    // -----------------------------------------------------------------------
+    // C3.5: the administration surface under /api/{scope}/admin, and admin
+    // never a selector
+    // -----------------------------------------------------------------------
+
+    /** C3.5: the prefix every path of the administration surface stands under. */
+    private static final String ADMINISTRATION_PREFIX = "/api/{scope}/admin/";
+
+    @Test
+    void the_administration_surface_stands_under_the_literal_admin_segment_alone() {
+        assertThat(administrationPathOffences(pathsOf(List.of(AdministrationResource.class)),
+                pathsOf(List.of(WorklistResource.class, DeclarationResource.class,
+                    WhoamiResource.class))))
+            .as("C3.5: every path of the administration surface is /api/{scope}/admin/..., "
+                + "and no other resource has a path with the segment admin")
+            .isEmpty();
+    }
+
+    @Test
+    void admin_is_never_a_selector() {
+        assertThat(selectorOffences(Set.of("admin")))
+            .as("C3.5: the literal segment admin is reserved and is never the name of a "
+                + "selector, so the grammar refuses it as a view")
+            .isEmpty();
+    }
+
+    /**
+     * The red state, observed on every build: an administration path under
+     * the other form, one beside the prefix, a verb route with the segment
+     * admin, and a name the grammar takes as a view.
+     */
+    @Test
+    void the_checks_report_each_offence_they_exist_for() {
+        assertThat(administrationPathOffences(
+                List.of("/api/{scope}/admin/statuses", "/api/admin/{scope}/statuses",
+                    "/api/{scope}/administration/statuses"),
+                List.of("/api/{scope}/{selector}", "/api/{scope}/admin/{id}")))
+            .as("RED STATE, observed: each path outside the form C3.5 names must be reported")
+            .containsExactly("/api/admin/{scope}/statuses",
+                "/api/{scope}/administration/statuses", "/api/{scope}/admin/{id}");
+        assertThat(selectorOffences(Set.of("admin", "item")))
+            .as("RED STATE, observed: a name the grammar takes as a view must be reported")
+            .containsExactly("item");
+    }
+
+    /**
+     * The paths outside C3.5: an administration path not under the prefix,
+     * and a path of another resource that carries the segment admin.
+     */
+    static List<String> administrationPathOffences(List<String> administration,
+                                                   List<String> others) {
+        List<String> offences = new ArrayList<>();
+        administration.stream()
+            .filter(path -> !path.startsWith(ADMINISTRATION_PREFIX))
+            .forEach(offences::add);
+        others.stream()
+            .filter(path -> List.of(path.split("/")).contains("admin"))
+            .forEach(offences::add);
+        return offences;
+    }
+
+    /** The names the address grammar takes as a view. */
+    static List<String> selectorOffences(Set<String> names) {
+        List<String> offences = new ArrayList<>();
+        for (String name : new TreeSet<>(names)) {
+            try {
+                AddressParser.view(name);
+                offences.add(name);
+            } catch (SurfaceException refused) {
+                // refused by the grammar, as C3.5 asks
+            }
+        }
+        return offences;
     }
 
     // -----------------------------------------------------------------------

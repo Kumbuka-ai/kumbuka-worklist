@@ -100,6 +100,14 @@ public final class AddressParser {
     public static final Set<String> RESERVED_SCOPES = Set.of("declaration", "whoami");
 
     /**
+     * The literal segment the administration surface stands under,
+     * {@code /api/{scope}/admin/...}, which is never the name of a selector
+     * (C3.5): a view so named would answer under a path the administration
+     * surface keeps. Refused by the grammar whatever the set of views holds.
+     */
+    public static final String ADMINISTRATION = "admin";
+
+    /**
      * A number in an address: at least one, no leading zeroes.
      *
      * <p>Leading zeroes are form rather than taste: {@code 07} and {@code 7}
@@ -195,7 +203,7 @@ public final class AddressParser {
         if (!Selector.TOKEN_PATTERN.matcher(candidate).matches()) {
             throw malformed();
         }
-        if (!Selector.VIEWS.contains(candidate)) {
+        if (!Selector.VIEWS.contains(candidate) || ADMINISTRATION.equals(candidate)) {
             throw malformed();
         }
         return candidate;
