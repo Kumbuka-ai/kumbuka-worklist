@@ -22,12 +22,14 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.EntityTag;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jspecify.annotations.Nullable;
@@ -103,7 +105,7 @@ public class AdministrationResource {
     @GET
     @Path(AdministrationSurface.STATUSES_PATH)
     public Response statuses(@PathParam("scope") String scope) {
-        calling("GET", AdministrationSurface.STATUSES_PATH);
+        calling(HttpMethod.GET, AdministrationSurface.STATUSES_PATH);
         return listing(scope, administration.statuses(caller.subject(), scope));
     }
 
@@ -114,7 +116,7 @@ public class AdministrationResource {
     @POST
     @Path(AdministrationSurface.STATUSES_PATH)
     public Response declareStatus(@PathParam("scope") String scope, @Nullable String body) {
-        calling("POST", AdministrationSurface.STATUSES_PATH);
+        calling(HttpMethod.POST, AdministrationSurface.STATUSES_PATH);
         ArgumentsPayload given = arguments(body, NAME, RANK, ACTIONABLE, IN_PROGRESS, CLOSED,
             SUCCESSFUL, REVIEWED, APPROVED, VERIFIED);
         AdministrationSurface.StatusDeclaration declared =
@@ -129,7 +131,7 @@ public class AdministrationResource {
     @Path(AdministrationSurface.STATUSES_PATH + "/{name}")
     public Response withdrawStatus(@PathParam("scope") String scope,
                                    @PathParam("name") String name) {
-        calling("DELETE", AdministrationSurface.STATUSES_PATH);
+        calling(HttpMethod.DELETE, AdministrationSurface.STATUSES_PATH);
         return ok(scope, administration.withdrawStatus(caller.subject(), scope, name));
     }
 
@@ -140,7 +142,7 @@ public class AdministrationResource {
     @GET
     @Path(AdministrationSurface.USAGES_PATH)
     public Response usages(@PathParam("scope") String scope) {
-        calling("GET", AdministrationSurface.USAGES_PATH);
+        calling(HttpMethod.GET, AdministrationSurface.USAGES_PATH);
         return listing(scope, administration.usages(caller.subject(), scope));
     }
 
@@ -148,7 +150,7 @@ public class AdministrationResource {
     @POST
     @Path(AdministrationSurface.USAGES_PATH)
     public Response declareUsage(@PathParam("scope") String scope, @Nullable String body) {
-        calling("POST", AdministrationSurface.USAGES_PATH);
+        calling(HttpMethod.POST, AdministrationSurface.USAGES_PATH);
         String name = text(arguments(body, NAME), NAME);
         ScopeUsage.Property property = ScopeUsage.Property.byToken(name)
             .orElseThrow(() -> SurfaceException.invalid(NAME));
@@ -162,7 +164,7 @@ public class AdministrationResource {
     @GET
     @Path(AdministrationSurface.ATTRIBUTES_PATH)
     public Response attributes(@PathParam("scope") String scope) {
-        calling("GET", AdministrationSurface.ATTRIBUTES_PATH);
+        calling(HttpMethod.GET, AdministrationSurface.ATTRIBUTES_PATH);
         return listing(scope, administration.attributes(caller.subject(), scope));
     }
 
@@ -173,7 +175,7 @@ public class AdministrationResource {
     @POST
     @Path(AdministrationSurface.ATTRIBUTES_PATH)
     public Response declareAttribute(@PathParam("scope") String scope, @Nullable String body) {
-        calling("POST", AdministrationSurface.ATTRIBUTES_PATH);
+        calling(HttpMethod.POST, AdministrationSurface.ATTRIBUTES_PATH);
         ArgumentsPayload given = arguments(body, KEY, NAME, TYPE, RANK, SORTABLE);
         AdministrationSurface.AttributeDeclaration declared =
             new AdministrationSurface.AttributeDeclaration(text(given, KEY), text(given, NAME),
@@ -185,7 +187,7 @@ public class AdministrationResource {
     @Path(AdministrationSurface.ATTRIBUTES_PATH + "/{key}")
     public Response withdrawAttribute(@PathParam("scope") String scope,
                                       @PathParam("key") String key) {
-        calling("DELETE", AdministrationSurface.ATTRIBUTES_PATH);
+        calling(HttpMethod.DELETE, AdministrationSurface.ATTRIBUTES_PATH);
         return ok(scope, administration.withdrawAttribute(caller.subject(), scope, key));
     }
 
@@ -194,7 +196,7 @@ public class AdministrationResource {
     @Path(AdministrationSurface.ATTRIBUTES_PATH + "/{key}/options")
     public Response declareOption(@PathParam("scope") String scope,
                                   @PathParam("key") String key, @Nullable String body) {
-        calling("POST", AdministrationSurface.ATTRIBUTES_PATH);
+        calling(HttpMethod.POST, AdministrationSurface.ATTRIBUTES_PATH);
         ArgumentsPayload given = arguments(body, NAME, RANK);
         return ok(scope, administration.declareOption(caller.subject(), scope, key,
             text(given, NAME), rankOf(given)));
@@ -207,7 +209,7 @@ public class AdministrationResource {
     @GET
     @Path(AdministrationSurface.RELATION_TYPES_PATH)
     public Response relationTypes(@PathParam("scope") String scope) {
-        calling("GET", AdministrationSurface.RELATION_TYPES_PATH);
+        calling(HttpMethod.GET, AdministrationSurface.RELATION_TYPES_PATH);
         return listing(scope, administration.relationTypes(caller.subject(), scope));
     }
 
@@ -220,7 +222,7 @@ public class AdministrationResource {
     @Path(AdministrationSurface.RELATION_TYPES_PATH)
     public Response declareRelationType(@PathParam("scope") String scope,
                                         @Nullable String body) {
-        calling("POST", AdministrationSurface.RELATION_TYPES_PATH);
+        calling(HttpMethod.POST, AdministrationSurface.RELATION_TYPES_PATH);
         ArgumentsPayload given = arguments(body, NAME, BLOCKS, RANK, TARGET_STATUS);
         AdministrationSurface.RelationDeclaration declared =
             new AdministrationSurface.RelationDeclaration(text(given, NAME),
@@ -232,7 +234,7 @@ public class AdministrationResource {
     @Path(AdministrationSurface.RELATION_TYPES_PATH + "/{name}")
     public Response withdrawRelationType(@PathParam("scope") String scope,
                                          @PathParam("name") String name) {
-        calling("DELETE", AdministrationSurface.RELATION_TYPES_PATH);
+        calling(HttpMethod.DELETE, AdministrationSurface.RELATION_TYPES_PATH);
         return ok(scope, administration.withdrawRelationType(caller.subject(), scope, name));
     }
 
@@ -244,7 +246,7 @@ public class AdministrationResource {
     @POST
     @Path(AdministrationSurface.WORKSTREAMS_PATH)
     public Response declareWorkstream(@PathParam("scope") String scope, @Nullable String body) {
-        calling("POST", AdministrationSurface.WORKSTREAMS_PATH);
+        calling(HttpMethod.POST, AdministrationSurface.WORKSTREAMS_PATH);
         ArgumentsPayload given = arguments(body, TOKEN, DESCRIPTION);
         return ok(scope, administration.declareWorkstream(caller.subject(), scope,
             text(given, TOKEN), text(given, DESCRIPTION)));
@@ -258,9 +260,9 @@ public class AdministrationResource {
     @Path(AdministrationSurface.WORKSTREAMS_PATH + "/{number}")
     public Response changeWorkstream(@PathParam("scope") String scope,
                                      @PathParam("number") String number,
-                                     @HeaderParam("If-Match") @Nullable String ifMatch,
+                                     @HeaderParam(HttpHeaders.IF_MATCH) @Nullable String ifMatch,
                                      @Nullable String body) {
-        calling("PATCH", AdministrationSurface.WORKSTREAMS_PATH);
+        calling(HttpMethod.PATCH, AdministrationSurface.WORKSTREAMS_PATH);
         long at = numberOf(number);
         ArgumentsPayload given = arguments(body, TOKEN, DESCRIPTION);
         if (given.isEmpty()) {
@@ -275,8 +277,8 @@ public class AdministrationResource {
     @Path(AdministrationSurface.WORKSTREAMS_PATH + "/{number}")
     public Response withdrawWorkstream(@PathParam("scope") String scope,
                                        @PathParam("number") String number,
-                                       @HeaderParam("If-Match") @Nullable String ifMatch) {
-        calling("DELETE", AdministrationSurface.WORKSTREAMS_PATH);
+                                       @HeaderParam(HttpHeaders.IF_MATCH) @Nullable String ifMatch) {
+        calling(HttpMethod.DELETE, AdministrationSurface.WORKSTREAMS_PATH);
         long at = numberOf(number);
         return ok(scope, administration.withdrawWorkstream(caller.subject(), scope, at,
             unquote(ifMatch).orElse(null)));
@@ -289,7 +291,7 @@ public class AdministrationResource {
     @GET
     @Path(AdministrationSurface.SETTINGS_PATH)
     public Response settings(@PathParam("scope") String scope) {
-        calling("GET", AdministrationSurface.SETTINGS_PATH);
+        calling(HttpMethod.GET, AdministrationSurface.SETTINGS_PATH);
         return ok(scope, administration.settings(caller.subject(), scope));
     }
 
@@ -300,7 +302,7 @@ public class AdministrationResource {
     @POST
     @Path(AdministrationSurface.SETTINGS_PATH)
     public Response openSettings(@PathParam("scope") String scope, @Nullable String body) {
-        calling("POST", AdministrationSurface.SETTINGS_PATH);
+        calling(HttpMethod.POST, AdministrationSurface.SETTINGS_PATH);
         return ok(scope, administration.openSettings(caller.subject(), scope,
             arguments(body, DEFAULT_COLUMNS).values()));
     }
@@ -309,9 +311,9 @@ public class AdministrationResource {
     @PATCH
     @Path(AdministrationSurface.SETTINGS_PATH)
     public Response changeSettings(@PathParam("scope") String scope,
-                                   @HeaderParam("If-Match") @Nullable String ifMatch,
+                                   @HeaderParam(HttpHeaders.IF_MATCH) @Nullable String ifMatch,
                                    @Nullable String body) {
-        calling("PATCH", AdministrationSurface.SETTINGS_PATH);
+        calling(HttpMethod.PATCH, AdministrationSurface.SETTINGS_PATH);
         ArgumentsPayload given = arguments(body, DEFAULT_COLUMNS);
         given.list(DEFAULT_COLUMNS).orElseThrow(() -> SurfaceException.missing(DEFAULT_COLUMNS));
         return ok(scope, administration.changeSettings(caller.subject(), scope,

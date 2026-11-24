@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +51,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * reports {@code declare_status asked READ}.
  */
 class AdministrationSurfaceTest {
+
+    /** The text every string parameter of a probed call carries. */
+    private static final String PROBE = "probe";
 
     /** Stops a call at the directory, once the access it asked for is recorded. */
     private static final class Stopped extends RuntimeException {
@@ -159,36 +163,26 @@ class AdministrationSurfaceTest {
         return camel.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** A well-formed value for each parameter type a call takes. */
+    private static final Map<Class<?>, Object> PROBE_VALUES = Map.of(
+        String.class, PROBE,
+        long.class, 1L,
+        int.class, 1,
+        Map.class, Map.of(),
+        ScopeUsage.Property.class, ScopeUsage.Property.PRIORITY,
+        AdministrationSurface.StatusDeclaration.class,
+        new AdministrationSurface.StatusDeclaration(PROBE, 1, true, false,
+            false, false, false, false, false),
+        AdministrationSurface.AttributeDeclaration.class,
+        new AdministrationSurface.AttributeDeclaration(PROBE, PROBE, "text", 1, false),
+        AdministrationSurface.RelationDeclaration.class,
+        new AdministrationSurface.RelationDeclaration(PROBE, false, 1, null));
+
     /** A well-formed value for each parameter, so that no form check stops the call. */
     private static Object[] argumentsFor(Method call) {
-        return Arrays.stream(call.getParameterTypes()).map(type -> {
-            if (type == String.class) {
-                return "probe";
-            }
-            if (type == long.class) {
-                return 1L;
-            }
-            if (type == int.class) {
-                return 1;
-            }
-            if (type == Map.class) {
-                return Map.of();
-            }
-            if (type == ScopeUsage.Property.class) {
-                return ScopeUsage.Property.PRIORITY;
-            }
-            if (type == AdministrationSurface.StatusDeclaration.class) {
-                return new AdministrationSurface.StatusDeclaration("probe", 1, true, false,
-                    false, false, false, false, false);
-            }
-            if (type == AdministrationSurface.AttributeDeclaration.class) {
-                return new AdministrationSurface.AttributeDeclaration("probe", "probe", "text",
-                    1, false);
-            }
-            if (type == AdministrationSurface.RelationDeclaration.class) {
-                return new AdministrationSurface.RelationDeclaration("probe", false, 1, null);
-            }
-            throw new IllegalStateException("no probe value for " + type);
-        }).toArray();
+        return Arrays.stream(call.getParameterTypes())
+            .map(type -> Optional.ofNullable(PROBE_VALUES.get(type)).orElseThrow(
+                () -> new IllegalStateException("no probe value for " + type)))
+            .toArray();
     }
 }
