@@ -205,9 +205,17 @@ class PropertyCoreIT {
         assertNothingWritten(duplicate, before);
     }
 
+    /**
+     * The registry refuses {@code duplicate_of} without a target status since
+     * the administration surface (REA-0011 S4), so the row is planted as a
+     * hand-edited one: declared with its target, the target then cleared by
+     * SQL under the service role. {@code relate} still refuses it.
+     */
     @Test
-    void d18_duplicate_of_without_a_target_status_is_refused_and_writes_nothing() {
-        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2);
+    void d18_duplicate_of_without_a_target_status_is_refused_and_writes_nothing()
+            throws SQLException {
+        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
+        retargetDuplicateOf(null);
         UUID duplicate = create("no target named");
         UUID original = create("the original");
         Map<String, Object> before = items.read(scope, duplicate);
@@ -235,9 +243,14 @@ class PropertyCoreIT {
         assertNothingWritten(duplicate, before);
     }
 
+    /**
+     * Planted as a hand-edited row, as above: the registry refuses a
+     * successful target at declaration since the administration surface.
+     */
     @Test
-    void d18_a_successful_target_status_is_no_target() {
-        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "done");
+    void d18_a_successful_target_status_is_no_target() throws SQLException {
+        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
+        retargetDuplicateOf("done");
         UUID duplicate = create("target successful");
         UUID original = create("the original");
         Map<String, Object> before = items.read(scope, duplicate);
@@ -249,6 +262,38 @@ class PropertyCoreIT {
             .as("a duplicate is closed as not successful; a successful target is refused")
             .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
         assertNothingWritten(duplicate, before);
+    }
+
+    /**
+     * The registry holds the rule of D18 at declaration (REA-0011 S4, K6):
+     * {@code duplicate_of} without a target status, with one the scope does
+     * not declare, with a withdrawn one, with one that is not closed and with
+     * a successful one is each refused naming {@code target_status}, and none
+     * writes a row.
+     */
+    @Test
+    void d18_the_registry_refuses_duplicate_of_without_a_valid_target_and_writes_nothing() {
+        vocabulary.declareStatus(scope, "retired", 5, false, false, true, false);
+        vocabulary.withdrawStatus(scope, vocabulary.statusByName(scope, "retired")
+            .orElseThrow().pk);
+
+        Map<String, WorklistException.Reason> expected = new LinkedHashMap<>();
+        expected.put("absent", WorklistException.Reason.ARGUMENT_MISSING);
+        expected.put("never-declared", WorklistException.Reason.VALUE_UNDECLARED);
+        expected.put("retired", WorklistException.Reason.VALUE_UNDECLARED);
+        expected.put("open", WorklistException.Reason.INVALID_VALUE);
+        expected.put("done", WorklistException.Reason.INVALID_VALUE);
+        expected.forEach((target, reason) -> {
+            WorklistException refusal = refusalFrom(() -> vocabulary.declareRelationType(scope,
+                DUPLICATE_OF, false, 2, "absent".equals(target) ? null : target));
+            assertThat(refusal.reason()).as("target %s", target).isEqualTo(reason);
+            assertThat(refusal.offenders()).as("target %s", target)
+                .containsExactly("target_status");
+        });
+        assertThat(vocabulary.relationTypes(scope))
+            .extracting(type -> type.name)
+            .as("no declaration was written")
+            .doesNotContain(DUPLICATE_OF);
     }
 
     @Test
@@ -620,5 +665,31 @@ class PropertyCoreIT {
         Throwable thrown = catchThrowable(call::run);
         assertThat(thrown).isInstanceOf(WorklistException.class);
         return (WorklistException) thrown;
+    }
+
+    /**
+     * Points this scope's {@code duplicate_of} at another status, or at none,
+     * by SQL under the service role: the hand-edited row the registry no
+     * longer writes, which {@code relate} has to refuse all the same.
+     *
+     * @param status the name of the status to point at; absent to point at none
+     */
+    private void retargetDuplicateOf(@org.jspecify.annotations.Nullable String status)
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, UUID.fromString(SubstrateDatabaseResource.TENANT_ID));
+            try (var st = c.prepareStatement(
+                    "UPDATE worklist.relation_type SET target_status_pk = "
+                        + "(SELECT s.pk FROM worklist.item_status s "
+                        + "WHERE s.scope_id = ? AND s.name = ?) "
+                        + "WHERE scope_id = ? AND name = ?")) {
+                st.setObject(1, scope);
+                st.setString(2, status);
+                st.setObject(3, scope);
+                st.setString(4, DUPLICATE_OF);
+                assertThat(st.executeUpdate()).as("the one duplicate_of of the scope").isEqualTo(1);
+            }
+            c.commit();
+        }
     }
 }

@@ -56,9 +56,9 @@ public class WorkstreamService {
     private static final String DESCRIPTION = "description";
 
     /*
-     * Nothing here logs (DEC-0051, C4). A workstream is declared on no verb of
-     * the surface today, so no line is written for it until a surface that
-     * calls these methods writes one -- and that line never carries the token.
+     * Nothing here logs (DEC-0051, C4). A workstream is declared on no verb;
+     * the administration surface calls these methods and writes their lines,
+     * by the workstream's number -- and that line never carries the token.
      */
 
     @Inject WorkstreamRepository workstreams;

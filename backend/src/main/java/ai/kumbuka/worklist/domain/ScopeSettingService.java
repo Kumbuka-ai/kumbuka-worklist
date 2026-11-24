@@ -53,8 +53,8 @@ public class ScopeSettingService extends PlanningService {
 
     /*
      * Nothing here logs (DEC-0051, C4). The opening and the settings are
-     * written by no verb of the surface today, so no line is written for them
-     * until a surface that calls them writes one.
+     * written by no verb; the administration surface calls them and writes
+     * their lines.
      */
 
     /**

@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import ai.kumbuka.worklist.domain.DeclaredValue;
 import ai.kumbuka.worklist.domain.Item;
 import ai.kumbuka.worklist.domain.ItemAddendum;
 import ai.kumbuka.worklist.domain.ItemFulfilment;
@@ -15,6 +16,7 @@ import ai.kumbuka.worklist.domain.Iteration;
 import ai.kumbuka.worklist.domain.IterationMembership;
 import ai.kumbuka.worklist.domain.Milestone;
 import ai.kumbuka.worklist.domain.WorklistException;
+import ai.kumbuka.worklist.domain.Workstream;
 import org.jboss.logging.Logger;
 
 import java.util.Collection;
@@ -125,6 +127,69 @@ public final class PlatformLog {
 
     static void returned(TechnicalAddress entry, ScopeId scope) {
         LOG.infof("return %s in scope %s", entry, scope);
+    }
+
+    // ======================================================================
+    // The administration surface (C1.6): one INFO line per completed call
+    // that writes, by the technical address of the declared value -- its
+    // surrogate, or a workstream's number -- and the scope id; never its
+    // name, key, token or description, which the caller chose.
+    // ======================================================================
+
+    static void statusDeclared(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: status %s declared in scope %s", entry, scope);
+    }
+
+    static void statusWithdrawn(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: status %s withdrawn in scope %s", entry, scope);
+    }
+
+    static void usageDeclared(ScopeId scope) {
+        LOG.infof("administration: a usage declared in scope %s", scope);
+    }
+
+    static void attributeDeclared(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: attribute %s declared in scope %s", entry, scope);
+    }
+
+    static void optionDeclared(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: option %s declared in scope %s", entry, scope);
+    }
+
+    static void attributeWithdrawn(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: attribute %s withdrawn in scope %s", entry, scope);
+    }
+
+    static void relationTypeDeclared(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: relation type %s declared in scope %s", entry, scope);
+    }
+
+    static void relationTypeWithdrawn(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: relation type %s withdrawn in scope %s", entry, scope);
+    }
+
+    static void workstreamDeclared(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: workstream %s declared in scope %s", entry, scope);
+    }
+
+    static void workstreamChanged(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: workstream %s changed in scope %s", entry, scope);
+    }
+
+    static void workstreamWithdrawn(TechnicalAddress entry, ScopeId scope) {
+        LOG.infof("administration: workstream %s withdrawn in scope %s", entry, scope);
+    }
+
+    static void settingsOpened(ScopeId scope) {
+        LOG.infof("administration: settings opened in scope %s", scope);
+    }
+
+    static void settingsChanged(ScopeId scope) {
+        LOG.infof("administration: settings changed in scope %s", scope);
+    }
+
+    static void vocabularyRead(ScopeId scope) {
+        LOG.debugf("administration: vocabulary read in scope %s", scope);
     }
 
     // ======================================================================
@@ -402,6 +467,20 @@ public final class PlatformLog {
          */
         static TechnicalAddress of(ItemAddendum addendum) {
             return new TechnicalAddress(String.valueOf(addendum.itemNumber));
+        }
+
+        /**
+         * A declared value -- a status, an attribute, an option, a relation
+         * type -- by the surrogate the store allocated to it; its name and
+         * key are the caller's and stay out.
+         */
+        static TechnicalAddress of(DeclaredValue value) {
+            return new TechnicalAddress(String.valueOf(value.pk));
+        }
+
+        /** A workstream, by its number; its token is the caller's and stays out. */
+        static TechnicalAddress of(Workstream workstream) {
+            return new TechnicalAddress(String.valueOf(workstream.number));
         }
 
         static TechnicalAddress of(IterationMembership membership) {

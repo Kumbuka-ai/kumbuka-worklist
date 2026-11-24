@@ -72,10 +72,12 @@ import java.util.UUID;
 public class VocabularyRegistry {
 
     /*
-     * Nothing here logs (DEC-0051, C4). The vocabulary is declared on no verb
-     * of the surface today, so no line is written for it until a surface that
-     * calls these methods writes one.
+     * Nothing here logs (DEC-0051, C4). The vocabulary is declared on no verb;
+     * the administration surface calls these methods and writes their lines.
      */
+
+    /** The argument a refusal about the target status of {@code duplicate_of} names. */
+    private static final String TARGET_STATUS = "target_status";
 
     /** The two usages under which an actionable status is also reviewed and approved. */
     private static final Set<ScopeUsage.Property> REVIEW_OR_APPROVAL =
@@ -450,10 +452,17 @@ public class VocabularyRegistry {
      * relation (REA-0011 D18).
      *
      * <p>Only the type named {@link RelationType#DUPLICATE_OF} takes a target
-     * status, and the status is named by the name it is declared under in
-     * the same scope. Whether it is closed and not successful, and still
-     * declared, is asked at {@code relate}, where it decides; a target that
-     * fails it there refuses the relation rather than this declaration.
+     * status, and that type takes one always: the status is named by the name
+     * it is declared under in the same scope, and it must be declared, not
+     * withdrawn, {@code closed} and not {@code successful}. A declaration that
+     * breaks this is refused before anything is written -- {@code duplicate_of}
+     * without a target status as {@code ARGUMENT_MISSING}, a target the scope
+     * does not hold declared as {@code VALUE_UNDECLARED}, a target that is not
+     * closed or is successful as {@code INVALID_VALUE} -- so the rule holds for
+     * every entry that declares through here, the administration surface
+     * among them. {@code relate} asks the same question again where it
+     * decides, for rows written around this class (the bootstrap script, a
+     * hand-edited row) and for a target withdrawn after the declaration.
      *
      * @param targetStatus the name of the target status; absent where the
      *                     type names none
@@ -462,19 +471,19 @@ public class VocabularyRegistry {
     public RelationType declareRelationType(UUID scopeId, String name, boolean blocks,
             int rank, @Nullable String targetStatus) {
         requireName(name);
-        Long targetStatusPk = null;
-        if (targetStatus != null) {
-            if (!RelationType.DUPLICATE_OF.equals(name.trim())) {
-                throw new WorklistException(
-                    WorklistException.Reason.INVALID_VALUE,
-                    List.of());
-            }
-            targetStatusPk = vocabulary.statusByName(scopeId, targetStatus)
-                .orElseThrow(() -> new WorklistException(
-                    WorklistException.Reason.VALUE_UNDECLARED,
-                    List.of()))
-                .pk;
+        boolean duplicateOf = RelationType.DUPLICATE_OF.equals(name.trim());
+        if (targetStatus != null && !duplicateOf) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(TARGET_STATUS));
         }
+        if (targetStatus == null && duplicateOf) {
+            throw new WorklistException(
+                WorklistException.Reason.ARGUMENT_MISSING,
+                List.of(TARGET_STATUS));
+        }
+        Long targetStatusPk = targetStatus == null ? null
+            : requireDuplicateTarget(scopeId, targetStatus).pk;
 
         // Idempotent for the same reason declareStatus is: the name is the
         // wire form of a relation entry, and a second row under the same name
@@ -493,6 +502,25 @@ public class VocabularyRegistry {
         vocabulary.insert(type);
 
         return type;
+    }
+
+    /**
+     * The status a {@code duplicate_of} type may close into, or the refusal
+     * naming {@code target_status}: declared in this scope and not withdrawn,
+     * {@code closed} and not {@code successful} (REA-0011 D18).
+     */
+    private ItemStatus requireDuplicateTarget(UUID scopeId, String targetStatus) {
+        ItemStatus status = vocabulary.statusByName(scopeId, targetStatus)
+            .filter(found -> DeclaredValue.DECLARED.equals(found.status))
+            .orElseThrow(() -> new WorklistException(
+                WorklistException.Reason.VALUE_UNDECLARED,
+                List.of(TARGET_STATUS)));
+        if (!status.closed || status.successful) {
+            throw new WorklistException(
+                WorklistException.Reason.INVALID_VALUE,
+                List.of(TARGET_STATUS));
+        }
+        return status;
     }
 
     /** Every relation type a scope declared, by rank then name. */

@@ -62,6 +62,17 @@ public class CallContext {
     }
 
     /**
+     * Records the call of the administration surface the route named, as
+     * this surface names it: the method and the collection under
+     * {@code admin} ({@code POST admin/statuses}). No tool names it, so the
+     * assistant surface names it the same way (C4.8).
+     */
+    void administering(String call) {
+        this.attempted = call;
+        this.assistant = false;
+    }
+
+    /**
      * Whether the calls a refusal names are named by their tool names: the
      * request named the assistant surface (C6.2, C14.4).
      */
