@@ -272,10 +272,36 @@ class AdministrationSurfaceIT {
 
         assertThat(given().get(admin("relation-types")).jsonPath().getList("objects"))
             .as("nothing was written").isEmpty();
-        assertThat(given().contentType(ContentType.JSON).body(Map.of("name", "dup"))
-                .patch(admin("relation-types/duplicate_of")).statusCode())
-            .as("no call renames a relation type, duplicate_of least of all")
-            .isEqualTo(405);
+    }
+
+    /**
+     * No call renames a relation type, {@code duplicate_of} least of all (D18):
+     * a write aimed at a declared {@code duplicate_of} under the
+     * administration path is refused -- as a method no route of the
+     * administration surface takes (C3.3), or as an address whose selector
+     * {@code admin} is never one (C3.5) -- and the type keeps its name.
+     */
+    @Test
+    void k6_duplicate_of_is_never_renamed() {
+        post("statuses", Map.of("name", "obsolete", "rank", 1, "closed", true));
+        expectOk(post("relation-types", Map.of("name", "duplicate_of", "rank", 1,
+            "target_status", "obsolete")));
+
+        for (String method : List.of("PATCH", "PUT", "POST")) {
+            Response refused = given().contentType(ContentType.JSON)
+                .header("If-Match", "\"a-token\"")
+                .body(Map.of("name", "duplicate"))
+                .request(method, admin("relation-types/duplicate_of"));
+            assertThat(refused.statusCode()).as("%s: %s", method, refused.asString())
+                .isIn(400, 405);
+            assertThat(refused.jsonPath().getString("reason")).as(method)
+                .isIn("VERB_NOT_CARRIED", "ADDRESS_MALFORMED");
+        }
+
+        assertThat(given().get(admin("relation-types")).jsonPath()
+                .getList("objects.fields.name", String.class))
+            .as("the type keeps its name")
+            .containsExactly("duplicate_of");
     }
 
     // ====================================================================
