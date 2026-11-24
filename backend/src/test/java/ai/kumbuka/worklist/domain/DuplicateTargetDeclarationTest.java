@@ -91,7 +91,8 @@ class DuplicateTargetDeclarationTest {
         expected.put("planned", WorklistException.Reason.INVALID_VALUE);
         expected.put("done", WorklistException.Reason.INVALID_VALUE);
 
-        expected.forEach((target, reason) -> {
+        for (Map.Entry<String, WorklistException.Reason> entry : expected.entrySet()) {
+            String target = entry.getKey();
             Statuses repository = new Statuses();
             VocabularyRegistry registry = registryOver(repository);
             Throwable thrown = catchThrowable(() -> registry.declareRelationType(SCOPE,
@@ -99,11 +100,11 @@ class DuplicateTargetDeclarationTest {
 
             assertThat(thrown).as("target %s", target).isInstanceOf(WorklistException.class);
             WorklistException refusal = (WorklistException) thrown;
-            assertThat(refusal.reason()).as("target %s", target).isEqualTo(reason);
+            assertThat(refusal.reason()).as("target %s", target).isEqualTo(entry.getValue());
             assertThat(refusal.offenders()).as("target %s", target)
                 .containsExactly("target_status");
             assertThat(repository.inserted).as("target %s writes nothing", target).isEmpty();
-        });
+        }
     }
 
     @Test
