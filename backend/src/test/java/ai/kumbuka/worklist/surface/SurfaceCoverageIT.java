@@ -55,8 +55,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <h2>Why the chain runs in one method</h2>
  *
- * The acts form one: an item is created, planned into an iteration, its
- * membership is read and changed, unplanned, and the iteration is closed. Split
+ * The acts form one: an item is created as a draft, submitted, planned into an
+ * iteration, its membership is read and changed, unplanned, the iteration is
+ * closed, and the item is closed last. Split
  * across methods, each would have to stage the middle of the chain behind the
  * surface being probed — writing the rows directly, which is exactly the thing
  * the probe exists to avoid doing.
@@ -126,6 +127,27 @@ class SurfaceCoverageIT {
             .statusCode(200)
             .body("fields.title", org.hamcrest.Matchers.is("a coverage probe, renamed"))
             .extract().path("fields.conflict_token");
+
+        // ---- the transitions of an item: the draft is submitted -----------
+        //
+        // create made a draft (REA-0011 D12); submit makes it open, which is
+        // what it has to be to be planned below.
+        itemToken = call("POST", item(Selector.ITEM, itemNumber) + ":submit", itemToken, null)
+            .statusCode(200)
+            .body("fields.phase", org.hamcrest.Matchers.is("open"))
+            .extract().path("fields.conflict_token");
+
+        // A second draft, discarded: deleted, and its address names nothing.
+        ValidatableResponse discardable = call("POST", collection(Selector.ITEM), null,
+            Map.of("title", "a draft to discard", "status", status))
+            .statusCode(201);
+        long discardedNumber = numberOf(discardable);
+        call("POST", item(Selector.ITEM, discardedNumber) + ":discard",
+            discardable.extract().path("fields.conflict_token"), null)
+            .statusCode(200);
+        call("GET", item(Selector.ITEM, discardedNumber), null, null)
+            .statusCode(404)
+            .body("reason", org.hamcrest.Matchers.is("NOT_FOUND"));
 
         // ---- the goal axis: create and close ----------------------------
         ValidatableResponse milestone = call("POST", collection(Selector.MILESTONE), null,
@@ -228,7 +250,7 @@ class SurfaceCoverageIT {
         // absent in the scope, so this is refused as VALUE_UNDECLARED at
         // the vocabulary check. Answered by the same domain refusal path.
         call("POST", item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
-            Map.of("to_item", itemAddress, "type", missingTypeName))
+            Map.of("to_item", itemAddress, "type", missingTypeName, "reason", "a mistake"))
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
@@ -256,6 +278,32 @@ class SurfaceCoverageIT {
                 Map.of("criterion", 9999, "status", "met", "evidence", "a report"))))
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("INVALID_VALUE"));
+
+        // ---- addendum, at item depth ---------------------------------------
+        //
+        // Reached and carried out: the item is open, and an addendum stands
+        // beside it. It presents no token, and the item's token stays, so the
+        // calls below still present the one read before. The semantics sit in
+        // ItemFieldClassIT.
+        call("POST", item(Selector.ITEM, itemNumber) + ":addendum", null,
+            Map.of("text", "a correction to the open item"))
+            .statusCode(200)
+            .body("fields.addenda[0].text",
+                org.hamcrest.Matchers.is("a correction to the open item"));
+
+        // ---- start and return, at item depth --------------------------------
+        //
+        // Reached, refused by the item's state: it carries no type, so it is
+        // not started (TAR-0002 B18), and it is open, so it is not returned.
+        // The semantics sit in the lifecycle probes. Refused, they write
+        // nothing, and the item's token stays.
+        call("POST", item(Selector.ITEM, itemNumber) + ":start", itemToken, null)
+            .statusCode(409)
+            .body("reason", org.hamcrest.Matchers.is("TRANSITION_REFUSED"));
+        call("POST", item(Selector.ITEM, itemNumber) + ":return", itemToken,
+            Map.of("reason", "it was never started"))
+            .statusCode(409)
+            .body("reason", org.hamcrest.Matchers.is("TRANSITION_REFUSED"));
 
         // ---- the seven the scheme does not carry --------------------------
         for (String verb : List.of("send", "append", "abandon", "block", "resume", "consume")) {
@@ -293,7 +341,9 @@ class SurfaceCoverageIT {
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
 
-        call("POST", item(Selector.ITEM, itemNumber) + ":close", itemToken, null)
+        // A transition of an item, aimed at a milestone: only items carry it.
+        call("POST", item(Selector.MILESTONE, milestoneNumber) + ":submit", milestoneToken,
+                null)
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VERB_UNCARRIED"));
 
@@ -324,10 +374,18 @@ class SurfaceCoverageIT {
             .statusCode(422)
             .body("reason", org.hamcrest.Matchers.is("VALUE_UNDECLARED"));
 
-        // ---- the item closes through update, the last thing done to it ----
+        // ---- the item closes through close, the last thing done to it ------
+        //
+        // A closed status is of another phase than the open item's, so update
+        // refuses it by state (REA-0011 D11); the transition close takes it.
         call("PATCH", item(Selector.ITEM, itemNumber), itemToken, Map.of("status", closed))
+            .statusCode(409)
+            .body("reason", org.hamcrest.Matchers.is("TRANSITION_REFUSED"));
+        call("POST", item(Selector.ITEM, itemNumber) + ":close", itemToken,
+                Map.of("status", closed))
             .statusCode(200)
-            .body("fields.status", org.hamcrest.Matchers.is("coverage-done"));
+            .body("fields.status", org.hamcrest.Matchers.is("coverage-done"))
+            .body("fields.phase", org.hamcrest.Matchers.is("closed"));
 
         // ---- POST on an item address with no verb in it --------------------
         call("POST", item(Selector.ITEM, itemNumber), null, null)

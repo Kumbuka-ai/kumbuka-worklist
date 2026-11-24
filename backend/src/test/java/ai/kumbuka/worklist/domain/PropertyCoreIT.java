@@ -104,14 +104,14 @@ class PropertyCoreIT {
 
         for (String field : List.of("creator", "close_date")) {
             WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
-                "conflict_token", token, field, "2026-11-20T10:00:00Z")));
+                "conflict_token", token, field, "2026-11-20T10:00:00Z"), CALLER));
             assertThat(refusal.reason())
                 .as("an update that gives %s a value of its own is refused", field)
                 .isEqualTo(WorklistException.Reason.FIELD_NOT_SETTABLE);
             assertThat(refusal.offenders()).containsExactly("fields." + field);
         }
 
-        Map<String, Object> echoed = items.update(scope, item, items.read(scope, item)).answer();
+        Map<String, Object> echoed = items.update(scope, item, items.read(scope, item), CALLER).answer();
         assertThat(echoed.get("conflict_token"))
             .as("the read answer sent back as it came, creator included, changes nothing")
             .isEqualTo(token);
@@ -119,30 +119,40 @@ class PropertyCoreIT {
     }
 
     // ====================================================================
-    // K2: close_date follows the move into and out of a closed status
+    // K2: close_date is set by the transition into the phase closed, and
+    // nothing reopens an item (REA-0011 D11, TAR-0002 B20)
     // ====================================================================
 
     @Test
-    void k2_closing_by_update_sets_close_date_and_reopening_clears_it() {
-        UUID item = create("closed and reopened");
+    void k2_closing_by_close_sets_close_date_and_nothing_clears_it() {
+        UUID item = create("closed for good");
         assertThat(items.read(scope, item).get("close_date"))
             .as("an open item has no close date")
             .isNull();
 
-        Map<String, Object> closed = update(item, Map.of("status", "done"));
+        WorklistException byStatus = refusalFrom(() -> update(item, Map.of("status", "done")));
+        assertThat(byStatus.reason())
+            .as("a status of the phase closed is no status of the open item's phase: the "
+                + "phase moves through close, and the status write is refused by state")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertThat(items.read(scope, item).get("close_date")).isNull();
+
+        Map<String, Object> closed = ItemLifecycle.close(items, scope, item, "done");
         assertThat(closed.get("close_date"))
-            .as("moving from open into a closed status sets close_date")
+            .as("entering the phase closed sets close_date")
             .isNotNull();
+        assertThat(closed.get("phase")).isEqualTo("closed");
 
-        Map<String, Object> stillClosed = update(item, Map.of("status", "dropped"));
-        assertThat(stillClosed.get("close_date"))
-            .as("moving between two closed statuses keeps the date the item closed on")
-            .isEqualTo(closed.get("close_date"));
-
-        Map<String, Object> reopened = update(item, Map.of("status", "open"));
-        assertThat(reopened.get("close_date"))
-            .as("leaving a closed status clears close_date: an open item has none")
-            .isNull();
+        for (String status : List.of("dropped", "open")) {
+            WorklistException refusal = refusalFrom(() -> update(item, Map.of("status", status)));
+            assertThat(refusal.reason())
+                .as("a closed item takes no update, to %s neither", status)
+                .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        }
+        assertThat(items.read(scope, item))
+            .as("so the item keeps its status and the date it closed on")
+            .containsEntry("status", "done")
+            .containsEntry("close_date", closed.get("close_date"));
     }
 
     // ====================================================================
@@ -165,6 +175,9 @@ class PropertyCoreIT {
         assertThat(answer.get("close_date"))
             .as("and its close_date is set in the same write")
             .isNotNull();
+        assertThat(answer.get("phase"))
+            .as("in the phase closed")
+            .isEqualTo("closed");
         assertThat(answer.get("relations"))
             .as("and the edge stands")
             .isEqualTo(List.of(Map.of("type", DUPLICATE_OF, "item", addressOf(original))));
@@ -179,7 +192,7 @@ class PropertyCoreIT {
         vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
         UUID duplicate = create("already closed");
         UUID original = create("the original");
-        update(duplicate, Map.of("status", "done"));
+        ItemLifecycle.close(items, scope, duplicate, "done");
         Map<String, Object> before = items.read(scope, duplicate);
 
         WorklistException refusal = refusalFrom(() -> items.relate(scope, duplicate,
@@ -192,9 +205,17 @@ class PropertyCoreIT {
         assertNothingWritten(duplicate, before);
     }
 
+    /**
+     * The registry refuses {@code duplicate_of} without a target status since
+     * the administration surface (REA-0011 S4), so the row is planted as a
+     * hand-edited one: declared with its target, the target then cleared by
+     * SQL under the service role. {@code relate} still refuses it.
+     */
     @Test
-    void d18_duplicate_of_without_a_target_status_is_refused_and_writes_nothing() {
-        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2);
+    void d18_duplicate_of_without_a_target_status_is_refused_and_writes_nothing()
+            throws SQLException {
+        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
+        retargetDuplicateOf(null);
         UUID duplicate = create("no target named");
         UUID original = create("the original");
         Map<String, Object> before = items.read(scope, duplicate);
@@ -222,9 +243,14 @@ class PropertyCoreIT {
         assertNothingWritten(duplicate, before);
     }
 
+    /**
+     * Planted as a hand-edited row, as above: the registry refuses a
+     * successful target at declaration since the administration surface.
+     */
     @Test
-    void d18_a_successful_target_status_is_no_target() {
-        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "done");
+    void d18_a_successful_target_status_is_no_target() throws SQLException {
+        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
+        retargetDuplicateOf("done");
         UUID duplicate = create("target successful");
         UUID original = create("the original");
         Map<String, Object> before = items.read(scope, duplicate);
@@ -236,6 +262,39 @@ class PropertyCoreIT {
             .as("a duplicate is closed as not successful; a successful target is refused")
             .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
         assertNothingWritten(duplicate, before);
+    }
+
+    /**
+     * The registry holds the rule of D18 at declaration (REA-0011 S4, K6):
+     * {@code duplicate_of} without a target status, with one the scope does
+     * not declare, with a withdrawn one, with one that is not closed and with
+     * a successful one is each refused naming {@code target_status}, and none
+     * writes a row.
+     */
+    @Test
+    void d18_the_registry_refuses_duplicate_of_without_a_valid_target_and_writes_nothing() {
+        vocabulary.declareStatus(scope, "retired", 5, false, false, true, false);
+        vocabulary.withdrawStatus(scope, vocabulary.statusByName(scope, "retired")
+            .orElseThrow().pk);
+
+        Map<String, WorklistException.Reason> expected = new LinkedHashMap<>();
+        expected.put("absent", WorklistException.Reason.ARGUMENT_MISSING);
+        expected.put("never-declared", WorklistException.Reason.VALUE_UNDECLARED);
+        expected.put("retired", WorklistException.Reason.VALUE_UNDECLARED);
+        expected.put("open", WorklistException.Reason.INVALID_VALUE);
+        expected.put("done", WorklistException.Reason.INVALID_VALUE);
+        for (Map.Entry<String, WorklistException.Reason> entry : expected.entrySet()) {
+            String target = entry.getKey();
+            WorklistException refusal = refusalFrom(() -> vocabulary.declareRelationType(scope,
+                DUPLICATE_OF, false, 2, "absent".equals(target) ? null : target));
+            assertThat(refusal.reason()).as("target %s", target).isEqualTo(entry.getValue());
+            assertThat(refusal.offenders()).as("target %s", target)
+                .containsExactly("target_status");
+        }
+        assertThat(vocabulary.relationTypes(scope))
+            .extracting(type -> type.name)
+            .as("no declaration was written")
+            .doesNotContain(DUPLICATE_OF);
     }
 
     @Test
@@ -275,21 +334,44 @@ class PropertyCoreIT {
     }
 
     @Test
-    void d18_unrelate_of_duplicate_of_reopens_nothing() {
+    void d18_the_duplicate_of_edge_of_a_closed_item_stays_and_nothing_reopens_it() {
         vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
         UUID duplicate = create("stays closed");
         UUID original = create("the original");
         Map<String, Object> closed = items.relate(scope, duplicate, addressOf(original),
             DUPLICATE_OF, tokenOf(duplicate)).answer();
 
-        Map<String, Object> after = items.unrelate(scope, duplicate, addressOf(original),
-            DUPLICATE_OF, String.valueOf(closed.get("conflict_token"))).answer();
+        WorklistException refusal = refusalFrom(() -> items.unrelate(scope, duplicate,
+            addressOf(original), DUPLICATE_OF, "a reason", CALLER,
+            String.valueOf(closed.get("conflict_token"))));
 
-        assertThat(after.get("relations")).as("the edge is withdrawn").isEqualTo(List.of());
-        assertThat(after.get("status"))
-            .as("and the item stays in the status the edge closed it into")
-            .isEqualTo("obsolete");
-        assertThat(after.get("close_date")).isEqualTo(closed.get("close_date"));
+        assertThat(refusal.reason())
+            .as("a closed item takes no write: unrelate is refused by state (REA-0011 D6)")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertThat(items.read(scope, duplicate))
+            .as("the edge stands and the item stays in the status the edge closed it into")
+            .containsEntry("relations",
+                List.of(Map.of("type", DUPLICATE_OF, "item", addressOf(original))))
+            .containsEntry("status", "obsolete")
+            .containsEntry("phase", "closed")
+            .containsEntry("close_date", closed.get("close_date"));
+    }
+
+    @Test
+    void d18_duplicate_of_on_a_draft_is_refused_by_state_and_writes_nothing() {
+        vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
+        UUID duplicate = ItemLifecycle.draft(items, scope,
+            Map.of("title", "still a draft", "status", "open"));
+        UUID original = create("the original");
+        Map<String, Object> before = items.read(scope, duplicate);
+
+        WorklistException refusal = refusalFrom(() -> items.relate(scope, duplicate,
+            addressOf(original), DUPLICATE_OF, String.valueOf(before.get("conflict_token"))));
+
+        assertThat(refusal.reason())
+            .as("a draft closes nowhere: it is submitted first (TAR-0002 B20)")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertNothingWritten(duplicate, before);
     }
 
     /**
@@ -307,7 +389,7 @@ class PropertyCoreIT {
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, duplicate, Map.of(
             "conflict_token", before.get("conflict_token"),
-            "relations", List.of(Map.of("type", DUPLICATE_OF, "item", addressOf(original))))));
+            "relations", List.of(Map.of("type", DUPLICATE_OF, "item", addressOf(original)))), CALLER));
 
         assertThat(refusal.reason())
             .as("adding duplicate_of through update is refused by state; relate is the "
@@ -326,19 +408,24 @@ class PropertyCoreIT {
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, duplicate, Map.of(
             "conflict_token", before.get("conflict_token"),
-            "relations", List.of())));
+            "relations", List.of()), CALLER));
 
         assertThat(refusal.reason())
-            .as("removing duplicate_of through update is refused by state; unrelate is the "
-                + "open call that withdraws it")
+            .as("removing duplicate_of through update is refused by state: the edge closed "
+                + "the item, and a closed item takes no update")
             .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
         assertThat(items.read(scope, duplicate))
             .as("nothing was written: the edge, the status and the token are as they were")
             .isEqualTo(before);
     }
 
+    /**
+     * The duplicate is closed by its edge, and a closed item is final: its
+     * read answer, edge included, goes back to no update, and an edge of
+     * another type beside it is refused the same way (REA-0011 D6).
+     */
     @Test
-    void d18_a_read_answer_carrying_duplicate_of_goes_back_as_it_came() {
+    void d18_a_duplicate_closed_by_its_edge_takes_no_update_not_even_its_echo() {
         vocabulary.declareRelationType(scope, DUPLICATE_OF, false, 2, "obsolete");
         UUID duplicate = create("echoed");
         UUID original = create("the original");
@@ -346,19 +433,18 @@ class PropertyCoreIT {
         items.relate(scope, duplicate, addressOf(original), DUPLICATE_OF, tokenOf(duplicate));
         Map<String, Object> read = items.read(scope, duplicate);
 
-        Map<String, Object> echoed = items.update(scope, duplicate, read).answer();
-        assertThat(echoed.get("conflict_token"))
-            .as("an existing duplicate_of edge sent back unchanged is no move and no refusal")
-            .isEqualTo(read.get("conflict_token"));
+        WorklistException echo = refusalFrom(() -> items.update(scope, duplicate, read, CALLER));
+        assertThat(echo.reason())
+            .as("the closed item refuses the update by state, whatever it carries")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
 
         Map<String, Object> withAnother = new LinkedHashMap<>(read);
         withAnother.put("relations", List.of(
             Map.of("type", DUPLICATE_OF, "item", addressOf(original)),
             Map.of("type", "carries", "item", addressOf(other))));
-        Map<String, Object> written = items.update(scope, duplicate, withAnother).answer();
-        assertThat((List<?>) written.get("relations"))
-            .as("and an edge of another type beside it is written as ever")
-            .hasSize(2);
+        WorklistException another = refusalFrom(() -> items.update(scope, duplicate, withAnother, CALLER));
+        assertThat(another.reason()).isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertNothingWritten(duplicate, read);
     }
 
     @Test
@@ -425,7 +511,7 @@ class PropertyCoreIT {
         for (Map.Entry<String, String> outside : Map.of(
                 "priority", "P1", "severity", "trivial").entrySet()) {
             WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
-                "conflict_token", token, outside.getKey(), outside.getValue())));
+                "conflict_token", token, outside.getKey(), outside.getValue()), CALLER));
             assertThat(refusal.reason())
                 .as("%s is outside the value set of %s", outside.getValue(), outside.getKey())
                 .isEqualTo(WorklistException.Reason.INVALID_VALUE);
@@ -444,14 +530,14 @@ class PropertyCoreIT {
         UUID c = create("c");
 
         WorklistException self = refusalFrom(() -> items.update(scope, a, Map.of(
-            "conflict_token", tokenOf(a), "parent", addressOf(a))));
+            "conflict_token", tokenOf(a), "parent", addressOf(a)), CALLER));
         assertThat(self.reason()).isEqualTo(WorklistException.Reason.INVALID_VALUE);
         assertThat(self.offenders()).containsExactly("fields.parent");
 
         update(b, Map.of("parent", addressOf(a)));
         update(c, Map.of("parent", addressOf(b)));
         WorklistException cycle = refusalFrom(() -> items.update(scope, a, Map.of(
-            "conflict_token", tokenOf(a), "parent", addressOf(c))));
+            "conflict_token", tokenOf(a), "parent", addressOf(c)), CALLER));
         assertThat(cycle.reason())
             .as("a's parent c, whose chain runs c, b, a, would close a cycle")
             .isEqualTo(WorklistException.Reason.INVALID_VALUE);
@@ -471,7 +557,7 @@ class PropertyCoreIT {
         UUID item = create("wants a foreign parent");
 
         WorklistException refusal = refusalFrom(() -> items.update(scope, item, Map.of(
-            "conflict_token", tokenOf(item), "parent", foreignAddress)));
+            "conflict_token", tokenOf(item), "parent", foreignAddress), CALLER));
 
         assertThat(refusal.reason())
             .as("a parent lies in the item's own scope; another scope's item is one this "
@@ -529,6 +615,7 @@ class PropertyCoreIT {
             .containsEntry("title", "from the image before")
             .containsEntry("description", "as it was")
             .containsEntry("status", "open")
+            .containsEntry("phase", "open")
             .containsEntry("number", number);
         assertThat(read)
             .as("and the six properties carry no value: nothing is filled retroactively")
@@ -544,17 +631,16 @@ class PropertyCoreIT {
     // Fixtures
     // ====================================================================
 
+    /** An open item: created as a draft and submitted, so that it may close. */
     private UUID create(String title) {
-        Map<String, Object> created = items.create(scope, CALLER, Map.of(
-            "title", title, "status", "open")).answer();
-        return (UUID) created.get("id");
+        return ItemLifecycle.open(items, scope, Map.of("title", title, "status", "open"));
     }
 
     /** An update of these fields, with the item's current token. */
     private Map<String, Object> update(UUID item, Map<String, Object> fields) {
         Map<String, Object> arguments = new LinkedHashMap<>(fields);
         arguments.put("conflict_token", tokenOf(item));
-        return items.update(scope, item, arguments).answer();
+        return items.update(scope, item, arguments, CALLER).answer();
     }
 
     private void assertNothingWritten(UUID item, Map<String, Object> before) {
@@ -580,5 +666,31 @@ class PropertyCoreIT {
         Throwable thrown = catchThrowable(call::run);
         assertThat(thrown).isInstanceOf(WorklistException.class);
         return (WorklistException) thrown;
+    }
+
+    /**
+     * Points this scope's {@code duplicate_of} at another status, or at none,
+     * by SQL under the service role: the hand-edited row the registry no
+     * longer writes, which {@code relate} has to refuse all the same.
+     *
+     * @param status the name of the status to point at; absent to point at none
+     */
+    private void retargetDuplicateOf(@org.jspecify.annotations.Nullable String status)
+            throws SQLException {
+        try (Connection c = Db.asService()) {
+            Db.bindTenant(c, UUID.fromString(SubstrateDatabaseResource.TENANT_ID));
+            try (var st = c.prepareStatement(
+                    "UPDATE worklist.relation_type SET target_status_pk = "
+                        + "(SELECT s.pk FROM worklist.item_status s "
+                        + "WHERE s.scope_id = ? AND s.name = ?) "
+                        + "WHERE scope_id = ? AND name = ?")) {
+                st.setObject(1, scope);
+                st.setString(2, status);
+                st.setObject(3, scope);
+                st.setString(4, DUPLICATE_OF);
+                assertThat(st.executeUpdate()).as("the one duplicate_of of the scope").isEqualTo(1);
+            }
+            c.commit();
+        }
     }
 }

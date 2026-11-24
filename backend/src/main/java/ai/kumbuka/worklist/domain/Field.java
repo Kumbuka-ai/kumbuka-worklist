@@ -194,8 +194,9 @@ public enum Field {
      * never chooses an identifier. Criteria that stand as prose in a
      * description stay there.
      *
-     * <p>As writable as the description until the field classes per phase
-     * arrive with a later step (REA-0011 S10), which freezes them at submit.
+     * <p>Content, as the title and the description are: written in a draft
+     * alone, and frozen at submit ({@link FieldClass#CONTENT}). A frozen item
+     * is corrected by an addendum ({@link #ADDENDA}).
      */
     CRITERIA("criteria", Set.of(ITEM), Set.of(ITEM)),
 
@@ -211,16 +212,28 @@ public enum Field {
     STATUS("status", Set.of(ITEM, MILESTONE), Set.of(ITEM, MILESTONE)),
 
     /**
-     * The predicates an item answers from its status (TAR-0002 B3, Annex
-     * A1), as one object: {@code closed}, {@code actionable} and
-     * {@code in_progress} always; {@code successful} only where
-     * {@code closed} holds; {@code reviewed}, {@code approved} and
-     * {@code verified} only where the item's scope uses them. A predicate the
-     * item does not answer is absent from the object, never false.
+     * The phase of an item, one of {@link Phase#tokens()} (REA-0011 D11).
      *
-     * <p>Read-only: a predicate holds because the status declares it, and the
-     * status changes through {@code update} (REA-0011 D1). A read answer sent
-     * back with it unchanged is accepted, as every read-only field is.
+     * <p>Read-only: a phase moves through a transition alone -- {@code submit},
+     * {@code start}, {@code return}, {@code close} -- and never through
+     * {@code update}. A read answer sent back with it unchanged is accepted,
+     * as every read-only field is.
+     */
+    PHASE("phase", Set.of(ITEM), Set.of()),
+
+    /**
+     * The predicates an item answers (TAR-0002 B3, Annex A1), as one object:
+     * {@code closed}, {@code actionable} and {@code in_progress} always;
+     * {@code successful} only where {@code closed} holds; {@code reviewed},
+     * {@code approved} and {@code verified} only where the item's scope uses
+     * them. A predicate the item does not answer is absent from the object,
+     * never false.
+     *
+     * <p>Read-only: {@code closed} and {@code in_progress} are a projection
+     * of the item's {@link #PHASE}, which a transition moves, and the others
+     * hold because the status declares them, and the status changes through
+     * {@code update} (REA-0011 D1). A read answer sent back with it unchanged
+     * is accepted, as every read-only field is.
      */
     PREDICATES("predicates", Set.of(ITEM), Set.of()),
 
@@ -237,7 +250,12 @@ public enum Field {
 
     /**
      * The external pointers, as an ordered list of entries carrying an
-     * optional {@code label} and a {@code target}.
+     * optional {@code label} and a {@code target}; the active ones alone
+     * (REA-0011 D15).
+     *
+     * <p>Written as a whole and matched by content: an entry the list leaves
+     * out is cancelled, a new one gets a row of its own, and no entry is ever
+     * rewritten.
      *
      * <p>A list and not one field. The single free-text column this replaces
      * came to hold, in the estate being migrated, an item's rationale, a
@@ -251,11 +269,45 @@ public enum Field {
      * {@code type} — the identity of a declared relation type — and an
      * {@code item}, the identity of the other end.
      *
-     * <p>Set as a whole. An edge that leaves the set is withdrawn and never
+     * <p>Set as a whole. An edge that leaves the set is cancelled and never
      * deleted, and one that re-enters is asserted again on the row that was
-     * already there.
+     * already there. Only active edges are answered here (REA-0011 D15).
      */
     RELATIONS("relations", Set.of(ITEM), Set.of(ITEM)),
+
+    /**
+     * How many references of the item are cancelled: answered on every read,
+     * beside {@link #REFERENCES}, which holds the active ones alone
+     * (REA-0011 D15). Read-only; sent back unchanged it is accepted, as every
+     * read-only field is.
+     */
+    CANCELLED_REFERENCES_COUNT("cancelled_references_count", Set.of(ITEM), Set.of()),
+
+    /**
+     * How many relations out of the item are cancelled, beside
+     * {@link #RELATIONS}, as {@link #CANCELLED_REFERENCES_COUNT}.
+     */
+    CANCELLED_RELATIONS_COUNT("cancelled_relations_count", Set.of(ITEM), Set.of()),
+
+    /**
+     * The cancelled references, each with {@code label} where it carries one,
+     * {@code target}, and {@code ended_at}, {@code ended_by} and
+     * {@code end_reason} where the row records them; answered only by a read
+     * with the option for cancelled edges, by the place each last held in the
+     * list.
+     *
+     * <p>Under a key of its own and never mixed into {@link #REFERENCES}, so
+     * that a read answer sent back writes nothing. Read-only: sent back as the
+     * option answered it, it is accepted.
+     */
+    CANCELLED_REFERENCES("cancelled_references", Set.of(ITEM), Set.of()),
+
+    /**
+     * The cancelled relations, each with {@code type}, {@code item}, and the
+     * end values where the row records them; answered only by a read with the
+     * option for cancelled edges, as {@link #CANCELLED_REFERENCES}.
+     */
+    CANCELLED_RELATIONS("cancelled_relations", Set.of(ITEM), Set.of()),
 
     /**
      * The tags an item carries, as the tokens of its scope's vocabulary in
@@ -292,6 +344,20 @@ public enum Field {
      * field is, in either of the two forms a read answers.
      */
     FULFILMENT("fulfilment", Set.of(ITEM), Set.of()),
+
+    /**
+     * The addenda of an item, in the order they were written, each with
+     * {@code text}, {@code author}, {@code delegated_identity} where the call
+     * that wrote it carried one, and {@code written_at}; an empty list where
+     * there are none (REA-0011 D13).
+     *
+     * <p>Read-only: an addendum stands beside the item and is not its
+     * content. It is written by {@code addendum} alone, append only, on an
+     * item in the phase open or in progress, and writing one moves neither
+     * the item's change time nor its conflict token. A read answer sent back
+     * with its addenda unchanged is accepted, as every read-only field is.
+     */
+    ADDENDA("addenda", Set.of(ITEM), Set.of()),
 
     // --- the goal axis ----------------------------------------------------
 
@@ -371,7 +437,7 @@ public enum Field {
 
     /**
      * When the item closed. Read-only: the service writes it when the item
-     * moves into a closed status, and clears it when the item leaves one.
+     * enters the phase closed, and nothing reopens a closed item.
      */
     CLOSE_DATE("close_date", Set.of(ITEM), Set.of()),
 

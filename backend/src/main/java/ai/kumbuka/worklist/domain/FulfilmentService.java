@@ -39,9 +39,11 @@ import java.util.UUID;
  * {@code book} writes the ledger and nothing else. It presents no conflict
  * token and moves neither the item's change time nor its token; the item is
  * locked for the length of the call all the same, so that a booking and a
- * write of the criteria decide one after the other. Any status of an item
- * takes a booking, a closed one included: the ledger records the contract an
- * instance entered, and the contract outlives the item.
+ * write of the criteria decide one after the other. An item in the phase
+ * open, in progress or closed takes a booking in any status: the ledger
+ * records the contract an instance entered, and the contract outlives the
+ * item (REA-0011 S13). A draft takes none, since no instance works on what
+ * was never submitted (REA-0011 Annex A1), and is refused by state.
  *
  * <h2>Append only</h2>
  *
@@ -92,12 +94,15 @@ public class FulfilmentService {
      * @return the item as a read answers it, the ledger included
      * @throws WorklistException {@code INVALID_VALUE} naming {@code instance}
      *         or {@code entries}; {@code ITEM_UNKNOWN} for an item of another
-     *         scope
+     *         scope; {@code TRANSITION_REFUSED} for a draft
      */
     @Transactional
     public Written<Map<String, Object>, List<ItemFulfilment>> book(UUID scopeId, UUID itemId,
             @Nullable Object instance, @Nullable Object entries, String actor) {
         Item item = requireLocked(scopeId, itemId);
+        if (item.phase() == Phase.DRAFT) {
+            throw ItemService.transitionRefused();
+        }
         String address = itemService.addressOf(item);
         String reporting = ItemFields.reference(ItemFields.INSTANCE, instance);
         List<ItemFields.BookingEntry> booked = ItemFields.booking(entries, address);

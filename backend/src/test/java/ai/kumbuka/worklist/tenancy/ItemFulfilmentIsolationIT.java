@@ -9,6 +9,7 @@ package ai.kumbuka.worklist.tenancy;
 
 import ai.kumbuka.worklist.domain.Field;
 import ai.kumbuka.worklist.domain.FulfilmentService;
+import ai.kumbuka.worklist.domain.ItemLifecycle;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.Selector;
 import ai.kumbuka.worklist.domain.SelectorRegistry;
@@ -200,13 +201,15 @@ class ItemFulfilmentIsolationIT {
     // Fixtures
     // =======================================================================
 
-    /** The probe tenant's item, with one criterion and one booked entry. */
+    /**
+     * The probe tenant's item, submitted -- a draft takes no booking
+     * (REA-0011 Annex A1) -- with one criterion and one booked entry.
+     */
     private UUID bookedItem() {
-        Map<String, Object> created = items.create(scope, "probe-subject", Map.of(
+        UUID item = ItemLifecycle.open(items, scope, Map.of(
             Field.TITLE.canonicalName(), "the probe tenant's item",
             Field.STATUS.canonicalName(), OPEN,
-            Field.CRITERIA.canonicalName(), List.of(Map.of("text", "the criterion")))).answer();
-        UUID item = UUID.fromString(String.valueOf(created.get(Field.ID.canonicalName())));
+            Field.CRITERIA.canonicalName(), List.of(Map.of("text", "the criterion"))));
         ledger.book(scope, item, INSTANCE,
             List.of(Map.of("criterion", 1, "status", "met", "evidence", "the probe's report")),
             "probe-subject");

@@ -22,19 +22,21 @@
 #   depth     item | membership | collection | none
 #   repeat    the declared repetition behaviour
 #
-# TWENTY-TWO OF THE TWENTY-SEVEN VERBS ARE HERE, in one of four classes: the
+# TWENTY-SEVEN OF THE THIRTY-TWO VERBS ARE HERE, in one of four classes: the
 # catalogue's twenty-four, the two tag verbs of sprint/210 (tag_attach,
-# tag_detach), which worklist, dispatch and memory carry alike, and book, the
-# call of an item's fulfilment ledger, less the five
+# tag_detach), which worklist, dispatch and memory carry alike, book, the
+# call of an item's fulfilment ledger, the four transitions of an item
+# beside close (REA-0011 D1): submit, discard, start and return, and
+# addendum, the append-only text on an item (REA-0011 D1, D13), less the five
 # that left this scheme's surface with its target cut: accept, withdraw,
 # claim, release and claim_next. They are decided too -- by their absence: no
-# route, no tool and no declared call names them, and an item's state changes
-# through `update` alone. Any other verb missing from this file is a verb
-# nobody decided about, which is the state this file exists to make
-# impossible.
+# route, no tool and no declared call names them; an item's status changes
+# within a phase through `update`, and its phase through the transitions. Any
+# other verb missing from this file is a verb nobody decided about, which is
+# the state this file exists to make impossible.
 #
 # ---------------------------------------------------------------------------
-# CARRIED -- the fourteen this scheme has and this service has built
+# CARRIED -- the nineteen this scheme has and this service has built
 # ---------------------------------------------------------------------------
 # Probed END TO END against a running service and a running database: each is
 # called and must be answered by the surface rather than by the framework's
@@ -52,6 +54,12 @@ carried	read	GET	/api/{scope}/{selector}/{id}/{member}	membership	none
 carried	update	PATCH	/api/{scope}/{selector}/{id}	item	conflict-token
 carried	update	PATCH	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
 carried	close	POST	/api/{scope}/{selector}/{id}:close	item	transition-guard
+# The transitions of an item (REA-0011 D1). Each presents the item's
+# conflict token and moves its phase; only the item view carries them.
+carried	submit	POST	/api/{scope}/{selector}/{id}:submit	item	transition-guard
+carried	discard	POST	/api/{scope}/{selector}/{id}:discard	item	transition-guard
+carried	start	POST	/api/{scope}/{selector}/{id}:start	item	transition-guard
+carried	return	POST	/api/{scope}/{selector}/{id}:return	item	transition-guard
 carried	advance	POST	/api/{scope}/{selector}:advance	collection	exactly-one
 carried	plan	POST	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
 carried	unplan	DELETE	/api/{scope}/{selector}/{id}/{member}	membership	conflict-token
@@ -68,6 +76,10 @@ carried	tag_detach	POST	/api/{scope}/{selector}/{id}:tag_detach	item	idempotent
 # holds, and nothing in the ledger is changed or removed. Only the item view
 # carries a ledger.
 carried	book	POST	/api/{scope}/{selector}/{id}:book	item	append-only
+# The addenda (REA-0011 D1, D13). An append-only text beside the item's
+# frozen content that presents no conflict token; every call is a new row,
+# and nothing written is changed or removed. Only the item view carries it.
+carried	addendum	POST	/api/{scope}/{selector}/{id}:addendum	item	append-only
 
 # ---------------------------------------------------------------------------
 # UNCARRIED -- the seven the capability declaration does not give this scheme
@@ -76,9 +88,9 @@ carried	book	POST	/api/{scope}/{selector}/{id}:book	item	append-only
 # an unimplemented path, never a silent absence. A caller that hears one can
 # stop looking.
 #
-# `send` and `append` are absent because an item never freezes: there is
-# nothing for an author to commit outward and nothing for an addendum to hang
-# off. The termination verbs beyond `close` belong to an exchange, which has
+# `send` and `append` are absent because an item is committed outward by
+# submit, and a text on a frozen item is written by `addendum`, the item's
+# own call. The termination verbs beyond `close` belong to an exchange, which has
 # an executor; an item has a declared status instead. `digest` is the memory
 # scheme's.
 

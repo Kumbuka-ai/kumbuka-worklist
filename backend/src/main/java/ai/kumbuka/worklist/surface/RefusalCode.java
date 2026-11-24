@@ -78,6 +78,12 @@ public enum RefusalCode {
     SCOPE_LOCKED(409),
     /** A write by a subject that may read the scope and may not write it. */
     SCOPE_READ_ONLY(403),
+    /**
+     * A call of the administration surface by a subject without the write
+     * right of the scope (C8.7), which stands in for the administration
+     * permission until that exists (C1.6).
+     */
+    ROLE_INSUFFICIENT(403),
 
     // --- the vocabulary and the values of a call ------------------------------
 
@@ -162,6 +168,7 @@ public enum RefusalCode {
             case SCOPE_KIND_UNSUPPORTED -> SCOPE_KIND_UNSUPPORTED;
             case SCOPE_LOCKED -> SCOPE_LOCKED;
             case SCOPE_READ_ONLY -> SCOPE_READ_ONLY;
+            case ROLE_INSUFFICIENT -> ROLE_INSUFFICIENT;
             case FIELD_RETRACTED -> FIELD_RETRACTED;
             case FIELD_NOT_SETTABLE -> FIELD_NOT_SETTABLE;
             case INVALID_VALUE -> INVALID_VALUE;
@@ -176,6 +183,7 @@ public enum RefusalCode {
             case SORT_UNDECLARED -> SORT_UNDECLARED;
             case ARGUMENT_UNKNOWN -> ARGUMENT_UNKNOWN;
             case ARGUMENT_INVALID -> ARGUMENT_INVALID;
+            case ARGUMENT_MISSING -> ARGUMENT_MISSING;
             case PREDICATE_UNKNOWN -> PREDICATE_UNKNOWN;
             case MARK_REGRESSION -> MARK_REGRESSION;
             case MEMBERSHIP_PRESENT -> MEMBERSHIP_PRESENT;

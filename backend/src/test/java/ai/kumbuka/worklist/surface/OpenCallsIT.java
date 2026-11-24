@@ -19,6 +19,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestIdentityAssociation;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,15 +40,23 @@ import static org.assertj.core.api.Assertions.assertThat;
  * call is never refused because of the state).
  *
  * <p>The open calls per object and state are written here from the target
- * cut, never read from the service:
+ * cut and REA-0011 Annex A1, never read from the service:
  * <ul>
- *   <li>an item, in every state: {@code read}, {@code update}, {@code relate},
- *       {@code unrelate}, {@code tag_attach}, {@code tag_detach}, {@code book},
- *       and {@code plan} into each open iteration it is no member of, where
- *       the item may enter an iteration at all: its status does not answer
- *       {@code closed}, whatever its milestone and whether or not its status
- *       is actionable (TAR-0002 B9). A closed item stays writable and takes a
- *       booking, and is named no {@code plan}, which it is refused;</li>
+ *   <li>an item, by its phase (REA-0011 D6, acceptance K8): a draft
+ *       {@code read}, {@code update}, {@code relate}, {@code unrelate},
+ *       {@code tag_attach}, {@code tag_detach}, {@code submit},
+ *       {@code discard}; an open item {@code read}, {@code update},
+ *       {@code relate}, {@code unrelate}, {@code tag_attach},
+ *       {@code tag_detach}, {@code addendum}, {@code book}, {@code start}
+ *       where its status answers {@code actionable} and it carries a type,
+ *       {@code close}, and {@code plan} into each open iteration it is no
+ *       member of, whatever its milestone (TAR-0002 B9); an item in progress
+ *       the same with {@code return} in place of {@code start} and without
+ *       {@code unrelate}, since in progress references and relations are only
+ *       appended (REA-0011 D15); a closed item
+ *       {@code read} alone. A closed item
+ *       still takes {@code book}, which it does not name (Annex A1). A draft
+ *       and a closed item are named no {@code plan}, which they are refused;</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
  *       {@code plan} at its own address, and {@code advance} at the iteration
  *       collection while an open iteration stands that is not the current one;
@@ -71,8 +80,17 @@ class OpenCallsIT {
     private static final String OPEN = "oc-open";
     private static final String DONE = "oc-done";
     private static final String RESTING = "oc-resting";
+    private static final String RUNNING = "oc-running";
     private static final String RELATION = "oc-relates";
     private static final String TAG = "oc-tag";
+
+    /** The attribute an item's type is stored under (TAR-0002 B18). */
+    private static final String TYPE = "type";
+
+    /** The calls that move an item's phase, carried out last in a state. */
+    private static final List<String> TRANSITIONS = List.of(
+        "worklist_submit", "worklist_discard", "worklist_start", "worklist_return",
+        "worklist_close");
 
     @Inject TestIdentityAssociation identity;
     @Inject SelectorRegistry selectors;
@@ -111,18 +129,38 @@ class OpenCallsIT {
         check(offences, "milestone closed, read", at.execute("worklist_read " + m1),
             at.milestone(m1, false));
 
-        // ---- items: three that may enter an iteration, one that may not ---
+        // ---- items: a draft, each of its calls, then submitted -------------
         String path = address(at.create(Selector.MILESTONE, Map.of("title", "the path")));
-        String a = address(at.create(Selector.ITEM, Map.of("title", "plannable",
-            "status", OPEN, "milestone", number(path),
-            "criteria", List.of(Map.of("text", "the criterion book reports on")))));
-        String b = address(at.create(Selector.ITEM, Map.of("title", "without a milestone",
-            "status", OPEN)));
-        String c = address(at.create(Selector.ITEM, Map.of(
-            "title", "resting: not actionable, without a milestone", "status", RESTING)));
-        String d = address(at.create(Selector.ITEM, Map.of("title", "closed from the start",
-            "status", DONE)));
+        String b = address(at.open(Map.of("title", "without a milestone", "status", OPEN)));
         at.relateTo(b);
+        Map<String, Object> drafted = at.create(Selector.ITEM, Map.of("title", "plannable",
+            "status", OPEN, "milestone", number(path),
+            "criteria", List.of(Map.of("text", "the criterion book reports on"))));
+        String a = address(drafted);
+        check(offences, "item draft, as created", drafted, at.draft(a));
+        check(offences, "item draft, read", at.read(a), at.draft(a));
+        carryOutAllButTransitions(at, at.draft(a), offences, "item draft", at.draft(a));
+        assertThat(Mcp.reason(Mcp.call("worklist_book", at.booking(a))))
+            .as("a draft is named no book, and a booking of it is refused by its state")
+            .isEqualTo("TRANSITION_REFUSED");
+        check(offences, "item open, as submitted", at.execute("worklist_submit " + a),
+            at.item(a, false));
+
+        // A second draft is discarded: the named call is accepted, its answer
+        // names no call, and nothing stands at the address any more.
+        String gone = address(at.create(Selector.ITEM, Map.of("title", "discarded")));
+        check(offences, "item discarded, as discarded", at.execute("worklist_discard " + gone),
+            List.of());
+        assertThat(Mcp.reason(Mcp.call("worklist_read", Map.of("address", gone))))
+            .as("a discarded draft is gone")
+            .isEqualTo("NOT_FOUND");
+
+        // ---- items: two more that may enter an iteration, one that may not -
+        String c = address(at.open(Map.of(
+            "title", "resting: not actionable, without a milestone", "status", RESTING)));
+        String d = address(at.closed(Map.of("title", "closed from the start",
+            "status", OPEN)));
+        String e = address(at.create(Selector.ITEM, Map.of("title", "a draft, never planned")));
 
         // ---- two open iterations, no current one ---------------------------
         Map<String, Object> first = at.create(Selector.ITERATION, Map.of("title", "first",
@@ -134,45 +172,43 @@ class OpenCallsIT {
         check(offences, "iteration open, read", at.read(i2), at.iteration(i2, true, true));
 
         check(offences, "item, plannable into both", at.read(a),
-            at.item(a, i1 + "/" + number(a), i2 + "/" + number(a)));
+            at.item(a, false, i1 + "/" + number(a), i2 + "/" + number(a)));
         check(offences, "item without a milestone, plannable into both", at.read(b),
-            at.item(b, i1 + "/" + number(b), i2 + "/" + number(b)));
+            at.item(b, false, i1 + "/" + number(b), i2 + "/" + number(b)));
         check(offences, "item, as listed", entry(at.query(Selector.ITEM), a),
-            at.item(a, i1 + "/" + number(a), i2 + "/" + number(a)));
+            at.item(a, false, i1 + "/" + number(a), i2 + "/" + number(a)));
 
         // The item that is neither actionable nor on a milestone is named plan
         // into both open iterations, and each named plan is accepted.
         check(offences, "item not actionable, without a milestone, plannable into both",
-            at.read(c), at.item(c, i1 + "/" + number(c), i2 + "/" + number(c)));
+            at.read(c), at.item(c, false, i1 + "/" + number(c), i2 + "/" + number(c)));
         for (String call : List.of("worklist_plan " + i1 + "/" + number(c),
                 "worklist_plan " + i2 + "/" + number(c))) {
             at.execute(call);
         }
-        check(offences, "item not actionable, planned into both", at.read(c), at.item(c));
+        check(offences, "item not actionable, planned into both", at.read(c),
+            at.item(c, false));
         // Taken out of the first again, so that its close below meets no live
         // membership; the dropped row keeps it a member, and no plan is named.
         at.execute("worklist_unplan " + i1 + "/" + number(c));
         check(offences, "item not actionable, unplanned from the first", at.read(c),
-            at.item(c));
+            at.item(c, false));
 
-        // The closed item is named no plan, and a plan of it is refused: plan
-        // is named exactly where plan is accepted.
-        check(offences, "item closed, never planned", at.read(d), at.item(d));
-        Response refused = Mcp.call("worklist_plan", Map.of(
-            "address", i1 + "/" + number(d), "conflict_token", at.token(i1)));
-        assertThat(refused.jsonPath().getBoolean("result.isError"))
-            .as("a plan of the closed item is refused: %s", refused.asString())
-            .isTrue();
-        assertThat(refused.jsonPath().getString("result.structuredContent.reason"))
-            .as("with the code a closed item was refused with before")
-            .isEqualTo("ITEM_UNPLANNABLE");
+        // The closed item and the draft are named no plan, and a plan of either
+        // is refused: plan is named exactly where plan is accepted.
+        check(offences, "item closed, never planned", at.read(d), at.closedItem(d));
+        check(offences, "item draft, never planned", at.read(e), at.draft(e));
+        assertThat(planRefusals(at, i1, List.of(d, e)))
+            .as("a draft and a closed item enter no iteration (TAR-0002 B9)")
+            .containsExactly("ITEM_UNPLANNABLE", "ITEM_UNPLANNABLE");
 
         // Every call the plannable item names is carried out, in this order:
-        // relate before unrelate, so that the edge unrelate takes stands.
-        for (String call : at.item(a, i1 + "/" + number(a), i2 + "/" + number(a))) {
-            at.execute(call);
-        }
-        check(offences, "item, planned into both", at.read(a), at.item(a));
+        // relate before unrelate, so that the edge unrelate takes stands. The
+        // transition is carried out last, further below.
+        carryOutAllButTransitions(at,
+            at.item(a, false, i1 + "/" + number(a), i2 + "/" + number(a)), offences,
+            "item, planning", null);
+        check(offences, "item, planned into both", at.read(a), at.item(a, false));
 
         // ---- a membership of an open iteration -----------------------------
         String member = i1 + "/" + number(a);
@@ -213,16 +249,32 @@ class OpenCallsIT {
         check(offences, "iteration open, current, none other open", at.read(i2),
             at.iteration(i2, true, false));
 
-        // ---- the item, closed, stays writable ------------------------------
-        at.mcp("worklist_update", Map.of("address", a, "conflict_token", at.token(a),
-            "fields", Map.of("status", DONE)));
-        check(offences, "item closed", at.read(a), at.item(a));
-        check(offences, "item closed, updated", at.execute("worklist_update " + a),
-            at.item(a));
+        // ---- the item through its phases: started, returned, closed --------
+        at.typed(a);
+        check(offences, "item open, typed: start is named", at.read(a), at.item(a, true));
+        check(offences, "item in progress, as started", at.execute("worklist_start " + a),
+            at.inProgress(a));
+        carryOutAllButTransitions(at, at.inProgress(a), offences, "item in progress",
+            at.inProgress(a));
+        check(offences, "item open, as returned", at.execute("worklist_return " + a),
+            at.item(a, true));
+        at.execute("worklist_start " + a);
+        check(offences, "item closed, as closed from in progress",
+            at.execute("worklist_close " + a), at.closedItem(a));
+        check(offences, "item closed, read", at.read(a), at.closedItem(a));
+
+        // A closed item opens read alone and refuses every write by its state,
+        // and still takes a booking, which it does not name (Annex A1, S13).
+        Response update = Mcp.call("worklist_update", Map.of("address", a,
+            "conflict_token", at.token(a), "fields", Map.of("title", "after the close")));
+        assertThat(Mcp.reason(update)).isEqualTo("TRANSITION_REFUSED");
+        Mcp.answer(Mcp.call("worklist_book", at.booking(a)));
+        check(offences, "item closed, booked", at.read(a), at.closedItem(a));
+
         check(offences, "item without a milestone, the one open iteration beside it",
-            at.read(b), at.item(b, i2 + "/" + number(b)));
+            at.read(b), at.item(b, false, i2 + "/" + number(b)));
         check(offences, "item closed, the one open iteration beside it", at.read(d),
-            at.item(d));
+            at.closedItem(d));
 
         // ---- a workstream --------------------------------------------------
         Map<String, Object> stream = at.query(Selector.WORKSTREAM).get(0);
@@ -245,20 +297,20 @@ class OpenCallsIT {
     void next_names_the_calls_in_the_names_of_the_caller_s_surface() {
         Scope at = stage("open-calls-names",
             UUID.fromString("0c0a11e5-0000-4000-8000-000000000002"));
-        String item = address(at.create(Selector.ITEM, Map.of("title", "named",
-            "status", OPEN)));
+        String item = address(at.open(Map.of("title", "named", "status", OPEN)));
         String rest = "/api/" + item.substring("worklist://".length());
         List<String> offences = new ArrayList<>();
 
-        check(offences, "over MCP", at.read(item), at.item(item));
+        check(offences, "over MCP", at.read(item), at.item(item, false));
         check(offences, "over REST", given().get(rest).jsonPath().getMap("$"),
-            withoutPrefix(at.item(item)));
+            withoutPrefix(at.item(item, false)));
         check(offences, "over REST as the assistant",
             given().header("Kumbuka-Surface", "assistant").get(rest).jsonPath().getMap("$"),
-            at.item(item));
+            at.item(item, false));
         Map<String, Object> page = given().get("/api/" + at.slug() + "/" + Selector.ITEM)
             .jsonPath().getMap("$");
-        check(offences, "a REST listing entry", entryOf(page, item), withoutPrefix(at.item(item)));
+        check(offences, "a REST listing entry", entryOf(page, item),
+            withoutPrefix(at.item(item, false)));
 
         assertThat(offences)
             .as("MCP names tool names; REST names its verbs, and the tool names under "
@@ -275,7 +327,7 @@ class OpenCallsIT {
         Scope at = stage("open-calls-reader",
             UUID.fromString("0c0a11e5-0000-4000-8000-000000000003"));
         String path = address(at.create(Selector.MILESTONE, Map.of("title", "the path")));
-        String item = address(at.create(Selector.ITEM, Map.of("title", "read only",
+        String item = address(at.open(Map.of("title", "read only",
             "status", OPEN, "milestone", number(path))));
         String iteration = address(at.create(Selector.ITERATION, Map.of("title", "read",
             "motto", "read", "description", "read only")));
@@ -318,6 +370,8 @@ class OpenCallsIT {
         vocabulary.declareStatus(id, OPEN, 1, true, false, false, false);
         vocabulary.declareStatus(id, DONE, 2, false, false, true, true);
         vocabulary.declareStatus(id, RESTING, 3, false, false, false, false);
+        vocabulary.declareStatus(id, RUNNING, 4, true, true, false, false);
+        vocabulary.declareAttribute(id, TYPE, "Type", "text", 1, false);
         if (vocabulary.relationTypeByName(id, RELATION).isEmpty()) {
             vocabulary.declareRelationType(id, RELATION, false, 1);
         }
@@ -362,6 +416,31 @@ class OpenCallsIT {
                 "fields", fields));
         }
 
+        /** An item created and submitted: open. */
+        Map<String, Object> open(Map<String, Object> fields) {
+            return Submitted.overMcp(create(Selector.ITEM, fields));
+        }
+
+        /** An item created, submitted and closed into the closed status. */
+        Map<String, Object> closed(Map<String, Object> fields) {
+            String item = address(open(fields));
+            return mcp("worklist_close", Map.of("address", item, "conflict_token", token(item),
+                "status", DONE));
+        }
+
+        /** Gives an item a type, the value of its attribute {@code type}. */
+        void typed(String item) {
+            mcp("worklist_update", Map.of("address", item, "conflict_token", token(item),
+                "fields", Map.of("attributes", Map.of(TYPE, "task"))));
+        }
+
+        /** The arguments of a booking on an item's first criterion. */
+        Map<String, Object> booking(String item) {
+            return Map.of("address", item, "instance", "https://instances.example/run/1",
+                "entries", List.of(Map.of("criterion", 1, "status", "met",
+                    "evidence", "a report of the instance")));
+        }
+
         Map<String, Object> read(String address) {
             return mcp("worklist_read", Map.of("address", address));
         }
@@ -402,10 +481,23 @@ class OpenCallsIT {
                     if (address.contains("/" + Selector.ITERATION + "/")) {
                         arguments.put("produced", "what the iteration made");
                     }
+                    if (address.contains("/" + Selector.ITEM + "/")) {
+                        // Mandatory where an item leaves the phase in progress.
+                        arguments.put("reason", "the work is finished");
+                    }
+                }
+                case "worklist_submit", "worklist_discard", "worklist_start" -> {
+                    arguments.put("address", address);
+                    arguments.put("conflict_token", token(address));
+                }
+                case "worklist_return" -> {
+                    arguments.put("address", address);
+                    arguments.put("conflict_token", token(address));
+                    arguments.put("reason", "back to the pool");
                 }
                 case "worklist_plan" -> {
                     String membership = isMembership(address) ? address
-                        : address + "/" + number(address(create(Selector.ITEM, Map.of(
+                        : address + "/" + number(address(open(Map.of(
                             "title", "appended", "status", OPEN,
                             "milestone", firstMilestoneNumber()))));
                     arguments.put("address", membership);
@@ -420,16 +512,20 @@ class OpenCallsIT {
                     arguments.put("conflict_token", token(address));
                     arguments.put("to_item", target);
                     arguments.put("type", RELATION);
+                    if ("worklist_unrelate".equals(tool)) {
+                        // Mandatory: the edge is cancelled with a reason (D15).
+                        arguments.put("reason", "the probe cancels the edge");
+                    }
                 }
                 case "worklist_tag_attach", "worklist_tag_detach" -> {
                     arguments.put("address", address);
                     arguments.put("tag", TAG);
                 }
-                case "worklist_book" -> {
+                case "worklist_book" -> arguments.putAll(booking(address));
+                case "worklist_addendum" -> {
+                    // No conflict token: an addendum stands beside the item.
                     arguments.put("address", address);
-                    arguments.put("instance", "https://instances.example/run/1");
-                    arguments.put("entries", List.of(Map.of("criterion", 1,
-                        "status", "met", "evidence", "a report of the instance")));
+                    arguments.put("text", "a correction the probe writes");
                 }
                 case "worklist_advance" -> {
                     arguments.put("scope", slug);
@@ -455,7 +551,13 @@ class OpenCallsIT {
             if (address.contains("/" + Selector.ITERATION + "/")) {
                 return Map.of("motto", "updated");
             }
-            return Map.of("title", "updated");
+            if (address.contains("/" + Selector.MILESTONE + "/")) {
+                return Map.of("title", "updated");
+            }
+            // A planning field: an item takes it in every phase that names
+            // update, where its title is frozen once it is submitted
+            // (REA-0011 D13, Annex A2).
+            return Map.of("contributor", List.of("subject-of-a-contributor"));
         }
 
         private long firstMilestoneNumber() {
@@ -467,16 +569,58 @@ class OpenCallsIT {
 
         // ---- what each object has open, written from the target cut --------
 
-        List<String> item(String address, String... plans) {
+        /** A draft (Annex A1): its writes, submit and discard. */
+        List<String> draft(String address) {
+            return List.of(
+                "worklist_read " + address, "worklist_update " + address,
+                "worklist_relate " + address, "worklist_unrelate " + address,
+                "worklist_tag_attach " + address, "worklist_tag_detach " + address,
+                "worklist_submit " + address, "worklist_discard " + address);
+        }
+
+        /**
+         * An open item (Annex A1): its writes, addendum, book, start where it
+         * may be started, close, and plan into each open iteration with room
+         * it is no member of.
+         */
+        List<String> item(String address, boolean startable, String... plans) {
             List<String> calls = new ArrayList<>(List.of(
                 "worklist_read " + address, "worklist_update " + address,
                 "worklist_relate " + address, "worklist_unrelate " + address,
                 "worklist_tag_attach " + address, "worklist_tag_detach " + address,
-                "worklist_book " + address));
+                "worklist_addendum " + address, "worklist_book " + address));
+            if (startable) {
+                calls.add("worklist_start " + address);
+            }
+            calls.add("worklist_close " + address);
             for (String membership : plans) {
                 calls.add("worklist_plan " + membership);
             }
             return calls;
+        }
+
+        /**
+         * An item in progress (Annex A1): its writes without unrelate, since
+         * in progress references and relations are only appended (D15),
+         * addendum, book, return, close, and plan as an open item has it.
+         */
+        List<String> inProgress(String address, String... plans) {
+            List<String> calls = new ArrayList<>(List.of(
+                "worklist_read " + address, "worklist_update " + address,
+                "worklist_relate " + address,
+                "worklist_tag_attach " + address, "worklist_tag_detach " + address,
+                "worklist_addendum " + address, "worklist_book " + address,
+                "worklist_return " + address,
+                "worklist_close " + address));
+            for (String membership : plans) {
+                calls.add("worklist_plan " + membership);
+            }
+            return calls;
+        }
+
+        /** A closed item (D6): read alone. */
+        List<String> closedItem(String address) {
+            return List.of("worklist_read " + address);
         }
 
         List<String> iteration(String address, boolean open, boolean advanceable) {
@@ -532,6 +676,39 @@ class OpenCallsIT {
 
     private static String verbOf(String call) {
         return call.substring(0, call.indexOf(' '));
+    }
+
+    /** Whether a named call moves the item's phase, and so is carried out on its own. */
+    private static boolean isTransition(String call) {
+        return TRANSITIONS.contains(verbOf(call));
+    }
+
+    /**
+     * Carries out every named call but the transitions, in their order, and
+     * checks the calls each answer names.
+     *
+     * @param expected the calls every answer names; absent where the answers
+     *                 are not checked, because the calls carried out move the
+     *                 memberships an answer names
+     */
+    private static void carryOutAllButTransitions(Scope at, List<String> calls,
+                                                  List<String> offences, String where,
+                                                  @Nullable List<String> expected) {
+        calls.stream().filter(call -> !isTransition(call)).forEach(call -> {
+            Map<String, Object> answer = at.execute(call);
+            if (expected != null) {
+                check(offences, where + " after " + verbOf(call), answer, expected);
+            }
+        });
+    }
+
+    /** The reason each plan of these items into the iteration is refused with. */
+    private static List<String> planRefusals(Scope at, String iteration, List<String> items) {
+        return items.stream()
+            .map(item -> Mcp.reason(Mcp.call("worklist_plan", Map.of(
+                "address", iteration + "/" + number(item),
+                "conflict_token", at.token(iteration)))))
+            .toList();
     }
 
     private static Map<String, Object> entry(List<Map<String, Object>> page, String address) {

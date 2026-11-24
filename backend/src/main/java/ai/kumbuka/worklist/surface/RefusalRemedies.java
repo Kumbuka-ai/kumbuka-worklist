@@ -77,6 +77,9 @@ public interface RefusalRemedies {
     String scopeReadOnly();
 
     @Message
+    String roleInsufficient();
+
+    @Message
     String fieldRetracted();
 
     @Message

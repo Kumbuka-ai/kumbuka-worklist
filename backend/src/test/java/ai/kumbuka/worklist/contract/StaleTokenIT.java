@@ -114,6 +114,17 @@ class StaleTokenIT {
         assertStale(refusal, now, "worklist_relate");
     }
 
+    /** A transition of an item presents the item's token as well (REA-0011 D1). */
+    @Test
+    void a_stale_token_on_a_transition_carries_the_object_too() {
+        String address = String.valueOf(created("stale on submit").get("address"));
+        Map<String, Object> refusal = Mcp.refusal(Mcp.call("worklist_submit", Map.of(
+            "address", address, "conflict_token", "stale")));
+        Map<String, Object> now = Mcp.answer(Mcp.call("worklist_read", Map.of("address", address)));
+
+        assertStale(refusal, now, "worklist_submit");
+    }
+
     // ======================================================================
 
     private static Map<String, Object> created(String title) {

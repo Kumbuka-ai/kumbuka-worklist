@@ -386,14 +386,15 @@ class PlanningDomainIT {
     // ==================================================================
 
     /**
-     * Planning sets no condition on an item but that its status does not
-     * answer {@code closed} (TAR-0002 B9): an open item without a milestone,
-     * an item whose status is not actionable, and an item whose milestone is
-     * off the product path all enter an open iteration. An item whose status
-     * answers {@code closed} is refused as before, naming the address only.
+     * Planning sets no condition on an item but its phase, open or in
+     * progress (TAR-0002 B9, REA-0011 Annex A1): an open item without a
+     * milestone, an item whose status is not actionable, and an item whose
+     * milestone is off the product path all enter an open iteration. A closed
+     * item is refused as before, and a draft as well, each naming the address
+     * only.
      */
     @Test
-    void an_item_enters_an_iteration_unless_its_status_answers_closed() {
+    void an_item_enters_an_iteration_in_the_phases_open_and_in_progress_only() {
         UUID iteration = iterationId(created("seventh", 1));
 
         UUID noMilestone = item("open, without a milestone");
@@ -422,6 +423,18 @@ class PlanningDomainIT {
                 + "is the tenant's vocabulary (DEC-0043 R18)")
             .containsExactly("address");
         assertThat(memberships.query(scope)).doesNotContain(closed);
+
+        UUID draft = draft("a draft, never submitted");
+        WorklistException draftRefusal = refusalFrom(() ->
+            memberships.plan(scope, iteration, draft, token(iteration)));
+        assertThat(draftRefusal.reason())
+            .as("a draft is refused with the code a closed item is refused with")
+            .isEqualTo(WorklistException.Reason.ITEM_UNPLANNABLE);
+        assertThat(draftRefusal.offenders()).containsExactly("address");
+        assertThat(memberships.query(scope))
+            .as("the items planned before stay planned, and the draft is none of them")
+            .isNotEmpty()
+            .doesNotContain(draft);
     }
 
     // ==================================================================
@@ -738,14 +751,27 @@ class PlanningDomainIT {
         return item(title, actionableStatus);
     }
 
+    /**
+     * An item in the status given: submitted, so that it stands in the phase
+     * open, and closed into the status where the status is bound to the phase
+     * closed (REA-0011 D11, D12).
+     */
     private UUID item(String title, Long statusId) {
         // The item view, declared before anything is created under it: an item
         // acquires its address at creation, so the view it is addressed under
         // has to exist by then. Declaring is idempotent.
         selectors.open(scope, Selector.ITEM);
-        String statusName = vocabulary.requireStatus(scope, statusId).name;
-        return (UUID) items.create(scope, "probe-subject", Map.of(
-            "title", title, "status", statusName)).answer().get("id");
+        ItemStatus status = vocabulary.requireStatus(scope, statusId);
+        if (status.closed) {
+            return ItemLifecycle.closed(items, scope, Map.of("title", title), status.name);
+        }
+        return ItemLifecycle.open(items, scope, Map.of("title", title, "status", status.name));
+    }
+
+    /** A draft, never submitted. */
+    private UUID draft(String title) {
+        selectors.open(scope, Selector.ITEM);
+        return ItemLifecycle.draft(items, scope, Map.of("title", title, "status", "open"));
     }
 
     /** A milestone of the given kind. Markers carry neither vision nor mission. */

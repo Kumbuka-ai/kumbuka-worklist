@@ -36,13 +36,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>Declare the three selectors and open the scope's settings row —
  *       the two acts that make a fresh scope carry addresses.</li>
  *   <li>Declare an actionable status and a terminal one, so an item can be
- *       moved through both. A membership needs its item to be actionable
- *       to enter an iteration.</li>
+ *       moved through both.</li>
  *   <li>Create a milestone, read it back, and activate it through
  *       {@code milestone.update} — the axis is on the product path.</li>
  *   <li>Create an iteration, read it back, and assert its title,
  *       motto and description survive the round trip.</li>
- *   <li>Create an item, and assign it to the milestone through
+ *   <li>Create an item, which is a draft, submit it, and assign it to the
+ *       milestone through
  *       <strong>{@code item.update} against the milestone's number</strong>
  *       — the SPRINT_180.5 fixture reached past this verb over JDBC, and
  *       the whole point of this suite is that it does not.</li>
@@ -53,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       close over it without carrying a live membership.</li>
  *   <li>Close the iteration with a naming of what was produced.</li>
  *   <li>Close the milestone.</li>
+ *   <li>Close the item through {@code close}, into the terminal status.</li>
  * </ol>
  *
  * <h2>What this suite deliberately does not do</h2>
@@ -145,11 +146,19 @@ class LifecycleChainIT {
             Field.TITLE.canonicalName(), "close the last beta reader thread",
             Field.STATUS.canonicalName(), actionable.name)).answer();
         UUID itemId = (UUID) itemAnswer.get(Field.ID.canonicalName());
-        String itemToken = (String) itemAnswer.get(Field.CONFLICT_TOKEN.canonicalName());
+        assertThat(itemAnswer.get(Field.PHASE.canonicalName()))
+            .as("create makes a draft (REA-0011 D12)")
+            .isEqualTo("draft");
+
+        // 4a. Submit the draft: an item is planned in the phase open.
+        Map<String, Object> submitted = items.submit(scope, itemId,
+            (String) itemAnswer.get(Field.CONFLICT_TOKEN.canonicalName())).answer();
+        assertThat(submitted.get(Field.PHASE.canonicalName())).isEqualTo("open");
+        String itemToken = (String) submitted.get(Field.CONFLICT_TOKEN.canonicalName());
 
         Map<String, Object> assigned = items.update(scope, itemId, Map.of(
             Field.MILESTONE_ID.canonicalName(), milestoneNumber,
-            Field.CONFLICT_TOKEN.canonicalName(), itemToken)).answer();
+            Field.CONFLICT_TOKEN.canonicalName(), itemToken), "probe-subject").answer();
         assertThat(assigned.get(Field.MILESTONE_ID.canonicalName()))
             .as("item.update carries the milestone assignment through the verb "
                 + "surface — SPRINT_180.4 fixed the wire form to the number, so this "
@@ -210,6 +219,15 @@ class LifecycleChainIT {
         assertThat(memberships.read(scope, iterationId, itemId)
                 .get(Field.MEMBERSHIP_STATUS.canonicalName()))
             .isEqualTo(IterationMembership.DONE);
+
+        // 11. Close the item through its transition, into the terminal status.
+        Map<String, Object> itemNow = items.read(scope, itemId);
+        Map<String, Object> closedItem = items.close(scope, itemId,
+            tokenOf(itemNow), null, "done").answer();
+        assertThat(closedItem)
+            .containsEntry(Field.PHASE.canonicalName(), "closed")
+            .containsEntry(Field.STATUS.canonicalName(), "done");
+        assertThat(closedItem.get(Field.CLOSE_DATE.canonicalName())).isNotNull();
     }
 
     // ==================================================================

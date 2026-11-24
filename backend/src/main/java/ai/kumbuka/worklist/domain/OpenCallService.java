@@ -35,20 +35,36 @@ import java.util.function.LongFunction;
  * Every condition here is the one the verb itself refuses on, read through the
  * same predicate rather than a table beside it: {@link Iteration#open},
  * {@link Milestone#open}, {@link MembershipService#plannable},
- * {@link IterationService#promotable}, {@link PlanningService#within}, and the
- * membership row {@code plan} refuses as present. So a call named here is
- * never refused for the object's state: a second table would be one the
- * verbs drift away from.
+ * {@link IterationService#promotable}, {@link PlanningService#within},
+ * {@link ItemService#submittable}, {@link ItemService#startable},
+ * {@link ItemService#firstOf}, {@link FieldClass#addendumOpen},
+ * {@link FieldClass#edgeAppendOpen}, {@link FieldClass#edgeCancelOpen}, and
+ * the membership row {@code plan} refuses as
+ * present. So a call named here is never refused for the object's state: a
+ * second table would be one the verbs drift away from.
  *
  * <p>Per object and state:
  * <ul>
- *   <li>an item, in every state: {@code read}, {@code update}, {@code relate},
- *       {@code unrelate}, {@code tag_attach}, {@code tag_detach}, {@code book},
- *       and {@code plan} into each open iteration it is no member of, where
- *       the item may enter an iteration at all and the iteration has room. A
- *       closed item stays writable, and takes a booking from every caller
- *       who may write; narrowing {@code book} on a closed item to the
- *       identity that concludes an instance comes with a later step;</li>
+ *   <li>an item, by its phase (REA-0011 D6, Annex A1): a draft opens
+ *       {@code read}, {@code update}, {@code relate}, {@code unrelate},
+ *       {@code tag_attach}, {@code tag_detach}, {@code submit} where it may
+ *       be submitted, and {@code discard}; an open item {@code read},
+ *       {@code update}, {@code relate}, {@code unrelate}, {@code tag_attach},
+ *       {@code tag_detach}, {@code addendum}, {@code book}, {@code start}
+ *       where it may be started, {@code close}, and {@code plan} into each
+ *       open iteration it is no member of and that has room; an item in
+ *       progress the same, with {@code return} in place of {@code start} and
+ *       without {@code unrelate}, since in progress references and relations
+ *       are only appended (REA-0011 D15, Annex A1); a
+ *       closed item {@code read} alone. A transition into a phase the scope
+ *       declares no status of is not named, since it is refused. A closed
+ *       item still takes {@code book}, and does not name it: that call is
+ *       open to the identity concluding an instance, which this service does
+ *       not yet recognise (Annex A1). {@code addendum} is named exactly where
+ *       {@link FieldClass#addendumOpen} admits it, the function the call
+ *       itself is refused on; {@code relate} and {@code unrelate} exactly
+ *       where {@link FieldClass#edgeAppendOpen} and
+ *       {@link FieldClass#edgeCancelOpen} admit them;</li>
  *   <li>an open iteration: {@code read}, {@code update}, {@code close},
  *       {@code plan} at its own address while it has room, and
  *       {@code advance} at the iteration collection while an open iteration
@@ -94,7 +110,12 @@ public class OpenCallService extends PlanningService {
         UNRELATE(true),
         TAG_ATTACH(true),
         TAG_DETACH(true),
-        BOOK(true);
+        BOOK(true),
+        ADDENDUM(true),
+        SUBMIT(true),
+        DISCARD(true),
+        START(true),
+        RETURN(true);
 
         private final boolean writes;
 
@@ -123,7 +144,7 @@ public class OpenCallService extends PlanningService {
      * An object's state and the calls open on it in that state.
      *
      * @param state the state as the object's read answers it: an item's
-     *              status, a milestone's status, {@link #OPEN} or
+     *              phase, a milestone's status, {@link #OPEN} or
      *              {@link #CLOSED} for an iteration and a membership of it, a
      *              workstream's status
      */
@@ -155,7 +176,8 @@ public class OpenCallService extends PlanningService {
             rooms.add(new Room(iteration.number, members,
                 within(countedMemberships(held) + 1, MEMBERSHIPS_PER_ITERATION)));
         }
-        return new Items(scopeId, List.copyOf(rooms))::open;
+        return new Items(scopeId, List.copyOf(rooms), vocabulary.statuses(scopeId),
+            vocabulary.attributeByKey(scopeId, ItemService.TYPE_KEY))::open;
     }
 
     /** The calls open on one iteration. */
@@ -236,39 +258,86 @@ public class OpenCallService extends PlanningService {
     }
 
     /**
-     * The items of one scope against its open iterations, with each status
-     * read once however many items name it.
+     * The items of one scope against its open iterations and its statuses,
+     * with each status read once however many items name it.
      */
     private final class Items {
 
         private final UUID scopeId;
         private final List<Room> rooms;
+        private final List<ItemStatus> declared;
+        private final Optional<AttributeDefinition> type;
         private final Map<Long, ItemStatus> statuses = new HashMap<>();
 
-        Items(UUID scopeId, List<Room> rooms) {
+        /**
+         * @param declared the statuses the scope declares, by rank
+         * @param type     the scope's declaration of the attribute
+         *                 {@code type}, if it has one
+         */
+        Items(UUID scopeId, List<Room> rooms, List<ItemStatus> declared,
+              Optional<AttributeDefinition> type) {
             this.scopeId = scopeId;
             this.rooms = rooms;
+            this.declared = declared;
+            this.type = type;
         }
 
-        /** The calls open on the item of this number. */
+        /** The calls open on the item of this number, by its phase. */
         Open open(long number) {
             Item item = items.byAddress(scopeId, number).orElseThrow(() -> new WorklistException(
                 WorklistException.Reason.ITEM_UNKNOWN, List.of()));
-            ItemStatus status = statuses.computeIfAbsent(item.statusPk,
-                pk -> vocabulary.requireStatus(scopeId, pk));
+            Phase phase = item.phase();
+            if (phase == Phase.CLOSED) {
+                return new Open(phase.token(), List.of(at(Verb.READ, Selector.ITEM, number)));
+            }
             List<Call> calls = new ArrayList<>(List.of(
-                at(Verb.READ, Selector.ITEM, number), at(Verb.UPDATE, Selector.ITEM, number),
-                at(Verb.RELATE, Selector.ITEM, number), at(Verb.UNRELATE, Selector.ITEM, number),
-                at(Verb.TAG_ATTACH, Selector.ITEM, number),
-                at(Verb.TAG_DETACH, Selector.ITEM, number),
-                at(Verb.BOOK, Selector.ITEM, number)));
-            if (MembershipService.plannable(status)) {
+                at(Verb.READ, Selector.ITEM, number), at(Verb.UPDATE, Selector.ITEM, number)));
+            if (FieldClass.edgeAppendOpen(phase)) {
+                calls.add(at(Verb.RELATE, Selector.ITEM, number));
+            }
+            if (FieldClass.edgeCancelOpen(phase)) {
+                calls.add(at(Verb.UNRELATE, Selector.ITEM, number));
+            }
+            calls.add(at(Verb.TAG_ATTACH, Selector.ITEM, number));
+            calls.add(at(Verb.TAG_DETACH, Selector.ITEM, number));
+            if (phase == Phase.DRAFT) {
+                if (ItemService.submittable(item)) {
+                    calls.add(at(Verb.SUBMIT, Selector.ITEM, number));
+                }
+                calls.add(at(Verb.DISCARD, Selector.ITEM, number));
+                return new Open(phase.token(), List.copyOf(calls));
+            }
+            if (FieldClass.addendumOpen(phase)) {
+                calls.add(at(Verb.ADDENDUM, Selector.ITEM, number));
+            }
+            calls.add(at(Verb.BOOK, Selector.ITEM, number));
+            if (phase == Phase.OPEN && declares(Phase.IN_PROGRESS)
+                    && ItemService.startable(statusOf(item), ItemService.typed(item, type))) {
+                calls.add(at(Verb.START, Selector.ITEM, number));
+            }
+            if (phase == Phase.IN_PROGRESS && declares(Phase.OPEN)) {
+                calls.add(at(Verb.RETURN, Selector.ITEM, number));
+            }
+            if (declares(Phase.CLOSED)) {
+                calls.add(at(Verb.CLOSE, Selector.ITEM, number));
+            }
+            if (MembershipService.plannable(phase)) {
                 rooms.stream()
                     .filter(room -> room.admits() && !room.members().contains(number))
                     .forEach(room -> calls.add(new Call(Verb.PLAN, Selector.ITERATION,
                         room.iteration(), number)));
             }
-            return new Open(status.name, List.copyOf(calls));
+            return new Open(phase.token(), List.copyOf(calls));
+        }
+
+        private ItemStatus statusOf(Item item) {
+            return statuses.computeIfAbsent(item.statusPk,
+                pk -> vocabulary.requireStatus(scopeId, pk));
+        }
+
+        /** Whether the scope declares a status a transition into this phase can set. */
+        private boolean declares(Phase phase) {
+            return ItemService.firstOf(declared, phase).isPresent();
         }
     }
 }

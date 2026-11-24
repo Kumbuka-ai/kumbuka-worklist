@@ -134,8 +134,18 @@ public class McpAdapter {
     private static final String ARG_INSTANCE = SurfaceDeclaration.BOOK_INSTANCE;
     private static final String ARG_ENTRIES = SurfaceDeclaration.BOOK_ENTRIES;
 
+    /** The text of an addendum. */
+    private static final String ARG_TEXT = SurfaceDeclaration.ADDENDUM_TEXT;
+
     /** How much of an item's fulfilment ledger a read answers. */
     private static final String ARG_FULFILMENT = SurfaceDeclaration.FULFILMENT_ARGUMENT;
+
+    /** How much of an item's cancelled references and relations a read answers. */
+    private static final String ARG_CANCELLED = SurfaceDeclaration.CANCELLED_ARGUMENT;
+
+    /** The status and the reason of a transition of an item. */
+    private static final String ARG_STATUS = SurfaceDeclaration.STATUS_ARGUMENT;
+    private static final String ARG_REASON = SurfaceDeclaration.REASON_ARGUMENT;
 
     /** The query's filter and paging, as arguments rather than address parts. */
     private static final String ARG_FILTER = QueryFilter.FILTER_ARGUMENT;
@@ -366,6 +376,13 @@ public class McpAdapter {
             case "update" -> update(in);
             case "query" -> query(in);
             case "close" -> close(in);
+
+            // The transitions of an item.
+            case "submit" -> submit(in);
+            case "discard" -> discard(in);
+            case "start" -> start(in);
+            case "return" -> returnItem(in);
+
             case "advance" -> advance(in);
             case "plan" -> plan(in);
             case "unplan" -> unplan(in);
@@ -382,6 +399,9 @@ public class McpAdapter {
             // The fulfilment ledger, addressed at an item.
             case "book" -> book(in);
 
+            // The addenda, addressed at an item.
+            case "addendum" -> addendum(in);
+
             // Not in tools/list, and still answered by name.
             case "send", "append", "digest", "abandon", "block", "resume", "consume" ->
                 refused(in, verb, false);
@@ -391,6 +411,12 @@ public class McpAdapter {
         };
     }
 
+    /**
+     * A create, always of a draft where it creates an item: the assistant
+     * surface creates and submits in two acts (TAR-0002 B12), so the tool
+     * declares no {@code submit} and an argument of that name is refused as
+     * one the tool does not declare.
+     */
     private Object create(Map<String, Object> in) {
         String scope = required(in, ARG_SCOPE);
         return dressed(scope, verbs.create(caller.subject(), scope,
@@ -399,6 +425,7 @@ public class McpAdapter {
 
     private ObjectPayload read(Map<String, Object> in) {
         Optional<String> fulfilment = text(in, ARG_FULFILMENT);
+        Optional<String> cancelled = text(in, ARG_CANCELLED);
         Address at = address(in);
         String member = at.member();
         if (member != null && fulfilment.isPresent()
@@ -406,11 +433,16 @@ public class McpAdapter {
             // A membership carries no ledger: a form fault, decided before the scope.
             throw SurfaceException.invalid(ARG_FULFILMENT);
         }
+        if (member != null && cancelled.isPresent()
+                && !SurfaceDeclaration.CANCELLED_COUNT.equals(cancelled.get())) {
+            // A membership carries no edges: a form fault, decided before the scope.
+            throw SurfaceException.invalid(ARG_CANCELLED);
+        }
         return dressed(at.scope(), member != null
             ? verbs.readMembership(caller.subject(), at.scope(), at.view(), at.head(),
                 member)
             : verbs.read(caller.subject(), at.scope(), at.view(), at.head(),
-                fulfilment.orElse(null)));
+                fulfilment.orElse(null), cancelled.orElse(null)));
     }
 
     private Object update(Map<String, Object> in) {
@@ -443,11 +475,42 @@ public class McpAdapter {
     }
 
     private Object close(Map<String, Object> in) {
+        Optional<String> reason = text(in, ARG_REASON);
+        Optional<String> status = text(in, ARG_STATUS);
         Address at = address(in);
         Object produced = in.get("produced");
         return dressed(at.scope(), verbs.close(caller.subject(), at.scope(), at.view(),
-            at.head(), required(in, ARG_TOKEN),
-            produced == null ? null : String.valueOf(produced)));
+            at.head(), required(in, ARG_TOKEN), new VerbInput.Closing(
+                produced == null ? null : String.valueOf(produced),
+                reason.orElse(null), status.orElse(null))));
+    }
+
+    private Object submit(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.submit(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN)));
+    }
+
+    private Object discard(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.discard(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN)));
+    }
+
+    private Object start(Map<String, Object> in) {
+        Optional<String> status = text(in, ARG_STATUS);
+        Address at = address(in);
+        return dressed(at.scope(), verbs.start(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN), status.orElse(null)));
+    }
+
+    /** {@code return}; the reason is refused by the surface where it is missing. */
+    private Object returnItem(Map<String, Object> in) {
+        Optional<String> reason = text(in, ARG_REASON);
+        Optional<String> status = text(in, ARG_STATUS);
+        Address at = address(in);
+        return dressed(at.scope(), verbs.return_(caller.subject(), at.scope(), at.view(),
+            at.head(), required(in, ARG_TOKEN), reason.orElse(null), status.orElse(null)));
     }
 
     private Object advance(Map<String, Object> in) {
@@ -475,11 +538,18 @@ public class McpAdapter {
             new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE))));
     }
 
+    /**
+     * {@code unrelate}; the reason is checked here for its JSON type alone, a
+     * form fault decided before the scope (C1.3), and refused by the surface
+     * where it is missing or empty.
+     */
     private Object unrelate(Map<String, Object> in) {
+        Optional<String> reason = text(in, ARG_REASON);
         Address at = address(in);
         return dressed(at.scope(), verbs.unrelate(caller.subject(), at.scope(), at.view(),
             at.head(), required(in, ARG_TOKEN),
-            new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE))));
+            new VerbInput.Edge(required(in, ARG_TO_ITEM), required(in, ARG_TYPE)),
+            reason.orElse(null)));
     }
 
     private Object validate(Map<String, Object> in) {
@@ -511,6 +581,17 @@ public class McpAdapter {
         return dressed(at.scope(), verbs.book(caller.subject(), at.scope(), at.view(),
             at.head(), new VerbInput.Booking(text(in, ARG_INSTANCE).orElse(null),
                 list(in, ARG_ENTRIES).orElse(null))));
+    }
+
+    /**
+     * An addendum. The text is checked here for its JSON type alone, a form
+     * fault decided before the scope (C1.3); a missing or empty one is
+     * refused by the surface.
+     */
+    private Object addendum(Map<String, Object> in) {
+        Address at = address(in);
+        return dressed(at.scope(), verbs.addendum(caller.subject(), at.scope(), at.view(),
+            at.head(), text(in, ARG_TEXT).orElse(null)));
     }
 
     /**

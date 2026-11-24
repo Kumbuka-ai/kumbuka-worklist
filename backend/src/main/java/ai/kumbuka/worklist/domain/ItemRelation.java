@@ -51,10 +51,16 @@ import java.util.UUID;
  * constraint expresses "this graph is acyclic", and the walk that answers it
  * is a domain check with a red probe of its own. It is not built here.
  *
- * <p><strong>Withdrawal rather than deletion</strong>, here as everywhere in
- * this schema. An edge that is no longer asserted keeps its row and changes
- * its status, and that is what lets "no verb deletes" be held by the GRANTS
- * rather than by a rule somebody has to remember.
+ * <p><strong>Cancellation rather than deletion</strong> (REA-0011 D15). An
+ * edge that is cancelled keeps its row: its status moves to
+ * {@link #WITHDRAWN}, the stored word of the cancelled state, and it records
+ * when it ended, who ended it and, where the call gave one, why (V35). An
+ * edge asserted again is the same row, active once more, and keeps the end
+ * columns of its last cancellation until the next one overwrites them: the
+ * key admits no second row, so only the last cancellation is held. The rows
+ * go only with a discarded draft at either end: {@code discard} deletes a
+ * draft and what stands beside it, which is what V33 grants DELETE on this
+ * table for.
  */
 @Entity
 @Table(name = "item_relation", schema = "worklist")
@@ -63,7 +69,7 @@ public class ItemRelation extends ScopeKeyed {
 
     /** The edge is asserted. */
     public static final String ASSERTED = "asserted";
-    /** The edge was asserted once and is not any more. */
+    /** The edge was cancelled: asserted once, and not any more. */
     public static final String WITHDRAWN = "withdrawn";
 
     @Id
@@ -86,6 +92,41 @@ public class ItemRelation extends ScopeKeyed {
 
     @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
+
+    /**
+     * When the edge was last cancelled. Absent on an edge never cancelled, and
+     * on one cancelled before V35 recorded it.
+     */
+    @Column(name = "ended_at")
+    public @Nullable Instant endedAt;
+
+    /**
+     * Who last cancelled the edge, as the service derived the subject from the
+     * token. Absent where {@link #endedAt} is.
+     */
+    @Column(name = "ended_by")
+    public @Nullable String endedBy;
+
+    /**
+     * Why the edge was last cancelled. Absent where the cancelling call took
+     * no reason, which is an {@code update} that left the edge out.
+     */
+    @Column(name = "end_reason")
+    public @Nullable String endReason;
+
+    /**
+     * Cancels the edge: its status moves and it records when, by whom and why.
+     * A further cancellation of an edge asserted again overwrites the three.
+     *
+     * @param reason why; absent where the call took none
+     */
+    public void cancel(Instant at, String actor, @Nullable String reason) {
+        status = WITHDRAWN;
+        endedAt = at;
+        endedBy = actor;
+        endReason = reason;
+        updatedAt = at;
+    }
 
     /**
      * The composite key: from, to, and the type.

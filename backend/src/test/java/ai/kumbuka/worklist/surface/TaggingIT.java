@@ -172,18 +172,35 @@ class TaggingIT {
             .then().statusCode(200);
     }
 
+    /**
+     * A draft and an open item take tags; a closed item takes no write, the
+     * tag verbs included, and refuses them by its state (REA-0011 D6, D8).
+     */
     @Test
-    void an_item_in_a_closed_status_takes_tags() {
-        long item = createItem("finished");
-        String token = read(item).jsonPath().getString("fields.conflict_token");
-        given().contentType(ContentType.JSON).header("If-Match", "\"" + token + "\"")
-            .body(Map.of("status", DONE))
-            .when().patch("/api/" + SCOPE + "/item/" + item)
-            .then().statusCode(200);
+    void a_draft_takes_tags_and_a_closed_item_refuses_them_by_its_state() {
+        long draft = createItem("a draft");
+        attach(draft, BETA).then().statusCode(200);
+        assertThat(read(draft).jsonPath().getString("fields.phase")).isEqualTo("draft");
+        assertThat(read(draft).jsonPath().getList("fields.tags", String.class))
+            .as("a draft takes a tag").containsExactly(BETA);
 
-        attach(item, ALPHA).then().statusCode(200);
+        long item = createOpenItem("finished");
+        attach(item, BETA).then().statusCode(200);
+        close(item);
+
+        Response attached = attach(item, ALPHA);
+        attached.then().statusCode(409);
+        assertThat(attached.jsonPath().getString("reason")).isEqualTo("TRANSITION_REFUSED");
+        assertThat(attached.jsonPath().getString("data.state")).isEqualTo("closed");
+        assertThat(attached.jsonPath().getList("data.next.call", String.class))
+            .as("a closed item opens read alone")
+            .containsExactly("read " + address(item));
+        Response detached = detach(item, BETA);
+        detached.then().statusCode(409);
+        assertThat(detached.jsonPath().getString("reason")).isEqualTo("TRANSITION_REFUSED");
         assertThat(read(item).jsonPath().getList("fields.tags", String.class))
-            .containsExactly(ALPHA);
+            .as("and its tags stay as they were")
+            .containsExactly(BETA);
     }
 
     // =======================================================================
@@ -311,15 +328,11 @@ class TaggingIT {
     @Test
     void the_filter_tag_combines_with_status() {
         long openTagged = createItem("open and tagged");
-        long doneTagged = createItem("done and tagged");
+        long doneTagged = createOpenItem("done and tagged");
         long openUntagged = createItem("open, untagged");
         attach(openTagged, BETA).then().statusCode(200);
         attach(doneTagged, BETA).then().statusCode(200);
-        String token = read(doneTagged).jsonPath().getString("fields.conflict_token");
-        given().contentType(ContentType.JSON).header("If-Match", "\"" + token + "\"")
-            .body(Map.of("status", DONE))
-            .when().patch("/api/" + SCOPE + "/item/" + doneTagged)
-            .then().statusCode(200);
+        close(doneTagged);
 
         List<Long> found = query(Map.of("filter.tag", BETA, "filter.status", OPEN));
         assertThat(found)
@@ -340,12 +353,31 @@ class TaggingIT {
     // Fixtures
     // =======================================================================
 
+    /** A draft, as every create makes one (REA-0011 D12). */
     private static long createItem(String title) {
         Response created = given().contentType(ContentType.JSON)
             .body(Map.of("title", title, "status", OPEN))
             .when().post("/api/" + SCOPE + "/" + Selector.ITEM);
         created.then().statusCode(201);
         return created.jsonPath().getLong("fields.number");
+    }
+
+    /** An open item: created and submitted in the same act. */
+    private static long createOpenItem(String title) {
+        Response created = given().contentType(ContentType.JSON)
+            .body(Map.of("title", title, "status", OPEN))
+            .when().post(Submitted.restCreate("/api/" + SCOPE + "/" + Selector.ITEM));
+        created.then().statusCode(201);
+        return created.jsonPath().getLong("fields.number");
+    }
+
+    /** Closes an open item into the closed status of this scope. */
+    private static void close(long item) {
+        String token = read(item).jsonPath().getString("fields.conflict_token");
+        given().contentType(ContentType.JSON).header("If-Match", "\"" + token + "\"")
+            .body(Map.of("status", DONE))
+            .when().post("/api/" + SCOPE + "/item/" + item + ":close")
+            .then().statusCode(200);
     }
 
     private static Response read(long item) {

@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import ai.kumbuka.worklist.domain.ItemLifecycle;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.Milestone;
@@ -1138,17 +1139,27 @@ class QueryNarrowingIT {
         }
     }
 
+    /**
+     * An item in the status named: a draft in the open status, and an item
+     * in {@link #DONE} created, submitted and closed into it, since a closed
+     * status is reached through the transition alone (REA-0011 D1, D11).
+     */
     private String item(String title, String status, String workstream, Long milestone) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("title", title);
-        fields.put("status", status);
+        fields.put("status", DONE.equals(status) ? OPEN : status);
         if (workstream != null) {
             fields.put("workstream", workstream);
         }
         Map<String, Object> created = items.create(SCOPE_ID, "probe-subject", fields).answer();
+        UUID id = (UUID) created.get("id");
         if (milestone != null) {
-            items.update(SCOPE_ID, (UUID) created.get("id"), Map.of(
-                "milestone", milestone, "conflict_token", created.get("conflict_token")));
+            items.update(SCOPE_ID, id, Map.of(
+                "milestone", milestone, "conflict_token", created.get("conflict_token")), "probe-subject");
+        }
+        if (DONE.equals(status)) {
+            ItemLifecycle.submit(items, SCOPE_ID, id);
+            ItemLifecycle.close(items, SCOPE_ID, id, DONE);
         }
         return address(Selector.ITEM, created.get("number"));
     }

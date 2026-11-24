@@ -70,10 +70,14 @@ class VerbVocabularyGuardTest {
     /**
      * The platform verb set, transcribed from section 2 of the catalogue, and
      * the two tag verbs sprint/210 adds to it for worklist, dispatch and
-     * memory alike, and {@code book}, the call on an item that records in its
-     * fulfilment ledger what an instance reported against its criteria.
+     * memory alike, {@code book}, the call on an item that records in its
+     * fulfilment ledger what an instance reported against its criteria, the
+     * transitions of an item beside {@code close} (REA-0011 D1):
+     * {@code submit}, {@code discard}, {@code start} and {@code return}, and
+     * {@code addendum}, the append-only text on an item whose content is
+     * frozen, from the same line of the same decision (REA-0011 D1, D13).
      *
-     * <p>Twenty-seven, grouped as the catalogue groups them. Its purpose here
+     * <p>Thirty-two, grouped as the catalogue groups them. Its purpose here
      * is narrow and it is not the main assertion: it catches a name that was
      * added to {@link #CARRIED_BY_THIS_SCHEME} without being a platform verb
      * at all. Without it, a fantasy name added in both places at once would
@@ -97,7 +101,13 @@ class VerbVocabularyGuardTest {
         // Tags (sprint/210): a scope's vocabulary, attached to an object
         "tag_attach", "tag_detach",
         // The fulfilment ledger: a new transition gets a verb of its own
-        "book");
+        "book",
+        // The lifecycle of an item (REA-0011 D1, TAR-0002 B20): the
+        // transitions beside close, each a verb of its own
+        "submit", "discard", "start", "return",
+        // The addendum of an item (REA-0011 D1, D13): an append-only text
+        // beside its frozen content, a verb of its own
+        "addendum");
 
     /**
      * The verbs each service of this scheme carries TODAY, and therefore
@@ -112,20 +122,16 @@ class VerbVocabularyGuardTest {
      * pooling would let a verb move from one service to another unnoticed,
      * which is the drift it exists against wearing a different hat.
      *
-     * <p>{@code close} is absent from {@link ItemService} for a different
-     * reason and stays absent: an item's terminality is reached through
-     * {@code update} against scope-declared status vocabulary, and
-     * {@code close} on this scheme addresses the iteration or the milestone.
-     * That asymmetry against the sibling service is a decision, not a gap —
-     * and the two entries below that DO carry {@code close} are what makes it
-     * an asymmetry rather than an omission.
+     * <p>{@code close} sits on {@link ItemService} as on the two planning
+     * objects: an item's phase moves through the transitions {@code submit},
+     * {@code discard}, {@code start}, {@code return} and {@code close}
+     * (REA-0011 D1), and its status within a phase through {@code update}.
      *
      * <p>The claim family -- {@code claim}, {@code release}, {@code claim_next}
      * -- and the item verbs {@code accept} and {@code withdraw} left this
-     * scheme's surface with the target cut of the work surface: an item's
-     * state changes through {@code update} alone, and no answer carries a
-     * lease. They are platform verbs still, and no class of this scheme
-     * carries them.
+     * scheme's surface with the target cut of the work surface, and no answer
+     * carries a lease. They are platform verbs still, and no class of this
+     * scheme carries them.
      *
      * <p>{@code relate}, {@code unrelate} and {@code validate} sit on
      * {@link ItemService}: the graph edges the first two move are stored
@@ -136,7 +142,8 @@ class VerbVocabularyGuardTest {
      */
     private static final Map<Class<?>, Set<String>> CARRIED_BY_THIS_SCHEME = Map.of(
         ItemService.class,
-        Set.of("create", "read", "update", "query", "relate", "unrelate", "validate"),
+        Set.of("create", "read", "update", "query", "relate", "unrelate", "validate",
+            "submit", "discard", "start", "return", "close"),
 
         MilestoneService.class,
         Set.of("create", "read", "update", "query", "close"),
@@ -164,7 +171,12 @@ class VerbVocabularyGuardTest {
         // The fulfilment ledger of an item: a table of its own beside the
         // item, written by `book` alone.
         FulfilmentService.class,
-        Set.of("book"));
+        Set.of("book"),
+
+        // The addenda of an item: a table of its own beside the item,
+        // append-only, written by `addendum` alone.
+        AddendumService.class,
+        Set.of("addendum"));
 
     /**
      * The public methods of the verb surface that are not verbs.
@@ -192,7 +204,7 @@ class VerbVocabularyGuardTest {
     @Test
     void every_verb_this_scheme_claims_to_carry_is_a_platform_verb() {
         assertThat(PLATFORM_VOCABULARY)
-            .as("a verb this scheme carries is one of the platform's twenty-seven. A name "
+            .as("a verb this scheme carries is one of the platform's thirty-two. A name "
                 + "that is not in that set is a service-private verb wearing the "
                 + "vocabulary's clothes, and adding it here as well as to the class "
                 + "would make this whole guard a list compared with itself")
@@ -321,16 +333,20 @@ class VerbVocabularyGuardTest {
     /**
      * A Java method name as the vocabulary spells it.
      *
-     * <p>The two forms coincide for every verb this scheme carries today, so
-     * this does nothing yet. It is here because exactly one platform verb —
-     * {@code claim_next} — is not a legal Java identifier, and the run that
-     * builds the draw would otherwise find this guard red against a correctly
-     * named {@code claimNext} and be tempted to loosen the guard rather than
-     * add the mapping.
+     * <p>Two platform verbs are no Java method name as they are spelled:
+     * {@code claim_next}, written {@code claimNext}, and {@code return}, a
+     * keyword of Java, written with one trailing underscore,
+     * {@code return_}. The mapping undoes both: an upper-case letter becomes
+     * an underscore and the lower-case letter, and one trailing underscore
+     * is dropped. Without it this guard would be red against a correctly
+     * named method, and the run that met it would be tempted to loosen the
+     * guard rather than add the mapping.
      */
     private static String wireNameOf(String methodName) {
+        String name = methodName.endsWith("_")
+            ? methodName.substring(0, methodName.length() - 1) : methodName;
         StringBuilder wire = new StringBuilder();
-        for (char c : methodName.toCharArray()) {
+        for (char c : name.toCharArray()) {
             if (Character.isUpperCase(c)) {
                 wire.append('_').append(Character.toLowerCase(c));
             } else {
@@ -379,19 +395,22 @@ class VerbVocabularyGuardTest {
      * <p>Twenty-four is the number after the two reductions the catalogue
      * records: the draw-candidate read folded into {@code query}, and the two
      * failure verbs folded into {@code abandon}. Sprint/210 adds the two tag
-     * verbs, which three services carry with one semantics, and the
-     * fulfilment ledger adds {@code book}, so twenty-seven. A transcription
-     * that had quietly picked up a twenty-eighth would be a transcription of
-     * something else.
+     * verbs, which three services carry with one semantics, the fulfilment
+     * ledger adds {@code book}, the lifecycle of an item adds
+     * {@code submit}, {@code discard}, {@code start} and {@code return}
+     * (REA-0011 D1), and the addendum of an item adds {@code addendum}
+     * (REA-0011 D1, D13), so thirty-two. A transcription that had quietly
+     * picked up a thirty-third would be a transcription of something else.
      */
     @Test
-    void the_transcribed_vocabulary_is_the_twenty_seven_the_catalogue_settled_on() {
+    void the_transcribed_vocabulary_is_the_thirty_two_the_catalogue_settled_on() {
         assertThat(PLATFORM_VOCABULARY)
             .as("the catalogue settles on twenty-four verbs after two reductions, "
-                + "sprint/210 adds tag_attach and tag_detach, and the fulfilment ledger "
-                + "adds book. A different count here means this transcription is of a "
-                + "different revision than the one that was ratified")
-            .hasSize(27);
+                + "sprint/210 adds tag_attach and tag_detach, the fulfilment ledger adds "
+                + "book, the lifecycle of an item adds submit, discard, start and return, and "
+                + "the addendum of an item adds addendum. A different count here means this "
+                + "transcription is of a different revision than the one that was ratified")
+            .hasSize(32);
     }
 
     /**

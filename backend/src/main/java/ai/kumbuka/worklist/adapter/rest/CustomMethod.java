@@ -70,8 +70,18 @@ public enum CustomMethod {
     // its target cut: a colon naming one of them names no verb of its depth,
     // and is answered as any such spelling is.
 
-    /** Terminal on an iteration or a milestone, and never on an item. */
+    /** Terminal on an iteration, a milestone and an item. */
     CLOSE("close", Depth.ITEM, Kind.CARRIED),
+
+    // ---- Carried, at item depth: the transitions of an item --------------
+    //
+    // Each presents the item's conflict token and moves its phase
+    // (REA-0011 D1); only the item view answers to them.
+
+    SUBMIT("submit", Depth.ITEM, Kind.CARRIED),
+    DISCARD("discard", Depth.ITEM, Kind.CARRIED),
+    START("start", Depth.ITEM, Kind.CARRIED),
+    RETURN("return", Depth.ITEM, Kind.CARRIED),
 
     // ---- Carried, at collection depth -----------------------------------
 
@@ -111,6 +121,14 @@ public enum CustomMethod {
     // a custom method on the item URI. Only the item view answers to it.
 
     BOOK("book", Depth.ITEM, Kind.CARRIED),
+
+    // ---- Carried, at item depth: the addenda -----------------------------
+    //
+    // An append-only text beside the item's frozen content that presents no
+    // conflict token, as the tags and the ledger (REA-0011 D1, D13). Only the
+    // item view answers to it.
+
+    ADDENDUM("addendum", Depth.ITEM, Kind.CARRIED),
 
     // ---- Carried, at collection depth -----------------------------------
     //

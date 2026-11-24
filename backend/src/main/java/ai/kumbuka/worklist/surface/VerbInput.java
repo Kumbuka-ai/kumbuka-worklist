@@ -146,4 +146,23 @@ public final class VerbInput {
      */
     public record Booking(@Nullable String instance, @Nullable List<?> entries) {
     }
+
+    /**
+     * The optional arguments of {@code close}: what an iteration produced,
+     * and why an item closes and the status it closes into. Each is taken on
+     * the path that has a place for it and refused on another.
+     *
+     * @param produced what an iteration produced; absent where the call named none
+     * @param reason   why an item closes; absent where the call named none
+     * @param status   the status an item closes into; absent where the call
+     *                 named none
+     */
+    public record Closing(@Nullable String produced, @Nullable String reason,
+                          @Nullable String status) {
+
+        /** A close that names none of the three. */
+        public static Closing none() {
+            return new Closing(null, null, null);
+        }
+    }
 }

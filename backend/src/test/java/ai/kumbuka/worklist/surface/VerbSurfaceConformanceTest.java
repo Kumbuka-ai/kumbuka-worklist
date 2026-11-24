@@ -71,12 +71,15 @@ class VerbSurfaceConformanceTest {
     private static final int MINIMUM_ROUTES = 8;
 
     /**
-     * The verb set is twenty-seven: the catalogue's twenty-four, after its two
-     * reductions, the two tag verbs of sprint/210, and {@code book}, the call
-     * of the fulfilment ledger. Five of them left this scheme's surface with
-     * its target cut, so the specification places twenty-two.
+     * The verb set is thirty-two: the catalogue's twenty-four, after its two
+     * reductions, the two tag verbs of sprint/210, {@code book}, the call of
+     * the fulfilment ledger, the four transitions of an item beside
+     * {@code close} (REA-0011 D1): {@code submit}, {@code discard},
+     * {@code start} and {@code return}, and {@code addendum} (REA-0011 D1,
+     * D13). Five of them left this scheme's surface with its target cut, so
+     * the specification places twenty-seven.
      */
-    private static final int PLACED = 22;
+    private static final int PLACED = 27;
 
     /** The five verbs that left the surface: no class of the specification names them. */
     private static final List<String> RETIRED =
@@ -86,20 +89,55 @@ class VerbSurfaceConformanceTest {
     // Closure, on the bindings
     // =======================================================================
 
+    /**
+     * Closure over both declarations (C3.5): every built route is a binding
+     * or an extension of the verb specification, or a row of the
+     * administration surface's own file. A route in neither is a defect.
+     */
     @Test
     void no_route_exists_outside_the_declared_bindings() {
-        Set<String> declared = VerbSurfaceSpecification.routesOf("binding", "extension");
-
-        List<String> undeclared = builtRoutes().stream()
-            .filter(route -> !declared.contains(route))
-            .toList();
-
-        assertThat(undeclared)
+        assertThat(undeclaredRoutes(builtRoutes(), declaredRoutes()))
             .as("REST is extensible while an extension adds no effect, and every extension "
                 + "is DECLARED — so a route nobody wrote into the specification is a "
-                + "violation and not a feature. State changes come from a verb, without "
-                + "exception")
+                + "violation and not a feature. State changes come from a verb, or from a "
+                + "call the administration surface declares in its own file (C1.6, C3.5)")
             .isEmpty();
+    }
+
+    /** The routes both declarations admit: the verb bindings and extensions, and the administration rows. */
+    private static Set<String> declaredRoutes() {
+        Set<String> declared = new LinkedHashSet<>(
+            VerbSurfaceSpecification.routesOf("binding", "extension"));
+        declared.addAll(AdministrationSurfaceSpecification.routes());
+        return declared;
+    }
+
+    /** The built routes that neither declaration names. */
+    static List<String> undeclaredRoutes(Set<String> built, Set<String> declared) {
+        return built.stream().filter(route -> !declared.contains(route)).toList();
+    }
+
+    @Test
+    void every_declared_administration_route_is_registered() {
+        Set<String> built = builtRoutes();
+
+        assertThat(AdministrationSurfaceSpecification.routes().stream()
+                .filter(route -> !built.contains(route)).toList())
+            .as("a call the administration declaration names and the framework never "
+                + "registered is one nothing can reach")
+            .isEmpty();
+    }
+
+    @Test
+    void every_administration_route_stands_under_the_literal_admin_segment() {
+        assertThat(AdministrationSurfaceSpecification.routes())
+            .as("the administration surface is reached under /api/{scope}/admin/... and "
+                + "nowhere else (C3.5)")
+            .allSatisfy(route -> assertThat(route.substring(route.indexOf(' ') + 1))
+                .startsWith("/api/{scope}/admin/"));
+        assertThat(VerbSurfaceSpecification.routesOf("binding", "extension"))
+            .as("and no binding of the verb surface stands under it")
+            .noneMatch(route -> route.contains("/admin"));
     }
 
     @Test
@@ -228,8 +266,10 @@ class VerbSurfaceConformanceTest {
 
         assertThat(named)
             .as("the catalogue settles on twenty-four verbs after two reductions, sprint/210 "
-                + "adds the two tag verbs, the fulfilment ledger adds book, and of the "
-                + "twenty-seven the twenty-two that stay are either carried, refused by name, "
+                + "adds the two tag verbs, the fulfilment ledger adds book, the lifecycle of "
+                + "an item adds submit, discard, start and return, the addendum adds addendum, "
+                + "and of the thirty-two the twenty-seven that stay are either carried, refused "
+                + "by name, "
                 + "declared-but-unbuilt, or the platform's")
             .hasSize(PLACED)
             .doesNotContainAnyElementsOf(RETIRED);
@@ -264,6 +304,34 @@ class VerbSurfaceConformanceTest {
                 + "would be an addition, and a verb with no tool would be an omission "
                 + "nobody declared")
             .containsExactlyInAnyOrderElementsOf(carried);
+    }
+
+    /**
+     * The tool list carries no call of the administration surface (C4.8,
+     * REA-0011 S4 acceptance): no tool is named after one of its calls, and
+     * the tool list is the carried verb set exactly, as before the surface
+     * existed (the assertion above).
+     */
+    @Test
+    void the_mcp_exposition_names_no_call_of_the_administration_surface() {
+        Set<String> declared = tools().stream()
+            .map(ToolPayload::name)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        assertThat(administrationTools(declared))
+            .as("an agent working a scope cannot change the scope's model through the "
+                + "surface it works on (TAR-0002 B13, D5): a tool named after a call of the "
+                + "administration surface is that change")
+            .isEmpty();
+    }
+
+    /** The tool names that name a call of the administration surface. */
+    static List<String> administrationTools(Set<String> toolNames) {
+        Set<String> calls = AdministrationSurfaceSpecification.calls();
+        return toolNames.stream()
+            .filter(name -> name.startsWith("worklist_")
+                && calls.contains(name.substring("worklist_".length())))
+            .toList();
     }
 
     @Test
@@ -361,6 +429,33 @@ class VerbSurfaceConformanceTest {
                 + "at collection depth, or the depth half of the table would pass on a verb "
                 + "written at any depth at all")
             .doesNotContain(CustomMethod.CLOSE.verb());
+    }
+
+    /**
+     * The closure over both files and the tool clause, handed planted
+     * offences: an administration route under the other path form, one with
+     * a method its row does not declare, and a tool named after a call of
+     * the administration surface. Each must be reported, and the declared
+     * routes and the carried tools beside them must not be.
+     */
+    @Test
+    void the_checks_report_each_offence_they_exist_for() {
+        Set<String> planted = new LinkedHashSet<>(List.of(
+            "GET /api/{scope}/admin/statuses",
+            "GET /api/{scope}/{selector}",
+            "POST /api/admin/{scope}/statuses",
+            "PUT /api/{scope}/admin/settings"));
+        assertThat(undeclaredRoutes(planted, declaredRoutes()))
+            .as("RED STATE, observed: a route of the administration surface under another "
+                + "form, and one with an undeclared method, must each be reported")
+            .containsExactly("POST /api/admin/{scope}/statuses",
+                "PUT /api/{scope}/admin/settings");
+
+        assertThat(administrationTools(new LinkedHashSet<>(List.of(
+                "worklist_read", "worklist_declare_status", "worklist_change_settings"))))
+            .as("RED STATE, observed: a tool named after a call of the administration "
+                + "surface must be reported, and a carried verb must not be")
+            .containsExactly("worklist_declare_status", "worklist_change_settings");
     }
 
     // =======================================================================

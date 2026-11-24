@@ -192,7 +192,8 @@ class NoUuidLabelsAtSurfaceIT {
 
         Response unrelated = restCall("POST",
             SurfaceFixture.item(Selector.ITEM, itemNumber) + ":unrelate", itemToken,
-            Map.of("to_item", secondItemAddress, "type", blocksTypeName));
+            Map.of("to_item", secondItemAddress, "type", blocksTypeName,
+                "reason", "the block was lifted"));
         unrelated.then().statusCode(200);
         assertNoUuid("unrelate", unrelated);
         itemToken = unrelated.jsonPath().getString("fields.conflict_token");
@@ -203,13 +204,20 @@ class NoUuidLabelsAtSurfaceIT {
         validated.then().statusCode(200);
         assertNoUuid("validate", validated);
 
-        // update into the closed status — the terminal write on the item,
-        // the status name at both ends of the round trip.
-        Response closed = restCall("PATCH",
-            SurfaceFixture.item(Selector.ITEM, itemNumber), itemToken,
+        // submit — the draft becomes open (REA-0011 D1).
+        Response submitted = restCall("POST",
+            SurfaceFixture.item(Selector.ITEM, itemNumber) + ":submit", itemToken, null);
+        submitted.then().statusCode(200);
+        assertNoUuid("submit", submitted);
+        itemToken = submitted.jsonPath().getString("fields.conflict_token");
+
+        // close into the closed status — the terminal transition of the
+        // item, the status name at both ends of the round trip.
+        Response closed = restCall("POST",
+            SurfaceFixture.item(Selector.ITEM, itemNumber) + ":close", itemToken,
             Map.of("status", closedStatusName));
         closed.then().statusCode(200);
-        assertNoUuid("update into the closed status", closed);
+        assertNoUuid("close into the closed status", closed);
     }
 
     /**

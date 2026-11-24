@@ -84,10 +84,15 @@ public final class McpTools {
         return SurfaceDeclaration.isNamed(verb) ? Optional.of(verb) : Optional.empty();
     }
 
-    /** The argument names one verb declares; absent for a verb that is not carried. */
+    /**
+     * The argument names one tool declares: the verb's, less those the
+     * assistant surface does not carry; absent for a verb that is not carried.
+     */
     public static Optional<List<String>> argumentsOf(String verb) {
         return SurfaceDeclaration.verb(verb)
-            .map(SurfaceDeclaration.Verb::argumentNames);
+            .map(declared -> declared.assistantArguments().stream()
+                .map(argument -> argument.name().name())
+                .toList());
     }
 
     /**
@@ -99,14 +104,15 @@ public final class McpTools {
      * {@code enum}, every declared value in it (C4.7), and {@code oneOf} carries
      * a description per value; an argument the declaration leaves open in the
      * tool list -- the view -- carries none. A bound travels as JSON Schema
-     * spells it.
+     * spells it. An argument the assistant surface does not carry -- the
+     * submit of a create -- is left out of the tool, and refused when sent.
      */
     private static SchemaPayload schema(SurfaceDeclaration.Verb verb,
                                         ArgumentDescriptions arguments,
                                         ValueDescriptions values) {
         Map<String, SchemaPayload> properties = new LinkedHashMap<>();
         List<String> mandatory = new ArrayList<>();
-        for (SurfaceDeclaration.Argument argument : verb.arguments()) {
+        for (SurfaceDeclaration.Argument argument : verb.assistantArguments()) {
             List<SchemaValuePayload> closed = argument.openInTools() ? List.of()
                 : argument.values().stream()
                     .map(v -> new SchemaValuePayload(v.name(), v.description().apply(values)))

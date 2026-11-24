@@ -21,8 +21,10 @@ case. The service fixes the **form** of a list and the meaning of a small
 number of questions about it. Everything else is the scope's.
 
 It is the sibling of the dispatch service and the opposite of it in one
-property: **a worklist item is mutable for its whole life, while a dispatch
-object freezes when it is sent.**
+property: **a worklist item stays plannable through its open and in-progress
+phases until it is closed, while a dispatch object freezes when it is sent.**
+What an item says -- its content -- freezes when it is submitted, and is
+corrected from then on by an addendum beside it.
 
 ## What is here today
 
@@ -36,9 +38,48 @@ them, milestones, workstreams and iterations, and the number space.
 
 The **caller surface** carries the verbs of the worklist scheme -- `create`,
 `read`, `update`, `query`, `relate`, `unrelate`, `validate`, `tag_attach`,
-`tag_detach`, `close`, `advance`, `plan` and `unplan` -- over REST under
-`/api/{scope}` and over MCP at `/mcp`, both through the one verb surface. An
-item's status moves through `update` alone. Every answer about an object names
+`tag_detach`, `book`, `addendum`, `close`, `advance`, `plan` and `unplan`, and the
+transitions of an item `submit`, `discard`, `start` and `return` -- over REST
+under `/api/{scope}` and over MCP at `/mcp`, both through the one verb surface.
+
+An item is in one of four **phases**, `draft`, `open`, `in_progress` and
+`closed`, held in a column of its own and moved by the transitions alone:
+`create` makes a draft on every surface (the REST create takes `?submit=true`
+to submit in the same act; the assistant surface submits in a second act),
+`submit` opens it, `discard` deletes a draft, `start` and `return` move it into
+and out of the phase in progress, and `close` ends it for good. Every declared
+status is bound to one phase, and `update` moves an item's status within its
+phase only; a closed item takes no write but a booking.
+
+The phase also decides which fields `update` may change. An item's content --
+its title, its description and its acceptance criteria -- is written in a
+draft alone; its classification -- its type, the attribute `type`, and its
+workstream -- in a draft and an open item; everything else, its status within
+the phase included, until it closes. A change to a frozen field is refused by
+state, and the refusal names `addendum` among the open calls; a value sent back
+as it is held is taken in every phase, so a read answer may go back as it came.
+`addendum` writes an append-only text on an open item or one in progress, with
+its author and time, and `read` answers the addenda under `addenda` in the
+order they were written; like the tag calls and `book`, it presents no conflict
+token and moves neither the item's token nor its change time.
+
+References and relations are cancelled, never deleted. `unrelate` takes a
+mandatory `reason` and cancels the edge: the row stays, with its end time, the
+caller as the one who ended it, and the reason. An `update` whose
+`references` or `relations` leave an entry out cancels that entry the same
+way, without a reason, which `update` does not carry; references are matched
+by their content, label and target, so no entry is ever rewritten into
+another. Cancelling is open on a draft and an open item; in progress the two
+lists only grow, `unrelate` is refused by state and not named among the open
+calls, and whoever needs to cancel returns the item first. `relate` on a
+cancelled edge makes the same row active again. `read` and `query` answer
+the active entries alone, with `cancelled_references_count` and
+`cancelled_relations_count`; `read` with `cancelled=all` answers the
+cancelled entries too, under `cancelled_references` and `cancelled_relations`,
+each with `ended_at`, `ended_by` and `end_reason` where recorded. A cancelled
+blocking edge counts nowhere: `validate` walks the active edges only.
+
+Every answer about an object names
 under `next` the calls open to the caller on it in its state, and a refusal by
 state names the state and those calls. Beside them stand the service's
 declaration at `GET /api/declaration`, `GET /api/whoami` and the health
@@ -48,6 +89,47 @@ The lease (`claim`, `claim_next`, `release`) has left the surface: no answer
 carries a holder or a receipt. Its table `claim` left the schema one release
 later (V31): the image before that step no longer read or wrote it, so it
 runs against the schema without the table.
+
+## The administration surface
+
+Where a scope is modelled: its statuses with their phase and predicates, the
+optional predicates and properties it uses, its attribute definitions with
+their options (the type of an item is an option of the attribute `type`), its
+relation types, its workstreams and its default column set. It is **not part of
+the work surface**: no MCP tool reaches it, no verb names its calls, and
+`GET /api/declaration` does not carry them. An agent working a scope does not
+change the scope's model through the surface it works on.
+
+It is REST only, under the literal segment `admin` after the scope; `admin` is
+never a selector, and no scope name is reserved for it. Resources, not verbs:
+GET reads a collection, POST declares into it, DELETE withdraws, PATCH changes
+under `If-Match`.
+
+| Path under `/api/{scope}/admin/` | Calls |
+|---|---|
+| `statuses`, `statuses/{name}` | GET, POST; DELETE withdraws a status |
+| `usages` | GET, POST (`reviewed`, `approved`, `verified`, `priority`, `severity`) |
+| `attributes`, `attributes/{key}`, `attributes/{key}/options` | GET, POST; DELETE withdraws an attribute; POST declares an option |
+| `relation-types`, `relation-types/{name}` | GET, POST (`duplicate_of` with its `target_status`); DELETE withdraws |
+| `workstreams`, `workstreams/{number}` | POST; PATCH changes the description or renames the token; DELETE withdraws |
+| `settings` | GET; POST opens the scope in this service with its views; PATCH writes `default_columns` |
+
+Every call goes through the same domain services the verbs use, so the
+surface writes the rows the migrations and the import wrote before. A status
+whose predicates contradict each other is refused and nothing is written;
+`duplicate_of` takes a target status that is declared, not withdrawn, closed
+and not successful; a workstream is renamed only while nothing points at it.
+No call changes a declared status or renames a relation type: a declared value
+in use is withdrawn, never retyped.
+
+**The right, in this step.** A read needs the read right of the scope, so a
+caller of the work surface reads the declared statuses, types and relation
+types. Every call that writes needs the **write right of the scope** and is
+refused without it with `ROLE_INSUFFICIENT` (a locked scope with
+`SCOPE_LOCKED`). That stands in for the administration permission, which
+arrives with the platform's rights store; then that permission replaces this
+check. A caller who cannot see the scope gets `NOT_FOUND`, as on the work
+surface.
 
 ## How isolation is built
 
@@ -118,9 +200,13 @@ and permanent. The drift the ownership arrangement was guarding against is
 answered by `ServiceRolePrivilegeIT`, which reads the catalog rather than a
 maintained list and requires, per table and per privilege:
 
-- exactly `SELECT`, `INSERT`, `UPDATE` on every domain table — no `DELETE`
-  until a verb genuinely deletes, and never `TRUNCATE`, `TRIGGER` or
-  `REFERENCES`;
+- exactly `SELECT`, `INSERT`, `UPDATE` on every domain table, with `DELETE`
+  only where a verb genuinely deletes -- an item's tags for `tag_detach`, and
+  a draft with its references, criteria and relations for `discard` -- and
+  never `TRUNCATE`, `TRIGGER` or `REFERENCES`;
+- exactly `SELECT` and `INSERT` on the two append-only tables, the fulfilment
+  ledger and the addenda of an item, so that nothing in them can be changed or
+  removed;
 - nothing whatever on `flyway_schema_history`, which belongs to the migrator;
 - and that the runtime role owns nothing, so the privileges above are grants
   rather than an owner's implicit set.

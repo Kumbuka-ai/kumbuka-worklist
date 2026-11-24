@@ -60,4 +60,20 @@ public interface ToolDescriptions {
 
     @Message
     String book();
+
+    @Message
+    String addendum();
+
+    @Message
+    String submit();
+
+    @Message
+    String discard();
+
+    @Message
+    String start();
+
+    /** The description of {@code return}, whose name is a keyword of Java. */
+    @Message
+    String returnItem();
 }

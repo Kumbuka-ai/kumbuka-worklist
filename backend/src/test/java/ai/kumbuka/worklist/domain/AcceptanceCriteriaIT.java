@@ -161,30 +161,42 @@ class AcceptanceCriteriaIT {
     }
 
     // ====================================================================
-    // K3: closing the item keeps the identifiers; appending goes on
+    // K3: closing the item keeps the identifiers; a closed item takes no
+    // further criterion (REA-0011 D6)
     // ====================================================================
 
     @Test
-    void k3_a_closed_item_keeps_its_identifiers_and_the_next_is_one_never_issued() {
+    void k3_a_closed_item_keeps_its_identifiers_and_takes_no_further_criterion() {
         UUID item = create("closed with its criteria", List.of(
             Map.of("text", "one"), Map.of("text", "two")));
+        // The criteria are content: written while the item is a draft, and
+        // frozen once it is submitted (REA-0011 D13, Annex A2).
         update(item, Map.of("criteria", List.of(
             Map.of("address", address(item, 1), "text", "one"))));
+        Map<String, Object> appended = update(item, Map.of("criteria", List.of(
+            Map.of("address", address(item, 1), "text", "one"),
+            Map.of("text", "before closing"))));
+        assertThat(criteriaOf(appended))
+            .as("a criterion appended gets 3: 2 was issued before and stays spent")
+            .containsExactly(
+                criterion(item, 1, "one"),
+                criterion(item, 3, "before closing"));
+        ItemLifecycle.submit(items, scope, item);
 
-        Map<String, Object> closed = update(item, Map.of("status", "done"));
+        Map<String, Object> closed = ItemLifecycle.close(items, scope, item, "done");
         assertThat(closed.get("close_date")).as("the item is closed").isNotNull();
         assertThat(criteriaOf(items.read(scope, item)))
             .as("the closed item reads back with the identifiers it had")
-            .containsExactly(criterion(item, 1, "one"));
+            .containsExactly(criterion(item, 1, "one"), criterion(item, 3, "before closing"));
 
-        Map<String, Object> appended = update(item, Map.of("criteria", List.of(
+        Map<String, Object> before = items.read(scope, item);
+        WorklistException refusal = refusalFrom(() -> update(item, Map.of("criteria", List.of(
             Map.of("address", address(item, 1), "text", "one"),
-            Map.of("text", "after closing"))));
-        assertThat(criteriaOf(appended))
-            .as("a criterion appended after closing gets 3: 2 was issued before and stays spent")
-            .containsExactly(
-                criterion(item, 1, "one"),
-                criterion(item, 3, "after closing"));
+            Map.of("text", "after closing")))));
+        assertThat(refusal.reason())
+            .as("a closed item is final: an update is refused by state")
+            .isEqualTo(WorklistException.Reason.TRANSITION_REFUSED);
+        assertNothingWritten(item, before);
     }
 
     // ====================================================================
@@ -287,7 +299,7 @@ class AcceptanceCriteriaIT {
         Map<String, Object> read = items.read(scope, item);
         List<String> rowsBefore = storedRows(item);
 
-        Written<Map<String, Object>, Item> echoed = items.update(scope, item, read);
+        Written<Map<String, Object>, Item> echoed = items.update(scope, item, read, CALLER);
 
         assertThat(echoed.answer().get("conflict_token"))
             .as("the token stays")
@@ -308,7 +320,7 @@ class AcceptanceCriteriaIT {
         java.util.Collections.reverse(reversed);
 
         Map<String, Object> answer = items.update(scope, item, Map.of(
-            "conflict_token", read.get("conflict_token"), "criteria", reversed)).answer();
+            "conflict_token", read.get("conflict_token"), "criteria", reversed), CALLER).answer();
 
         assertThat(answer.get("conflict_token"))
             .as("an item answers its criteria by identifier, so their order is no change")
@@ -458,7 +470,7 @@ class AcceptanceCriteriaIT {
     private Map<String, Object> update(UUID item, Map<String, Object> fields) {
         Map<String, Object> arguments = new LinkedHashMap<>(fields);
         arguments.put("conflict_token", tokenOf(item));
-        return items.update(scope, item, arguments).answer();
+        return items.update(scope, item, arguments, CALLER).answer();
     }
 
     /** The address of criterion {@code k} of an item, in the form D14 fixes. */

@@ -56,4 +56,24 @@ public interface NextStepTexts {
 
     @Message
     String book();
+
+    @Message
+    String addendum();
+
+    @Message
+    String submit();
+
+    @Message
+    String discard();
+
+    @Message
+    String start();
+
+    /** What {@code return} does, whose name is a keyword of Java. */
+    @Message
+    String returnItem();
+
+    /** What {@code close} does on an item. */
+    @Message
+    String closeItem();
 }

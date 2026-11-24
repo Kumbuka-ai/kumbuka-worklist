@@ -80,6 +80,13 @@ class CheckOrderConformanceIT {
         calls.put("worklist_relate", Map.of("address", ADDRESS, "conflict_token", "stale",
             "to_item", ADDRESS, "type", "never-declared"));
         calls.put("worklist_send", Map.of("address", ADDRESS));
+        // The transitions of an item (REA-0011 D1): an undeclared status and a
+        // missing reason are scope-dependent defects too.
+        calls.put("worklist_submit", Map.of("address", ADDRESS, "conflict_token", "stale"));
+        calls.put("worklist_start", Map.of("address", ADDRESS, "conflict_token", "stale",
+            "status", "never-declared"));
+        calls.put("worklist_return", Map.of("address", ADDRESS, "conflict_token", "stale"));
+        calls.put("worklist_discard", Map.of("address", ADDRESS, "conflict_token", "stale"));
         calls.forEach((tool, arguments) -> {
             assertThat(Mcp.reason(Mcp.call(tool, arguments))).as("%s over MCP", tool)
                 .isEqualTo("NOT_FOUND");
@@ -187,7 +194,8 @@ class CheckOrderConformanceIT {
         assertThat(put.jsonPath().getString("reason")).isEqualTo("VERB_NOT_CARRIED");
         assertThat(put.header("Allow")).as("the methods the route carries").isNotBlank();
         assertThat(put.jsonPath().getList("data.accepts", String.class))
-            .as("the verbs carried at an object").contains("read", "update", "close")
+            .as("the verbs carried at an object, the transitions of an item among them")
+            .contains("read", "update", "close", "submit", "discard", "start", "return")
             .doesNotContain("claim", "release", "accept", "withdraw");
 
         Response delete = given().delete(SurfaceFixture.collection(Selector.ITEM));

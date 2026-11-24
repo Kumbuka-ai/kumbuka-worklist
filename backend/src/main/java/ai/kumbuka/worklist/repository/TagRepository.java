@@ -115,8 +115,7 @@ public class TagRepository {
     }
 
     /**
-     * Removes an assignment and flushes. The one DELETE this service issues;
-     * V26 grants it on this table alone.
+     * Removes an assignment and flushes; V26 grants DELETE on this table.
      */
     @Transactional
     public void remove(ItemTag assignment) {

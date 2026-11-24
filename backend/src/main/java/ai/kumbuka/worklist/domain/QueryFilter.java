@@ -52,6 +52,16 @@ public enum QueryFilter {
      */
     ITEM_TAG(Selector.ITEM, "tag", Form.TOKEN),
 
+    /** An item's phase, one of the platform's four (REA-0011 D12). */
+    ITEM_PHASE(Selector.ITEM, "phase", Form.oneOf(Phase.tokens())),
+
+    /**
+     * The items created more than this many whole days ago, by the service's
+     * clock: with the phase {@code draft}, the drafts left standing
+     * (REA-0011 D12).
+     */
+    ITEM_OLDER_THAN_DAYS(Selector.ITEM, "older_than_days", Form.NUMBER),
+
     /** Whether an iteration is closed. */
     ITERATION_CLOSED(Selector.ITERATION, "closed", Form.BOOLEAN),
 

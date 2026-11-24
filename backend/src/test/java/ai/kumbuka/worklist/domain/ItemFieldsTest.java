@@ -786,6 +786,105 @@ class ItemFieldsTest {
             .isFalse();
     }
 
+    // ------------------------------------------------------------------
+    // Cancelled references (REA-0011 D15): matched by content, never by place
+    // ------------------------------------------------------------------
+
+    /**
+     * K4 in the small: of three references, the one in the middle is left
+     * out. It alone is cancelled, and the other two are kept as the rows they
+     * are -- neither takes the middle one's place or content.
+     */
+    @Test
+    void a_reference_left_out_of_the_middle_is_cancelled_alone_and_overwrites_nothing() {
+        List<Map<String, Object>> living = ItemFields.references(List.of(
+            Map.of("label", "a", "target", "docs/a.md"),
+            Map.of("label", "b", "target", "docs/b.md"),
+            Map.of("label", "c", "target", "docs/c.md")));
+        List<Map<String, Object>> wanted = ItemFields.references(List.of(
+            Map.of("label", "a", "target", "docs/a.md"),
+            Map.of("label", "c", "target", "docs/c.md")));
+
+        ItemFields.ReferencePlan plan = ItemFields.referencePlan(living, wanted);
+
+        assertThat(plan.cancelled()).as("the middle entry, and only it").containsExactly(1);
+        assertThat(plan.kept())
+            .as("position 0 is the first row, position 1 the third row -- matched by content")
+            .containsExactly(0, 2);
+        assertThat(plan.appendsOnly()).isFalse();
+    }
+
+    /** A changed label is the old entry cancelled and a new one, never an overwrite. */
+    @Test
+    void a_changed_entry_is_a_cancelled_one_and_a_new_one() {
+        List<Map<String, Object>> living = ItemFields.references(List.of(
+            Map.of("label", "a", "target", "docs/a.md")));
+        List<Map<String, Object>> wanted = ItemFields.references(List.of(
+            Map.of("label", "a, renamed", "target", "docs/a.md")));
+
+        ItemFields.ReferencePlan plan = ItemFields.referencePlan(living, wanted);
+
+        assertThat(plan.kept()).containsExactly(-1);
+        assertThat(plan.cancelled()).containsExactly(0);
+    }
+
+    /**
+     * What an item in progress takes: every living entry where it stands,
+     * new ones behind them, and the unchanged echo. A reorder moves a living
+     * entry and is no append.
+     */
+    @Test
+    void appending_keeps_every_living_entry_where_it_stands() {
+        List<Map<String, Object>> living = ItemFields.references(List.of(
+            Map.of("label", "a", "target", "docs/a.md"),
+            Map.of("target", "docs/b.md")));
+        Map<String, Object> added = Map.of("target", "docs/c.md");
+
+        assertThat(ItemFields.referencePlan(living, living).appendsOnly())
+            .as("the unchanged echo").isTrue();
+        assertThat(ItemFields.referencePlan(living, living).kept()).containsExactly(0, 1);
+
+        List<Map<String, Object>> appended = ItemFields.references(List.of(
+            living.get(0), living.get(1), added));
+        ItemFields.ReferencePlan append = ItemFields.referencePlan(living, appended);
+        assertThat(append.appendsOnly()).as("one entry behind the two").isTrue();
+        assertThat(append.kept()).containsExactly(0, 1, -1);
+
+        List<Map<String, Object>> reordered = ItemFields.references(List.of(
+            living.get(1), living.get(0)));
+        assertThat(ItemFields.referencePlan(living, reordered).appendsOnly())
+            .as("a reorder moves an active entry").isFalse();
+
+        List<Map<String, Object>> inFront = ItemFields.references(List.of(
+            added, living.get(0), living.get(1)));
+        assertThat(ItemFields.referencePlan(living, inFront).appendsOnly())
+            .as("an entry put in front moves the active ones").isFalse();
+    }
+
+    /** Two entries of one content are two rows, matched one each, in order. */
+    @Test
+    void entries_of_one_content_are_matched_one_each() {
+        Map<String, Object> same = Map.of("target", "docs/a.md");
+        List<Map<String, Object>> living = ItemFields.references(List.of(same, same));
+        List<Map<String, Object>> wanted = ItemFields.references(List.of(same));
+
+        ItemFields.ReferencePlan plan = ItemFields.referencePlan(living, wanted);
+
+        assertThat(plan.kept()).containsExactly(0);
+        assertThat(plan.cancelled()).containsExactly(1);
+    }
+
+    /** The counts and the cancelled lists are carried by an item and never set. */
+    @Test
+    void the_cancelled_edges_are_read_only_fields_of_an_item() {
+        for (String name : List.of("cancelled_references_count", "cancelled_relations_count",
+                "cancelled_references", "cancelled_relations")) {
+            Field field = Field.byCanonicalName(Addressed.ITEM, name).orElseThrow();
+            assertThat(field.settableOn(Addressed.ITEM)).as(name).isFalse();
+            assertThat(Field.byCanonicalName(Addressed.MILESTONE, name)).as(name).isEmpty();
+        }
+    }
+
     private static ItemFulfilment entry(long pk, long criterion, String instance, String status,
                                         Instant bookedAt) {
         ItemFulfilment entry = new ItemFulfilment();

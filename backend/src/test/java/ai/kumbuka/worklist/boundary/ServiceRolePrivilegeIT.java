@@ -80,13 +80,23 @@ class ServiceRolePrivilegeIT {
      * status to fall back to (V2: "the day a verb genuinely deletes is the day
      * the grant is added with that verb"). From V30: the fulfilment ledger is
      * append-only, so it grants SELECT and INSERT and neither UPDATE nor
-     * DELETE -- nothing in it is ever changed or removed. Named table by
-     * table, so DELETE on any other table is still a defect, and UPDATE on the
-     * ledger is one.
+     * DELETE -- nothing in it is ever changed or removed. From V33:
+     * {@code discard} deletes a draft and what stands beside it that does not
+     * cascade -- its references, its relations in both directions and its
+     * criteria (REA-0011 D12) -- so those four tables grant DELETE. From V34:
+     * the addenda of an item are append-only as the ledger is (REA-0011 D13),
+     * SELECT and INSERT and nothing else. Named table by table, so DELETE on
+     * any other table is still a defect, and UPDATE on the ledger or on the
+     * addenda is one.
      */
     private static final Map<String, Set<String>> PERMITTED_HERE = Map.of(
         "item_tag", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"),
-        "item_fulfilment", Set.of("SELECT", "INSERT"));
+        "item_fulfilment", Set.of("SELECT", "INSERT"),
+        "item_addendum", Set.of("SELECT", "INSERT"),
+        "item", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"),
+        "item_reference", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"),
+        "item_relation", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"),
+        "item_criterion", Set.of("SELECT", "INSERT", "UPDATE", "DELETE"));
 
     /**
      * Everything {@code has_table_privilege} can be asked about a table.
@@ -126,7 +136,8 @@ class ServiceRolePrivilegeIT {
      * catalog is a check that the catalog agrees with itself.
      */
     private static final Set<String> EXPECTED_TABLES = Set.of(
-        // The substrate's, from V1.
+        // The substrate's, from V1; DELETE since V33, for discard
+        // (PERMITTED_HERE).
         "item",
         // The declared vocabularies, from V4. Three tables for one kind of
         // object, because the platform properties differ: a status carries the
@@ -136,7 +147,7 @@ class ServiceRolePrivilegeIT {
         // Identity: the declared head of an address, and both high-water marks.
         "selector", "number_space",
         // The item's satellites: an ordered list of external pointers, and the
-        // typed edge.
+        // typed edge; DELETE since V33, for discard (PERMITTED_HERE).
         "item_reference", "item_relation",
         // The planning layer. Its tables are here and its verbs are not — a
         // planning layer added later would be a second replacement of the
@@ -157,13 +168,16 @@ class ServiceRolePrivilegeIT {
         // What a scope declares it uses, from V28: the same SELECT/INSERT/UPDATE,
         // and no DELETE -- no verb takes a usage back.
         "scope_usage",
-        // The acceptance criteria of an item, from V29: the same
-        // SELECT/INSERT/UPDATE, and no DELETE -- a criterion is withdrawn and
-        // keeps its number.
+        // The acceptance criteria of an item, from V29: a criterion is
+        // withdrawn and keeps its number; DELETE since V33, only for the
+        // criteria of a discarded draft (PERMITTED_HERE).
         "item_criterion",
         // The fulfilment ledger of an item, from V30: SELECT and INSERT and
         // nothing else (PERMITTED_HERE) -- append-only by grant.
         "item_fulfilment",
+        // The addenda of an item, from V34: SELECT and INSERT and nothing
+        // else (PERMITTED_HERE) -- append-only by grant.
+        "item_addendum",
         // The migrator's own record: no privilege for the runtime role, and
         // nonetheless expected to BE there.
         HISTORY_TABLE);
@@ -457,6 +471,38 @@ class ServiceRolePrivilegeIT {
                         .contains("UPDATE"));
             } finally {
                 exec(c, "REVOKE UPDATE ON " + table + " FROM " + role());
+            }
+
+            assertThat(privilegeDefects(c, tablesIn(c, schema())))
+                .as("and gone again")
+                .isEmpty();
+        }
+    }
+
+    /**
+     * The addenda's own red state: UPDATE and DELETE on the append-only table
+     * are defects (K6). A separate case for the reason the ledger has one: the
+     * table is checked against a set narrower than every other domain table's.
+     */
+    @Test
+    void the_check_reports_update_and_delete_on_the_append_only_addenda() throws SQLException {
+        String table = schema() + ".item_addendum";
+        try (Connection c = admin()) {
+            try {
+                exec(c, "GRANT UPDATE, DELETE ON " + table + " TO " + role());
+
+                assertThat(privilegeDefects(c, tablesIn(c, schema())))
+                    .as("RED STATE, observed: UPDATE and DELETE on the addenda must be "
+                        + "reported. An addendum is append-only by grant, and one the runtime "
+                        + "role could change or remove is a record nobody can rely on")
+                    .anySatisfy(defect -> assertThat(defect)
+                        .contains("item_addendum")
+                        .contains("UPDATE"))
+                    .anySatisfy(defect -> assertThat(defect)
+                        .contains("item_addendum")
+                        .contains("DELETE"));
+            } finally {
+                exec(c, "REVOKE UPDATE, DELETE ON " + table + " FROM " + role());
             }
 
             assertThat(privilegeDefects(c, tablesIn(c, schema())))

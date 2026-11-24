@@ -7,6 +7,7 @@
  */
 package ai.kumbuka.worklist.surface;
 
+import ai.kumbuka.worklist.domain.ItemLifecycle;
 import ai.kumbuka.worklist.domain.ItemService;
 import ai.kumbuka.worklist.domain.IterationService;
 import ai.kumbuka.worklist.domain.MilestoneService;
@@ -148,6 +149,11 @@ class MarkerProbeIT {
         minimal.put("tag_attach", Map.of("address", item));
         minimal.put("tag_detach", Map.of("address", item));
         minimal.put("book", Map.of("address", item));
+        minimal.put("submit", Map.of("address", item, "conflict_token", "t"));
+        minimal.put("discard", Map.of("address", item, "conflict_token", "t"));
+        minimal.put("start", Map.of("address", item, "conflict_token", "t"));
+        minimal.put("return", Map.of("address", item, "conflict_token", "t"));
+        minimal.put("addendum", Map.of("address", item));
         minimal.forEach((tool, args) -> {
             Map<String, Object> with = new LinkedHashMap<>(args);
             with.put(MARKER, MARKER);
@@ -239,7 +245,24 @@ class MarkerProbeIT {
                 "to_item", other, "type", MARKER)));
         absent(soft, "unrelate an absent edge", mcpRaw("unrelate",
             Map.of("address", item, "conflict_token", tokenOf(item),
-                "to_item", other, "type", RELATION)));
+                "to_item", other, "type", RELATION, "reason", MARKER)));
+        absent(soft, "unrelate with an empty reason", mcpRaw("unrelate",
+            Map.of("address", item, "conflict_token", tokenOf(item),
+                "to_item", other, "type", RELATION, "reason", " ")));
+        absent(soft, "read with a marked option for cancelled edges", mcpRaw("read",
+            Map.of("address", item, "cancelled", MARKER)));
+        // The status and the reason the transitions of an item take.
+        absent(soft, "close an item into a marked status", mcpRaw("close",
+            Map.of("address", item, "conflict_token", tokenOf(item), "status", MARKER)));
+        absent(soft, "close an item into a marked identity", mcpRaw("close",
+            Map.of("address", item, "conflict_token", tokenOf(item), "status", MARKER_UUID)));
+        absent(soft, "start into a marked status", mcpRaw("start",
+            Map.of("address", item, "conflict_token", tokenOf(item), "status", MARKER)));
+        absent(soft, "return with a marked reason", mcpRaw("return",
+            Map.of("address", item, "conflict_token", tokenOf(item), "reason", MARKER,
+                "status", MARKER)));
+        staleAbsent(soft, "submit with a marked token", mcpRaw("submit",
+            Map.of("address", item, "conflict_token", MARKER_UUID)));
         absent(soft, "close an iteration with live memberships", mcpRaw("close",
             Map.of("address", iteration, "conflict_token", tokenOf(iteration),
                 "produced", MARKER)));
@@ -275,6 +298,10 @@ class MarkerProbeIT {
                 "criterion", 1, "status", MARKER, "evidence", "a report")))));
         absent(soft, "a ledger option", given().queryParam("fulfilment", MARKER)
             .when().get(itemPath + "/1").then().extract().asString());
+        absent(soft, "an option for cancelled edges", given().queryParam("cancelled", MARKER)
+            .when().get(itemPath + "/1").then().extract().asString());
+        absent(soft, "an unrelate reason", post(itemPath + "/1:unrelate", Map.of(
+            "to_item", "worklist://" + SCOPE + "/item/2", "type", RELATION, "reason", MARKER)));
         absent(soft, "an edge", post(itemPath + "/1:relate", Map.of("to_item", MARKER,
             "type", MARKER)));
         staleAbsent(soft, "a stale token", given().contentType(ContentType.JSON)
@@ -310,8 +337,9 @@ class MarkerProbeIT {
      */
     @Test
     void a_notice_repeats_nothing_the_caller_or_the_tenant_wrote() {
-        Map<String, Object> created = items.create(SCOPE_ID, "probe-subject",
-            Map.of("title", MARKER, "status", OPEN, "milestone", 1)).answer();
+        // Open, so that it may enter an iteration (REA-0011 Annex A1).
+        Map<String, Object> created = items.read(SCOPE_ID, ItemLifecycle.open(items, SCOPE_ID,
+            Map.of("title", MARKER, "status", OPEN, "milestone", 1)));
         Object number = created.get("number");
         String iteration = address(Selector.ITERATION, 1);
         ExtractableResponse<Response> planned = given().contentType(ContentType.JSON)
@@ -328,8 +356,8 @@ class MarkerProbeIT {
 
         // a blocks b over the tenant's blocking relation type, and b blocks a.
         UUID a = (UUID) created.get("id");
-        Map<String, Object> other = items.create(SCOPE_ID, "probe-subject",
-            Map.of("title", MARKER + " too", "status", OPEN)).answer();
+        Map<String, Object> other = items.read(SCOPE_ID, ItemLifecycle.open(items, SCOPE_ID,
+            Map.of("title", MARKER + " too", "status", OPEN)));
         UUID b = (UUID) other.get("id");
         String addressOfA = address(Selector.ITEM, number);
         String addressOfB = address(Selector.ITEM, other.get("number"));
@@ -349,8 +377,10 @@ class MarkerProbeIT {
             }
         } finally {
             // The scope is shared by every case of this class: the ring goes.
-            items.unrelate(SCOPE_ID, a, addressOfB, RELATION, itemToken(a));
-            items.unrelate(SCOPE_ID, b, addressOfA, RELATION, itemToken(b));
+            items.unrelate(SCOPE_ID, a, addressOfB, RELATION, "the ring goes",
+                ItemLifecycle.CALLER, itemToken(a));
+            items.unrelate(SCOPE_ID, b, addressOfA, RELATION, "the ring goes",
+                ItemLifecycle.CALLER, itemToken(b));
         }
         soft.assertAll();
     }
@@ -469,9 +499,12 @@ class MarkerProbeIT {
         Map<String, Object> milestone = milestones.create(SCOPE_ID,
             Map.of("title", "goal", "kind", "milestone")).answer();
         List<Object> numbers = new ArrayList<>();
+        // Open items: the first is planned and both are booked on, which a
+        // draft refuses (REA-0011 Annex A1).
         for (int i = 0; i < 2; i++) {
-            numbers.add(items.create(SCOPE_ID, "probe-subject", Map.of("title", "marked " + i, "status", OPEN,
-                "milestone", milestone.get("number"))).answer().get("number"));
+            numbers.add(items.read(SCOPE_ID, ItemLifecycle.open(items, SCOPE_ID, Map.of(
+                "title", "marked " + i, "status", OPEN,
+                "milestone", milestone.get("number")))).get("number"));
         }
         iterations.create(SCOPE_ID, Map.of("title", "first", "motto", "m", "description", "d"));
         given().contentType(ContentType.JSON)

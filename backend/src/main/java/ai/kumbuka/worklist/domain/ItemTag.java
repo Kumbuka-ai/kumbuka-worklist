@@ -36,7 +36,8 @@ import java.util.UUID;
  * <p><strong>Removed, not withdrawn.</strong> Every other link of this schema
  * keeps its row and moves a status. An assignment has nothing to fall back to
  * and no address that has to keep resolving, so {@code tag_detach} deletes it;
- * V26 grants DELETE on this table and on no other.
+ * V26 grants DELETE on this table. The assignments of a discarded draft go
+ * with the draft, by the cascade of V26.
  *
  * <p>{@code attachedBy} is who attached the tag. It is a fact about one act
  * and is never counted per subject.
